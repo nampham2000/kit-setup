@@ -119,10 +119,19 @@ const {
   emitCircleCollider2D: emitCircleCollider2DImpl,
   emitBoxCollider2D: emitBoxCollider2DImpl,
   emitPolygonCollider2D: emitPolygonCollider2DImpl,
+  emitMeshCollider: emitMeshColliderImpl,
 } = createColliderPorter({
   getField,
   parseUnityPolygonColliderPaths,
   boundsForUnityPolygonPaths,
+  unityRefGuid,
+  resolveUnityPhysicsMaterialUuid,
+  resolveUnityBuiltinMeshUuid,
+  resolveBuiltinPrimitiveMeshUuid,
+  importedUnityAssetPath: importedUnityAssetPathImpl,
+  copyUnityAssetToCocos: copyUnityAssetToCocosImpl,
+  handleMissingModel: handleMissingModelImpl,
+  resolveLibraryAssetUuid,
 });
 
 const {
@@ -196,6 +205,7 @@ const componentDispatcher = createComponentDispatcher({
   emitSyntheticModelRenderer,
   emitParticleSystem,
   emitMeshRenderer,
+  emitMeshCollider,
   emitSpriteRenderer,
   emitLight,
   emitAnimator,
@@ -238,6 +248,8 @@ Examples:
 }
 
 const CLI_PATH_VALUE_OPTIONS = new Set(['--src', '--out', '--unity-root', '--cocos-root', '--report']);
+const COCOS_CAMERA_PROJECTION_ORTHO = 0;
+const COCOS_CAMERA_PROJECTION_PERSPECTIVE = 1;
 
 function splitEmbeddedOption(text) {
   const match = String(text).match(/^(--[A-Za-z0-9][A-Za-z0-9-]*)(?:=(.*)|\s+(.*))?$/);
@@ -1580,6 +1592,114 @@ function resolveStandaloneMaterialAssetUuid(assetFile, options) {
   return meta?.importer === 'material' && meta?.uuid ? meta.uuid : '';
 }
 
+function readUnityPhysicsMaterialDoc(assetFile) {
+  if (!assetFile || !fs.existsSync(assetFile)) return null;
+  return parseUnityYaml(assetFile).find((doc) => doc.classId === 134 || doc.typeName === 'PhysicsMaterial') || null;
+}
+
+function convertedUnityPhysicsMaterialAssetPath(physicsMaterialAsset, options) {
+  const importedPath = importedUnityAssetPath(physicsMaterialAsset, options);
+  if (!importedPath) return '';
+  return importedPath.replace(/\.[^.]+$/i, '.pmtl');
+}
+
+function ensurePhysicsMaterialAssetMeta(assetFile, options) {
+  const metaFile = `${assetFile}.meta`;
+  const existing = readJsonIfExists(metaFile) || {};
+  const relativePath = toPosix(path.relative(options.cocosRoot, assetFile));
+  const meta = {
+    ver: existing.ver || '1.0.1',
+    importer: existing.importer || 'physics-material',
+    imported: existing.imported ?? true,
+    uuid: existing.uuid || stableUuid(`physics-material:${relativePath}`),
+    files: Array.isArray(existing.files) && existing.files.length ? existing.files : ['.json'],
+    subMetas: {},
+    userData: { ...(existing.userData || {}) },
+  };
+
+  if (JSON.stringify(existing) !== JSON.stringify(meta)) {
+    fs.writeFileSync(metaFile, `${JSON.stringify(meta, null, 2)}\n`, 'utf8');
+  }
+  return meta;
+}
+
+function syncImportedPhysicsMaterialLibraryCache(physicsMaterialData, meta, options) {
+  if (!meta?.uuid || !physicsMaterialData || options.dryRun) return false;
+  const libraryFile = libraryJsonPathForUuid(options, meta.uuid);
+  ensureDir(path.dirname(libraryFile));
+  fs.writeFileSync(libraryFile, `${JSON.stringify(physicsMaterialData, null, 2)}\n`, 'utf8');
+  return true;
+}
+
+function resolveCurrentPhysicsMaterialUuid(assetFile, options) {
+  if (!assetFile) return '';
+  const libraryUuid = resolveLibraryAssetUuid(assetFile, options, ['cc.PhysicsMaterial', 'cc.PhysicMaterial'], { forceReload: true });
+  if (libraryUuid) return libraryUuid;
+  const meta = readJsonIfExists(`${assetFile}.meta`);
+  return meta?.importer === 'physics-material' && meta?.uuid ? meta.uuid : '';
+}
+
+function convertUnityPhysicsMaterialToCocos(physicsMaterialAsset, options, reporter) {
+  if (!physicsMaterialAsset?.path || !fs.existsSync(physicsMaterialAsset.path)) return '';
+
+  const physicsDoc = readUnityPhysicsMaterialDoc(physicsMaterialAsset.path);
+  if (!physicsDoc) {
+    reporter.medium('PHYSICS_MATERIAL_CONVERSION_FAILED', physicsMaterialAsset.relativePath, '', 'Unity PhysicsMaterial could not be parsed');
+    return '';
+  }
+
+  const convertedDest = convertedUnityPhysicsMaterialAssetPath(physicsMaterialAsset, options);
+  if (!convertedDest) return '';
+
+  const dynamicFriction = Math.max(0, finiteNumber(getField(physicsDoc, 'm_DynamicFriction', 0), 0));
+  const staticFriction = Math.max(0, finiteNumber(getField(physicsDoc, 'm_StaticFriction', 0), 0));
+  const restitution = Math.max(0, finiteNumber(getField(physicsDoc, 'm_Bounciness', 0), 0));
+  const friction = Math.max(dynamicFriction, staticFriction);
+  const physicsMaterialData = {
+    __type__: 'cc.PhysicsMaterial',
+    _name: String(getField(physicsDoc, 'm_Name', physicsMaterialAsset.stem) || physicsMaterialAsset.stem),
+    _friction: friction,
+    _rollingFriction: 0,
+    _spinningFriction: 0,
+    _restitution: restitution,
+  };
+
+  if (!options.dryRun) {
+    ensureDir(path.dirname(convertedDest));
+    ensureDirectoryMetas(path.dirname(convertedDest), path.join(options.cocosRoot, 'assets'));
+    fs.writeFileSync(convertedDest, `${JSON.stringify(physicsMaterialData, null, 2)}\n`, 'utf8');
+    const meta = ensurePhysicsMaterialAssetMeta(convertedDest, options);
+    syncImportedPhysicsMaterialLibraryCache(physicsMaterialData, meta, options);
+  }
+
+  reporter.low(
+    'PHYSICS_MATERIAL_CONVERTED',
+    physicsMaterialAsset.relativePath,
+    toPosix(path.relative(options.cocosRoot, convertedDest)),
+    'Unity PhysicsMaterial was converted to Cocos PhysicsMaterial',
+    `friction=${friction}, restitution=${restitution}`,
+  );
+
+  return convertedDest;
+}
+
+function resolveUnityPhysicsMaterialUuid(physicsMaterialAsset, options, reporter, gameObjectName = '') {
+  if (!physicsMaterialAsset) return '';
+
+  const convertedDest = convertedUnityPhysicsMaterialAssetPath(physicsMaterialAsset, options);
+  if (convertedDest && fs.existsSync(convertedDest)) {
+    const existingUuid = resolveCurrentPhysicsMaterialUuid(convertedDest, options);
+    if (existingUuid) return existingUuid;
+  }
+
+  const writtenDest = convertUnityPhysicsMaterialToCocos(physicsMaterialAsset, options, reporter);
+  const uuid = resolveCurrentPhysicsMaterialUuid(writtenDest || convertedDest, options);
+  if (!uuid) {
+    reporter.medium('PHYSICS_MATERIAL_UNRESOLVED', physicsMaterialAsset.relativePath, gameObjectName, 'Unity PhysicsMaterial could not be resolved to a Cocos PhysicsMaterial asset');
+  }
+  return uuid;
+}
+
 function resolveCurrentTextureUuid(assetFile) {
   if (!assetFile) return '';
   const meta = readJsonIfExists(`${assetFile}.meta`);
@@ -1692,6 +1812,9 @@ function ensureImageAssetMeta(assetFile, config = {}) {
   const ext = path.extname(assetFile).toLowerCase();
   const displayName = path.basename(assetFile, ext);
   const isParticleTexture = Boolean(config.particleTexture);
+  const requestedImageType = String(config.imageType || '').toLowerCase();
+  const wantsTextureType = isParticleTexture || requestedImageType === 'texture';
+  const wantsSpriteFrameType = requestedImageType === 'sprite-frame' || !wantsTextureType;
   const meta = {
     ver: existing.ver || '1.0.27',
     importer: existing.importer || 'image',
@@ -1714,7 +1837,7 @@ function ensureImageAssetMeta(assetFile, config = {}) {
     }
   }
   const generatedSpriteFrame = meta.subMetas[COCOS_IMAGE_SPRITE_FRAME_SUBMETA_ID];
-  if (isParticleTexture && generatedSpriteFrame?.importer === 'sprite-frame' && isPendingGeneratedSubMeta(generatedSpriteFrame)) {
+  if (wantsTextureType && generatedSpriteFrame?.importer === 'sprite-frame' && isPendingGeneratedSubMeta(generatedSpriteFrame)) {
     delete meta.subMetas[COCOS_IMAGE_SPRITE_FRAME_SUBMETA_ID];
     changed = true;
   }
@@ -1759,7 +1882,7 @@ function ensureImageAssetMeta(assetFile, config = {}) {
     changed = true;
   }
 
-  if (isParticleTexture) {
+  if (wantsTextureType) {
     textureRecord.subMeta.userData = {
       ...(textureRecord.subMeta.userData || {}),
       wrapModeS: 'repeat',
@@ -1777,7 +1900,7 @@ function ensureImageAssetMeta(assetFile, config = {}) {
   const existingSpriteFrame = meta.subMetas[COCOS_IMAGE_SPRITE_FRAME_SUBMETA_ID]?.importer === 'sprite-frame'
     ? meta.subMetas[COCOS_IMAGE_SPRITE_FRAME_SUBMETA_ID]
     : null;
-  if (!isParticleTexture && !existingSpriteFrame) {
+  if (wantsSpriteFrameType && !existingSpriteFrame) {
     const { width, height } = getImageDimensions(assetFile);
     const id = COCOS_IMAGE_SPRITE_FRAME_SUBMETA_ID;
     meta.subMetas[id] = {
@@ -1822,14 +1945,14 @@ function ensureImageAssetMeta(assetFile, config = {}) {
   }
 
   meta.userData = {
-    type: 'sprite-frame',
+    ...meta.userData,
+    type: wantsTextureType ? 'texture' : 'sprite-frame',
     fixAlphaTransparencyArtifacts: false,
     hasAlpha: true,
-    ...meta.userData,
     redirect: textureRecord.uuid,
   };
 
-  if (isParticleTexture) {
+  if (wantsTextureType) {
     meta.userData = {
       ...meta.userData,
       type: 'texture',
@@ -3589,6 +3712,21 @@ class CocosPrefabBuilder {
     }, unityComponentId, fileId);
   }
 
+  addMeshCollider(nodeId, unityComponentId, config, fileId) {
+    return this.addComponent(nodeId, 'cc.MeshCollider', {
+      _enabled: Boolean(config?.enabled ?? true),
+      _material: config?.materialUuid ? cocosUuid(config.materialUuid, 'cc.PhysicsMaterial') : null,
+      _isTrigger: Boolean(config?.isTrigger ?? false),
+      _center: vec3(
+        Number(config?.center?.x || 0),
+        Number(config?.center?.y || 0),
+        Number(config?.center?.z || 0),
+      ),
+      _mesh: config?.meshUuid ? cocosUuid(config.meshUuid, 'cc.Mesh') : null,
+      _convex: Boolean(config?.convex ?? false),
+    }, unityComponentId, fileId);
+  }
+
   addBoxCollider2D(nodeId, unityComponentId, config, fileId) {
     return this.addComponent(nodeId, 'cc.BoxCollider2D', {
       _enabled: Boolean(config?.enabled ?? true),
@@ -3644,7 +3782,8 @@ class CocosPrefabBuilder {
   }
 
   addCamera(nodeId, unityComponentId, doc, fileId) {
-    const projection = Number(getField(doc, 'orthographic', getField(doc, 'm_Orthographic', 0)) || 0) ? 1 : 0;
+    const isOrthographic = Number(getField(doc, 'orthographic', getField(doc, 'm_Orthographic', 0)) || 0) !== 0;
+    const projection = isOrthographic ? COCOS_CAMERA_PROJECTION_ORTHO : COCOS_CAMERA_PROJECTION_PERSPECTIVE;
     const fov = Number(getField(doc, 'field of view', getField(doc, 'm_FieldOfView', 60)) || 60);
     const orthoHeight = Number(getField(doc, 'orthographic size', getField(doc, 'm_OrthographicSize', 5)) || 5);
     const near = Number(getField(doc, 'near clip plane', getField(doc, 'm_NearClipPlane', 0.3)) || 0.3);
@@ -4700,6 +4839,10 @@ function emitParticleSystem(nodeId, componentId, doc, gameObject, builder, repor
 
 function emitMeshRenderer(gameObject, nodeId, componentId, doc, model, builder, reporter, options, unityDb, cocosDb) {
   return emitMeshRendererImpl(gameObject, nodeId, componentId, doc, model, builder, reporter, options, unityDb, cocosDb);
+}
+
+function emitMeshCollider(nodeId, componentId, doc, gameObject, model, builder, reporter, options, unityDb, cocosDb) {
+  return emitMeshColliderImpl(nodeId, componentId, doc, gameObject, model, builder, reporter, options, unityDb, cocosDb);
 }
 
 function handleMissingModel(meshAsset, reporter, options, config = {}) {

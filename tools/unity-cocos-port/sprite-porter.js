@@ -90,7 +90,10 @@ module.exports = function createSpritePorter(deps) {
         : '';
       if (!spriteUuid) spriteUuid = cocosDb.resolveSpriteByStem(attempt.asset.stem);
       if (!spriteUuid && attempt.allowCopy) {
-        copiedDest = copyUnityAssetToCocos(attempt.asset, options, reporter, 'image', 'medium', { deferNeedsImportReport: true });
+        copiedDest = copyUnityAssetToCocos(attempt.asset, options, reporter, 'image', 'medium', {
+          deferNeedsImportReport: true,
+          imageType: 'sprite-frame',
+        });
         spriteUuid = waitForCurrentSpriteFrameUuid(copiedDest, options);
       }
       if (spriteUuid) {

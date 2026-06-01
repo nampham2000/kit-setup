@@ -256,8 +256,13 @@ module.exports = function createMaterialPorter(deps) {
     if (!textureAsset) return '';
 
     const importedDest = importedUnityAssetPath(textureAsset, options);
-    const copyConfig = { deferNeedsImportReport: true, ...importConfig };
-    const needsMetaRefresh = Boolean(importConfig.particleTexture);
+    const copyConfig = { deferNeedsImportReport: true, imageType: 'texture', ...importConfig };
+    const requestedImageType = String(copyConfig.imageType || '').toLowerCase();
+    const existingMeta = importedDest && fs.existsSync(importedDest)
+      ? readJsonIfExists(`${importedDest}.meta`)
+      : null;
+    const needsMetaRefresh = Boolean(importConfig.particleTexture)
+      || Boolean(requestedImageType && existingMeta?.userData?.type !== requestedImageType);
 
     if (importedDest && fs.existsSync(importedDest) && !needsMetaRefresh) {
       const textureUuid = resolveCurrentTextureUuid(importedDest);
