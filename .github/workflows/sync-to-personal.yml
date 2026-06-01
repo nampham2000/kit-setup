@@ -1,0 +1,29 @@
+name: Sync to personal mirror
+
+on:
+  push:
+    branches:
+      - "**"
+    tags:
+      - "**"
+  delete:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Clone business repo as mirror
+        run: |
+          git clone --mirror https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git source.git
+
+      - name: Push mirror to personal repo
+        env:
+          TARGET_REPO: https://x-access-token:${{ secrets.PERSONAL_MIRROR_TOKEN }}@github.com:minhdangphamthe/playable-shared-kit.git
+        run: |
+          cd source.git
+          git push --mirror "$TARGET_REPO"
