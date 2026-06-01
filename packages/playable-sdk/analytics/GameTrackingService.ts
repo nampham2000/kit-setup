@@ -4,6 +4,7 @@ import ga from "gameanalytics";
 type TrackingConfig = {
     project_id: string;
     brief_id: string;
+    form_id: string;
     android_bundle_id: string;
     ios_bundle_id: string;
     gameAnalytics: {
@@ -60,6 +61,7 @@ declare global {
 const DEFAULT_CONFIG: TrackingConfig = {
     project_id: "unknown_project",
     brief_id: "unknown_brief",
+    form_id: "short",
     android_bundle_id: "unknown_android_bundle",
     ios_bundle_id: "unknown_ios_bundle",
     gameAnalytics: {
@@ -93,6 +95,7 @@ export class GameTrackingService {
     private static defaultParams: Record<string, string> = {
         project_id: DEFAULT_CONFIG.project_id,
         brief_id: DEFAULT_CONFIG.brief_id,
+        form_id: DEFAULT_CONFIG.form_id,
         playable_id: `${DEFAULT_CONFIG.android_bundle_id}.playable`
     };
     private static ready: boolean = false;
@@ -244,6 +247,7 @@ export class GameTrackingService {
         return this.loadConfigJson().then(json => ({
             project_id: json?.project_id || DEFAULT_CONFIG.project_id,
             brief_id: json?.brief_id || DEFAULT_CONFIG.brief_id,
+            form_id: json?.form_id || DEFAULT_CONFIG.form_id,
             android_bundle_id: json?.android_bundle_id || DEFAULT_CONFIG.android_bundle_id,
             ios_bundle_id: json?.ios_bundle_id || DEFAULT_CONFIG.ios_bundle_id,
             gameAnalytics: { ...DEFAULT_CONFIG.gameAnalytics, ...json?.gameAnalytics },
@@ -330,6 +334,7 @@ export class GameTrackingService {
         return {
             project_id: this.snakeCaseValue(this.config.project_id || DEFAULT_CONFIG.project_id),
             brief_id: this.snakeCaseValue(this.config.brief_id || DEFAULT_CONFIG.brief_id),
+            form_id: this.snakeCaseValue(this.config.form_id || DEFAULT_CONFIG.form_id),
             playable_id: this.buildPlayableId()
         };
     }
