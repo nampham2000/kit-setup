@@ -8,7 +8,76 @@ module.exports = function createColliderPorter(deps) {
     getField,
     parseUnityPolygonColliderPaths,
     boundsForUnityPolygonPaths,
+    unityRefGuid,
+    resolveUnityPhysicsMaterialUuid,
+    resolveUnityBuiltinMeshUuid,
+    resolveBuiltinPrimitiveMeshUuid,
+    importedUnityAssetPath,
+    copyUnityAssetToCocos,
+    handleMissingModel,
+    resolveLibraryAssetUuid,
   } = deps;
+
+  function unityRefEquals(left, right) {
+    if (!left || !right) return false;
+    return String(left.fileID || '') === String(right.fileID || '')
+      && String(unityRefGuid(left) || '') === String(unityRefGuid(right) || '');
+  }
+
+  function siblingMeshRendererMeshUuid(gameObject, model, builder, meshRef) {
+    const meshFilterId = gameObject.components.find((id) => model.componentDocs.get(id)?.classId === 33);
+    const meshFilter = meshFilterId ? model.componentDocs.get(meshFilterId) : null;
+    const meshFilterRef = meshFilter ? getField(meshFilter, 'm_Mesh') : null;
+    if (meshRef && meshFilterRef && !unityRefEquals(meshRef, meshFilterRef)) return '';
+
+    const meshRendererId = gameObject.components.find((id) => model.componentDocs.get(id)?.classId === 23);
+    const componentId = meshRendererId == null ? null : builder.componentMap.get(meshRendererId);
+    const renderer = Number.isInteger(componentId) ? builder.objects[componentId] : null;
+    return renderer?._mesh?.__uuid__ || '';
+  }
+
+  function resolveMeshColliderMeshUuid(meshRef, gameObject, model, builder, reporter, options, unityDb, cocosDb) {
+    const siblingMeshUuid = siblingMeshRendererMeshUuid(gameObject, model, builder, meshRef);
+    if (siblingMeshUuid) return siblingMeshUuid;
+
+    const builtinMeshUuid = resolveUnityBuiltinMeshUuid ? resolveUnityBuiltinMeshUuid(meshRef, gameObject.name) : '';
+    if (builtinMeshUuid) return builtinMeshUuid;
+
+    const meshAsset = unityDb.get(unityRefGuid(meshRef));
+    if (!meshAsset) return '';
+
+    const resolved = cocosDb?.resolveModelMeshByStem
+      ? cocosDb.resolveModelMeshByStem(meshAsset.stem, gameObject.name)
+      : null;
+    if (resolved?.meshUuid) return resolved.meshUuid;
+
+    if (meshAsset.ext === '.asset') {
+      const importedDest = importedUnityAssetPath ? importedUnityAssetPath(meshAsset, options) : '';
+      if (importedDest) {
+        const existingUuid = resolveLibraryAssetUuid(importedDest, options, 'cc.Mesh', { forceReload: true });
+        if (existingUuid) return existingUuid;
+      }
+      if (copyUnityAssetToCocos) {
+        const copiedDest = copyUnityAssetToCocos(meshAsset, options, reporter, 'model', 'medium', {
+          deferNeedsImportReport: true,
+          meshNameHint: gameObject.name,
+        });
+        if (copiedDest) {
+          const copiedUuid = resolveLibraryAssetUuid(copiedDest, options, 'cc.Mesh', { forceReload: true });
+          if (copiedUuid) return copiedUuid;
+        }
+      }
+      if (resolveBuiltinPrimitiveMeshUuid) {
+        const primitiveUuid = resolveBuiltinPrimitiveMeshUuid(gameObject.name, meshAsset.stem);
+        if (primitiveUuid) return primitiveUuid;
+      }
+    }
+
+    const missing = handleMissingModel
+      ? handleMissingModel(meshAsset, reporter, options, { autoCopy: true, severity: 'low', meshNameHint: gameObject.name })
+      : null;
+    return missing?.resolved?.meshUuid || '';
+  }
 
   function unityRigidBody2DTypeToCocosType(unityBodyType) {
     const value = Number(unityBodyType || 0);
@@ -151,6 +220,28 @@ module.exports = function createColliderPorter(deps) {
     }, `cmp-polygon-collider-2d-${componentId}`);
   }
 
+  function emitMeshCollider(nodeId, componentId, doc, gameObject, model, builder, reporter, options, unityDb, cocosDb) {
+    const meshRef = getField(doc, 'm_Mesh', null);
+    const meshUuid = resolveMeshColliderMeshUuid(meshRef, gameObject, model, builder, reporter, options, unityDb, cocosDb);
+    const physicsMaterialAsset = unityDb.get(unityRefGuid(getField(doc, 'm_Material', null)));
+    const physicsMaterialUuid = resolveUnityPhysicsMaterialUuid
+      ? resolveUnityPhysicsMaterialUuid(physicsMaterialAsset, options, reporter, gameObject.name)
+      : '';
+
+    if (!meshUuid) {
+      reporter.high('MESH_COLLIDER_UNRESOLVED', model.file, gameObject.name, 'Unity MeshCollider was ported without a resolved Cocos mesh');
+    }
+
+    builder.addMeshCollider(nodeId, componentId, {
+      enabled: Number(getField(doc, 'm_Enabled', 1) || 0) !== 0,
+      isTrigger: Number(getField(doc, 'm_IsTrigger', 0) || 0) !== 0,
+      convex: Number(getField(doc, 'm_Convex', 0) || 0) !== 0,
+      center: { x: 0, y: 0, z: 0 },
+      meshUuid,
+      materialUuid: physicsMaterialUuid,
+    }, `cmp-mesh-collider-${componentId}`);
+  }
+
   return {
     unityRigidBody2DTypeToCocosType,
     emitRigidbody2D,
@@ -158,5 +249,6 @@ module.exports = function createColliderPorter(deps) {
     emitBoxCollider2D,
     polygonPathArea,
     emitPolygonCollider2D,
+    emitMeshCollider,
   };
 };

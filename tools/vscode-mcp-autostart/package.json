@@ -1,0 +1,24 @@
+{
+  "name": "cocos-game-mcp-autostart",
+  "displayName": "Cocos Game MCP Autostart",
+  "description": "Starts the cocos_game workspace MCP servers when the project is opened in VS Code.",
+  "version": "0.0.1",
+  "publisher": "local",
+  "license": "UNLICENSED",
+  "private": true,
+  "engines": {
+    "vscode": "^1.103.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "files": [
+    "extension.js",
+    "README.md",
+    "LICENSE"
+  ],
+  "activationEvents": [
+    "workspaceContains:.vscode/mcp.json"
+  ],
+  "main": "./extension.js"
+}

@@ -41,7 +41,7 @@ module.exports = function createRendererPorter(deps) {
     }
 
     const missing = handleMissingModel(modelAsset, reporter, options, { autoCopy: true, severity: 'low', meshNameHint });
-    if (missing.resolved?.meshUuid && !missing.pendingImport) {
+    if (missing.resolved?.meshUuid) {
       builder.addMeshRenderer(
         nodeId,
         componentId,
@@ -49,7 +49,15 @@ module.exports = function createRendererPorter(deps) {
         overrideMaterialUuids.length ? overrideMaterialUuids : (missing.resolved.materialUuids || (missing.resolved.materialUuid ? [missing.resolved.materialUuid] : [])),
         componentFileId,
       );
-      reporter.low('NESTED_MODEL_RENDERER_CREATED', modelAsset.relativePath, gameObject.name, 'Nested model asset resolved to Cocos MeshRenderer', missing.resolved.source);
+      reporter.low(
+        missing.pendingImport ? 'NESTED_MODEL_PENDING_MESH_WIRED' : 'NESTED_MODEL_RENDERER_CREATED',
+        modelAsset.relativePath,
+        gameObject.name,
+        missing.pendingImport
+          ? 'Nested model asset was wired to a stable pending Cocos mesh sub-asset; Creator import will materialize it'
+          : 'Nested model asset resolved to Cocos MeshRenderer',
+        missing.resolved.source,
+      );
       return;
     }
     if (missing.pendingImport) {
@@ -78,6 +86,7 @@ module.exports = function createRendererPorter(deps) {
     const meshFilter = meshFilterId ? model.componentDocs.get(meshFilterId) : null;
     const meshRef = meshFilter ? getField(meshFilter, 'm_Mesh') : null;
     const materialRefs = getNestedList(doc, 'm_Materials');
+    const hasExplicitMaterialSlots = materialRefs.length > 0;
 
     const meshAsset = unityDb.get(unityRefGuid(meshRef));
     const materialAssets = materialRefs.map((materialRef) => unityDb.get(unityRefGuid(materialRef)) || null);
@@ -103,8 +112,10 @@ module.exports = function createRendererPorter(deps) {
       const resolved = cocosDb.resolveModelMeshByStem(meshAsset.stem, gameObject.name);
       if (resolved) {
         meshUuid = resolved.meshUuid;
-        const resolvedMaterials = cocosDb.resolveModelMaterialUuidsByStem(meshAsset.stem, materialHints);
-        materialUuids = resolvedMaterials?.materialUuids || resolved.materialUuids || (resolved.materialUuid ? [resolved.materialUuid] : []);
+        if (hasExplicitMaterialSlots) {
+          const resolvedMaterials = cocosDb.resolveModelMaterialUuidsByStem(meshAsset.stem, materialHints);
+          materialUuids = resolvedMaterials?.materialUuids || resolved.materialUuids || (resolved.materialUuid ? [resolved.materialUuid] : []);
+        }
         if (resolved.fallbackExt !== meshAsset.ext && ['.fbx', '.gltf', '.glb'].includes(resolved.fallbackExt)) {
           reporter.low('MODEL_FALLBACK_USED', meshAsset.relativePath, resolved.source, `Model was resolved through ${resolved.fallbackExt} fallback`);
         }
@@ -133,9 +144,12 @@ module.exports = function createRendererPorter(deps) {
         if (!meshUuid) {
           const missing = handleMissingModel(meshAsset, reporter, options, { autoCopy: true, meshNameHint: gameObject.name });
           meshPendingImport = Boolean(missing.pendingImport);
-          if (missing.resolved && !missing.pendingImport) {
+          if (missing.resolved?.meshUuid) {
             meshUuid = missing.resolved.meshUuid;
-            materialUuids = missing.resolved.materialUuids || (missing.resolved.materialUuid ? [missing.resolved.materialUuid] : materialUuids);
+            meshPendingImport = Boolean(missing.pendingImport);
+            if (hasExplicitMaterialSlots) {
+              materialUuids = missing.resolved.materialUuids || (missing.resolved.materialUuid ? [missing.resolved.materialUuid] : materialUuids);
+            }
           }
         }
       }
