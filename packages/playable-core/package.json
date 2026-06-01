@@ -1,0 +1,19 @@
+{
+  "name": "playable-core",
+  "version": "0.0.0",
+  "private": true,
+  "main": "./index.ts",
+  "types": "./index.ts",
+  "exports": {
+    ".": "./index.ts",
+    "./GameManager": "./GameManager.ts",
+    "./SoundManager": "./SoundManager.ts",
+    "./utils/GameUtils": "./utils/GameUtils.ts",
+    "./utils/pool/ObjectPool": "./utils/pool/ObjectPool.ts",
+    "./utils/pool/NodePoolAdapter": "./utils/pool/NodePoolAdapter.ts",
+    "./utils/pool/Poolable": "./utils/pool/Poolable.ts"
+  },
+  "dependencies": {
+    "playable-sdk": "file:../playable-sdk"
+  }
+}

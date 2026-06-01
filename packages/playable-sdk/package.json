@@ -6,6 +6,8 @@
   "types": "./index.ts",
   "exports": {
     ".": "./index.ts",
-    "./analytics/GameTrackingService": "./analytics/GameTrackingService.ts"
+    "./analytics/GameTrackingService": "./analytics/GameTrackingService.ts",
+    "./platform/SuperHtmlPlayable": "./platform/SuperHtmlPlayable.ts",
+    "./platform/PlayableAdDownloadEvent": "./platform/PlayableAdDownloadEvent.ts"
   }
 }
