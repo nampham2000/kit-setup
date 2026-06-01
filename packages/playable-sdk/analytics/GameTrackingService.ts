@@ -1,4 +1,4 @@
-import { JsonAsset, resources } from "cc";
+import { assetManager, JsonAsset, resources } from "cc";
 import ga from "gameanalytics";
 
 type TrackingConfig = {
@@ -60,7 +60,7 @@ declare global {
 const DEFAULT_CONFIG: TrackingConfig = {
     project_id: "unknown_project",
     brief_id: "unknown_brief",
-    android_bundle_id: "unknown_android_bundle",
+    android_bundle_id: "com.leonet.food.sort.grill.fever",
     ios_bundle_id: "unknown_ios_bundle",
     gameAnalytics: {
         gameKey: "",
@@ -87,6 +87,8 @@ const DEFAULT_CONFIG: TrackingConfig = {
 };
 
 export class GameTrackingService {
+    private static readonly CONFIG_PATH: string = "TrackingConfig";
+    private static configBundles: string[] = ["resources"];
     private static config: TrackingConfig = DEFAULT_CONFIG;
     private static defaultParams: Record<string, string> = {
         project_id: DEFAULT_CONFIG.project_id,
@@ -110,7 +112,8 @@ export class GameTrackingService {
     private static appLovinSentEvents: Set<AppLovinPlayableEvent> = new Set();
     private static appLovinChallengeStartedAt: number = 0;
 
-    public static init(): Promise<TrackingConfig> {
+    public static init(bundles?: string[]): Promise<TrackingConfig> {
+        if (bundles) this.configBundles = bundles;
         if (this.ready) return Promise.resolve(this.config);
         if (this.initPromise) return this.initPromise;
 
@@ -172,8 +175,9 @@ export class GameTrackingService {
         this.run(() => {
             if (this.gameEnded) return;
             if (!this.sessionActive) this.startSession();
-            this.step++;
-            this.logEvent("interactionStep", { ...params, step: this.step });
+            const requestedStep = typeof params?.step === "number" ? params.step : this.step + 1;
+            this.step = Math.max(this.step, requestedStep);
+            this.logEvent("interactionStep", { ...params, step: requestedStep });
             if (this.step === this.config.interactions.target_clicks) {
                 this.logEvent("targetClicksReached", { ...params, total_clicks: this.step });
             }
@@ -237,22 +241,53 @@ export class GameTrackingService {
     }
 
     private static loadConfig(): Promise<TrackingConfig> {
-        return new Promise(resolve => {
-            resources.load("TrackingConfig", JsonAsset, (_, asset) => {
-                const json = asset?.json as Partial<TrackingConfig>;
-                resolve({
-                    project_id: json?.project_id || DEFAULT_CONFIG.project_id,
-                    brief_id: json?.brief_id || DEFAULT_CONFIG.brief_id,
-                    android_bundle_id: json?.android_bundle_id || DEFAULT_CONFIG.android_bundle_id,
-                    ios_bundle_id: json?.ios_bundle_id || DEFAULT_CONFIG.ios_bundle_id,
-                    gameAnalytics: { ...DEFAULT_CONFIG.gameAnalytics, ...json?.gameAnalytics },
-                    events: { ...DEFAULT_CONFIG.events, ...json?.events },
-                    batch: { ...DEFAULT_CONFIG.batch, ...json?.batch },
-                    offline: { ...DEFAULT_CONFIG.offline, ...json?.offline },
-                    engagement: { ...DEFAULT_CONFIG.engagement, ...json?.engagement },
-                    interactions: { ...DEFAULT_CONFIG.interactions, ...json?.interactions }
-                });
-            });
+        return this.loadConfigJson().then(json => ({
+            project_id: json?.project_id || DEFAULT_CONFIG.project_id,
+            brief_id: json?.brief_id || DEFAULT_CONFIG.brief_id,
+            android_bundle_id: json?.android_bundle_id || DEFAULT_CONFIG.android_bundle_id,
+            ios_bundle_id: json?.ios_bundle_id || DEFAULT_CONFIG.ios_bundle_id,
+            gameAnalytics: { ...DEFAULT_CONFIG.gameAnalytics, ...json?.gameAnalytics },
+            events: { ...DEFAULT_CONFIG.events, ...json?.events },
+            batch: { ...DEFAULT_CONFIG.batch, ...json?.batch },
+            offline: { ...DEFAULT_CONFIG.offline, ...json?.offline },
+            engagement: { ...DEFAULT_CONFIG.engagement, ...json?.engagement },
+            interactions: { ...DEFAULT_CONFIG.interactions, ...json?.interactions }
+        }));
+    }
+
+    private static loadConfigJson(): Promise<Partial<TrackingConfig>> {
+        return new Promise(resolve => this.loadConfigFromBundle(0, resolve));
+    }
+
+    private static loadConfigFromBundle(index: number, resolve: (json: Partial<TrackingConfig>) => void): void {
+        const bundleName = this.configBundles[index];
+        if (!bundleName) {
+            resolve({});
+            return;
+        }
+
+        const onLoaded = (asset?: JsonAsset | null) => {
+            if (asset?.json) resolve(asset.json as Partial<TrackingConfig>);
+            else this.loadConfigFromBundle(index + 1, resolve);
+        };
+
+        if (bundleName === "resources") {
+            resources.load(this.CONFIG_PATH, JsonAsset, (_, asset) => onLoaded(asset));
+            return;
+        }
+
+        const bundle = assetManager.getBundle(bundleName);
+        if (bundle) {
+            bundle.load(this.CONFIG_PATH, JsonAsset, (_, asset) => onLoaded(asset));
+            return;
+        }
+
+        assetManager.loadBundle(bundleName, (_, loadedBundle) => {
+            if (!loadedBundle) {
+                this.loadConfigFromBundle(index + 1, resolve);
+                return;
+            }
+            loadedBundle.load(this.CONFIG_PATH, JsonAsset, (_, asset) => onLoaded(asset));
         });
     }
 
