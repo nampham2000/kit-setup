@@ -60,7 +60,7 @@ declare global {
 const DEFAULT_CONFIG: TrackingConfig = {
     project_id: "unknown_project",
     brief_id: "unknown_brief",
-    android_bundle_id: "com.leonet.food.sort.grill.fever",
+    android_bundle_id: "unknown_android_bundle",
     ios_bundle_id: "unknown_ios_bundle",
     gameAnalytics: {
         gameKey: "",
