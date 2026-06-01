@@ -1,6 +1,7 @@
 {
   "project_id": "screw_out_factory_playable",
   "brief_id": "SOF_BH_IQ_C_DB_B_G_C_Minh_130526",
+  "form_id": "short",
   "android_bundle_id": "com.ntt.screw.out.factory",
   "ios_bundle_id": "com.juicejoy.screw.out.factory",
   "gameAnalytics": {
@@ -21,7 +22,7 @@
     "playableClicked": "playable_clicked",
     "gameEnd": "playable_game_end",
     "sessionStart": "engagement_session_start",
-    "sessionStay": "engagement_stay_{seconds}_seconds",
+    "sessionStay": "engagement_stay",
     "targetDurationReached": "engagement_target_duration_reached",
     "sessionEnd": "engagement_session_end",
     "interactionStep": "interaction_step_{step}",
