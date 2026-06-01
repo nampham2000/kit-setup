@@ -14,12 +14,6 @@ if exist "%ROOT%\extensions\" (
     )
 )
 
-if exist "%ROOT%\tools\" (
-    for /d %%D in ("%ROOT%\tools\*") do (
-        call :install "%%D" "tools\%%~nxD"
-    )
-)
-
 echo.
 echo All packages installed successfully.
 if /I not "%SETUP_ALL_NO_PAUSE%"=="1" pause

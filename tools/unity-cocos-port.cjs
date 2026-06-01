@@ -221,9 +221,9 @@ function printHelp() {
 Unity -> Cocos Prefab Porter
 
 Usage:
-  node tools/unity-cocos-port.cjs port --src <UnityPrefab> --out <CocosPrefab> [options]
-  node tools/unity-cocos-port.cjs port --src <UnityPrefabFolder> --out <CocosPrefabFolder> [options]
-  node tools/unity-cocos-port.cjs doctor [options]
+  node playable-shared-kit/tools/unity-cocos-port.cjs port --src <UnityPrefab> --out <CocosPrefab> [options]
+  node playable-shared-kit/tools/unity-cocos-port.cjs port --src <UnityPrefabFolder> --out <CocosPrefabFolder> [options]
+  node playable-shared-kit/tools/unity-cocos-port.cjs doctor [options]
 
 Options:
   --unity-root <path>       Unity Assets folder. Default: inferred from --src.
@@ -241,9 +241,9 @@ Options:
   --layer-map <json>        JSON object overriding Unity layer index to Cocos layer name/value.
 
 Examples:
-  node tools/unity-cocos-port.cjs port --src "D:/_Projects/Unity/TapeTap/Assets/_Game/Prefabs/Gameplay/Box/Box.prefab" --out assets/prefabs/Gameplay/Box/Box.prefab --overwrite --recursive
-  node tools/unity-cocos-port.cjs port --src "D:/Unity/Game/Assets/_Game/Prefabs" --out assets/prefabs --overwrite --recursive
-  node tools/unity-cocos-port.cjs port --src "D:/Unity/Game/Assets/Foo.prefab" --out assets/prefabs/Foo.prefab --dry-run --report temp/foo-report.csv
+  node playable-shared-kit/tools/unity-cocos-port.cjs port --src "D:/_Projects/Unity/TapeTap/Assets/_Game/Prefabs/Gameplay/Box/Box.prefab" --out assets/prefabs/Gameplay/Box/Box.prefab --overwrite --recursive
+  node playable-shared-kit/tools/unity-cocos-port.cjs port --src "D:/Unity/Game/Assets/_Game/Prefabs" --out assets/prefabs --overwrite --recursive
+  node playable-shared-kit/tools/unity-cocos-port.cjs port --src "D:/Unity/Game/Assets/Foo.prefab" --out assets/prefabs/Foo.prefab --dry-run --report temp/foo-report.csv
 `);
 }
 

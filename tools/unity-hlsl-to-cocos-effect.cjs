@@ -18,7 +18,25 @@
 const fs = require('fs');
 const path = require('path');
 
-const ROOT_DIR = path.resolve(__dirname, '..');
+function findProjectRoot(startDir) {
+  let current = path.resolve(startDir);
+  while (true) {
+    const hasPackageJson = fs.existsSync(path.join(current, 'package.json'));
+    const looksLikeCocosProject = fs.existsSync(path.join(current, 'assets'))
+      || fs.existsSync(path.join(current, 'configs'));
+    if (hasPackageJson && looksLikeCocosProject) return current;
+
+    const parent = path.dirname(current);
+    if (parent === current) return null;
+    current = parent;
+  }
+}
+
+const ROOT_DIR = process.env.PLAYABLE_PROJECT_ROOT
+  ? path.resolve(process.env.PLAYABLE_PROJECT_ROOT)
+  : findProjectRoot(process.cwd())
+    || findProjectRoot(path.resolve(__dirname, '..'))
+    || path.resolve(process.cwd());
 const SEVERITY_ORDER = { high: 0, medium: 1, low: 2 };
 
 function printHelp() {
@@ -26,12 +44,12 @@ function printHelp() {
 Unity HLSL/ShaderLab -> Cocos .effect Converter
 
 Usage:
-  node tools/unity-hlsl-to-cocos-effect.cjs convert --src <UnityShaderOrHlsl> --out <CocosEffect> [options]
+  node playable-shared-kit/tools/unity-hlsl-to-cocos-effect.cjs convert --src <UnityShaderOrHlsl> --out <CocosEffect> [options]
 
 Options:
   --src <path>             Unity .shader/.hlsl/.cginc source file.
   --out <path>             Output Cocos .effect file.
-  --cocos-root <path>      Cocos project root. Default: parent folder of this script.
+  --cocos-root <path>      Cocos project root. Default: current repo root.
   --shader-name <name>     Cocos program/effect display name. Default: derived from --out/--src.
   --report <path>          CSV report path. Default: .unity/hlsl-port-report.csv.
   --overwrite              Allow replacing an existing output .effect.
@@ -41,8 +59,8 @@ Options:
   --alpha-clip             Add alpha clip threshold support.
 
 Examples:
-  node tools/unity-hlsl-to-cocos-effect.cjs convert --src "Assets/Shaders/Fx.shader" --out "assets/effects/fx.effect" --overwrite
-  node tools/unity-hlsl-to-cocos-effect.cjs convert --src "Assets/Shaders/MatCap.shader" --out "assets/effects/matcap.effect" --transparent --report .unity/matcap-report.csv
+  node playable-shared-kit/tools/unity-hlsl-to-cocos-effect.cjs convert --src "Assets/Shaders/Fx.shader" --out "assets/effects/fx.effect" --overwrite
+  node playable-shared-kit/tools/unity-hlsl-to-cocos-effect.cjs convert --src "Assets/Shaders/MatCap.shader" --out "assets/effects/matcap.effect" --transparent --report .unity/matcap-report.csv
 `);
 }
 

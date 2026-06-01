@@ -23,13 +23,13 @@ The warm cache is written as portable JSON. Repo-local paths are emitted with a 
 Initialize databases:
 
 ```powershell
-node tools/work-memory.cjs init
+node playable-shared-kit/tools/work-memory.cjs init
 ```
 
 Remember one note manually:
 
 ```powershell
-node tools/work-memory.cjs remember `
+node playable-shared-kit/tools/work-memory.cjs remember `
   --scope repo `
   --category bug-fix `
   --title "Sprite effect trap" `
@@ -44,8 +44,8 @@ node tools/work-memory.cjs remember `
 Import an existing markdown or TODO file:
 
 ```powershell
-node tools/work-memory.cjs import-markdown `
-  --file tools/unity-cocos-port.TODO.md `
+node playable-shared-kit/tools/work-memory.cjs import-markdown `
+  --file playable-shared-kit/tools/unity-cocos-port.TODO.md `
   --scope repo `
   --category porting-note `
   --tags unity,cocos,porting
@@ -54,41 +54,41 @@ node tools/work-memory.cjs import-markdown `
 Auto-discover and import repo note sources:
 
 ```powershell
-node tools/work-memory.cjs import-sources --scope repo
-node tools/work-memory.cjs import-sources --scope repo --include-reference true
+node playable-shared-kit/tools/work-memory.cjs import-sources --scope repo
+node playable-shared-kit/tools/work-memory.cjs import-sources --scope repo --include-reference true
 ```
 
 Query memories:
 
 ```powershell
-node tools/work-memory.cjs query --text "particle rotation" --scope repo
-node tools/work-memory.cjs query --text "sprite effect preview" --scope hybrid --semantic hybrid --json
-node tools/work-memory.cjs query --text "preview sprites shader semantics" --scope repo --semantic only --prefer-cache false --json
+node playable-shared-kit/tools/work-memory.cjs query --text "particle rotation" --scope repo
+node playable-shared-kit/tools/work-memory.cjs query --text "sprite effect preview" --scope hybrid --semantic hybrid --json
+node playable-shared-kit/tools/work-memory.cjs query --text "preview sprites shader semantics" --scope repo --semantic only --prefer-cache false --json
 ```
 
 Build a startup warm cache:
 
 ```powershell
-node tools/work-memory.cjs warmup --repo-limit 20 --global-limit 10
-node tools/work-memory.cjs inspect-cache --items true
+node playable-shared-kit/tools/work-memory.cjs warmup --repo-limit 20 --global-limit 10
+node playable-shared-kit/tools/work-memory.cjs inspect-cache --items true
 ```
 
 Start a session in one command:
 
 ```powershell
-node tools/work-memory.cjs session-start --sync-sources true --hot-limit 8
+node playable-shared-kit/tools/work-memory.cjs session-start --sync-sources true --hot-limit 8
 ```
 
 Rebuild semantic vectors explicitly:
 
 ```powershell
-node tools/work-memory.cjs reindex-semantic --force false
+node playable-shared-kit/tools/work-memory.cjs reindex-semantic --force false
 ```
 
 Show counts:
 
 ```powershell
-node tools/work-memory.cjs stats
+node playable-shared-kit/tools/work-memory.cjs stats
 ```
 
 ## Recommended startup flow
@@ -96,8 +96,8 @@ node tools/work-memory.cjs stats
 At the beginning of a work session:
 
 ```powershell
-node tools/work-memory.cjs session-start --sync-sources true --repo-limit 25 --global-limit 10 --hot-limit 8
-node tools/work-memory.cjs query --text "current porting traps" --scope hybrid --semantic hybrid --prefer-cache true
+node playable-shared-kit/tools/work-memory.cjs session-start --sync-sources true --repo-limit 25 --global-limit 10 --hot-limit 8
+node playable-shared-kit/tools/work-memory.cjs query --text "current porting traps" --scope hybrid --semantic hybrid --prefer-cache true
 ```
 
 This keeps SQLite on disk as the source of truth while loading a ranked working set into process memory for fast first queries.
@@ -106,10 +106,10 @@ This keeps SQLite on disk as the source of truth while loading a ranked working 
 
 `import-sources` looks for workspace-visible markdown sources such as:
 
-- `tools/**/*.TODO.md`
+- `playable-shared-kit/tools/**/*.TODO.md`
 - `**/*CHANGELOG*.md`
 - `**/*summary*.md`, `**/*bugfix*.md`, `**/*postmortem*.md`
-- `tools/**/README*.md`
+- `playable-shared-kit/tools/**/README*.md`
 - `extensions/**/README*.md`
 - `extensions/**/FEATURE_GUIDE*.md`
 

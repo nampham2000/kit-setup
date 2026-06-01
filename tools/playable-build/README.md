@@ -1,38 +1,34 @@
 # Playable Build Tools
 
-`playable-build` contains the Cocos playable build helper tools imported from `GrillFever-Playable-Cocos`.
+`playable-build` contains the Cocos playable build helper tools.
 
-Use the root wrapper so commands run against this Cocos project:
+Run the shared-kit entrypoint from the Cocos project root:
 
 ```powershell
-node tools/playable-build.cjs doctor
-npm run playable:doctor
+node playable-shared-kit/tools/playable-build.cjs doctor
+npm run doctor
 ```
 
 ## Layout
 
-- `tools/playable-build.cjs` is the root CLI entrypoint used by `package.json`.
-- `tools/playable-build/playable-cli.cjs` contains the build, install, config export, and subtree pull logic.
-- `tools/playable-build/playable-cli.config.cjs` contains local defaults for Cocos discovery, install folders, ad platform retention, and subtree settings.
-- `tools/playable-build/playable-cli.config_TEMPLATE.cjs` is the fallback template used when the config file is missing.
-- `tools/playable-build/build_project.*`, `install_all.*`, and `subtree_pull.*` are shell wrappers that now jump back to the project root before invoking the CLI.
+- `playable-shared-kit/tools/playable-build.cjs` is the CLI entrypoint used by `package.json`.
+- `playable-shared-kit/tools/playable-build/playable-cli.cjs` contains the build, install, config export, and subtree pull logic.
+- `playable-shared-kit/tools/playable-build/playable-cli.config.cjs` contains local defaults for Cocos discovery, install folders, ad platform retention, and subtree settings.
+- `playable-shared-kit/tools/playable-build/playable-cli.config_TEMPLATE.cjs` is the fallback template used when the config file is missing.
+- `playable-shared-kit/tools/playable-build/build_project.*`, `install_all.*`, and `subtree_pull.*` jump back to the project root before invoking the shared-kit CLI.
 
 ## NPM Scripts
 
 ```powershell
-npm run playable:doctor
-npm run playable:setup
-npm run playable:setup:fast
-npm run playable:export-configs
-npm run playable:build
-npm run playable:build:fast
-npm run playable:build:seq
-npm run playable:build:maxcpu
-npm run playable:build:short
-npm run playable:build:mid
-npm run playable:build:long
-npm run playable:subtree:pull
+npm run doctor
+npm run setup
+npm run setup:fast
+npm run build
+npm run build:fast
+npm run build:seq
+npm run build:maxcpu
+npm run build:Short
+npm run build:Mid
+npm run build:Long
+npm run subtree:pull
 ```
-
-The scripts are namespaced with `playable:*` so they do not replace the existing `memory:*` tooling.
-

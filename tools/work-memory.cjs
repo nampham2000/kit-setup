@@ -31,7 +31,7 @@ function printHelp() {
 Work Memory CLI
 
 Usage:
-  node tools/work-memory.cjs <command> [options]
+  node playable-shared-kit/tools/work-memory.cjs <command> [options]
 
 Commands:
   init              Initialize global and repo SQLite databases.
@@ -53,13 +53,13 @@ Common options:
   --json                 Print machine-readable JSON.
 
 Examples:
-  node tools/work-memory.cjs init
-  node tools/work-memory.cjs remember --scope repo --category bug-fix --title "Sprite effect trap" --content "Start from builtin-sprite.effect semantics" --tags cocos,sprite,effect --source-path assets/effects/TestSpriteNodeShine.effect
-  node tools/work-memory.cjs import-markdown --file tools/unity-cocos-port.TODO.md --scope repo --category porting-note --tags unity,cocos,porting
-  node tools/work-memory.cjs import-sources --scope repo
-  node tools/work-memory.cjs query --text particle rotation --scope repo --semantic hybrid
-  node tools/work-memory.cjs warmup --repo-limit 20 --global-limit 10
-  node tools/work-memory.cjs session-start --sync-sources true --hot-limit 8
+  node playable-shared-kit/tools/work-memory.cjs init
+  node playable-shared-kit/tools/work-memory.cjs remember --scope repo --category bug-fix --title "Sprite effect trap" --content "Start from builtin-sprite.effect semantics" --tags cocos,sprite,effect --source-path assets/effects/TestSpriteNodeShine.effect
+  node playable-shared-kit/tools/work-memory.cjs import-markdown --file playable-shared-kit/tools/unity-cocos-port.TODO.md --scope repo --category porting-note --tags unity,cocos,porting
+  node playable-shared-kit/tools/work-memory.cjs import-sources --scope repo
+  node playable-shared-kit/tools/work-memory.cjs query --text particle rotation --scope repo --semantic hybrid
+  node playable-shared-kit/tools/work-memory.cjs warmup --repo-limit 20 --global-limit 10
+  node playable-shared-kit/tools/work-memory.cjs session-start --sync-sources true --hot-limit 8
 `);
 }
 

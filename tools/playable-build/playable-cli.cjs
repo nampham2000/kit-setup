@@ -6,7 +6,31 @@ const path = require('path');
 const os = require('os');
 const { spawnSync, spawn } = require('child_process');
 
-const ROOT_DIR = path.resolve(__dirname, '..', '..');
+function findProjectRoot(startDir) {
+  let current = path.resolve(startDir);
+  while (true) {
+    const hasPackageJson = fs.existsSync(path.join(current, 'package.json'));
+    const looksLikeCocosProject = fs.existsSync(path.join(current, 'assets'))
+      || fs.existsSync(path.join(current, 'configs'));
+    if (hasPackageJson && looksLikeCocosProject) return current;
+
+    const parent = path.dirname(current);
+    if (parent === current) return null;
+    current = parent;
+  }
+}
+
+function resolveRootDir() {
+  if (process.env.PLAYABLE_PROJECT_ROOT) {
+    return path.resolve(process.env.PLAYABLE_PROJECT_ROOT);
+  }
+
+  return findProjectRoot(process.cwd())
+    || findProjectRoot(path.resolve(__dirname, '..', '..'))
+    || path.resolve(process.cwd());
+}
+
+const ROOT_DIR = resolveRootDir();
 
 const CLI_CONFIG_PATH = path.join(__dirname, 'playable-cli.config.cjs');
 const CLI_CONFIG_TEMPLATE_PATH = path.join(__dirname, 'playable-cli.config_TEMPLATE.cjs');
@@ -14,11 +38,11 @@ const CLI_CONFIG_TEMPLATE_PATH = path.join(__dirname, 'playable-cli.config_TEMPL
 function bootstrapCliConfigFile() {
   if (fs.existsSync(CLI_CONFIG_PATH)) return;
   if (!fs.existsSync(CLI_CONFIG_TEMPLATE_PATH)) {
-    console.error('[playable-cli] ERROR: Missing tools/playable-build/playable-cli.config.cjs and tools/playable-build/playable-cli.config_TEMPLATE.cjs');
+    console.error('[playable-cli] ERROR: Missing playable-shared-kit/tools/playable-build/playable-cli.config.cjs and playable-shared-kit/tools/playable-build/playable-cli.config_TEMPLATE.cjs');
     process.exit(1);
   }
   fs.copyFileSync(CLI_CONFIG_TEMPLATE_PATH, CLI_CONFIG_PATH);
-  console.log('[playable-cli] Created tools/playable-build/playable-cli.config.cjs from tools/playable-build/playable-cli.config_TEMPLATE.cjs');
+  console.log('[playable-cli] Created playable-shared-kit/tools/playable-build/playable-cli.config.cjs from playable-shared-kit/tools/playable-build/playable-cli.config_TEMPLATE.cjs');
 }
 
 bootstrapCliConfigFile();
@@ -79,7 +103,7 @@ function printHelp() {
 Playable CLI
 
 Usage:
-  node tools/playable-build.cjs <command> [options]
+  node playable-shared-kit/tools/playable-build.cjs <command> [options]
 
 Commands:
   doctor
@@ -123,12 +147,11 @@ Commands:
       Requires clean tracked working tree (same as legacy script).
 
 Examples:
-  npm run playable:doctor
-  npm run playable:export-configs
-  npm run playable:setup
-  node tools/playable-build.cjs build --brief brief1
-  node tools/playable-build.cjs build --all --cocos "C:/ProgramData/cocos/editors/Creator/3.8.8/CocosCreator.exe"
-  node tools/playable-build.cjs subtree-pull
+  npm run doctor
+  npm run setup
+  node playable-shared-kit/tools/playable-build.cjs build --brief brief1
+  node playable-shared-kit/tools/playable-build.cjs build --all --cocos "C:/ProgramData/cocos/editors/Creator/3.8.8/CocosCreator.exe"
+  node playable-shared-kit/tools/playable-build.cjs subtree-pull
 `);
 }
 

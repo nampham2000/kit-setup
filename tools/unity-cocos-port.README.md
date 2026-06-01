@@ -3,7 +3,7 @@
 CLI:
 
 ```powershell
-node tools/unity-cocos-port.cjs port `
+node playable-shared-kit/tools/unity-cocos-port.cjs port `
   --src "D:\_Projects\Unity\MarbleSort\Assets\_Game\Prefabs\Gameplay\Obstacle\BoxObject.prefab" `
   --out assets\prefabs\BoxObject.prefab `
   --overwrite `
@@ -14,7 +14,7 @@ node tools/unity-cocos-port.cjs port `
 Batch port a folder recursively:
 
 ```powershell
-node tools/unity-cocos-port.cjs port `
+node playable-shared-kit/tools/unity-cocos-port.cjs port `
   --src "D:\_Projects\CC3\unity2cc_particles3d\unity\Assets\Hovl Studio\Toon Projectiles 2\Prefabs" `
   --out "assets\Hovl Studio\Toon Projectiles 2\Prefabs" `
   --overwrite `
@@ -24,19 +24,19 @@ node tools/unity-cocos-port.cjs port `
 
 Module layout:
 
-- `tools/unity-cocos-port.cjs` keeps the CLI entrypoint, batch orchestration, Unity/Cocos DB parsing, and prefab graph assembly glue.
-- `tools/unity-cocos-port/constants.js` keeps shared constants and built-in UUID tables.
-- `tools/unity-cocos-port/core-utils.js` keeps shared path/uuid/fs/value helpers.
-- `tools/unity-cocos-port/reporter.js` owns CSV report accumulation and writeback.
-- `tools/unity-cocos-port/asset-import-porter.js` handles Unity asset copy/import fallback, FBX fallback conversion, and generic asset meta creation.
-- `tools/unity-cocos-port/material-porter.js` handles Unity material/shader property conversion into Cocos `.mtl` assets.
-- `tools/unity-cocos-port/sprite-porter.js` handles sprite-frame resolution and `cc.SpriteRenderer` emission.
-- `tools/unity-cocos-port/collider-porter.js` handles Rigidbody2D, CircleCollider2D, BoxCollider2D, and PolygonCollider2D conversion.
-- `tools/unity-cocos-port/renderer-porter.js` handles MeshRenderer emission and nested model renderer fallback wiring.
-- `tools/unity-cocos-port/particle-porter.js` handles particle template approximation.
-- `tools/unity-cocos-port/light-porter.js` handles Unity Light to Cocos light conversion.
-- `tools/unity-cocos-port/animation-porter.js` handles AnimationClip and AnimatorController conversion plus `cc.animation.AnimationController` wiring.
-- `tools/unity-cocos-port/script-porter.js` handles MonoBehaviour-to-Cocos-script wiring and serialized field translation.
+- `playable-shared-kit/tools/unity-cocos-port.cjs` keeps the CLI entrypoint, batch orchestration, Unity/Cocos DB parsing, and prefab graph assembly glue.
+- `playable-shared-kit/tools/unity-cocos-port/constants.js` keeps shared constants and built-in UUID tables.
+- `playable-shared-kit/tools/unity-cocos-port/core-utils.js` keeps shared path/uuid/fs/value helpers.
+- `playable-shared-kit/tools/unity-cocos-port/reporter.js` owns CSV report accumulation and writeback.
+- `playable-shared-kit/tools/unity-cocos-port/asset-import-porter.js` handles Unity asset copy/import fallback, FBX fallback conversion, and generic asset meta creation.
+- `playable-shared-kit/tools/unity-cocos-port/material-porter.js` handles Unity material/shader property conversion into Cocos `.mtl` assets.
+- `playable-shared-kit/tools/unity-cocos-port/sprite-porter.js` handles sprite-frame resolution and `cc.SpriteRenderer` emission.
+- `playable-shared-kit/tools/unity-cocos-port/collider-porter.js` handles Rigidbody2D, CircleCollider2D, BoxCollider2D, and PolygonCollider2D conversion.
+- `playable-shared-kit/tools/unity-cocos-port/renderer-porter.js` handles MeshRenderer emission and nested model renderer fallback wiring.
+- `playable-shared-kit/tools/unity-cocos-port/particle-porter.js` handles particle template approximation.
+- `playable-shared-kit/tools/unity-cocos-port/light-porter.js` handles Unity Light to Cocos light conversion.
+- `playable-shared-kit/tools/unity-cocos-port/animation-porter.js` handles AnimationClip and AnimatorController conversion plus `cc.animation.AnimationController` wiring.
+- `playable-shared-kit/tools/unity-cocos-port/script-porter.js` handles MonoBehaviour-to-Cocos-script wiring and serialized field translation.
 
 Safety defaults:
 
