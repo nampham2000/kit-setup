@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Centralized configuration for tools/playable-build.cjs.
+ * Centralized configuration for playable-shared-kit/tools/playable-build.cjs.
  * Keep this file dependency-free (no fs reads) so it can be required safely.
  */
 

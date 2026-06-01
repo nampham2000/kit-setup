@@ -1,8 +1,27 @@
 'use strict';
 
+const fs = require('fs');
 const path = require('path');
 
-const ROOT_DIR = path.resolve(__dirname, '..', '..');
+function findProjectRoot(startDir) {
+  let current = path.resolve(startDir);
+  while (true) {
+    const hasPackageJson = fs.existsSync(path.join(current, 'package.json'));
+    const looksLikeCocosProject = fs.existsSync(path.join(current, 'assets'))
+      || fs.existsSync(path.join(current, 'configs'));
+    if (hasPackageJson && looksLikeCocosProject) return current;
+
+    const parent = path.dirname(current);
+    if (parent === current) return null;
+    current = parent;
+  }
+}
+
+const ROOT_DIR = process.env.PLAYABLE_PROJECT_ROOT
+  ? path.resolve(process.env.PLAYABLE_PROJECT_ROOT)
+  : findProjectRoot(process.cwd())
+    || findProjectRoot(path.resolve(__dirname, '..', '..'))
+    || path.resolve(process.cwd());
 const BUILTIN_DEFAULT_SPRITE_RENDERER_MATERIAL_UUID = 'ade8a15a-dcca-4b3c-84c6-f6476ac875bb';
 const BUILTIN_DEFAULT_MESH_MATERIAL_UUID = 'd3c7820c-2a98-4429-8bc7-b8453bc9ac41';
 const BUILTIN_STANDARD_EFFECT_UUID = 'c8f66d17-351a-48da-a12c-0212d28575c4';
