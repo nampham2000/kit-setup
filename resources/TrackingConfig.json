@@ -7,7 +7,7 @@
     "gameKey": "75062136d1e176286e9bc4d3b20899c3",
     "gameSecret": "88c8bb77812643ec085bc43439573fcecc42da12",
     "build": "1.0.0",
-    "verboseLog": true
+    "verboseLog": false
   },
   "engagement": {
     "target_duration": 300,
