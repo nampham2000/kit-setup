@@ -1,7 +1,13 @@
 // NodePoolAdapter.ts
-import { Node, Prefab, instantiate, Tween, Component } from 'cc';
+import { Node, Prefab, instantiate, Tween, Component, Vec3, Quat } from 'cc';
 import { Poolable } from './Poolable.ts';
 import type { PoolConfig } from './ObjectPool.ts';
+
+type LocalTransform = {
+  position: Vec3;
+  rotation: Quat;
+  scale: Vec3;
+};
 
 export function makeNodePoolConfig(template: Prefab | Node, opts?: {
   name?: string;
@@ -10,11 +16,20 @@ export function makeNodePoolConfig(template: Prefab | Node, opts?: {
   resetTransform?: boolean;
 }): PoolConfig<Node> {
   const parentOnPut = opts?.parentOnPut;
+  const initialTransformByNode = new WeakMap<Node, LocalTransform>();
 
   return {
     name: opts?.name ?? template.name,
     max: opts?.max ?? 9999,
-    create: () => instantiate(template as any) as Node,
+    create: () => {
+      const n = instantiate(template as any) as Node;
+      initialTransformByNode.set(n, {
+        position: n.position.clone(),
+        rotation: n.rotation.clone(),
+        scale: n.scale.clone(),
+      });
+      return n;
+    },
     validate: (n) => !!n && n.isValid,
     destroy: (n) => n?.destroy?.(),
     onGet: (n) => {
@@ -40,11 +55,18 @@ export function makeNodePoolConfig(template: Prefab | Node, opts?: {
       else n.removeFromParent();
       n.active = false;
 
-      // 5) optional: reset basic transform
+      // 5) optional: restore authored local transform for the pooled instance
       if (opts?.resetTransform) {
-        n.setPosition(0, 0, 0);
-        n.setRotationFromEuler(0, 0, 0);
-        n.setScale(1, 1, 1);
+        const initial = initialTransformByNode.get(n);
+        if (initial) {
+          n.setPosition(initial.position);
+          n.setRotation(initial.rotation);
+          n.setScale(initial.scale);
+        } else {
+          n.setPosition(0, 0, 0);
+          n.setRotationFromEuler(0, 0, 0);
+          n.setScale(1, 1, 1);
+        }
       }
     },
   };
