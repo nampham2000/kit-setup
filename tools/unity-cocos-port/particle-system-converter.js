@@ -1127,9 +1127,8 @@ function applyShapeModule(builder, particle, data) {
   module._angle = num(data.angle, 0) * DEG_TO_RAD;
   module._position = unityVectorToCocos(data.m_Position || data.position, module._position || { x: 0, y: 0, z: 0 });
   const rotation = vec3(data.m_Rotation || data.rotation, { x: 0, y: 0, z: 0 });
-  const coneXAxisOffset = mapping.shapeType === 2 ? -90 : 0;
   module._rotation = vec3({
-    x: (-rotation.x) + coneXAxisOffset,
+    x: -rotation.x,
     y: rotation.y,
     z: -rotation.z,
   }, { x: 0, y: 0, z: 0 });
