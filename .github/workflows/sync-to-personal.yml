@@ -18,7 +18,7 @@ jobs:
     steps:
       - name: Clone business repo
         run: |
-          git clone --bare https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git source.git
+          git clone --bare https://x-access-token:${{ secrets.PERSONAL_MIRROR_TOKEN }}@github.com/${{ github.repository }}.git source.git
 
       - name: Push branches and tags to personal repo
         env:
