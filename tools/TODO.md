@@ -1,1 +1,0 @@
-- tự động bật mcp servers
