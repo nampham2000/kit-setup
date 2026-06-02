@@ -18,11 +18,11 @@ jobs:
     steps:
       - name: Clone business repo
         run: |
-          git clone --bare https://x-access-token:${{ secrets.PERSONAL_MIRROR_TOKEN }}@github.com/${{ github.repository }}.git source.git
+          git clone --bare https://x-access-token:${{ secrets.PERSONAL_MIRROR_TOKEN }}@github.com/minhdangphamthe/playable-shared-kit.git source.git
 
       - name: Push branches and tags to personal repo
         env:
-          TARGET_REPO: https://x-access-token:${{ secrets.PERSONAL_MIRROR_TOKEN }}@github.com/minhdangphamthe/playable-shared-kit.git
+          TARGET_REPO: https://x-access-token:${{ secrets.PERSONAL_MIRROR_TOKEN }}@github.com/${{ github.repository }}.git
         run: |
           cd source.git
           git push "$TARGET_REPO" '+refs/heads/*:refs/heads/*'
