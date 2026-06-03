@@ -1116,7 +1116,7 @@ async function commandSessionStart(options) {
 async function commandWatch(options) {
   const once = parseBoolean(options.once, false);
   const jsonMode = parseBoolean(options.json, false);
-  if (options.json && !once) {
+  if (jsonMode && !once) {
     throw new Error('watch supports --json only with --once true.');
   }
   const paths = resolvePaths(options);
