@@ -14,6 +14,10 @@
           "playable-shared-kit/tools/work-memory/**/*.js"
         ]
       }
+    },
+    "cocos-mcp": {
+      "type": "http",
+      "url": "http://127.0.0.1:3000/mcp"
     }
   }
 }
