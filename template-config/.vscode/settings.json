@@ -1,0 +1,42 @@
+{
+  "editor.tabSize": 2,
+  "editor.insertSpaces": true,
+  "editor.detectIndentation": false,
+  "[typescript]": {
+    "editor.tabSize": 2,
+    "editor.insertSpaces": true
+  },
+  "[javascript]": {
+    "editor.tabSize": 2,
+    "editor.insertSpaces": true
+  },
+  "[json]": {
+    "editor.tabSize": 2,
+    "editor.insertSpaces": true
+  },
+  "files.exclude": {
+    "**/.git": true,
+    "**/*.[fF][bB][xX]": true,
+    "**/*.[mM][eE][tT][aA]": true,
+    "**/[lL]ibrary/": true,
+    "**/[pP]rofiles/": true,
+    "**/[tT][eE][mM][pP]/": true,
+    "**/[bB][uU][iI][lL][dD]/": true,
+    "**/*.[sS][cC][eE][nN][eE]": true,
+    "**/*.[mM][tT][lL]": true
+  },
+  "search.exclude": {
+    "**/.git": true,
+    "**/*.[fF][bB][xX]": true,
+    "**/*.[mM][eE][tT][aA]": true,
+    "**/[lL]ibrary/": true,
+    "**/[pP]rofiles/": true,
+    "**/[tT][eE][mM][pP]/": true,
+    "**/[bB][uU][iI][lL][dD]/": true,
+    "**/*.[sS][cC][eE][nN][eE]": true,
+    "**/*.[mM][tT][lL]": true,
+    "**/node_modules": true,
+    "**/bower_components": true
+  },
+  "task.allowAutomaticTasks": "on",
+}

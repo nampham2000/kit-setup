@@ -1,0 +1,79 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "memory:watch",
+      "type": "process",
+      "command": "node",
+      "args": [
+        "playable-shared-kit/tools/work-memory.cjs",
+        "watch",
+        "--sync-sources",
+        "true",
+        "--sync-shared-capture",
+        "true",
+        "--poll-seconds",
+        "15",
+        "--hot-limit",
+        "8"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "isBackground": true,
+      "runOptions": {
+        "runOn": "folderOpen",
+        "instanceLimit": 1,
+        "instancePolicy": "terminateOldest"
+      },
+      "presentation": {
+        "reveal": "never",
+        "revealProblems": "never",
+        "panel": "dedicated",
+        "showReuseMessage": false,
+        "clear": false
+      },
+      "problemMatcher": {
+        "owner": "work-memory",
+        "pattern": {
+          "regexp": "^(?!)()$",
+          "kind": "file",
+          "file": 1,
+          "message": 1
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^\\[work-memory\\] watch starting$",
+          "endsPattern": "^\\[work-memory\\] watch ready$"
+        }
+      }
+    },
+    {
+      "label": "memory:session-start",
+      "type": "process",
+      "command": "node",
+      "args": [
+        "playable-shared-kit/tools/work-memory.cjs",
+        "watch",
+        "--once",
+        "--sync-sources",
+        "true",
+        "--sync-shared-capture",
+        "true",
+        "--hot-limit",
+        "8"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "silent",
+        "revealProblems": "never",
+        "panel": "dedicated",
+        "showReuseMessage": false,
+        "clear": false
+      },
+      "problemMatcher": []
+    }
+  ]
+}

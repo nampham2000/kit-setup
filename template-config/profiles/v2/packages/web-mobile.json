@@ -1,0 +1,98 @@
+{
+  "__version__": "1.0.1",
+  "builder": {
+    "common": {
+      "binGroupConfig": {
+        "threshold": 16,
+        "enable": true
+      },
+      "polyfills": {
+        "asyncFunctions": true,
+        "coreJs": true
+      },
+      "buildPath": "project://build/Short",
+      "outputName": "web-mobile",
+      "mainBundleCompressionType": "merge_all_json",
+      "platform": "web-mobile",
+      "nativeCodeBundleMode": "asmjs",
+      "useSplashScreen": false,
+      "name": "GF_S_CTB_O_N_PN_M_A_Shot_Minh_15052026",
+      "mainBundleIsRemote": false,
+      "bundleConfigs": [
+        {
+          "name": "main",
+          "root": "",
+          "output": true
+        },
+        {
+          "name": "internal",
+          "root": "",
+          "output": true
+        },
+        {
+          "root": "db://assets/brief2",
+          "name": "brief2",
+          "output": true,
+          "uuid": "6f78dbf3-16a6-4219-96de-cfd67d79690e"
+        },
+        {
+          "root": "db://assets/resources",
+          "name": "resources",
+          "output": true,
+          "uuid": "dade3750-8f93-4695-afdd-7963c03bb97c"
+        },
+        {
+          "root": "db://assets/asset-bundles/Mid",
+          "name": "Mid",
+          "output": true,
+          "uuid": "6f78dbf3-16a6-4219-96de-cfd67d79690e"
+        }
+      ],
+      "scenes": [
+        {
+          "url": "db://assets/Gameplay.scene",
+          "uuid": "b3cd8379-3ac5-4a93-a5ff-6da5a24eb1d8"
+        }
+      ],
+      "startScene": "b3cd8379-3ac5-4a93-a5ff-6da5a24eb1d8",
+      "experimentalEraseModules": false,
+      "mangleProperties": false,
+      "debug": false
+    },
+    "taskOptionsMap": {
+      "1768475537914": {
+        "useWebGPU": false,
+        "orientation": "auto",
+        "embedWebDebugger": false,
+        "__version__": "1.0.1"
+      },
+      "1770801409723": {
+        "useWebGPU": false,
+        "orientation": "auto",
+        "embedWebDebugger": false,
+        "__version__": "1.0.1"
+      },
+      "1770869363868": {
+        "useWebGPU": false,
+        "orientation": "auto",
+        "embedWebDebugger": false,
+        "__version__": "1.0.1"
+      },
+      "1770880835622": {
+        "useWebGPU": false,
+        "orientation": "auto",
+        "embedWebDebugger": false,
+        "__version__": "1.0.1"
+      }
+    },
+    "__version__": "1.3.9",
+    "options": {
+      "web-mobile": {
+        "useWebGPU": false,
+        "orientation": "auto",
+        "embedWebDebugger": false,
+        "__version__": "1.0.1"
+      }
+    }
+  }
+}

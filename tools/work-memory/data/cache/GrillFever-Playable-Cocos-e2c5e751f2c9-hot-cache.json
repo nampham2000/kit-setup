@@ -1,0 +1,14 @@
+{
+  "ok": true,
+  "createdAt": "2026-06-03T03:24:19.052Z",
+  "repoId": "GrillFever-Playable-Cocos:e2c5e751f2c9",
+  "repoRoot": "<repo-root>",
+  "cacheVersion": 2,
+  "pathMode": "portable",
+  "pathTokens": {
+    "<repo-root>": "Resolved from --repo-root or the current working directory at runtime.",
+    "<home>": "Resolved from the current user home directory at runtime."
+  },
+  "itemCount": 0,
+  "items": []
+}

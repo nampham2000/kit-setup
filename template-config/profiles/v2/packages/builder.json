@@ -1,0 +1,400 @@
+{
+  "__version__": "1.3.9",
+  "log": {
+    "level": 4
+  },
+  "common": {
+    "binGroupConfig": {
+      "threshold": 16,
+      "enable": true
+    },
+    "polyfills": {
+      "asyncFunctions": true,
+      "coreJs": true
+    },
+    "buildPath": "project://build/Short",
+    "outputName": "web-mobile",
+    "mainBundleCompressionType": "merge_all_json",
+    "platform": "web-mobile",
+    "nativeCodeBundleMode": "asmjs",
+    "useSplashScreen": false,
+    "name": "GF_S_CTB_O_N_PN_M_A_Shot_Minh_15052026",
+    "mainBundleIsRemote": false,
+    "bundleConfigs": [
+      {
+        "name": "main",
+        "root": "",
+        "output": true
+      },
+      {
+        "name": "internal",
+        "root": "",
+        "output": true
+      },
+      {
+        "root": "db://assets/brief2",
+        "name": "brief2",
+        "output": true,
+        "uuid": "6f78dbf3-16a6-4219-96de-cfd67d79690e"
+      },
+      {
+        "root": "db://assets/resources",
+        "name": "resources",
+        "output": true,
+        "uuid": "dade3750-8f93-4695-afdd-7963c03bb97c"
+      },
+      {
+        "root": "db://assets/asset-bundles/Mid",
+        "name": "Mid",
+        "output": true,
+        "uuid": "6f78dbf3-16a6-4219-96de-cfd67d79690e"
+      }
+    ],
+    "scenes": [
+      {
+        "url": "db://assets/Gameplay.scene",
+        "uuid": "b3cd8379-3ac5-4a93-a5ff-6da5a24eb1d8"
+      }
+    ],
+    "startScene": "b3cd8379-3ac5-4a93-a5ff-6da5a24eb1d8",
+    "experimentalEraseModules": false,
+    "server": "",
+    "engineModulesConfigKey": "defaultConfig",
+    "debug": false,
+    "buildMode": "normal",
+    "mangleProperties": false,
+    "md5Cache": false,
+    "skipCompressTexture": false,
+    "sourceMaps": false,
+    "overwriteProjectSettings": {
+      "includeModules": {
+        "gfx-webgl2": "on",
+        "physics": "inherit-project-setting",
+        "physics-2d": "inherit-project-setting"
+      },
+      "macroConfig": {
+        "cleanupImageCache": "inherit-project-setting"
+      }
+    },
+    "startSceneAssetBundle": false,
+    "inlineEnum": true,
+    "useBuiltinServer": false,
+    "md5CacheOptions": {
+      "excludes": [],
+      "includes": [],
+      "replaceOnly": [],
+      "handleTemplateMd5Link": true
+    },
+    "bundleCommonChunk": false,
+    "packAutoAtlas": true,
+    "taskName": "Brief3",
+    "wasmCompressionMode": false
+  },
+  "BuildTaskManager": {
+    "taskMap": {
+      "1768475537914": {
+        "type": "build",
+        "id": "1768475537914",
+        "progress": 0,
+        "state": "failure",
+        "stage": "build",
+        "message": "Wait a moment, build task is busy",
+        "detailMessage": "",
+        "options": {
+          "name": "GF_S_CTB_O_N_PN_M_A_Shot_Minh_15052026",
+          "server": "",
+          "engineModulesConfigKey": "defaultConfig",
+          "platform": "web-mobile",
+          "buildPath": "project://build/Short",
+          "debug": false,
+          "buildMode": "normal",
+          "mangleProperties": false,
+          "md5Cache": false,
+          "skipCompressTexture": false,
+          "sourceMaps": false,
+          "overwriteProjectSettings": {
+            "includeModules": {
+              "gfx-webgl2": "on",
+              "physics": "inherit-project-setting",
+              "physics-2d": "inherit-project-setting"
+            },
+            "macroConfig": {
+              "cleanupImageCache": "inherit-project-setting"
+            }
+          },
+          "nativeCodeBundleMode": "asmjs",
+          "polyfills": {
+            "asyncFunctions": true,
+            "coreJs": true
+          },
+          "experimentalEraseModules": false,
+          "startSceneAssetBundle": false,
+          "bundleConfigs": [
+            {
+              "name": "main",
+              "root": "",
+              "output": true
+            },
+            {
+              "name": "internal",
+              "root": "",
+              "output": true
+            },
+            {
+              "root": "db://assets/resources",
+              "name": "resources",
+              "output": true,
+              "uuid": "dade3750-8f93-4695-afdd-7963c03bb97c"
+            },
+            {
+              "root": "db://assets/brief3",
+              "name": "brief3",
+              "output": true,
+              "uuid": "7ce25222-c8c2-4fa6-a610-0aa868d2773f"
+            },
+            {
+              "root": "db://assets/asset-bundles/Short",
+              "name": "Short",
+              "output": true,
+              "uuid": "7ce25222-c8c2-4fa6-a610-0aa868d2773f"
+            }
+          ],
+          "inlineEnum": true,
+          "useBuiltinServer": false,
+          "md5CacheOptions": {
+            "excludes": [],
+            "includes": [],
+            "replaceOnly": [],
+            "handleTemplateMd5Link": true
+          },
+          "mainBundleIsRemote": false,
+          "mainBundleCompressionType": "merge_all_json",
+          "useSplashScreen": false,
+          "bundleCommonChunk": false,
+          "packAutoAtlas": true,
+          "startScene": "b3cd8379-3ac5-4a93-a5ff-6da5a24eb1d8",
+          "outputName": "web-mobile",
+          "taskName": "Short",
+          "scenes": [
+            {
+              "url": "db://assets/Gameplay.scene",
+              "uuid": "b3cd8379-3ac5-4a93-a5ff-6da5a24eb1d8"
+            }
+          ],
+          "wasmCompressionMode": false,
+          "binGroupConfig": {
+            "threshold": 16,
+            "enable": true
+          },
+          "packages": {},
+          "__version__": "1.3.9",
+          "logDest": "project://temp/builder/log/web-mobile1-15-2026 18-12.log"
+        },
+        "time": "5-16-2026 13:39:16",
+        "dirty": false
+      },
+      "1770869363868": {
+        "type": "build",
+        "id": "1770869363868",
+        "progress": 1,
+        "state": "success",
+        "stage": "build",
+        "message": "6-2-2026 17:25:06 build success in 1 min 33 s!",
+        "detailMessage": "[super-html] : \r[pangle] [3826 kb] \rD:\\_Projects\\CC3\\@puzzle\\GrillFever-Playable-Cocos\\build\\Mid\\super-html\\pangle\\GF_S_CTB_O_N_PN_M_A_Mid_Minh_15052026_pangle_landscape.zip\r\r",
+        "options": {
+          "name": "GF_S_CTB_O_N_PN_M_A_Mid_Minh_15052026",
+          "server": "",
+          "engineModulesConfigKey": "defaultConfig",
+          "platform": "web-mobile",
+          "buildPath": "project://build/Mid",
+          "debug": false,
+          "buildMode": "normal",
+          "mangleProperties": false,
+          "md5Cache": false,
+          "skipCompressTexture": false,
+          "sourceMaps": false,
+          "overwriteProjectSettings": {
+            "includeModules": {
+              "gfx-webgl2": "on",
+              "physics": "inherit-project-setting",
+              "physics-2d": "inherit-project-setting"
+            },
+            "macroConfig": {
+              "cleanupImageCache": "inherit-project-setting"
+            }
+          },
+          "nativeCodeBundleMode": "asmjs",
+          "polyfills": {
+            "asyncFunctions": true,
+            "coreJs": true
+          },
+          "experimentalEraseModules": false,
+          "startSceneAssetBundle": false,
+          "bundleConfigs": [
+            {
+              "name": "main",
+              "root": "",
+              "output": true
+            },
+            {
+              "name": "internal",
+              "root": "",
+              "output": true
+            },
+            {
+              "root": "db://assets/brief2",
+              "name": "brief2",
+              "output": true,
+              "uuid": "6f78dbf3-16a6-4219-96de-cfd67d79690e"
+            },
+            {
+              "root": "db://assets/resources",
+              "name": "resources",
+              "output": true,
+              "uuid": "dade3750-8f93-4695-afdd-7963c03bb97c"
+            },
+            {
+              "root": "db://assets/asset-bundles/Mid",
+              "name": "Mid",
+              "output": true,
+              "uuid": "6f78dbf3-16a6-4219-96de-cfd67d79690e"
+            }
+          ],
+          "inlineEnum": true,
+          "useBuiltinServer": false,
+          "md5CacheOptions": {
+            "excludes": [],
+            "includes": [],
+            "replaceOnly": [],
+            "handleTemplateMd5Link": true
+          },
+          "mainBundleIsRemote": false,
+          "mainBundleCompressionType": "merge_all_json",
+          "useSplashScreen": false,
+          "bundleCommonChunk": false,
+          "packAutoAtlas": true,
+          "startScene": "b3cd8379-3ac5-4a93-a5ff-6da5a24eb1d8",
+          "outputName": "web-mobile",
+          "taskName": "Mid",
+          "scenes": [
+            {
+              "url": "db://assets/Gameplay.scene",
+              "uuid": "b3cd8379-3ac5-4a93-a5ff-6da5a24eb1d8"
+            }
+          ],
+          "wasmCompressionMode": false,
+          "binGroupConfig": {
+            "threshold": 16,
+            "enable": true
+          },
+          "packages": {},
+          "__version__": "1.3.9",
+          "logDest": "project://temp/builder/log/web-mobile1-15-2026 18-12.log"
+        },
+        "time": "6-2-2026 17:23:32",
+        "dirty": false
+      },
+      "1770880835622": {
+        "type": "build",
+        "id": "1770880835622",
+        "progress": 1,
+        "state": "success",
+        "stage": "build",
+        "message": "5-16-2026 11:54:17 build success in 1 min 9 s!",
+        "detailMessage": "[super-html] : \r[gdt] [3792 kb] \rD:\\_Projects\\CC3\\GrillFever-Playable-Cocos\\build\\Long\\super-html\\gdt\\GF_S_CTB_O_N_PN_M_A_Long_Minh_15052026_gdt_portrait.zip\r\r",
+        "options": {
+          "name": "GF_S_CTB_O_N_PN_M_A_Long_Minh_15052026",
+          "server": "",
+          "engineModulesConfigKey": "defaultConfig",
+          "platform": "web-mobile",
+          "buildPath": "project://build/Long",
+          "debug": false,
+          "buildMode": "normal",
+          "mangleProperties": false,
+          "md5Cache": false,
+          "skipCompressTexture": false,
+          "sourceMaps": false,
+          "overwriteProjectSettings": {
+            "includeModules": {
+              "gfx-webgl2": "on",
+              "physics": "inherit-project-setting",
+              "physics-2d": "inherit-project-setting"
+            },
+            "macroConfig": {
+              "cleanupImageCache": "inherit-project-setting"
+            }
+          },
+          "nativeCodeBundleMode": "asmjs",
+          "polyfills": {
+            "asyncFunctions": true,
+            "coreJs": false
+          },
+          "experimentalEraseModules": false,
+          "startSceneAssetBundle": false,
+          "bundleConfigs": [
+            {
+              "name": "main",
+              "root": "",
+              "output": true
+            },
+            {
+              "name": "internal",
+              "root": "",
+              "output": true
+            },
+            {
+              "root": "db://assets/brief1",
+              "name": "brief1",
+              "output": true,
+              "uuid": "26d8dec5-925a-4a6c-8328-983b7dacc859"
+            },
+            {
+              "root": "db://assets/resources",
+              "name": "resources",
+              "output": true,
+              "uuid": "dade3750-8f93-4695-afdd-7963c03bb97c"
+            },
+            {
+              "root": "db://assets/asset-bundles/Long",
+              "name": "Long",
+              "output": true,
+              "uuid": "26d8dec5-925a-4a6c-8328-983b7dacc859"
+            }
+          ],
+          "inlineEnum": true,
+          "useBuiltinServer": false,
+          "md5CacheOptions": {
+            "excludes": [],
+            "includes": [],
+            "replaceOnly": [],
+            "handleTemplateMd5Link": true
+          },
+          "mainBundleIsRemote": false,
+          "mainBundleCompressionType": "merge_all_json",
+          "useSplashScreen": false,
+          "bundleCommonChunk": false,
+          "packAutoAtlas": true,
+          "startScene": "b3cd8379-3ac5-4a93-a5ff-6da5a24eb1d8",
+          "outputName": "web-mobile",
+          "taskName": "Long",
+          "scenes": [
+            {
+              "url": "db://assets/Gameplay.scene",
+              "uuid": "b3cd8379-3ac5-4a93-a5ff-6da5a24eb1d8"
+            }
+          ],
+          "wasmCompressionMode": false,
+          "binGroupConfig": {
+            "threshold": 16,
+            "enable": true
+          },
+          "packages": {},
+          "__version__": "1.3.9",
+          "logDest": "project://temp/builder/log/web-mobile1-15-2026 18-12.log"
+        },
+        "time": "5-16-2026 11:53:08",
+        "dirty": false
+      }
+    }
+  }
+}

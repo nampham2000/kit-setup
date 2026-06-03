@@ -13,6 +13,9 @@ const tempRepoRoot = path.join(tempRoot, 'repo');
 const repoDb = path.join(tempRoot, 'repo-memory.db');
 const globalDb = path.join(tempRoot, 'global-memory.db');
 const cacheFile = path.join(tempRoot, 'hot-cache.json');
+const sharedCaptureFile = path.join(tempRoot, 'shared-capture.md');
+const transcriptFile = path.join(tempRoot, 'session-transcript.json');
+const hookScript = path.join(repoRoot, 'tools', 'work-memory-agent-hook.cjs');
 
 fs.mkdirSync(path.join(tempRepoRoot, 'tools'), { recursive: true });
 fs.mkdirSync(path.join(tempRepoRoot, 'docs'), { recursive: true });
@@ -42,6 +45,31 @@ fs.writeFileSync(
     '',
     'Sprites disappear in preview when shader semantics skip a_color preservation.',
   ].join('\n'),
+  'utf8'
+);
+fs.writeFileSync(
+  sharedCaptureFile,
+  [
+    '## Shared shader lesson',
+    'Preserve sprite semantics when porting effect shaders across playable projects.',
+  ].join('\n'),
+  'utf8'
+);
+fs.writeFileSync(
+  transcriptFile,
+  JSON.stringify({
+    turns: [
+      {
+        role: 'assistant',
+        content: [
+          'Done.',
+          '<!-- WORK_MEMORY: {"scope":"global","category":"tip","title":"Keep sprite semantics","content":"Preserve builtin sprite semantics when porting sprite effects.","tags":["shader","cocos","porting"],"importance":0.88,"confidence":0.97} -->',
+          '<!-- WORK_MEMORY: {"scope":"repo","category":"bug-fix","title":"Particle converter axis trap","content":"Do not add an extra cone-only -90 X offset after node transform remap.","tags":["particle","converter","unity","cocos"],"importance":0.9,"confidence":0.96} -->',
+          '<!-- WORK_MEMORY: {"title":"Particle remap note","content":"Porting Unity particle transforms into Cocos should keep the node remap in one place.","path":"assets/scripts/ParticleConverter.ts"} -->'
+        ].join('\n')
+      }
+    ]
+  }, null, 2),
   'utf8'
 );
 
@@ -89,6 +117,36 @@ run([
   '--importance', '0.8',
   '--json',
 ]);
+
+const rememberAutoResult = run([
+  'remember-auto',
+  '--repo-root', tempRepoRoot,
+  '--repo-db', repoDb,
+  '--global-db', globalDb,
+  '--cache-file', cacheFile,
+  '--shared-capture-file', sharedCaptureFile,
+  '--memory', '{"scope":"global","category":"tip","title":"Save root causes","content":"Write down one reusable root cause after each resolved bug.","tags":["process","debugging"],"importance":0.81,"confidence":0.93}',
+  '--json',
+]);
+assert.strictEqual(rememberAutoResult.importedCount, 1, 'expected remember-auto to save one memory');
+
+const rememberAutoInferredResult = run([
+  'remember-auto',
+  '--repo-root', tempRepoRoot,
+  '--repo-db', repoDb,
+  '--global-db', globalDb,
+  '--cache-file', cacheFile,
+  '--shared-capture-file', sharedCaptureFile,
+  '--memory', '{"title":"ViewModel remap note","content":"Porting Unity particle data into the Cocos ViewModel should happen in one remap pass.","path":"assets/scripts/ParticleConverter.ts"}',
+  '--json',
+]);
+assert.strictEqual(rememberAutoInferredResult.importedCount, 1, 'expected inferred remember-auto payload to save one memory');
+assert.strictEqual(rememberAutoInferredResult.items[0].scope, 'repo', 'expected source path to infer repo scope');
+assert.strictEqual(rememberAutoInferredResult.items[0].category, 'porting-note', 'expected porting text to infer porting-note category');
+assert.ok(rememberAutoInferredResult.items[0].tags.includes('unity'), 'expected inferred remember-auto tags to include unity');
+assert.ok(rememberAutoInferredResult.items[0].tags.includes('cocos'), 'expected inferred remember-auto tags to include cocos');
+assert.ok(rememberAutoInferredResult.items[0].tags.includes('particle'), 'expected inferred remember-auto tags to include particle');
+assert.ok(rememberAutoInferredResult.items[0].tags.includes('mvvm'), 'expected inferred remember-auto tags to include mvvm');
 
 const importSourcesResult = run([
   'import-sources',
@@ -153,8 +211,65 @@ const semanticOnlyQuery = run([
   '--prefer-cache', 'false',
   '--json',
 ]);
-assert.ok(semanticOnlyQuery.count >= 1, 'expected semantic-only query to return at least one memory');
-assert.ok(semanticOnlyQuery.items.every((item) => item.matchSource === 'repo-semantic'), 'expected semantic-only query results to come from semantic search');
+if (semanticOnlyQuery.semantic.repo.available) {
+  assert.ok(semanticOnlyQuery.count >= 1, 'expected semantic-only query to return at least one memory');
+  assert.ok(semanticOnlyQuery.items.every((item) => item.matchSource === 'repo-semantic'), 'expected semantic-only query results to come from semantic search');
+} else {
+  assert.strictEqual(semanticOnlyQuery.count, 0, 'expected semantic-only query to be empty without sqlite-vec');
+  assert.ok(/sqlite-vec/i.test(String(semanticOnlyQuery.semantic.repo.reason || '')), 'expected semantic unavailability reason to mention sqlite-vec');
+}
+
+const watchResult = run([
+  'watch',
+  '--once',
+  '--repo-root', tempRepoRoot,
+  '--repo-db', repoDb,
+  '--global-db', globalDb,
+  '--cache-file', cacheFile,
+  '--shared-capture-file', sharedCaptureFile,
+  '--json',
+]);
+assert.ok(watchResult.sharedCapture.importedCount >= 1, 'expected shared capture file to be imported');
+assert.ok(watchResult.global.itemCount >= 2, 'expected shared capture import to increase shared DB count');
+
+const importAgentMemoriesResult = run([
+  'import-agent-memories',
+  '--repo-root', tempRepoRoot,
+  '--repo-db', repoDb,
+  '--global-db', globalDb,
+  '--cache-file', cacheFile,
+  '--shared-capture-file', sharedCaptureFile,
+  '--transcript', transcriptFile,
+  '--session-id', 'session-123',
+  '--json',
+]);
+assert.strictEqual(importAgentMemoriesResult.discoveredCount, 3, 'expected transcript markers to be discovered');
+assert.strictEqual(importAgentMemoriesResult.importedCount, 3, 'expected transcript markers to be imported');
+const inferredTranscriptMemory = importAgentMemoriesResult.items.find((item) => item.title === 'Particle remap note');
+assert.ok(inferredTranscriptMemory, 'expected inferred transcript memory to be imported');
+assert.strictEqual(inferredTranscriptMemory.scope, 'repo', 'expected transcript path alias to infer repo scope');
+assert.strictEqual(inferredTranscriptMemory.category, 'porting-note', 'expected transcript memory to infer porting-note category');
+assert.ok(inferredTranscriptMemory.tags.includes('porting'), 'expected transcript inference to add porting tag');
+assert.ok(inferredTranscriptMemory.tags.includes('unity'), 'expected transcript inference to add unity tag');
+assert.ok(inferredTranscriptMemory.tags.includes('cocos'), 'expected transcript inference to add cocos tag');
+
+const hookPayload = JSON.stringify({
+  cwd: tempRepoRoot,
+  sessionId: 'session-123',
+  hookEventName: 'Stop',
+  transcript_path: transcriptFile,
+  repo_db: repoDb,
+  global_db: globalDb,
+  cache_file: cacheFile,
+  shared_capture_file: sharedCaptureFile,
+});
+const hookResult = spawnSync(process.execPath, [hookScript], {
+  cwd: repoRoot,
+  encoding: 'utf8',
+  input: hookPayload,
+});
+assert.strictEqual(hookResult.status, 0, 'expected agent hook script to exit successfully');
+assert.strictEqual(JSON.parse(hookResult.stdout).continue, true, 'expected hook script to continue agent processing');
 
 const sessionStartResult = run([
   'session-start',
@@ -162,13 +277,17 @@ const sessionStartResult = run([
   '--repo-db', repoDb,
   '--global-db', globalDb,
   '--cache-file', cacheFile,
+  '--shared-capture-file', sharedCaptureFile,
   '--hot-limit', '5',
   '--json',
 ]);
 assert.ok(sessionStartResult.cache.itemCount >= 2, 'expected session-start to build warm cache');
 assert.ok(Array.isArray(sessionStartResult.topItems) && sessionStartResult.topItems.length >= 1, 'expected session-start hot items');
-assert.ok(sessionStartResult.semantic.repo.available, 'expected semantic layer to be available');
-assert.ok(sessionStartResult.semantic.repo.indexedCount >= sessionStartResult.repo.itemCount, 'semantic index should exist after session-start');
+if (sessionStartResult.semantic.repo.available) {
+  assert.ok(sessionStartResult.semantic.repo.indexedCount >= sessionStartResult.repo.itemCount, 'semantic index should exist after session-start');
+} else {
+  assert.ok(/sqlite-vec/i.test(String(sessionStartResult.semantic.repo.reason || '')), 'expected missing sqlite-vec to explain semantic unavailability after session-start');
+}
 
 const statsResult = run([
   'stats',
@@ -176,11 +295,16 @@ const statsResult = run([
   '--repo-db', repoDb,
   '--global-db', globalDb,
   '--cache-file', cacheFile,
+  '--shared-capture-file', sharedCaptureFile,
   '--json',
 ]);
 assert.ok(statsResult.repo.itemCount >= 5, 'expected repo item count to include imported sources');
-assert.strictEqual(statsResult.global.itemCount, 1);
-assert.ok(statsResult.semantic.repo.available, 'expected repo semantic status to be available');
-assert.ok(statsResult.semantic.repo.indexedCount >= statsResult.repo.itemCount, 'expected all repo memories to be semantically indexed');
+assert.ok(statsResult.global.itemCount >= 4, 'expected shared DB to include remember-auto, shared capture, and transcript memories');
+assert.ok(statsResult.repo.itemCount >= 6, 'expected repo DB to include transcript-derived repo memory');
+if (statsResult.semantic.repo.available) {
+  assert.ok(statsResult.semantic.repo.indexedCount >= statsResult.repo.itemCount, 'expected all repo memories to be semantically indexed');
+} else {
+  assert.ok(/sqlite-vec/i.test(String(statsResult.semantic.repo.reason || '')), 'expected missing sqlite-vec to explain semantic unavailability in stats');
+}
 
 console.log(JSON.stringify({ ok: true, tempRoot }, null, 2));

@@ -204,7 +204,7 @@ function createStore(options) {
   }
 
   db.exec(`
-    PRAGMA journal_mode = WAL;
+    PRAGMA journal_mode = DELETE;
     PRAGMA synchronous = NORMAL;
     PRAGMA temp_store = MEMORY;
     PRAGMA foreign_keys = ON;

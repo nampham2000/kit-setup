@@ -48,19 +48,21 @@ Bộ shared kit cho playable ads/Cocos: package dùng chung, tool build, tool po
 ### `tools/work-memory.cjs`
 - Mục đích: lưu note/lesson learned cục bộ bằng SQLite + semantic search.
 - Quick guide:
-  1. `node playable-shared-kit/tools/work-memory.cjs init` — tạo DB/cache.
+  1. `node playable-shared-kit/tools/work-memory.cjs init` — tạo DB/cache trong `playable-shared-kit/tools/work-memory/data`.
   2. `... remember` hoặc `... import-markdown` — ghi note thủ công / import file.
   3. `... import-sources --scope repo` — quét TODO/README/summary trong repo.
-  4. `... query --text "..." --scope hybrid --semantic hybrid` — tìm note.
-  5. `... session-start --sync-sources true --hot-limit 8` — warmup nhanh đầu buổi.
-  6. `... stats` / `... inspect-cache --items true` — xem thống kê và cache.
+  4. `... watch --poll-seconds 15` — tự sync khi mở VS Code và khi note nguồn thay đổi.
+  5. `... query --text "..." --scope hybrid --semantic hybrid` — tìm note.
+  6. Thêm lesson reusable vào `playable-shared-kit/tools/work-memory/shared-capture.md` để watcher tự import vào shared DB.
+  7. `... stats` / `... inspect-cache --items true` — xem thống kê và cache.
 
 ### `tools/vscode-mcp-autostart/`
 - Mục đích: VS Code helper tự bật MCP server khi mở workspace có `.vscode/mcp.json`.
 - Quick guide:
   1. Chạy `scripts/0_setup-all.bat` để cài/refresh helper.
-  2. Mở workspace; helper tự bật `blender-mcp`, `gimp-mcp`.
-  3. `cocos-mcp` chỉ bật sau khi `localhost:3000` sẵn sàng.
+  2. Mở workspace; helper tự bật toàn bộ workspace MCP server không phụ thuộc vào `localhost:3000`.
+  3. `cocos-mcp` vẫn chỉ bật sau khi `localhost:3000` sẵn sàng.
+  4. Workspace hiện có thể expose `workMemory` qua `.vscode/mcp.json` để query/save memory trực tiếp từ chat tools.
 
 ## 3) Các lệnh npm cần thiết
 
