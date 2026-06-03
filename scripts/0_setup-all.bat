@@ -30,6 +30,9 @@ if !errorlevel! neq 0 exit /b !errorlevel!
 call :applyTemplateConfig "%ROOT%" "%SHARED_KIT%\template-config" "%SHARED_KIT%"
 if !errorlevel! neq 0 exit /b !errorlevel!
 
+call :installVscodeMcpAutostart "%SHARED_KIT%"
+if !errorlevel! neq 0 exit /b !errorlevel!
+
 call :updatePackageMetadata "%ROOT%"
 if !errorlevel! neq 0 exit /b !errorlevel!
 
@@ -89,6 +92,28 @@ if exist "%~2\playable-cli.config_TEMPLATE.cjs" (
 )
 if !errorlevel! neq 0 exit /b !errorlevel!
 echo [ok] template config applied
+exit /b 0
+
+:installVscodeMcpAutostart
+set "VSCODE_MCP_SOURCE=%~1\tools\vscode-mcp-autostart"
+set "VSCODE_EXT_ROOT=%USERPROFILE%\.vscode\extensions"
+set "VSCODE_MCP_TARGET=%VSCODE_EXT_ROOT%\local.cocos-game-mcp-autostart-0.0.1"
+if not exist "%VSCODE_MCP_SOURCE%\package.json" (
+    echo [skip] VSCode MCP autostart helper source not found.
+    exit /b 0
+)
+echo.
+echo ==^> Refreshing VSCode MCP autostart helper
+if not exist "%VSCODE_EXT_ROOT%\" mkdir "%VSCODE_EXT_ROOT%"
+if not exist "%VSCODE_MCP_TARGET%\" mkdir "%VSCODE_MCP_TARGET%"
+robocopy "%VSCODE_MCP_SOURCE%" "%VSCODE_MCP_TARGET%" /E /NFL /NDL /NJH /NJS /NC /NS /NP >nul
+set "COPY_EXIT=!errorlevel!"
+if !COPY_EXIT! geq 8 (
+    echo [ERROR] Failed to refresh VSCode MCP autostart helper.
+    if /I not "%SETUP_ALL_NO_PAUSE%"=="1" pause
+    exit /b !COPY_EXIT!
+)
+echo [ok] VSCode MCP autostart helper
 exit /b 0
 
 :copyTree
