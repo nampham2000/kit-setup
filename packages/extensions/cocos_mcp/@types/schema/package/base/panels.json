@@ -1,0 +1,81 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "description": "Panel definitions",
+    "additionalProperties": false,
+    "patternProperties": {
+        "^[a-zA-Z0-9_-]+$": {
+            "type": "object",
+            "description": "Panel definition",
+            "properties": {
+                "title": {
+                    "type": "string",
+                    "default": "Default Panel",
+                    "description": "Panel title. Supports i18n:key. Required."
+                },
+                "main": {
+                    "type": "string",
+                    "default": "dist/panels/default/index.js",
+                    "description": "Entry point. Required."
+                },
+                "icon": {
+                    "type": "string",
+                    "description": "Relative path to the panel icon"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": ["dockable", "simple"],
+                    "default": "dockable",
+                    "description": "Panel type (dockable | simple)"
+                },
+                "flags": {
+                    "type": "object",
+                    "properties": {
+                        "resizable": {
+                            "type": "boolean",
+                            "default": true,
+                            "description": "Whether the panel can be resized. Defaults to true."
+                        },
+                        "save": {
+                            "type": "boolean",
+                            "default": true,
+                            "description": "Whether the panel state should be saved. Defaults to true."
+                        },
+                        "alwaysOnTop": {
+                            "type": "boolean",
+                            "default": true,
+                            "description": "Whether the panel should stay on top. Defaults to true."
+                        }
+                    }
+                },
+                "size": {
+                    "type": "object",
+                    "description": "Panel size settings",
+                    "properties": {
+                        "min-width": {
+                            "type": "number",
+                            "default": 200,
+                            "description": "Minimum panel width"
+                        },
+                        "min-height": {
+                            "type": "number",
+                            "default": 200,
+                            "description": "Minimum panel height"
+                        },
+                        "width": {
+                            "type": "number",
+                            "default": 400,
+                            "description": "Default panel width"
+                        },
+                        "height": {
+                            "type": "number",
+                            "default": 600,
+                            "description": "Default panel height"
+                        }
+                    }
+                }
+            },
+            "required": ["title", "main"]
+        }
+    }
+}

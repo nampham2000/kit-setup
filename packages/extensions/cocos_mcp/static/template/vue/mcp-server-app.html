@@ -1,0 +1,125 @@
+<div class="mcp-app">
+    <!-- Tab navigation -->
+    <div class="tab-navigation">
+        <button class="tab-button" :class="{ active: activeTab === 'server' }" @click="switchTab('server')">
+            <span>Server</span>
+        </button>
+        <button class="tab-button" :class="{ active: activeTab === 'tools' }" @click="switchTab('tools')">
+            <span>Tool Manager</span>
+        </button>
+    </div>
+    
+    <!-- Server tab -->
+    <div class="tab-content" v-show="activeTab === 'server'">
+        <section class="server-status">
+            <h3>Server Status</h3>
+            <div class="status-info">
+                <ui-prop>
+                    <ui-label slot="label">Status</ui-label>
+                    <ui-label slot="content" class="status-value" :class="statusClass">{{ serverStatus }}</ui-label>
+                </ui-prop>
+                <ui-prop v-if="serverRunning">
+                    <ui-label slot="label">Recent MCP Clients</ui-label>
+                    <ui-label slot="content">{{ connectedClients }}</ui-label>
+                </ui-prop>
+            </div>
+        </section>
+
+        <section class="server-controls">
+            <ui-button @click="toggleServer" :disabled="isProcessing" class="primary">
+                {{ serverRunning ? 'Stop Server' : 'Start Server' }}
+            </ui-button>
+        </section>
+
+        <section class="server-settings">
+            <h3>Server Settings</h3>
+            <ui-prop>
+                <ui-label slot="label">Port</ui-label>
+                <ui-num-input slot="content" :value="settings.port" @change="updateNumberSetting('port', $event)" :min="1024" :max="65535" :step="1" :disabled="serverRunning">
+                </ui-num-input>
+            </ui-prop>
+            <ui-prop>
+                <ui-label slot="label">Auto-start</ui-label>
+                <ui-checkbox slot="content" :checked="settings.autoStart" @change="updateBooleanSetting('autoStart')"></ui-checkbox>
+            </ui-prop>
+            <ui-prop>
+                <ui-label slot="label">Debug Logging</ui-label>
+                <ui-checkbox slot="content" :checked="settings.debugLog" @change="updateBooleanSetting('debugLog')"></ui-checkbox>
+            </ui-prop>
+            <ui-prop>
+                <ui-label slot="label">Max Connections</ui-label>
+                <ui-num-input slot="content" :value="settings.maxConnections" @change="updateNumberSetting('maxConnections', $event)" :min="1" :max="100" :step="1">
+                </ui-num-input>
+            </ui-prop>
+        </section>
+
+        <section class="server-info" v-if="serverRunning">
+            <h3>Connection Info</h3>
+            <div class="connection-details">
+                <ui-prop>
+                    <ui-label slot="label">HTTP URL</ui-label>
+                    <ui-input slot="content" :value="httpUrl" readonly>
+                        <ui-button slot="suffix" @click="copyUrl">Copy</ui-button>
+                    </ui-input>
+                </ui-prop>
+            </div>
+        </section>
+
+        <footer>
+            <ui-button @click="saveSettings" :disabled="!settingsChanged">Save Settings</ui-button>
+        </footer>
+    </div>
+    
+    <!-- Tool manager tab -->
+    <div class="tab-content" v-show="activeTab === 'tools'">
+        <section class="tool-manager">
+            <div class="tool-manager-header">
+                <h3>Tool Manager</h3>
+            </div>
+            
+            <div class="tools-section">
+                <div class="tools-section-header">
+                    <div class="tools-section-title">
+                        <h4>Available Tools</h4>
+                        <div class="tools-stats">
+                            {{ totalTools }} tools
+                            ({{ enabledTools }} enabled / {{ disabledTools }} disabled)
+                        </div>
+                    </div>
+                    <div class="tools-section-controls">
+                        <ui-button @click="selectAllTools" class="small">Select All</ui-button>
+                        <ui-button @click="deselectAllTools" class="small">Deselect All</ui-button>
+                        <ui-button @click="saveChanges" class="primary">Save Changes</ui-button>
+                    </div>
+                </div>
+                
+                <div class="tools-container">
+                    <div v-for="category in toolCategories" :key="category" class="tool-category">
+                        <div class="category-header">
+                            <h5>{{ getCategoryDisplayName(category) }}</h5>
+                            <div class="category-controls">
+                                <ui-button @click="toggleCategoryTools(category, true)" class="small">Select All</ui-button>
+                                <ui-button @click="toggleCategoryTools(category, false)" class="small">Deselect All</ui-button>
+                            </div>
+                        </div>
+                        <div class="tool-items">
+                            <div v-for="tool in getToolsByCategory(category)" :key="tool.name" class="tool-item">
+                                <ui-checkbox 
+                                    :checked="tool.enabled"
+                                    @change="updateToolStatus(category, tool.name, !tool.enabled)"
+                                ></ui-checkbox>
+                                <div class="tool-info">
+                                    <div class="tool-name">{{ tool.name }}</div>
+                                    <div class="tool-description">{{ tool.description }}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+
+        </section>
+    </div>
+</div>
+
