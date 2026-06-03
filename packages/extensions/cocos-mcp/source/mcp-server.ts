@@ -19,6 +19,27 @@ import { ValidationTools } from './tools/validation-tools';
 
 const CLIENT_ACTIVITY_TIMEOUT_MS = 30_000;
 
+// JSON-RPC 2.0 / MCP standard error codes
+const JSONRPC_PARSE_ERROR = -32700;
+const JSONRPC_INVALID_REQUEST = -32600;
+const JSONRPC_METHOD_NOT_FOUND = -32601;
+const JSONRPC_INVALID_PARAMS = -32602;
+const JSONRPC_INTERNAL_ERROR = -32603;
+
+// Protocol versions this server understands. The latest is preferred.
+const SUPPORTED_PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'];
+const DEFAULT_PROTOCOL_VERSION = SUPPORTED_PROTOCOL_VERSIONS[0];
+
+class JsonRpcError extends Error {
+    public readonly code: number;
+    public readonly data?: any;
+    constructor(code: number, message: string, data?: any) {
+        super(message);
+        this.code = code;
+        this.data = data;
+    }
+}
+
 export class MCPServer {
     private settings: MCPServerSettings;
     private httpServer: http.Server | null = null;
@@ -90,7 +111,18 @@ export class MCPServer {
         }
     }
 
+    private notifyToolsListChanged(): void {
+        // MCP `notifications/tools/list_changed` is delivered over a server->client
+        // channel (e.g. SSE). The HTTP transport here is request/response only, so
+        // we just log it for now. When SSE/Streamable-HTTP support lands, broadcast
+        // a JSON-RPC notification with method `notifications/tools/list_changed`.
+        if (this.settings.enableDebugLog) {
+            console.log('[MCPServer] tools/list_changed (no active SSE channel to notify)');
+        }
+    }
+
     private setupTools(): void {
+        const previousCount = this.toolsList.length;
         this.toolsList = [];
         
         // If no tool configuration is enabled, expose all tools.
@@ -125,6 +157,9 @@ export class MCPServer {
         }
         
         console.log(`[MCPServer] Setup tools: ${this.toolsList.length} tools available`);
+        if (previousCount !== 0 && previousCount !== this.toolsList.length) {
+            this.notifyToolsListChanged();
+        }
     }
 
     public getFilteredTools(enabledTools: any[]): ToolDefinition[] {
@@ -207,40 +242,76 @@ export class MCPServer {
     
     private async handleMCPRequest(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
         let body = '';
-        
+
         req.on('data', (chunk) => {
             body += chunk.toString();
         });
-        
+
         req.on('end', async () => {
+            // Per JSON-RPC 2.0, parse errors must produce an error response with id=null.
+            let message: any;
             try {
-                // Enhanced JSON parsing with better error handling
-                let message;
-                try {
-                    message = JSON.parse(body);
-                } catch (parseError: any) {
-                    // Try to fix common JSON issues
-                    const fixedBody = this.fixCommonJsonIssues(body);
-                    try {
-                        message = JSON.parse(fixedBody);
-                        console.log('[MCPServer] Fixed JSON parsing issue');
-                    } catch (secondError) {
-                        throw new Error(`JSON parsing failed: ${parseError.message}. Original body: ${body.substring(0, 500)}...`);
-                    }
-                }
-                
-                const response = await this.handleMessage(message);
-                res.writeHead(200);
-                res.end(JSON.stringify(response));
-            } catch (error: any) {
-                console.error('Error handling MCP request:', error);
+                message = body.length === 0 ? null : JSON.parse(body);
+            } catch (parseError: any) {
+                console.error('[MCPServer] JSON parse error:', parseError?.message);
                 res.writeHead(400);
                 res.end(JSON.stringify({
                     jsonrpc: '2.0',
                     id: null,
                     error: {
-                        code: -32700,
-                        message: `Parse error: ${error.message}`
+                        code: JSONRPC_PARSE_ERROR,
+                        message: `Parse error: ${parseError?.message ?? 'invalid JSON'}`
+                    }
+                }));
+                return;
+            }
+
+            try {
+                // JSON-RPC 2.0 batch support: array of requests/notifications.
+                if (Array.isArray(message)) {
+                    if (message.length === 0) {
+                        res.writeHead(400);
+                        res.end(JSON.stringify({
+                            jsonrpc: '2.0',
+                            id: null,
+                            error: { code: JSONRPC_INVALID_REQUEST, message: 'Invalid Request: empty batch' }
+                        }));
+                        return;
+                    }
+                    const responses: any[] = [];
+                    for (const item of message) {
+                        const response = await this.handleMessage(item);
+                        if (response) responses.push(response);
+                    }
+                    if (responses.length === 0) {
+                        // All entries were notifications -> no body, 202 Accepted.
+                        res.writeHead(202);
+                        res.end();
+                        return;
+                    }
+                    res.writeHead(200);
+                    res.end(JSON.stringify(responses));
+                    return;
+                }
+
+                const response = await this.handleMessage(message);
+                if (!response) {
+                    // Notification: no response body per JSON-RPC 2.0.
+                    res.writeHead(202);
+                    res.end();
+                    return;
+                }
+                res.writeHead(200);
+                res.end(JSON.stringify(response));
+            } catch (error: any) {
+                console.error('Error handling MCP request:', error);
+                res.writeHead(500);
+                res.end(JSON.stringify({
+                    jsonrpc: '2.0',
+                    id: null,
+                    error: {
+                        code: JSONRPC_INTERNAL_ERROR,
+                        message: `Internal error: ${error?.message ?? error}`
                     }
                 }));
             }
@@ -271,27 +342,49 @@ export class MCPServer {
         }
     }
 
-    private async handleMessage(message: any): Promise<any> {
+    private async handleMessage(message: any): Promise<any | null> {
+        // Validate JSON-RPC envelope.
+        if (!message || typeof message !== 'object' || Array.isArray(message)) {
+            return {
+                jsonrpc: '2.0',
+                id: null,
+                error: { code: JSONRPC_INVALID_REQUEST, message: 'Invalid Request' }
+            };
+        }
+        if (message.jsonrpc !== '2.0') {
+            return {
+                jsonrpc: '2.0',
+                id: message.id ?? null,
+                error: { code: JSONRPC_INVALID_REQUEST, message: 'Invalid Request: jsonrpc must be "2.0"' }
+            };
+        }
+
         const { id, method, params } = message;
+        const isNotification = id === undefined || id === null;
+
+        // MCP/JSON-RPC notifications must not receive a response.
+        if (typeof method !== 'string') {
+            if (isNotification) return null;
+            return {
+                jsonrpc: '2.0',
+                id,
+                error: { code: JSONRPC_INVALID_REQUEST, message: 'Invalid Request: missing method' }
+            };
+        }
 
         try {
             let result: any;
 
             switch (method) {
-                case 'tools/list':
-                    result = { tools: this.getAvailableTools() };
-                    break;
-                case 'tools/call':
-                    const { name, arguments: args } = params;
-                    const toolResult = await this.executeToolCall(name, args);
-                    result = { content: [{ type: 'text', text: JSON.stringify(toolResult) }] };
-                    break;
-                case 'initialize':
-                    // MCP initialization
+                case 'initialize': {
+                    const requested = params?.protocolVersion;
+                    const negotiated = SUPPORTED_PROTOCOL_VERSIONS.includes(requested)
+                        ? requested
+                        : DEFAULT_PROTOCOL_VERSION;
                     result = {
-                        protocolVersion: '2024-11-05',
+                        protocolVersion: negotiated,
                         capabilities: {
-                            tools: {}
+                            tools: { listChanged: true }
                         },
                         serverInfo: {
                             name: 'cocos-mcp-server',
@@ -299,9 +392,47 @@ export class MCPServer {
                         }
                     };
                     break;
+                }
+                case 'notifications/initialized':
+                case 'initialized':
+                case 'notifications/cancelled':
+                case 'notifications/roots/list_changed':
+                    // Spec-defined notifications: acknowledge silently.
+                    return null;
+                case 'ping':
+                    result = {};
+                    break;
+                case 'tools/list':
+                    result = { tools: this.getAvailableTools() };
+                    break;
+                case 'tools/call': {
+                    if (!params || typeof params.name !== 'string') {
+                        throw new JsonRpcError(JSONRPC_INVALID_PARAMS, 'Invalid params: "name" is required');
+                    }
+                    const { name, arguments: args } = params;
+                    // Per MCP spec, tool execution failures must NOT be returned as
+                    // JSON-RPC errors. Instead, return a normal result with
+                    // `isError: true` so the client/LLM can observe and react.
+                    try {
+                        const toolResult = await this.executeToolCall(name, args ?? {});
+                        const isError = !!(toolResult && typeof toolResult === 'object' && toolResult.success === false);
+                        result = {
+                            content: [{ type: 'text', text: JSON.stringify(toolResult) }],
+                            isError
+                        };
+                    } catch (toolError: any) {
+                        result = {
+                            content: [{ type: 'text', text: toolError?.message ?? String(toolError) }],
+                            isError: true
+                        };
+                    }
+                    break;
+                }
                 default:
-                    throw new Error(`Unknown method: ${method}`);
+                    throw new JsonRpcError(JSONRPC_METHOD_NOT_FOUND, `Method not found: ${method}`);
             }
+
+            if (isNotification) return null;
 
             return {
                 jsonrpc: '2.0',
@@ -309,35 +440,28 @@ export class MCPServer {
                 result
             };
         } catch (error: any) {
+            if (isNotification) return null;
+            const code = error instanceof JsonRpcError ? error.code : JSONRPC_INTERNAL_ERROR;
+            const data = error instanceof JsonRpcError ? error.data : undefined;
+            const errObj: any = { code, message: error?.message ?? String(error) };
+            if (data !== undefined) errObj.data = data;
             return {
                 jsonrpc: '2.0',
                 id,
-                error: {
-                    code: -32603,
-                    message: error.message
-                }
+                error: errObj
             };
         }
     }
 
     private fixCommonJsonIssues(jsonStr: string): string {
+        // Kept only for the legacy `/api/*` REST helper. Heuristic JSON-repair is
+        // unsafe for the MCP endpoint (it can corrupt valid JSON, e.g. swap quotes
+        // inside strings or double-escape newlines), so the MCP path no longer
+        // calls into this; it must reject malformed JSON with -32700 per spec.
         let fixed = jsonStr;
-        
-        // Fix common escape character issues
         fixed = fixed
-            // Fix unescaped quotes in strings
-            .replace(/([^\\])"([^"]*[^\\])"([^,}\]:])/g, '$1\\"$2\\"$3')
-            // Fix unescaped backslashes
-            .replace(/([^\\])\\([^"\\\/bfnrt])/g, '$1\\\\$2')
-            // Fix trailing commas
-            .replace(/,(\s*[}\]])/g, '$1')
-            // Fix single quotes (should be double quotes)
-            .replace(/'/g, '"')
-            // Fix common control characters
-            .replace(/\n/g, '\\n')
-            .replace(/\r/g, '\\r')
-            .replace(/\t/g, '\\t');
-        
+            .replace(/,(\s*[}\]])/g, '$1') // trailing commas
+            .replace(/'/g, '"');           // single -> double quotes
         return fixed;
     }
 
