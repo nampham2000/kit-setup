@@ -132,8 +132,9 @@ if not exist "%~1\package.json" (
     exit /b 0
 )
 echo.
+echo.
 echo ==^> Updating root package metadata
-call node -e "const fs=require('fs'),path=require('path');const root=process.argv[1];const file=path.join(root,'package.json');const raw=fs.readFileSync(file,'utf8').replace(/^\uFEFF/,'');const pkg=JSON.parse(raw);pkg.name=path.basename(root);pkg.description='Playable Ads';fs.writeFileSync(file,JSON.stringify(pkg,null,2)+'\n');" "%~1"
+call node -e "const fs=require('fs'),path=require('path');const root=process.argv[1];const file=path.join(root,'package.json');const raw=fs.readFileSync(file,'utf8').replace(/^\uFEFF/,'');const pkg=JSON.parse(raw);const base=path.basename(root);const normalized=base.toLowerCase().replace(/[^a-z0-9._-]+/g,'-').replace(/-+/g,'-').replace(/^-+|-+$/g,'')||'playable-ads';pkg.name=normalized;pkg.description='Playable Ads';fs.writeFileSync(file,JSON.stringify(pkg,null,2)+'\n');" "%~1"
 if errorlevel 1 (
     echo [ERROR] Failed to update root package metadata.
     if /I not "%SETUP_ALL_NO_PAUSE%"=="1" pause
