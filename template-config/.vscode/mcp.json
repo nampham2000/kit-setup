@@ -1,0 +1,19 @@
+{
+  "servers": {
+    "workMemory": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "playable-shared-kit/tools/work-memory-mcp.cjs"
+      ],
+      "cwd": "${workspaceFolder}",
+      "dev": {
+        "watch": [
+          "playable-shared-kit/tools/work-memory-mcp.cjs",
+          "playable-shared-kit/tools/work-memory.cjs",
+          "playable-shared-kit/tools/work-memory/**/*.js"
+        ]
+      }
+    }
+  }
+}

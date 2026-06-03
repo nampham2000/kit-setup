@@ -1,0 +1,24 @@
+{
+  "__version__": "1.0.6",
+  "general": {
+    "designResolution": {
+      "width": 1080,
+      "height": 2048,
+      "fitHeight": true,
+      "fitWidth": false
+    },
+    "highQuality": false,
+    "downloadMaxConcurrency": 15
+  },
+  "custom_joint_texture_layouts": [],
+  "layer": [
+    {
+      "name": "UI_2D_OVERLAY",
+      "value": 524288
+    },
+    {
+      "name": "VFX_3D",
+      "value": 262144
+    }
+  ]
+}

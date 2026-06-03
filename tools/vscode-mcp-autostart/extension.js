@@ -42,12 +42,28 @@ async function waitForPort(port, host, timeoutMilliseconds) {
   return false;
 }
 
-function findWorkspaceConfigIndex() {
+function readWorkspaceMcpConfig(configFile) {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(configFile, 'utf8'));
+    const servers = parsed && typeof parsed === 'object' ? parsed.servers : null;
+    const serverNames = servers && typeof servers === 'object' ? Object.keys(servers) : [];
+    return serverNames.length ? { serverNames } : null;
+  } catch {
+    return null;
+  }
+}
+
+function findWorkspaceConfig() {
   const folders = vscode.workspace.workspaceFolders || [];
-  return folders.findIndex((folder) => {
+  for (let workspaceIndex = 0; workspaceIndex < folders.length; workspaceIndex += 1) {
+    const folder = folders[workspaceIndex];
     const configFile = path.join(folder.uri.fsPath, '.vscode', 'mcp.json');
-    return folder.name.toLowerCase() === 'cocos_game' && fs.existsSync(configFile);
-  });
+    if (!fs.existsSync(configFile)) continue;
+    const config = readWorkspaceMcpConfig(configFile);
+    if (!config) continue;
+    return { workspaceIndex, configFile, serverNames: config.serverNames };
+  }
+  return null;
 }
 
 async function startServer(output, id) {
@@ -98,34 +114,43 @@ function startCocosMcpMonitor(context, output, id, initialAvailable) {
   checkAndStart();
 }
 
+function isCocosMcpServer(name) {
+  const normalized = String(name || '').trim().toLowerCase();
+  return normalized === 'cocos-mcp' || normalized === 'cocosmcp';
+}
+
 async function activate(context) {
-  const workspaceIndex = findWorkspaceConfigIndex();
-  if (workspaceIndex < 0) {
+  const workspaceConfig = findWorkspaceConfig();
+  if (!workspaceConfig) {
     return;
   }
 
   const output = vscode.window.createOutputChannel('Cocos Game MCP Autostart', { log: true });
   context.subscriptions.push(output);
 
+  const { workspaceIndex, serverNames } = workspaceConfig;
   const prefix = `mcp.config.ws${workspaceIndex}.`;
-  const cocosMcpId = `${prefix}cocos-mcp`;
   output.appendLine('Starting workspace MCP servers.');
   await delay(STARTUP_DELAY_MS);
 
-  await Promise.all([
-    startServer(output, `${prefix}blender-mcp`),
-    startServer(output, `${prefix}gimp-mcp`)
-  ]);
+  const immediateServerIds = serverNames
+    .filter((name) => !isCocosMcpServer(name))
+    .map((name) => `${prefix}${name}`);
+  await Promise.all(immediateServerIds.map((id) => startServer(output, id)));
 
-  const cocosAvailableAtStartup = await waitForPort(COCOS_MCP_PORT, '127.0.0.1', WAIT_FOR_COCOS_MS);
-  if (cocosAvailableAtStartup) {
-    await startServer(output, cocosMcpId);
-  } else {
-    output.appendLine(`Skipped ${cocosMcpId}: localhost:${COCOS_MCP_PORT} was not available within ${WAIT_FOR_COCOS_MS / 1000}s.`);
+  const cocosMcpName = serverNames.find((name) => isCocosMcpServer(name));
+  if (cocosMcpName) {
+    const cocosMcpId = `${prefix}${cocosMcpName}`;
+    const cocosAvailableAtStartup = await waitForPort(COCOS_MCP_PORT, '127.0.0.1', WAIT_FOR_COCOS_MS);
+    if (cocosAvailableAtStartup) {
+      await startServer(output, cocosMcpId);
+    } else {
+      output.appendLine(`Skipped ${cocosMcpId}: localhost:${COCOS_MCP_PORT} was not available within ${WAIT_FOR_COCOS_MS / 1000}s.`);
+    }
+
+    output.appendLine(`Monitoring localhost:${COCOS_MCP_PORT} for Cocos MCP restarts.`);
+    startCocosMcpMonitor(context, output, cocosMcpId, cocosAvailableAtStartup);
   }
-
-  output.appendLine(`Monitoring localhost:${COCOS_MCP_PORT} for Cocos MCP restarts.`);
-  startCocosMcpMonitor(context, output, cocosMcpId, cocosAvailableAtStartup);
 }
 
 function deactivate() {}

@@ -1,0 +1,65 @@
+{
+  "__version__": "1.3.9",
+  "splash-setting": {
+    "logo": {
+      "type": "none"
+    }
+  },
+  "bundleConfig": {
+    "custom": {
+      "default": {
+        "displayName": "i18n:builder.asset_bundle.defaultConfig",
+        "configs": {
+          "native": {
+            "preferredOptions": {
+              "isRemote": false,
+              "compressionType": "merge_dep"
+            }
+          },
+          "web": {
+            "preferredOptions": {
+              "isRemote": false,
+              "compressionType": "merge_dep"
+            },
+            "fallbackOptions": {
+              "compressionType": "merge_dep"
+            }
+          },
+          "miniGame": {
+            "fallbackOptions": {
+              "isRemote": false,
+              "compressionType": "merge_dep"
+            },
+            "configMode": "fallback"
+          }
+        }
+      }
+    }
+  },
+  "textureCompressConfig": {
+    "userPreset": {
+      "28VZ1xkshALKqvkAaBNtnM": null,
+      "1fYG0h7MJDcp+zA2cMcUsR": {
+        "name": "PlayableTransparent",
+        "options": {
+          "web": {
+            "webp": {
+              "quality": 60
+            }
+          }
+        }
+      },
+      "caN1shVmpEEKSqquZ64sut": {
+        "name": "PlayableOpaque",
+        "options": {
+          "web": {
+            "webp": {
+              "quality": 17
+            }
+          }
+        }
+      }
+    },
+    "genMipmaps": false
+  }
+}

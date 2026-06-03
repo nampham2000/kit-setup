@@ -5,18 +5,21 @@ Local-first memory storage for bug-fix notes, implementation lessons, commands, 
 Design goals:
 
 - SQLite as the canonical local database.
-- Hybrid scope: one global DB plus one repo-local DB.
+- Hybrid scope: one shared DB plus one repo-partitioned DB under the shared kit.
 - Startup warmup that builds a ranked hot working set for RAM preload.
-- CLI-first workflow so it can be used before integrating with any MCP server or editor startup hook.
+- CLI-first workflow with a thin MCP wrapper so the same behavior is available from chat tools without duplicating storage logic.
 - Optional semantic indexing and retrieval using `sqlite-vec` plus a real local multilingual embedding model, while SQLite remains the canonical store.
 
 ## Default storage locations
 
-- Global DB: `%USERPROFILE%/.copilot-work-memory/global-memory.db`
-- Repo DB: `<repo>/.local-memory/repo-memory.db`
-- Warm cache: `<repo>/.local-memory/hot-cache.json`
+- Shared DB: `<repo>/playable-shared-kit/tools/work-memory/data/shared-memory.db`
+- Repo DB: `<repo>/playable-shared-kit/tools/work-memory/data/repo/<repo-id>.db`
+- Warm cache: `<repo>/playable-shared-kit/tools/work-memory/data/cache/<repo-id>-hot-cache.json`
+- Shared capture inbox: `<repo>/playable-shared-kit/tools/work-memory/shared-capture.md`
 
 The warm cache is written as portable JSON. Repo-local paths are emitted with a `<repo-root>/...` token so the cache can be reviewed or moved without embedding a developer-specific absolute folder.
+
+With this layout, the tracked DB files stay inside `playable-shared-kit`, the repo DB is fragmented by `repo-id`, and the cache is fragmented by `repo-id` as well.
 
 ## Commands
 
@@ -39,6 +42,19 @@ node playable-shared-kit/tools/work-memory.cjs remember `
   --importance 0.9 `
   --confidence 0.95 `
   --pinned true
+```
+
+Save AI-generated memories directly:
+
+```powershell
+node playable-shared-kit/tools/work-memory.cjs remember-auto `
+  --memory '{"scope":"global","category":"tip","title":"Preserve sprite semantics","content":"Preserve builtin sprite semantics when porting sprite effects.","tags":["shader","cocos","porting"]}'
+```
+
+Import hidden agent markers from a transcript:
+
+```powershell
+node playable-shared-kit/tools/work-memory.cjs import-agent-memories --transcript c:/tmp/session-transcript.json
 ```
 
 Import an existing markdown or TODO file:
@@ -79,6 +95,13 @@ Start a session in one command:
 node playable-shared-kit/tools/work-memory.cjs session-start --sync-sources true --hot-limit 8
 ```
 
+Start the background watcher:
+
+```powershell
+node playable-shared-kit/tools/work-memory.cjs watch --poll-seconds 15
+node playable-shared-kit/tools/work-memory.cjs watch --once --json
+```
+
 Rebuild semantic vectors explicitly:
 
 ```powershell
@@ -96,11 +119,25 @@ node playable-shared-kit/tools/work-memory.cjs stats
 At the beginning of a work session:
 
 ```powershell
-node playable-shared-kit/tools/work-memory.cjs session-start --sync-sources true --repo-limit 25 --global-limit 10 --hot-limit 8
+node playable-shared-kit/tools/work-memory.cjs watch --poll-seconds 15
 node playable-shared-kit/tools/work-memory.cjs query --text "current porting traps" --scope hybrid --semantic hybrid --prefer-cache true
 ```
 
-This keeps SQLite on disk as the source of truth while loading a ranked working set into process memory for fast first queries.
+`watch` runs the initial session sync once, keeps the warm cache fresh, and re-imports note sources whenever matching markdown files change.
+
+For reusable cross-project lessons, append them to `playable-shared-kit/tools/work-memory/shared-capture.md`. The watcher imports that file into the shared DB automatically.
+
+## MCP server
+
+Workspace MCP config now lives in `.vscode/mcp.json` and starts `playable-shared-kit/tools/work-memory-mcp.cjs` as a local stdio server.
+
+Available MCP tools:
+
+- `queryWorkMemory` for lexical and semantic search.
+- `rememberWorkMemory` for saving one or more memories through the same `remember-auto` normalization path.
+- `workMemoryStats` for repo/shared counts and semantic status.
+
+The MCP wrapper shells into `work-memory.cjs`, so query/save behavior stays aligned with the CLI, watcher, and hook flows.
 
 ## Auto-import source discovery
 
@@ -116,6 +153,20 @@ This keeps SQLite on disk as the source of truth while loading a ranked working 
 Large folders like `node_modules`, `library`, `temp`, and `assets` are skipped.
 
 Default behavior favors high-signal sources only: TODOs, changelogs, summaries, and overrides. Reference docs are opt-in via `--include-reference true` so your hot cache does not get drowned by large manuals.
+
+`watch` polls the discovered source set plus `shared-capture.md`. Any change in those files triggers a fresh import, semantic reindex attempt, and warm-cache rebuild.
+
+## Agent autosave
+
+Workspace hooks in `.github/hooks/work-memory.json` import hidden agent markers on `PreCompact`, `SubagentStop`, and `Stop`.
+
+Future Copilot/Codex responses can append invisible HTML comments like:
+
+```html
+<!-- WORK_MEMORY: {"scope":"global","category":"tip","title":"Short title","content":"Concrete reusable lesson","tags":["cocos","porting"],"importance":0.85,"confidence":0.95} -->
+```
+
+The hook reads the transcript, extracts these markers, and saves them into the shared or repo DB automatically.
 
 Optional override file:
 
@@ -162,7 +213,9 @@ This keeps the full semantic path local and works better for mixed English and V
 - FTS matches for exact terms, paths, and symbols
 - semantic matches from the `sqlite-vec` index when enabled
 
-## Suggested next integration
+## Workspace integration
 
-- A workspace task now auto-runs `memory:session-start` on folder open.
-- If you later want deeper integration, expose `query` or `remember` through the existing `cocos-mcp-server` startup path after the standalone flow is stable.
+- A workspace task now auto-runs `memory:watch` on folder open.
+- Workspace setting `task.allowAutomaticTasks` should stay `on` so the watcher starts without prompting in a trusted workspace.
+- `.vscode/mcp.json` exposes the `workMemory` MCP server for chat tools in this workspace.
+- The `vscode-mcp-autostart` helper now starts all immediate workspace MCP servers and still delays `cocos-mcp` until `localhost:3000` is ready.
