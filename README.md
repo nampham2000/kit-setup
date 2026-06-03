@@ -22,7 +22,6 @@ Bộ shared kit cho playable ads/Cocos: package dùng chung, tool build, tool po
   - `tools/playable-build/playable-cli.cjs`: logic chính.
   - `tools/playable-build/playable-cli.config.cjs`: cấu hình local.
   - `tools/playable-build/playable-cli.config_TEMPLATE.cjs`: mẫu config mặc định.
-  - `tools/playable-build/build_project.*`, `install_all.*`, `subtree_pull.*`: wrapper quay về root project rồi gọi CLI.
 - Quick guide:
   1. `node playable-shared-kit/tools/playable-build.cjs doctor` — kiểm tra Cocos path, config, git status.
   2. `node playable-shared-kit/tools/playable-build.cjs export-build-configs` — xuất `configs/*.json` từ builder profile.
