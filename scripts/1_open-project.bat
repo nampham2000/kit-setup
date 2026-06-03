@@ -112,6 +112,24 @@ function Sync-CocosMcpExtension {
     }
 }
 
+function Sync-VSCodeMcpAutostart {
+    $Source = Join-Path $SharedKitDir 'tools\vscode-mcp-autostart'
+    if (-not (Test-Path (Join-Path $Source 'package.json'))) {
+        Write-Host "  [warn] VSCode MCP autostart helper source not found: $Source" -ForegroundColor Yellow
+        return
+    }
+
+    $Target = Join-Path $env:USERPROFILE '.vscode\extensions\local.cocos-game-mcp-autostart-0.0.1'
+    $TargetParent = Split-Path $Target -Parent
+    if (-not (Test-Path $TargetParent)) { New-Item -ItemType Directory -Path $TargetParent -Force | Out-Null }
+    if (-not (Test-Path $Target)) { New-Item -ItemType Directory -Path $Target -Force | Out-Null }
+
+    Write-Host "  [mcp] Refreshing VSCode MCP autostart helper..." -ForegroundColor DarkGray
+    robocopy $Source $Target /E /NFL /NDL /NJH /NJS /NC /NS /NP | Out-Null
+    $CopyExit = $LASTEXITCODE
+    if ($CopyExit -ge 8) { throw "Failed to refresh VSCode MCP autostart helper (robocopy exit $CopyExit)." }
+}
+
 function Test-Port($HostName, $Port) {
     $Client = New-Object System.Net.Sockets.TcpClient
     try {
@@ -237,22 +255,10 @@ if (Test-Path $TokenBackup) {
 
 if (Test-Path $CocosCreatorExe) {
     Write-Host "==> Preparing MCP..." -ForegroundColor Cyan
+    Sync-VSCodeMcpAutostart
     Sync-CocosMcpExtension
     Ensure-CocosMcpSettings
     Ensure-VSCodeMcpConfig
-
-    Write-Host "==> Opening VSCode..." -ForegroundColor Cyan
-    $CodeCmd = Get-Command code -ErrorAction SilentlyContinue
-    if ($CodeCmd) {
-        $CodeExe = Join-Path (Split-Path (Split-Path $CodeCmd.Source -Parent) -Parent) "Code.exe"
-        if (Test-Path $CodeExe) {
-            Start-Detached $CodeExe "`"$ProjectDir`""
-        } else {
-            Start-Detached $CodeCmd.Source "`"$ProjectDir`""
-        }
-    } else {
-        Write-Host "  [warn] VSCode command 'code' not found." -ForegroundColor Yellow
-    }
 
     $ResolvedProjectDir = [System.IO.Path]::GetFullPath($ProjectDir).TrimEnd('\')
     $AllCocosProcesses = @(Get-CimInstance Win32_Process -Filter "name = 'CocosCreator.exe'" -ErrorAction SilentlyContinue)
@@ -274,6 +280,19 @@ if (Test-Path $CocosCreatorExe) {
         Write-Host "  [mcp] Cocos MCP server ready: $CocosMcpUrl" -ForegroundColor DarkGray
     } else {
         Write-Host "  [warn] Cocos launched but MCP port $CocosMcpPort is not ready yet." -ForegroundColor Yellow
+    }
+
+    Write-Host "==> Opening VSCode..." -ForegroundColor Cyan
+    $CodeCmd = Get-Command code -ErrorAction SilentlyContinue
+    if ($CodeCmd) {
+        $CodeExe = Join-Path (Split-Path (Split-Path $CodeCmd.Source -Parent) -Parent) "Code.exe"
+        if (Test-Path $CodeExe) {
+            Start-Detached $CodeExe "`"$ProjectDir`""
+        } else {
+            Start-Detached $CodeCmd.Source "`"$ProjectDir`""
+        }
+    } else {
+        Write-Host "  [warn] VSCode command 'code' not found." -ForegroundColor Yellow
     }
 
     if (-not ([System.Management.Automation.PSTypeName]'Win32Console').Type) {
