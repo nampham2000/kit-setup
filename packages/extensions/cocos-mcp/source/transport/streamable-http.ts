@@ -155,7 +155,15 @@ export class StreamableHttpServer {
         try {
             if (pathname === '/health' && req.method === 'GET') {
                 res.writeHead(200, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ status: 'ok', sessions: this.sessions.size }));
+                res.end(JSON.stringify({
+                    status: 'ok',
+                    name: 'cocos-mcp-server',
+                    version: '1.4.0',
+                    sessions: this.sessions.size,
+                    maxConnections: this.settings.maxConnections,
+                    transport: 'streamable-http',
+                    auth: this.settings.authToken ? 'bearer' : 'none'
+                }));
                 return;
             }
             if (pathname !== '/mcp') {

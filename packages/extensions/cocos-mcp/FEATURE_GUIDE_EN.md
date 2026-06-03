@@ -376,6 +376,133 @@ or rely on `notifications/tools/list_changed`).
 
 ---
 
+## 0bis. MCP Protocol (Phases 2–6) — Resources, Prompts, Sampling, Editor Runtime, DX
+
+> Phases 2–6 build on top of the Phase 1 transport/handshake to expose every
+> remaining MCP 2025‑06‑18 capability and to broaden the surface of editor
+> functionality reachable from a client.
+
+### Phase 2 — Resources / Prompts / Sampling / Completion
+
+The server now advertises:
+
+```jsonc
+"capabilities": {
+  "tools":       { "listChanged": true },
+  "logging":     {},
+  "resources":   { "listChanged": true, "subscribe": true },
+  "prompts":     { "listChanged": true },
+  "sampling":    {},
+  "completions": {}
+}
+```
+
+**Built‑in resources** (every MCP-compliant client can `resources/list` to
+discover them, then `resources/read`):
+
+| URI | MIME | Purpose |
+|-----|------|---------|
+| `project://info`     | `application/json` | Project name / path / Cocos version |
+| `scene://current`    | `application/json` | Current scene hierarchy (queries `scene.query-node-tree`) |
+| `assets://tree`      | `application/json` | Top-level `db://assets/**/*` listing |
+| `runtime://logs`     | `text/plain`       | Last ~200 console log lines (subscribable, see Phase 5) |
+| `scene://node/{uuid}`  | template          | Snapshot of one node by UUID |
+| `assets://item/{uuid}` | template          | Asset DB info for one asset by UUID |
+
+`resources/subscribe` for `runtime://logs` causes
+`notifications/resources/updated` to fire on every new log line.
+
+**Built‑in prompts** (`prompts/list` → `prompts/get`):
+
+- `explain-current-scene` — summarize the open scene (optional `focus`).
+- `create-prefab-from-node` — plan node→prefab extraction (`nodeUuid`, optional `destination`).
+- `debug-runtime-error` — walk through an error (`errorMessage`).
+
+`completion/complete` returns argument suggestions (e.g. `focus` →
+`physics, ui, rendering, audio, animation`).
+
+**Sampling round‑trip.** Tools can call back into the LLM via the connected
+client:
+
+```ts
+const reply = await ctx.handler.requestSampling({
+  messages: [{ role: 'user', content: { type: 'text', text: '...' } }],
+  maxTokens: 200
+});
+```
+
+The server emits a JSON‑RPC `sampling/createMessage` request to the client
+over the same transport (SSE for HTTP, stdout for stdio); the client's
+JSON‑RPC response is correlated by id and resolves the promise. Pending
+requests are aborted on session shutdown and time out after
+`samplingTimeoutMs` (default 60 s).
+
+### Phase 3 — Scene / Component coverage
+
+`source/protocol/tool-hints.ts` now covers every shipped scene/node/component/
+prefab/sceneAdvanced/sceneView tool with accurate `readOnlyHint`,
+`destructiveHint`, `idempotentHint`, `openWorldHint`. LLM clients can now warn
+before destructive operations such as `node_delete_node`,
+`component_remove_component`, `prefab_revert_prefab`, `sceneAdvanced_reset_*`
+without ad‑hoc heuristics.
+
+Scene state is also exposed declaratively as resources (`scene://current`,
+`scene://node/{uuid}`) so a client can include scene context in its prompts
+without round-tripping through `tools/call`.
+
+### Phase 4 — Asset coverage
+
+All `project_*` (asset DB), `assetAdvanced_*` and `referenceImage_*` tools
+now ship full annotations. Reading the asset tree is exposed as a resource
+(`assets://tree`, `assets://item/{uuid}`); subscribing to the tree is a no-op
+fallback (the registry records the subscription so future asset-DB watchers
+can wire up `notifications/resources/updated` without protocol churn).
+
+### Phase 5 — Editor runtime
+
+A new `editorRuntime_*` tool category exposes preview / log operations:
+
+| Tool | Effect |
+|------|--------|
+| `editorRuntime_run_preview`            | Start the preview server (`platform` arg) |
+| `editorRuntime_stop_preview`           | Stop the preview server |
+| `editorRuntime_reload_preview`         | Reload the running preview |
+| `editorRuntime_tail_runtime_logs`      | Read the in-process log ring buffer (last 200) |
+| `editorRuntime_reload_current_scene`   | Soft-reload the current scene |
+| `editorRuntime_subscribe_runtime_logs` | Hint to call `resources/subscribe` on `runtime://logs` |
+
+When the package loads inside the editor host the buffer auto-installs an
+`Editor.Message.addBroadcastListener('console:log', …)` listener; outside
+the editor (stdio) the buffer remains usable via direct `pushRuntimeLog`
+calls so the runtime resource is never empty.
+
+### Phase 6 — Networking / DX
+
+- **`/health`** now returns structured JSON: `{status, name, version,
+  sessions, maxConnections, transport, auth}`. Useful for upstream load
+  balancers that assert on `auth: 'bearer'` or `transport: 'streamable-http'`.
+- **`dx_*`** tool category — `dx_search_tools` (substring search across the
+  registered tool list), `dx_get_capabilities`, `dx_server_info`,
+  `dx_describe_tool`. Lets a client discover the server without enumerating
+  every category by hand.
+- **Phase 1 follow-up wired here**: `MCPServer.updateEnabledTools` now both
+  invalidates Ajv validators **and** emits `notifications/tools/list_changed`
+  on every active session so live-reconfigured tool sets propagate
+  automatically.
+
+### Smoke test
+
+A self-contained smoke harness (see commit history) covers initialize →
+`resources/list` → `resources/read` → `prompts/get` → `completion/complete`
+→ `sampling/createMessage` round-trip → `tools/list_changed` broadcast.
+Run inside the package after `npm install`:
+
+```bash
+npx ts-node --transpile-only --compiler-options '{"module":"commonjs","esModuleInterop":true}' /tmp/smoke.ts
+```
+
+---
+
 ## Tool Categories
 
 The MCP server provides **158 tools** organized into 13 main categories by functionality:

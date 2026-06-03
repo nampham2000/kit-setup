@@ -22,6 +22,12 @@
 import { MCPServerSettings, MCPClient, ServerStatus, ToolDefinition } from './types';
 import { ProtocolHandler, ToolExecutionContext, ToolRegistry } from './protocol/protocol-handler';
 import { StreamableHttpServer } from './transport/streamable-http';
+import {
+    PromptRegistry,
+    ResourceRegistry,
+    buildBuiltInPromptProvider,
+    buildBuiltInResourceProvider
+} from './protocol/registries';
 import { SceneTools } from './tools/scene-tools';
 import { NodeTools } from './tools/node-tools';
 import { ComponentTools } from './tools/component-tools';
@@ -36,6 +42,8 @@ import { SceneViewTools } from './tools/scene-view-tools';
 import { ReferenceImageTools } from './tools/reference-image-tools';
 import { AssetAdvancedTools } from './tools/asset-advanced-tools';
 import { ValidationTools } from './tools/validation-tools';
+import { EditorRuntimeTools } from './tools/editor-runtime-tools';
+import { DXTools } from './tools/dx-tools';
 
 /**
  * The tool registry used by all transports. Wraps the legacy per‑category
@@ -62,6 +70,13 @@ export class CocosToolRegistry implements ToolRegistry {
         this.tools.referenceImage = new ReferenceImageTools();
         this.tools.assetAdvanced = new AssetAdvancedTools();
         this.tools.validation = new ValidationTools();
+        this.tools.editorRuntime = new EditorRuntimeTools();
+        this.rebuild();
+    }
+
+    /** Late binding for the DX category, which needs a directory pointer to the server. */
+    public registerDxTools(dx: DXTools): void {
+        this.tools.dx = dx;
         this.rebuild();
     }
 
@@ -121,17 +136,43 @@ export class MCPServer {
     private registry: CocosToolRegistry;
     private transport: StreamableHttpServer;
     private handlersBySession = new Map<string, ProtocolHandler>();
+    private resources: ResourceRegistry;
+    private prompts: PromptRegistry;
+    private startedAt = 0;
 
     constructor(settings: MCPServerSettings) {
         this.settings = settings;
         this.registry = new CocosToolRegistry();
+
+        // Phase 2 — registries broadcast list_changed via every active session
+        // by piping their notifications through `broadcastNotification`.
+        this.resources = new ResourceRegistry((method, params) => this.broadcastNotification(method, params));
+        this.prompts = new PromptRegistry((method, params) => this.broadcastNotification(method, params));
+        this.resources.addProvider(buildBuiltInResourceProvider());
+        this.prompts.addProvider(buildBuiltInPromptProvider());
+
+        // Phase 6 — DX tools need a pointer to the server itself.
+        this.registry.registerDxTools(new DXTools({
+            listTools: () => this.registry.listTools(),
+            getServerCapabilities: () => this.getAdvertisedCapabilities(),
+            getServerInfo: () => ({
+                name: 'cocos-mcp-server',
+                version: '1.4.0',
+                uptimeMs: this.startedAt ? Date.now() - this.startedAt : 0,
+                sessions: this.transport ? this.transport.getSessionCount() : 0,
+                port: this.settings.port
+            })
+        }));
+
         this.transport = new StreamableHttpServer({
             settings,
             createHandler: (sessionId) => {
                 const h = new ProtocolHandler({
                     registry: this.registry,
                     pageSize: this.settings.toolsPageSize ?? 100,
-                    initialLogLevel: this.settings.logLevel ?? 'info'
+                    initialLogLevel: this.settings.logLevel ?? 'info',
+                    resources: this.resources,
+                    prompts: this.prompts
                 });
                 this.handlersBySession.set(sessionId, h);
                 return h;
@@ -142,12 +183,14 @@ export class MCPServer {
 
     public async start(): Promise<void> {
         await this.transport.start();
+        this.startedAt = Date.now();
         console.log(`[MCPServer] Streamable HTTP listening on http://127.0.0.1:${this.settings.port}/mcp`);
     }
 
     public stop(): void {
         this.transport.stop();
         this.handlersBySession.clear();
+        this.startedAt = 0;
     }
 
     public updateSettings(settings: MCPServerSettings): void {
@@ -160,11 +203,24 @@ export class MCPServer {
 
     public updateEnabledTools(enabledTools: any[]): void {
         this.registry.updateEnabledTools(enabledTools);
-        for (const h of this.handlersBySession.values()) h.clearValidatorCache();
+        // Phase 1 follow-up: invalidate validators *and* broadcast
+        // notifications/tools/list_changed so connected clients refresh.
+        for (const h of this.handlersBySession.values()) {
+            h.clearValidatorCache();
+            h.emitToolsListChanged();
+        }
     }
 
     public getRegistry(): CocosToolRegistry {
         return this.registry;
+    }
+
+    public getResources(): ResourceRegistry {
+        return this.resources;
+    }
+
+    public getPrompts(): PromptRegistry {
+        return this.prompts;
     }
 
     public getStatus(): ServerStatus {
@@ -189,5 +245,30 @@ export class MCPServer {
 
     public getFilteredTools(enabledTools: any[]): ToolDefinition[] {
         return this.registry.getFilteredTools(enabledTools);
+    }
+
+    /** Broadcast a server notification to every active session. */
+    private broadcastNotification(method: string, params?: any): void {
+        for (const h of this.handlersBySession.values()) {
+            try {
+                // We cheat here a little by reaching for the public sendClientRequest
+                // path's notification cousin via the public emit helpers; for
+                // generic notifications we use the same private notify channel
+                // by calling clearValidatorCache wrappers won't fit, so use
+                // the protocol handler's notification helpers added below.
+                h.emitNotification(method, params);
+            } catch { /* ignore */ }
+        }
+    }
+
+    private getAdvertisedCapabilities(): Record<string, any> {
+        return {
+            tools: { listChanged: true },
+            logging: {},
+            resources: { listChanged: true, subscribe: true },
+            prompts: { listChanged: true },
+            sampling: {},
+            completions: {}
+        };
     }
 }

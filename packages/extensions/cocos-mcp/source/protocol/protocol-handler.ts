@@ -32,7 +32,8 @@ import {
     makeResult
 } from './jsonrpc';
 import { resolveToolHints } from './tool-hints';
-import { McpLogLevel, ToolDefinition } from '../types';
+import { PromptRegistry, ResourceRegistry } from './registries';
+import { McpLogLevel, McpSamplingRequest, ToolDefinition } from '../types';
 
 // Protocol versions this server understands. The latest is preferred.
 export const SUPPORTED_PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'];
@@ -75,6 +76,12 @@ export interface ProtocolHandlerOptions {
     initialLogLevel?: McpLogLevel;
     /** Optional feature flags advertised in `initialize.result.capabilities`. */
     extraCapabilities?: Record<string, any>;
+    /** Phase 2: shared resource registry (server-wide). */
+    resources?: ResourceRegistry;
+    /** Phase 2: shared prompt registry (server-wide). */
+    prompts?: PromptRegistry;
+    /** Phase 2: timeout (ms) when waiting for a `sampling/createMessage` reply. */
+    samplingTimeoutMs?: number;
 }
 
 export class ProtocolHandler {
@@ -87,12 +94,22 @@ export class ProtocolHandler {
     private validators = new Map<string, ValidateFunction>();
     private extraCapabilities: Record<string, any>;
     private negotiatedProtocolVersion = DEFAULT_PROTOCOL_VERSION;
+    private resources: ResourceRegistry | null;
+    private prompts: PromptRegistry | null;
+    private clientCapabilities: Record<string, any> = {};
+    private samplingTimeoutMs: number;
+    /** In-flight server→client requests keyed by their outgoing id. */
+    private pendingRequests = new Map<string | number, { resolve: (v: any) => void; reject: (e: any) => void; timer: NodeJS.Timeout }>();
+    private nextOutgoingId = 1;
 
     constructor(opts: ProtocolHandlerOptions) {
         this.registry = opts.registry;
         this.pageSize = Math.max(1, opts.pageSize ?? 100);
         this.logLevel = opts.initialLogLevel ?? 'info';
         this.extraCapabilities = opts.extraCapabilities || {};
+        this.resources = opts.resources ?? null;
+        this.prompts = opts.prompts ?? null;
+        this.samplingTimeoutMs = Math.max(1_000, opts.samplingTimeoutMs ?? 60_000);
         this.ajv = new Ajv({ allErrors: true, strict: false, useDefaults: false });
         addFormats(this.ajv);
     }
@@ -115,6 +132,11 @@ export class ProtocolHandler {
             try { ctrl.abort(new Error(reason)); } catch { /* noop */ }
         }
         this.inFlight.clear();
+        for (const [, p] of this.pendingRequests) {
+            clearTimeout(p.timer);
+            try { p.reject(new Error(reason)); } catch { /* noop */ }
+        }
+        this.pendingRequests.clear();
     }
 
     /** Entry point for the transport. Returns the response (or null for notifications). */
@@ -152,6 +174,21 @@ export class ProtocolHandler {
         if (message.jsonrpc !== JSONRPC_VERSION) {
             return makeError(message.id ?? null, JSONRPC_INVALID_REQUEST, 'Invalid Request: jsonrpc must be "2.0"');
         }
+
+        // Phase 2: route incoming responses to outgoing server→client requests
+        // (e.g. `sampling/createMessage`). Responses have no `method` and an
+        // `id` that matches a pending entry.
+        if (message.method === undefined && (message.result !== undefined || message.error !== undefined)) {
+            const pending = this.pendingRequests.get(message.id);
+            if (pending) {
+                clearTimeout(pending.timer);
+                this.pendingRequests.delete(message.id);
+                if (message.error) pending.reject(new JsonRpcError(message.error.code ?? JSONRPC_INTERNAL_ERROR, message.error.message ?? 'client error', message.error.data));
+                else pending.resolve(message.result);
+            }
+            return null;
+        }
+
         const { id, method, params } = message;
         const isNotif = id === undefined || id === null;
         if (typeof method !== 'string') {
@@ -189,6 +226,30 @@ export class ProtocolHandler {
                 case 'tools/call':
                     result = await this.handleToolsCall(id, params);
                     break;
+                case 'resources/list':
+                    result = await this.handleResourcesList(params);
+                    break;
+                case 'resources/templates/list':
+                    result = await this.handleResourceTemplatesList();
+                    break;
+                case 'resources/read':
+                    result = await this.handleResourcesRead(params);
+                    break;
+                case 'resources/subscribe':
+                    result = await this.handleResourcesSubscribe(params);
+                    break;
+                case 'resources/unsubscribe':
+                    result = this.handleResourcesUnsubscribe(params);
+                    break;
+                case 'prompts/list':
+                    result = await this.handlePromptsList();
+                    break;
+                case 'prompts/get':
+                    result = await this.handlePromptsGet(params);
+                    break;
+                case 'completion/complete':
+                    result = await this.handleCompletionComplete(params);
+                    break;
                 default:
                     throw new JsonRpcError(JSONRPC_METHOD_NOT_FOUND, `Method not found: ${method}`);
             }
@@ -211,13 +272,26 @@ export class ProtocolHandler {
             ? requested
             : DEFAULT_PROTOCOL_VERSION;
         this.negotiatedProtocolVersion = negotiated;
+        this.clientCapabilities = (params?.capabilities && typeof params.capabilities === 'object') ? params.capabilities : {};
+        const capabilities: Record<string, any> = {
+            tools: { listChanged: true },
+            logging: {},
+            ...this.extraCapabilities
+        };
+        if (this.resources) {
+            capabilities.resources = { listChanged: true, subscribe: true };
+        }
+        if (this.prompts) {
+            capabilities.prompts = { listChanged: true };
+        }
+        // Server-initiated sampling round-trip is supported when the client
+        // advertises the matching capability — we still announce it so older
+        // clients that probe capabilities know the server is willing.
+        capabilities.sampling = capabilities.sampling || {};
+        capabilities.completions = capabilities.completions || {};
         return {
             protocolVersion: negotiated,
-            capabilities: {
-                tools: { listChanged: true },
-                logging: {},
-                ...this.extraCapabilities
-            },
+            capabilities,
             serverInfo: {
                 name: 'cocos-mcp-server',
                 version: '1.4.0'
@@ -225,8 +299,15 @@ export class ProtocolHandler {
             instructions:
                 'Cocos Creator MCP server. Call tools/list (supports `cursor` pagination) ' +
                 'to discover capabilities. Long‑running calls can be aborted with ' +
-                'notifications/cancelled. Use logging/setLevel to control log verbosity.'
+                'notifications/cancelled. Use logging/setLevel to control log verbosity. ' +
+                'Resources (project://info, scene://current, assets://tree, runtime://logs) ' +
+                'and prompts are also available.'
         };
+    }
+
+    /** True when the client advertised the named top-level capability. */
+    public clientSupports(name: string): boolean {
+        return !!this.clientCapabilities[name];
     }
 
     private handleLoggingSetLevel(params: any): any {
@@ -369,7 +450,7 @@ export class ProtocolHandler {
         this.notify('notifications/message', { level, logger, data });
     }
 
-    private notify(method: string, params: any): void {
+    private notify(method: string, params?: any): void {
         if (!this.notifySink) return;
         try {
             this.notifySink({ jsonrpc: JSONRPC_VERSION, method, params });
@@ -379,5 +460,158 @@ export class ProtocolHandler {
     /** Invalidate cached validators when the enabled tool set changes. */
     public clearValidatorCache(): void {
         this.validators.clear();
+    }
+
+    /** Phase 1 follow-up: emit `notifications/tools/list_changed`. */
+    public emitToolsListChanged(): void {
+        this.notify('notifications/tools/list_changed');
+    }
+
+    /** Generic helper used by registries to emit any notification to the client. */
+    public emitNotification(method: string, params?: any): void {
+        this.notify(method, params);
+    }
+
+    // -- Phase 2 handlers ------------------------------------------------
+
+    private async handleResourcesList(params: any): Promise<any> {
+        if (!this.resources) {
+            throw new JsonRpcError(JSONRPC_METHOD_NOT_FOUND, 'resources capability not enabled');
+        }
+        const all = await this.resources.listResources();
+        // Reuse the same opaque cursor scheme as tools/list (G4).
+        const cursor = params?.cursor;
+        let start = 0;
+        if (cursor !== undefined && cursor !== null) {
+            const idx = Number.parseInt(String(cursor), 10);
+            if (!Number.isFinite(idx) || idx < 0) {
+                throw new JsonRpcError(JSONRPC_INVALID_PARAMS, `Invalid cursor: ${cursor}`);
+            }
+            start = idx;
+        }
+        const end = Math.min(all.length, start + this.pageSize);
+        const out: any = { resources: all.slice(start, end) };
+        if (end < all.length) out.nextCursor = String(end);
+        return out;
+    }
+
+    private async handleResourceTemplatesList(): Promise<any> {
+        if (!this.resources) {
+            throw new JsonRpcError(JSONRPC_METHOD_NOT_FOUND, 'resources capability not enabled');
+        }
+        return { resourceTemplates: await this.resources.listResourceTemplates() };
+    }
+
+    private async handleResourcesRead(params: any): Promise<any> {
+        if (!this.resources) {
+            throw new JsonRpcError(JSONRPC_METHOD_NOT_FOUND, 'resources capability not enabled');
+        }
+        if (!params || typeof params.uri !== 'string') {
+            throw new JsonRpcError(JSONRPC_INVALID_PARAMS, 'Invalid params: "uri" is required');
+        }
+        return await this.resources.readResource(params.uri);
+    }
+
+    private async handleResourcesSubscribe(params: any): Promise<any> {
+        if (!this.resources) {
+            throw new JsonRpcError(JSONRPC_METHOD_NOT_FOUND, 'resources capability not enabled');
+        }
+        if (!params || typeof params.uri !== 'string') {
+            throw new JsonRpcError(JSONRPC_INVALID_PARAMS, 'Invalid params: "uri" is required');
+        }
+        await this.resources.subscribe(params.uri);
+        return {};
+    }
+
+    private handleResourcesUnsubscribe(params: any): any {
+        if (!this.resources) {
+            throw new JsonRpcError(JSONRPC_METHOD_NOT_FOUND, 'resources capability not enabled');
+        }
+        if (!params || typeof params.uri !== 'string') {
+            throw new JsonRpcError(JSONRPC_INVALID_PARAMS, 'Invalid params: "uri" is required');
+        }
+        this.resources.unsubscribe(params.uri);
+        return {};
+    }
+
+    private async handlePromptsList(): Promise<any> {
+        if (!this.prompts) {
+            throw new JsonRpcError(JSONRPC_METHOD_NOT_FOUND, 'prompts capability not enabled');
+        }
+        return { prompts: await this.prompts.listPrompts() };
+    }
+
+    private async handlePromptsGet(params: any): Promise<any> {
+        if (!this.prompts) {
+            throw new JsonRpcError(JSONRPC_METHOD_NOT_FOUND, 'prompts capability not enabled');
+        }
+        if (!params || typeof params.name !== 'string') {
+            throw new JsonRpcError(JSONRPC_INVALID_PARAMS, 'Invalid params: "name" is required');
+        }
+        const args: Record<string, string> = {};
+        if (params.arguments && typeof params.arguments === 'object') {
+            for (const [k, v] of Object.entries(params.arguments)) {
+                args[k] = typeof v === 'string' ? v : String(v);
+            }
+        }
+        return await this.prompts.getPrompt(params.name, args);
+    }
+
+    private async handleCompletionComplete(params: any): Promise<any> {
+        if (!params || !params.ref || typeof params.ref !== 'object') {
+            throw new JsonRpcError(JSONRPC_INVALID_PARAMS, 'Invalid params: "ref" is required');
+        }
+        const argName = params?.argument?.name;
+        const value = params?.argument?.value ?? '';
+        if (typeof argName !== 'string') {
+            throw new JsonRpcError(JSONRPC_INVALID_PARAMS, 'Invalid params: "argument.name" is required');
+        }
+        let values: string[] = [];
+        if (params.ref.type === 'ref/prompt' && this.prompts) {
+            values = await this.prompts.complete(params.ref.name, argName, value);
+        } else if (params.ref.type === 'ref/resource' && this.resources) {
+            values = await this.resources.complete(params.ref.uri, argName, value);
+        }
+        // Filter by current value prefix when the provider didn't already.
+        const filtered = value
+            ? values.filter((v) => v.toLowerCase().includes(String(value).toLowerCase()))
+            : values;
+        return {
+            completion: {
+                values: filtered.slice(0, 100),
+                total: filtered.length,
+                hasMore: filtered.length > 100
+            }
+        };
+    }
+
+    /**
+     * Phase 2: ask the connected client to perform LLM sampling. Resolves with
+     * the client's response or rejects on timeout / client error.
+     */
+    public async requestSampling(req: McpSamplingRequest): Promise<any> {
+        return await this.sendClientRequest('sampling/createMessage', req);
+    }
+
+    /** Send any server→client JSON-RPC request and await the response. */
+    public sendClientRequest(method: string, params: any): Promise<any> {
+        if (!this.notifySink) {
+            return Promise.reject(new Error('No active client channel for server→client request'));
+        }
+        return new Promise((resolve, reject) => {
+            const id = this.nextOutgoingId++;
+            const timer = setTimeout(() => {
+                this.pendingRequests.delete(id);
+                reject(new Error(`Client request "${method}" timed out after ${this.samplingTimeoutMs}ms`));
+            }, this.samplingTimeoutMs);
+            this.pendingRequests.set(id, { resolve, reject, timer });
+            try {
+                this.notifySink!({ jsonrpc: JSONRPC_VERSION, id, method, params } as any);
+            } catch (e) {
+                clearTimeout(timer);
+                this.pendingRequests.delete(id);
+                reject(e);
+            }
+        });
     }
 }

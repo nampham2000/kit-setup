@@ -25,6 +25,12 @@
 import { ProtocolHandler } from '../protocol/protocol-handler';
 import { StdioTransport } from '../transport/stdio';
 import { CocosToolRegistry } from '../mcp-server';
+import {
+    PromptRegistry,
+    ResourceRegistry,
+    buildBuiltInPromptProvider,
+    buildBuiltInResourceProvider
+} from '../protocol/registries';
 
 function main(): void {
     // Tools that touch the Cocos editor expect a global `Editor` object. Provide
@@ -38,8 +44,31 @@ function main(): void {
     }
 
     const registry = new CocosToolRegistry();
-    const handler = new ProtocolHandler({ registry, pageSize: 100, initialLogLevel: 'info' });
+    // Phase 2 — expose resources and prompts in stdio mode too. Notifications
+    // emitted by the registries flow through the transport's notification
+    // sink (set up by `StdioTransport` after handler construction below).
+    let pendingNotify: { method: string; params?: any }[] = [];
+    let notifySink: ((method: string, params?: any) => void) = (m, p) => {
+        pendingNotify.push({ method: m, params: p });
+    };
+    const resources = new ResourceRegistry((m, p) => notifySink(m, p));
+    const prompts = new PromptRegistry((m, p) => notifySink(m, p));
+    resources.addProvider(buildBuiltInResourceProvider());
+    prompts.addProvider(buildBuiltInPromptProvider());
+
+    const handler = new ProtocolHandler({
+        registry,
+        pageSize: 100,
+        initialLogLevel: 'info',
+        resources,
+        prompts
+    });
     const transport = new StdioTransport({ handler });
+    // Replace the buffering sink with one that hands off to the protocol
+    // handler (which forwards through the transport's notification path).
+    notifySink = (method, params) => handler.emitNotification(method, params);
+    for (const ev of pendingNotify) handler.emitNotification(ev.method, ev.params);
+    pendingNotify = [];
 
     const shutdown = () => {
         transport.stop();

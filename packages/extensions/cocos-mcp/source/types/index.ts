@@ -171,6 +171,85 @@ export interface MCPClient {
     userAgent?: string;
 }
 
+// -- MCP resources / prompts / sampling (Phase 2) ---------------------------
+
+/** A static resource exposed via `resources/list` (MCP 2025-06-18). */
+export interface McpResource {
+    uri: string;
+    name: string;
+    description?: string;
+    mimeType?: string;
+    /** Hint for clients about the cost of reading. */
+    size?: number;
+}
+
+/** A URI-template resource exposed via `resources/templates/list`. */
+export interface McpResourceTemplate {
+    uriTemplate: string;
+    name: string;
+    description?: string;
+    mimeType?: string;
+}
+
+/** Result returned by `resources/read`. */
+export interface McpResourceContents {
+    /** One entry per concrete resource matched by the URI. */
+    contents: Array<{
+        uri: string;
+        mimeType?: string;
+        /** UTF-8 text payload. Mutually exclusive with `blob`. */
+        text?: string;
+        /** Base64-encoded payload. Mutually exclusive with `text`. */
+        blob?: string;
+    }>;
+}
+
+/** A prompt template exposed via `prompts/list`. */
+export interface McpPrompt {
+    name: string;
+    description?: string;
+    arguments?: Array<{
+        name: string;
+        description?: string;
+        required?: boolean;
+    }>;
+}
+
+/** Single message inside a prompt expansion. */
+export interface McpPromptMessage {
+    role: 'user' | 'assistant' | 'system';
+    content:
+        | { type: 'text'; text: string }
+        | { type: 'image'; data: string; mimeType: string }
+        | { type: 'resource'; resource: { uri: string; text?: string; blob?: string; mimeType?: string } };
+}
+
+/** Result returned by `prompts/get`. */
+export interface McpPromptExpansion {
+    description?: string;
+    messages: McpPromptMessage[];
+}
+
+/** Argument shape for `sampling/createMessage` (server → client request). */
+export interface McpSamplingRequest {
+    messages: Array<{
+        role: 'user' | 'assistant';
+        content: { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string };
+    }>;
+    modelPreferences?: {
+        hints?: Array<{ name?: string }>;
+        costPriority?: number;
+        speedPriority?: number;
+        intelligencePriority?: number;
+    };
+    systemPrompt?: string;
+    includeContext?: 'none' | 'thisServer' | 'allServers';
+    temperature?: number;
+    maxTokens?: number;
+    stopSequences?: string[];
+    metadata?: Record<string, any>;
+}
+
 export interface ToolExecutor {
     getTools(): ToolDefinition[];
     execute(toolName: string, args: any, ctx?: any): Promise<ToolResponse>;
