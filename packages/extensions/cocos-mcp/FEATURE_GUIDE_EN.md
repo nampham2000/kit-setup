@@ -6,6 +6,376 @@ The Cocos Creator MCP Server is a comprehensive Model Context Protocol (MCP) ser
 
 This document provides detailed information about all available MCP tools and their usage.
 
+---
+
+## 0. MCP Protocol (Phase 1) — Transport, Capabilities, Auth
+
+> Phase 1 brings the server up to spec with **MCP 2025‑03‑26** (with selected
+> 2025‑06‑18 additions). All transports speak the same JSON‑RPC 2.0 protocol;
+> only the framing differs.
+
+### 0.1 Transports
+
+#### Streamable HTTP (default)
+
+| Method | Path   | Purpose                                                                |
+| ------ | ------ | ---------------------------------------------------------------------- |
+| POST   | `/mcp` | Send a JSON‑RPC request / batch. Server replies with `application/json` *or* `text/event-stream` (depending on the `Accept` header). |
+| GET    | `/mcp` | Open a server → client SSE channel for notifications and out‑of‑band replies. Supports `Last-Event-ID` for resume. |
+| DELETE | `/mcp` | Explicitly terminate the MCP session.                                  |
+
+**Required / optional headers**
+
+| Header              | Direction | Purpose                                                              |
+| ------------------- | --------- | -------------------------------------------------------------------- |
+| `Mcp-Session-Id`    | both      | Assigned on `initialize`, echoed by the client on every subsequent request. |
+| `Last-Event-ID`     | request   | Replay buffered SSE events after a reconnect.                        |
+| `Authorization`     | request   | `****** when `authToken` is configured (A5).               |
+| `Origin` / `Host`   | request   | Validated against `allowedOrigins` / `allowedHosts` (A4).            |
+| `Accept`            | request   | `application/json` for unary POST, `text/event-stream` for SSE.      |
+
+**Example — initialize + first tool call**
+
+```bash
+# 1. initialize and capture the session id
+SID=$(curl -sS -D - -o /tmp/init.json http://127.0.0.1:3000/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: ******' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize",
+       "params":{"protocolVersion":"2025-03-26",
+                 "capabilities":{},
+                 "clientInfo":{"name":"curl","version":"0"}}}' \
+  | awk 'tolower($1)=="mcp-session-id:" {print $2}' | tr -d '\r')
+
+cat /tmp/init.json
+# {"jsonrpc":"2.0","id":1,"result":{
+#   "protocolVersion":"2025-03-26",
+#   "capabilities":{"tools":{"listChanged":true},"logging":{}},
+#   "serverInfo":{"name":"cocos-mcp-server","version":"1.4.0"},
+#   "instructions":"Cocos Creator MCP server. ..."
+# }}
+
+# 2. list tools (with cursor pagination)
+curl -sS http://127.0.0.1:3000/mcp \
+  -H "Content-Type: application/json" \
+  -H "Authorization: ******" \
+  -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
+
+# 3. open SSE channel for notifications
+curl -N http://127.0.0.1:3000/mcp \
+  -H "Accept: text/event-stream" \
+  -H "Authorization: ******" \
+  -H "Mcp-Session-Id: $SID"
+
+# 4. terminate the session when finished
+curl -X DELETE http://127.0.0.1:3000/mcp \
+  -H "Authorization: ******" \
+  -H "Mcp-Session-Id: $SID"
+```
+
+#### stdio (subprocess)
+
+For Claude Desktop / Cursor / MCP Inspector. The server reads newline‑delimited
+JSON from stdin and writes JSON responses + notifications to stdout. Logging
+goes to stderr so it never corrupts the stream.
+
+```jsonc
+// Claude Desktop / Cursor mcp.json
+{
+  "mcpServers": {
+    "cocos": {
+      "command": "node",
+      "args": [
+        "/abs/path/to/cocos-mcp/dist/cli/stdio.js"
+      ]
+    }
+  }
+}
+```
+
+A standalone Node process can use the same binary directly:
+
+```bash
+node ./dist/cli/stdio.js < requests.ndjson
+```
+
+> Note: tools that touch `Editor.*` only work when the binary is launched from
+> within the Cocos Creator editor host. Outside the editor the protocol
+> handshake, `tools/list`, `ping`, `logging/setLevel` and validation still
+> function — useful for offline testing.
+
+### 0.2 Settings (A4 + A5)
+
+`Project/settings/mcp-server.json`:
+
+```jsonc
+{
+  "port": 3000,
+  "autoStart": false,
+  "enableDebugLog": false,
+  // A4 — DNS rebinding mitigations:
+  "allowedOrigins": ["https://claude.ai", "http://localhost:5173"], // or ["*"]
+  "allowedHosts":   ["localhost", "127.0.0.1"],                     // optional
+  // A5 — shared secret. Empty disables auth.
+  "authToken": "my-secret",
+  // A6 — initial logging level (RFC 5424).
+  "logLevel": "info",
+  // G4 — page size for tools/list.
+  "toolsPageSize": 100,
+  "maxConnections": 10
+}
+```
+
+Requests with an `Origin` not in `allowedOrigins` (and not `*`) are rejected
+with **403**. Requests with a `Host` other than `localhost` / `127.0.0.1` /
+`::1` (plus anything in `allowedHosts`) are likewise rejected. When `authToken`
+is set, every `/mcp` request must carry `Authorization: ****** or it
+gets `401 { "error": { "code": -32001 } }`.
+
+### 0.3 `initialize` (G9 — protocolVersion handshake)
+
+**Input**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "initialize",
+  "params": {
+    "protocolVersion": "2025-03-26",
+    "capabilities": {},
+    "clientInfo": { "name": "claude-desktop", "version": "0.5.3" }
+  }
+}
+```
+
+**Output**
+
+```json
+{
+  "jsonrpc": "2.0", "id": 1,
+  "result": {
+    "protocolVersion": "2025-03-26",
+    "capabilities": {
+      "tools":   { "listChanged": true },
+      "logging": {}
+    },
+    "serverInfo": { "name": "cocos-mcp-server", "version": "1.4.0" },
+    "instructions": "Cocos Creator MCP server. Call tools/list ..."
+  }
+}
+```
+
+Supported versions: `2025-06-18`, `2025-03-26`, `2024-11-05`. The server
+negotiates down to the highest version it shares with the client. Unknown
+versions are silently mapped to `2025-06-18` (the default).
+
+### 0.4 `tools/list` with cursor pagination (G1 + G3 + G4)
+
+**Input**
+
+```json
+{ "jsonrpc": "2.0", "id": 2, "method": "tools/list",
+  "params": { "cursor": "100" } }   // omit `cursor` for the first page
+```
+
+**Output**
+
+```json
+{
+  "jsonrpc": "2.0", "id": 2,
+  "result": {
+    "tools": [
+      {
+        "name": "node_delete_node",
+        "description": "Delete a node by UUID",
+        "inputSchema": {
+          "type": "object",
+          "properties": { "uuid": { "type": "string" } },
+          "required": ["uuid"]
+        },
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "success": { "type": "boolean" },
+            "message": { "type": "string" },
+            "data": {},
+            "error": { "type": "string" }
+          },
+          "required": ["success"]
+        },
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      }
+    ],
+    "nextCursor": "200"
+  }
+}
+```
+
+- **G1** — every tool advertises `readOnlyHint`, `destructiveHint`,
+  `idempotentHint`, `openWorldHint` so the client can warn the user before
+  invoking destructive tools (defaults are derived per category and can be
+  overridden in `source/protocol/tool-hints.ts`).
+- **G3** — every tool advertises an `outputSchema` (default: the
+  `{ success, data, message, error, ... }` envelope). MCP 2025‑06‑18 clients
+  also receive a `structuredContent` field on `tools/call` results.
+- **G4** — when more tools are available than `toolsPageSize` (default 100),
+  the response includes `nextCursor`. Pass it as `params.cursor` on the next
+  request. Cursors are server‑opaque integers.
+
+### 0.5 `tools/call` with validation, progress and cancellation
+
+**Input** (with optional `_meta.progressToken` for A7)
+
+```json
+{
+  "jsonrpc": "2.0", "id": 7, "method": "tools/call",
+  "params": {
+    "name": "assetAdvanced_import_asset",
+    "arguments": { "sourcePath": "/abs/img.png", "destinationPath": "db://assets/img.png" },
+    "_meta": { "progressToken": "import-1" }
+  }
+}
+```
+
+**Successful output**
+
+```json
+{
+  "jsonrpc": "2.0", "id": 7,
+  "result": {
+    "content": [{ "type": "text", "text": "{\"success\":true,\"data\":{...}}" }],
+    "isError": false,
+    "structuredContent": { "success": true, "data": { "uuid": "..." } }
+  }
+}
+```
+
+**Validation failure (G8 — Ajv → JSON‑RPC `-32602`)**
+
+```json
+{
+  "jsonrpc": "2.0", "id": 7,
+  "error": {
+    "code": -32602,
+    "message": "Invalid arguments for assetAdvanced_import_asset: data must have required property 'sourcePath'",
+    "data": {
+      "tool": "assetAdvanced_import_asset",
+      "errors": [
+        { "instancePath": "", "schemaPath": "#/required",
+          "keyword": "required", "params": { "missingProperty": "sourcePath" },
+          "message": "must have required property 'sourcePath'" }
+      ]
+    }
+  }
+}
+```
+
+**Cancellation (A8)** — the client sends a notification:
+
+```json
+{ "jsonrpc": "2.0", "method": "notifications/cancelled",
+  "params": { "requestId": 7, "reason": "user pressed Esc" } }
+```
+
+The in‑flight `AbortController` is aborted; the tool sees `ctx.signal.aborted
+=== true` (it must check it to terminate promptly). The response is:
+
+```json
+{ "jsonrpc": "2.0", "id": 7,
+  "error": { "code": -32800, "message": "user pressed Esc" } }
+```
+
+### 0.6 Progress notifications (A7)
+
+Emitted over the SSE channel only when the original `tools/call` carried a
+`_meta.progressToken`:
+
+```
+event: message
+id: 42
+data: {"jsonrpc":"2.0","method":"notifications/progress",
+       "params":{"progressToken":"import-1","progress":3,"total":10,
+                 "message":"Compressing texture"}}
+```
+
+A tool emits progress via the execution context passed in by the protocol
+handler:
+
+```ts
+async execute(name: string, args: any, ctx: { reportProgress(p: number, t?: number, m?: string): void; signal: AbortSignal }) {
+    ctx.reportProgress(0, 10, 'starting');
+    for (let i = 0; i < 10; i++) {
+        if (ctx.signal.aborted) throw new Error('cancelled');
+        await doStep(i);
+        ctx.reportProgress(i + 1, 10);
+    }
+    return { success: true };
+}
+```
+
+### 0.7 Logging (A6)
+
+**Set the active level** (RFC 5424: `debug`, `info`, `notice`, `warning`,
+`error`, `critical`, `alert`, `emergency`):
+
+```json
+{ "jsonrpc": "2.0", "id": 9, "method": "logging/setLevel",
+  "params": { "level": "warning" } }
+```
+
+**Server emits log messages** (only when `>= active level`) over SSE:
+
+```
+event: message
+data: {"jsonrpc":"2.0","method":"notifications/message",
+       "params":{"level":"warning","logger":"scene",
+                 "data":{"msg":"Scene saved with unresolved missing component refs"}}}
+```
+
+Inside a tool: `ctx.log('warning', { msg: '...', extra: ... }, 'scene')`.
+
+### 0.8 Session lifecycle
+
+| Step | Client                                              | Server                                                |
+| ---- | --------------------------------------------------- | ----------------------------------------------------- |
+| 1    | `POST /mcp` `initialize`                            | Allocates `Mcp-Session-Id`, returns it in headers.    |
+| 2    | `GET /mcp` with that id (`Accept: text/event-stream`) | Opens SSE channel; replays buffered events if `Last-Event-ID` is provided. |
+| 3    | `POST /mcp` `tools/call` … `_meta.progressToken`    | Progress + log notifications are pushed over the SSE channel. |
+| 4    | `notifications/cancelled` (POST)                    | Aborts the matching in‑flight request.                |
+| 5    | `DELETE /mcp` with the session id                   | Cancels all in‑flight tools and removes the session.  |
+
+Idle sessions without an active SSE channel are evicted after 5 minutes.
+
+### 0.9 Configuring tool annotations / output schemas
+
+Every category gets sensible defaults (read tools in `debug_*` and
+`validation_*` are flagged `readOnlyHint:true`, etc.). To override a single
+tool, edit `source/protocol/tool-hints.ts`:
+
+```ts
+TOOL_HINTS['scene_save_scene'] = {
+    annotations: { destructiveHint: true, idempotentHint: false },
+    outputSchema: {
+        type: 'object',
+        properties: { success: { type: 'boolean' }, savedPath: { type: 'string' } },
+        required: ['success', 'savedPath']
+    }
+};
+```
+
+The annotations and `outputSchema` are merged into the next `tools/list`
+response automatically — no client restart needed (issue `tools/list` again
+or rely on `notifications/tools/list_changed`).
+
+---
+
 ## Tool Categories
 
 The MCP server provides **158 tools** organized into 13 main categories by functionality:

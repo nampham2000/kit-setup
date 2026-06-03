@@ -7,7 +7,11 @@ const DEFAULT_SETTINGS: MCPServerSettings = {
     autoStart: false,
     enableDebugLog: false,
     allowedOrigins: ['*'],
-    maxConnections: 10
+    maxConnections: 10,
+    authToken: '',
+    allowedHosts: [],
+    logLevel: 'info',
+    toolsPageSize: 100
 };
 
 const DEFAULT_TOOL_MANAGER_SETTINGS: ToolManagerSettings = {
@@ -41,7 +45,11 @@ function normalizeSettings(settings: StoredServerSettings): MCPServerSettings {
         autoStart: settings.autoStart ?? DEFAULT_SETTINGS.autoStart,
         enableDebugLog: settings.enableDebugLog ?? settings.debugLog ?? DEFAULT_SETTINGS.enableDebugLog,
         allowedOrigins: settings.allowedOrigins ?? DEFAULT_SETTINGS.allowedOrigins,
-        maxConnections: settings.maxConnections ?? DEFAULT_SETTINGS.maxConnections
+        maxConnections: settings.maxConnections ?? DEFAULT_SETTINGS.maxConnections,
+        authToken: settings.authToken ?? DEFAULT_SETTINGS.authToken,
+        allowedHosts: settings.allowedHosts ?? DEFAULT_SETTINGS.allowedHosts,
+        logLevel: settings.logLevel ?? DEFAULT_SETTINGS.logLevel,
+        toolsPageSize: settings.toolsPageSize ?? DEFAULT_SETTINGS.toolsPageSize
     };
 }
 

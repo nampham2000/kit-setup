@@ -13,9 +13,14 @@
     "description": "i18n:cocos-mcp-server.description",
     "main": "./dist/main.js",
     "dependencies": {
+        "ajv": "^8.20.0",
+        "ajv-formats": "^3.0.1",
         "fs-extra": "^11.3.0",
         "uuid": "^9.0.1",
         "vue": "^3.1.4"
+    },
+    "bin": {
+        "cocos-mcp-stdio": "./dist/cli/stdio.js"
     },
     "devDependencies": {
         "@cocos/creator-types": "^3.8.7",
@@ -39,7 +44,7 @@
         }
     },
     "contributions": {
-                "menu": [
+        "menu": [
             {
                 "path": "i18n:menu.extension/Cocos MCP Server",
                 "label": "i18n:cocos-mcp-server.open_panel",

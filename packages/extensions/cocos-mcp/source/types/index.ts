@@ -2,9 +2,42 @@ export interface MCPServerSettings {
     port: number;
     autoStart: boolean;
     enableDebugLog: boolean;
+    /**
+     * Allowed `Origin` header values for the Streamable HTTP transport. Used as
+     * a DNS-rebinding mitigation. `['*']` disables the check.
+     */
     allowedOrigins: string[];
     maxConnections: number;
+    /**
+     * Optional shared secret. When set, every HTTP request to `/mcp` must
+     * carry `Authorization: ******; SSE connections too.
+     */
+    authToken?: string;
+    /**
+     * Comma‑separated list of allowed Host headers. `localhost` and `127.0.0.1`
+     * are always permitted regardless of this list.
+     */
+    allowedHosts?: string[];
+    /**
+     * Default minimum log level for `notifications/message` (RFC 5424 levels).
+     */
+    logLevel?: McpLogLevel;
+    /**
+     * Maximum number of tools per `tools/list` page. Defaults to 100.
+     */
+    toolsPageSize?: number;
 }
+
+/** RFC 5424 syslog severity levels accepted by MCP `logging/setLevel`. */
+export type McpLogLevel =
+    | 'debug'
+    | 'info'
+    | 'notice'
+    | 'warning'
+    | 'error'
+    | 'critical'
+    | 'alert'
+    | 'emergency';
 
 export interface ServerStatus {
     running: boolean;
@@ -12,10 +45,27 @@ export interface ServerStatus {
     clients: number;
 }
 
+export interface ToolAnnotations {
+    /** Human‑readable title shown in clients. */
+    title?: string;
+    /** Tool only reads state and never mutates the editor / project. */
+    readOnlyHint?: boolean;
+    /** Tool may delete or irreversibly modify state. */
+    destructiveHint?: boolean;
+    /** Calling the tool repeatedly with the same args produces the same effect. */
+    idempotentHint?: boolean;
+    /** Tool can interact with arbitrary external resources (network, FS outside project). */
+    openWorldHint?: boolean;
+}
+
 export interface ToolDefinition {
     name: string;
     description: string;
     inputSchema: any;
+    /** JSON Schema for the structured result (MCP 2025‑06‑18 `outputSchema`). */
+    outputSchema?: any;
+    /** Behaviour hints surfaced to clients (MCP 2025‑03‑26 `annotations`). */
+    annotations?: ToolAnnotations;
 }
 
 export interface ToolResponse {
@@ -123,7 +173,7 @@ export interface MCPClient {
 
 export interface ToolExecutor {
     getTools(): ToolDefinition[];
-    execute(toolName: string, args: any): Promise<ToolResponse>;
+    execute(toolName: string, args: any, ctx?: any): Promise<ToolResponse>;
 }
 
 // Interfaces related to tool configuration management.
