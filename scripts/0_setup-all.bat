@@ -71,9 +71,9 @@ if not exist "%~2\" (
 )
 echo.
 echo ==^> Applying shared template config
-call :copyTree "%~2\profiles\v2\packages" "%~1\profiles\v2\packages" "profiles\v2\packages"
+call :mergeConfigTree "%~2\profiles" "%~1\profiles" "profiles"
 if !errorlevel! neq 0 exit /b !errorlevel!
-call :copyTree "%~2\settings\v2\packages" "%~1\settings\v2\packages" "settings\v2\packages"
+call :mergeConfigTree "%~2\settings" "%~1\settings" "settings"
 if !errorlevel! neq 0 exit /b !errorlevel!
 call :copyTree "%~2\.vscode" "%~1\.vscode" ".vscode"
 if !errorlevel! neq 0 exit /b !errorlevel!
@@ -114,6 +114,20 @@ if !COPY_EXIT! geq 8 (
     exit /b !COPY_EXIT!
 )
 echo [ok] VSCode MCP autostart helper
+exit /b 0
+
+:mergeConfigTree
+if not exist "%~1\" (
+    echo [skip] Missing template folder: %~3
+    exit /b 0
+)
+if not exist "%~2\" mkdir "%~2"
+call node -e "const fs=require('fs'),path=require('path');const source=process.argv[1],target=process.argv[2],label=process.argv[3];const isObj=v=>Boolean(v)&&typeof v==='object'&&Array.isArray(v)===false;const merge=(tmpl,proj)=>{if(isObj(tmpl)===false||isObj(proj)===false)return proj;const out={...tmpl};for(const [k,v] of Object.entries(proj))out[k]=Object.prototype.hasOwnProperty.call(tmpl,k)?merge(tmpl[k],v):v;return out};let copied=0,merged=0,skipped=0;function walk(dir){for(const ent of fs.readdirSync(dir,{withFileTypes:true})){const src=path.join(dir,ent.name);const rel=path.relative(source,src);const dst=path.join(target,rel);if(ent.isDirectory()){fs.mkdirSync(dst,{recursive:true});walk(src);continue}fs.mkdirSync(path.dirname(dst),{recursive:true});if(fs.existsSync(dst)===false){fs.copyFileSync(src,dst);copied++;continue}if(path.extname(ent.name).toLowerCase()==='.json'){const tmpl=JSON.parse(fs.readFileSync(src,'utf8').replace(/^\uFEFF/,''));const proj=JSON.parse(fs.readFileSync(dst,'utf8').replace(/^\uFEFF/,''));fs.writeFileSync(dst,JSON.stringify(merge(tmpl,proj),null,2)+'\n');merged++;continue}skipped++}}walk(source);console.log('[ok] '+label+' merged project-wins (copied='+copied+' merged='+merged+' skipped='+skipped+')');" "%~1" "%~2" "%~3"
+if errorlevel 1 (
+    echo [ERROR] Failed to merge %~3.
+    if /I not "%SETUP_ALL_NO_PAUSE%"=="1" pause
+    exit /b 1
+)
 exit /b 0
 
 :copyTree
