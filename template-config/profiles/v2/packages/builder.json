@@ -44,7 +44,7 @@
         "uuid": "dade3750-8f93-4695-afdd-7963c03bb97c"
       },
       {
-        "root": "db://assets/asset-bundles/Mid",
+        "root": "db://assets/asset_bundles/mid",
         "name": "Mid",
         "output": true,
         "uuid": "6f78dbf3-16a6-4219-96de-cfd67d79690e"
@@ -153,7 +153,7 @@
               "uuid": "7ce25222-c8c2-4fa6-a610-0aa868d2773f"
             },
             {
-              "root": "db://assets/asset-bundles/Short",
+              "root": "db://assets/asset_bundles/short",
               "name": "Short",
               "output": true,
               "uuid": "7ce25222-c8c2-4fa6-a610-0aa868d2773f"
@@ -254,7 +254,7 @@
               "uuid": "dade3750-8f93-4695-afdd-7963c03bb97c"
             },
             {
-              "root": "db://assets/asset-bundles/Mid",
+              "root": "db://assets/asset_bundles/mid",
               "name": "Mid",
               "output": true,
               "uuid": "6f78dbf3-16a6-4219-96de-cfd67d79690e"
@@ -355,7 +355,7 @@
               "uuid": "dade3750-8f93-4695-afdd-7963c03bb97c"
             },
             {
-              "root": "db://assets/asset-bundles/Long",
+              "root": "db://assets/asset_bundles/long",
               "name": "Long",
               "output": true,
               "uuid": "26d8dec5-925a-4a6c-8328-983b7dacc859"

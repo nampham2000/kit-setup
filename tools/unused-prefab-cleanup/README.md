@@ -71,7 +71,7 @@ suy ra đường dẫn tĩnh. Khai báo asset đó bằng `--root`:
 
 ```powershell
 node playable-shared-kit/tools/unused-prefab-cleanup.cjs `
-  --root assets/prefabs/PowerText/PowerText.prefab `
+  --root assets/prefabs/power_text/PowerText.prefab `
   --root assets/json/Level23.json
 ```
 
@@ -81,8 +81,8 @@ Có thể truyền nhiều `--root`.
 
 ```powershell
 node playable-shared-kit/tools/unused-prefab-cleanup.cjs `
-  --scene assets/Scene/Gameplay.scene `
-  --scene assets/Scene/Boot.scene `
+  --scene assets/scene/Gameplay.scene `
+  --scene assets/scene/Boot.scene `
   --prefab-dir assets/prefabs
 ```
 
