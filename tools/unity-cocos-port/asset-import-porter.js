@@ -44,6 +44,17 @@ module.exports = function createAssetImportPorter(deps) {
     fs.writeFileSync(metaFile, `${JSON.stringify(meta, null, 2)}\n`, 'utf8');
   }
 
+  function unityTextureImporterConfig(assetFile) {
+    const metaFile = `${assetFile}.meta`;
+    if (!fs.existsSync(metaFile)) return {};
+    const text = fs.readFileSync(metaFile, 'utf8');
+    const meshType = text.match(/^\s*spriteMeshType:\s*(\d+)/m);
+    return {
+      fixAlphaTransparencyArtifacts: /^\s*alphaIsTransparency:\s*1\s*$/m.test(text),
+      spriteTrimType: meshType && Number(meshType[1]) === 0 ? 'none' : 'auto',
+    };
+  }
+
   function copyUnityAssetToCocos(unityAsset, options, reporter, kind, severity = 'medium', config = {}) {
     const { deferNeedsImportReport = false } = config;
     const dest = path.join(options.cocosRoot, 'assets', 'unity_imported', unityAsset.relativePath);
@@ -57,7 +68,10 @@ module.exports = function createAssetImportPorter(deps) {
     ensureDirectoryMetas(path.dirname(dest), path.join(options.cocosRoot, 'assets'));
     if (!fs.existsSync(dest)) fs.copyFileSync(unityAsset.path, dest);
     if (kind === 'model') recoverModelMetaFromLibrary(dest, options);
-    ensureAssetMeta(dest, kind, config);
+    const importConfig = kind === 'image'
+      ? { ...unityTextureImporterConfig(unityAsset.path), ...config }
+      : config;
+    ensureAssetMeta(dest, kind, importConfig);
     if (kind === 'model') recoverModelMetaFromLibrary(dest, options);
     if (!deferNeedsImportReport) {
       reporter.add(severity, 'ASSET_COPIED_NEEDS_IMPORT', unityAsset.relativePath, toPosix(path.relative(options.cocosRoot, dest)), 'Unity asset copied to Cocos; refresh/import is required before it can be wired');

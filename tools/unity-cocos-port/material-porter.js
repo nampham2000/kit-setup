@@ -16,6 +16,7 @@ const {
 const {
   ensureDir,
   readJsonIfExists,
+  stableUuid,
   toPosix,
   unityColorToCocos,
   cocosUuid,
@@ -27,6 +28,8 @@ const COCOS_PARTICLE_TECHNIQUE_ALPHA_BLEND = 1;
 const COCOS_PARTICLE_TECHNIQUE_ADD_MULTIPLY = 2;
 const COCOS_PARTICLE_TECHNIQUE_ADD_SMOOTH = 3;
 const COCOS_PARTICLE_TECHNIQUE_PREMULTIPLY_BLEND = 4;
+const INVISIBLE_SHADOW_RECEIVER_EFFECT_TEMPLATE = path.join(__dirname, 'invisible-shadow-receiver.effect');
+const INVISIBLE_SHADOW_RECEIVER_EFFECT_PATH = path.join('assets', 'effects', 'InvisibleShadowReceiver.effect');
 const COCOS_PARTICLE_DEFAULT_TINT = 128 / 255;
 const COCOS_PARTICLE_DEFAULT_TINT_COLOR = [
   COCOS_PARTICLE_DEFAULT_TINT,
@@ -287,6 +290,45 @@ module.exports = function createMaterialPorter(deps) {
     return true;
   }
 
+  function ensureInvisibleShadowReceiverEffect(options, reporter) {
+    const effectFile = path.join(options.cocosRoot, INVISIBLE_SHADOW_RECEIVER_EFFECT_PATH);
+    const relativePath = toPosix(path.relative(options.cocosRoot, effectFile));
+    if (options.dryRun) return stableUuid(`effect:${relativePath}`);
+    if (options._invisibleShadowReceiverEffectUuid) return options._invisibleShadowReceiverEffectUuid;
+
+    ensureDir(path.dirname(effectFile));
+    ensureDirectoryMetas(path.dirname(effectFile), path.join(options.cocosRoot, 'assets'));
+    const effectText = fs.readFileSync(INVISIBLE_SHADOW_RECEIVER_EFFECT_TEMPLATE, 'utf8');
+    if (!fs.existsSync(effectFile) || fs.readFileSync(effectFile, 'utf8') !== effectText) {
+      fs.writeFileSync(effectFile, effectText, 'utf8');
+    }
+
+    const metaFile = `${effectFile}.meta`;
+    const existing = readJsonIfExists(metaFile) || {};
+    const meta = {
+      ver: existing.ver || '1.7.1',
+      importer: 'effect',
+      imported: existing.imported ?? true,
+      uuid: existing.uuid || stableUuid(`effect:${relativePath}`),
+      files: Array.isArray(existing.files) && existing.files.length ? existing.files : ['.json'],
+      subMetas: {},
+      userData: { ...(existing.userData || {}) },
+    };
+    if (JSON.stringify(existing) !== JSON.stringify(meta)) {
+      fs.writeFileSync(metaFile, `${JSON.stringify(meta, null, 2)}\n`, 'utf8');
+    }
+
+    options._invisibleShadowReceiverEffectUuid = meta.uuid;
+    reporter.low(
+      'INVISIBLE_SHADOW_RECEIVER_EFFECT_PREPARED',
+      relativePath,
+      '',
+      'Prepared opaque depth-only effect with color writes disabled for Cocos planar-shadow receivers',
+      meta.uuid,
+    );
+    return meta.uuid;
+  }
+
   function convertUnityMaterialToCocos(materialAsset, options, unityDb, reporter) {
     if (!materialAsset?.path || !fs.existsSync(materialAsset.path)) return '';
 
@@ -301,14 +343,20 @@ module.exports = function createMaterialPorter(deps) {
 
     const shaderRef = getField(materialDoc, 'm_Shader', null);
     const shaderGuid = unityRefGuid(shaderRef);
+    let shaderName = '';
     if (shaderGuid && shaderGuid !== UNITY_BUILTIN_SHADER_GUID) {
       const shaderAsset = unityDb?.get(shaderGuid);
-      const shaderName = readUnityShaderName(shaderAsset) || shaderAsset?.relativePath || shaderGuid;
-      reporter.high(
-        'CUSTOM_SHADER_NOT_PORTED',
+      shaderName = readUnityShaderName(shaderAsset) || shaderAsset?.relativePath || shaderGuid;
+    }
+    const invisibleShadowReceiver = /Invisible Shadow Receiver/i.test(shaderName);
+    if (shaderName) {
+      reporter[invisibleShadowReceiver ? 'low' : 'high'](
+        invisibleShadowReceiver ? 'INVISIBLE_SHADOW_RECEIVER_APPROXIMATED' : 'CUSTOM_SHADER_NOT_PORTED',
         materialAsset.relativePath,
         String(getField(materialDoc, 'm_Name', materialAsset.stem) || materialAsset.stem),
-        `Custom shader "${shaderName}" has not been ported; material approximated with builtin-standard`,
+        invisibleShadowReceiver
+          ? `Custom shader "${shaderName}" was mapped to a depth-only effect for Cocos planar shadows`
+          : `Custom shader "${shaderName}" has not been ported; material approximated with builtin-standard`,
       );
     }
 
@@ -380,11 +428,16 @@ module.exports = function createMaterialPorter(deps) {
       _objFlags: 0,
       __editorExtras__: {},
       _native: '',
-      _effectAsset: cocosUuid(BUILTIN_STANDARD_EFFECT_UUID, 'cc.EffectAsset'),
-      _techIdx: transparent ? BUILTIN_STANDARD_TRANSPARENT_TECHNIQUE_INDEX : 0,
-      _defines: [defines],
-      _states: states,
-      _props: [props],
+      _effectAsset: cocosUuid(
+        invisibleShadowReceiver
+          ? ensureInvisibleShadowReceiverEffect(options, reporter)
+          : BUILTIN_STANDARD_EFFECT_UUID,
+        'cc.EffectAsset',
+      ),
+      _techIdx: invisibleShadowReceiver ? 0 : transparent ? BUILTIN_STANDARD_TRANSPARENT_TECHNIQUE_INDEX : 0,
+      _defines: [invisibleShadowReceiver ? {} : defines],
+      _states: invisibleShadowReceiver ? [] : states,
+      _props: [invisibleShadowReceiver ? {} : props],
     };
 
     if (options.dryRun) return fs.existsSync(convertedDest) ? convertedDest : '';

@@ -156,6 +156,25 @@ module.exports = function createColliderPorter(deps) {
     }, `cmp-box-collider-2d-${componentId}`);
   }
 
+  function emitBoxCollider(nodeId, componentId, doc, builder) {
+    const center = getField(doc, 'm_Center', { x: 0, y: 0, z: 0 });
+    const size = getField(doc, 'm_Size', { x: 1, y: 1, z: 1 });
+    builder.addBoxCollider(nodeId, componentId, {
+      enabled: Number(getField(doc, 'm_Enabled', 1) || 0) !== 0,
+      isTrigger: Number(getField(doc, 'm_IsTrigger', 0) || 0) !== 0,
+      center: {
+        x: finiteNumber(center?.x, 0),
+        y: finiteNumber(center?.y, 0),
+        z: finiteNumber(center?.z, 0),
+      },
+      size: {
+        x: Math.abs(finiteNumber(size?.x, 1)),
+        y: Math.abs(finiteNumber(size?.y, 1)),
+        z: Math.abs(finiteNumber(size?.z, 1)),
+      },
+    }, `cmp-box-collider-${componentId}`);
+  }
+
   function polygonPathArea(points) {
     if (!Array.isArray(points) || points.length < 3) return 0;
     let area = 0;
@@ -247,6 +266,7 @@ module.exports = function createColliderPorter(deps) {
     emitRigidbody2D,
     emitCircleCollider2D,
     emitBoxCollider2D,
+    emitBoxCollider,
     polygonPathArea,
     emitPolygonCollider2D,
     emitMeshCollider,

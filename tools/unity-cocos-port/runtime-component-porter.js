@@ -47,6 +47,8 @@ const RUNTIME_SCRIPTS = {
 const SPRITE_RENDERER_COLOR_EFFECT = path.join('assets', 'effects', 'UnitySpriteRendererColor.effect');
 const SPRITE_RENDERER_COLOR_EFFECT_TEMPLATE = path.join(RUNTIME_DIR, 'UnitySpriteRendererColor.effect');
 const SPRITE_RENDERER_COLOR_MATERIAL = path.join('assets', 'materials', 'UnitySpriteRendererColor.mtl');
+const SPRITE_RENDERER_COLOR_OPAQUE_MATERIAL = path.join('assets', 'materials', 'UnitySpriteRendererColorOpaque.mtl');
+const SPRITE_RENDERER_COLOR_GLOW_MATERIAL = path.join('assets', 'materials', 'UnitySpriteRendererGlow.mtl');
 
 function scriptTargetPath(script) {
   return path.join(SCRIPT_TARGET_DIR, `${script.className}.ts`);
@@ -286,11 +288,109 @@ function createRuntimeComponentPorter(deps) {
       fs.writeFileSync(materialMetaFile, `${JSON.stringify(materialMeta, null, 2)}\n`, 'utf8');
     }
     syncImportedMaterialLibraryCache(materialData, materialMeta, options);
+
+    const opaqueMaterialFile = path.join(options.cocosRoot, SPRITE_RENDERER_COLOR_OPAQUE_MATERIAL);
+    const opaqueMaterialData = {
+      ...materialData,
+      _name: 'UnitySpriteRendererColorOpaque',
+      _techIdx: 1,
+      _defines: [{}, {}],
+      _states: [
+        {
+          rasterizerState: {},
+          depthStencilState: {},
+          blendState: { targets: [{}] },
+        },
+        {
+          rasterizerState: {},
+          depthStencilState: {},
+          blendState: { targets: [{}] },
+        },
+      ],
+      _props: [
+        { mainColor: color(255, 255, 255, 255) },
+        { mainColor: color(255, 255, 255, 255) },
+      ],
+    };
+    fs.writeFileSync(opaqueMaterialFile, `${JSON.stringify(opaqueMaterialData, null, 2)}\n`, 'utf8');
+
+    const opaqueMaterialMetaFile = `${opaqueMaterialFile}.meta`;
+    const existingOpaqueMaterialMeta = readJsonIfExists(opaqueMaterialMetaFile) || {};
+    const opaqueMaterialMeta = {
+      ver: existingOpaqueMaterialMeta.ver || COCOS_MATERIAL_IMPORTER_VERSION,
+      importer: existingOpaqueMaterialMeta.importer || 'material',
+      imported: existingOpaqueMaterialMeta.imported ?? true,
+      uuid: existingOpaqueMaterialMeta.uuid || stableUuid('unity-cocos-port-runtime-material:UnitySpriteRendererColorOpaque'),
+      files: Array.isArray(existingOpaqueMaterialMeta.files) ? existingOpaqueMaterialMeta.files : ['.json'],
+      subMetas: {},
+      userData: { ...(existingOpaqueMaterialMeta.userData || {}) },
+    };
+    if (JSON.stringify(existingOpaqueMaterialMeta) !== JSON.stringify(opaqueMaterialMeta)) {
+      fs.writeFileSync(opaqueMaterialMetaFile, `${JSON.stringify(opaqueMaterialMeta, null, 2)}\n`, 'utf8');
+    }
+    syncImportedMaterialLibraryCache(opaqueMaterialData, opaqueMaterialMeta, options);
+
+    const glowMaterialFile = path.join(options.cocosRoot, SPRITE_RENDERER_COLOR_GLOW_MATERIAL);
+    const glowMaterialData = {
+      ...materialData,
+      _name: 'UnitySpriteRendererGlow',
+      _techIdx: 2,
+      _defines: [{}, {}, {}],
+      _states: [
+        {
+          rasterizerState: {},
+          depthStencilState: {},
+          blendState: { targets: [{}] },
+        },
+        {
+          rasterizerState: {},
+          depthStencilState: {},
+          blendState: { targets: [{}] },
+        },
+        {
+          rasterizerState: {},
+          depthStencilState: {},
+          blendState: { targets: [{}] },
+        },
+      ],
+      _props: [
+        { mainColor: color(255, 255, 255, 255) },
+        { mainColor: color(255, 255, 255, 255) },
+        { mainColor: color(75, 55, 157, 255) },
+      ],
+    };
+    fs.writeFileSync(glowMaterialFile, `${JSON.stringify(glowMaterialData, null, 2)}\n`, 'utf8');
+
+    const glowMaterialMetaFile = `${glowMaterialFile}.meta`;
+    const existingGlowMaterialMeta = readJsonIfExists(glowMaterialMetaFile) || {};
+    const glowMaterialMeta = {
+      ver: existingGlowMaterialMeta.ver || COCOS_MATERIAL_IMPORTER_VERSION,
+      importer: existingGlowMaterialMeta.importer || 'material',
+      imported: existingGlowMaterialMeta.imported ?? true,
+      uuid: existingGlowMaterialMeta.uuid || stableUuid('unity-cocos-port-runtime-material:UnitySpriteRendererGlow'),
+      files: Array.isArray(existingGlowMaterialMeta.files) ? existingGlowMaterialMeta.files : ['.json'],
+      subMetas: {},
+      userData: { ...(existingGlowMaterialMeta.userData || {}) },
+    };
+    if (JSON.stringify(existingGlowMaterialMeta) !== JSON.stringify(glowMaterialMeta)) {
+      fs.writeFileSync(glowMaterialMetaFile, `${JSON.stringify(glowMaterialMeta, null, 2)}\n`, 'utf8');
+    }
+    syncImportedMaterialLibraryCache(glowMaterialData, glowMaterialMeta, options);
   }
 
-  function spriteRendererColorMaterialUuid(options) {
-    const meta = readJsonIfExists(path.join(options.cocosRoot || ROOT_DIR, `${SPRITE_RENDERER_COLOR_MATERIAL}.meta`));
-    return meta?.uuid || stableUuid('unity-cocos-port-runtime-material:UnitySpriteRendererColor');
+  function spriteRendererColorMaterialUuid(options, opaque, glow) {
+    const assetPath = glow
+      ? SPRITE_RENDERER_COLOR_GLOW_MATERIAL
+      : opaque
+        ? SPRITE_RENDERER_COLOR_OPAQUE_MATERIAL
+        : SPRITE_RENDERER_COLOR_MATERIAL;
+    const seed = glow
+      ? 'UnitySpriteRendererGlow'
+      : opaque
+        ? 'UnitySpriteRendererColorOpaque'
+        : 'UnitySpriteRendererColor';
+    const meta = readJsonIfExists(path.join(options.cocosRoot || ROOT_DIR, `${assetPath}.meta`));
+    return meta?.uuid || stableUuid(`unity-cocos-port-runtime-material:${seed}`);
   }
 
   function attachParticleSubEmitterFollowers(model, builder, reporter) {
@@ -408,7 +508,7 @@ function createRuntimeComponentPorter(deps) {
     );
   }
 
-  function attachUnitySpriteRendererColorAdapter(nodeId, unityComponentId, spriteRendererId, builder, reporter) {
+  function attachUnitySpriteRendererColorAdapter(nodeId, unityComponentId, spriteRendererId, builder, reporter, opaque = false, glow = false) {
     const script = RUNTIME_SCRIPTS.spriteRendererColorAdapter;
     const adapterClassId = readRuntimeScriptClassId(script, builder.cocosDb);
     const node = builder.objects[nodeId];
@@ -428,7 +528,7 @@ function createRuntimeComponentPorter(deps) {
     if (nodeHasComponentType(builder, nodeId, adapterClassId)) return;
 
     const sourceColor = spriteRenderer._color || {};
-    const tintMaterialUuid = spriteRendererColorMaterialUuid(builder.options || {});
+    const tintMaterialUuid = spriteRendererColorMaterialUuid(builder.options || {}, opaque, glow);
     if (tintMaterialUuid) spriteRenderer._materials = [cocosUuid(tintMaterialUuid, 'cc.Material')];
 
     builder.addComponent(nodeId, adapterClassId, {
@@ -438,7 +538,7 @@ function createRuntimeComponentPorter(deps) {
         Number(sourceColor.b ?? 255),
         Number(sourceColor.a ?? 255)
       ),
-      applyMaterialColor: true,
+      applyMaterialColor: !glow,
     }, null, `cmp-unity-sprite-renderer-color-${unityComponentId}`);
   }
 

@@ -1,6 +1,6 @@
 CCEffect %{
   techniques:
-  - name: default
+  - name: transparent
     passes:
     - vert: spriteRender-vs:vert
       frag: spriteRender-fs:frag
@@ -15,8 +15,35 @@ CCEffect %{
           blendDstAlpha: one_minus_src_alpha
       rasterizerState:
         cullMode: none
-      properties:
+      properties: &props
         mainColor: { value: [1, 1, 1, 1], editor: { type: color } }
+  - name: opaque-background
+    passes:
+    - vert: spriteRender-vs:vert
+      frag: spriteRender-fs:frag
+      priority: min + 1
+      depthStencilState:
+        depthTest: true
+        depthWrite: true
+      rasterizerState:
+        cullMode: none
+      properties: *props
+  - name: smooth-alpha-glow
+    passes:
+    - vert: spriteRender-vs:vert
+      frag: spriteGlow-fs:frag
+      depthStencilState:
+        depthTest: true
+        depthWrite: false
+      blendState:
+        targets:
+        - blend: true
+          blendSrc: src_alpha
+          blendDst: one_minus_src_alpha
+          blendDstAlpha: one_minus_src_alpha
+      rasterizerState:
+        cullMode: none
+      properties: *props
 }%
 
 CCProgram spriteRender-vs %{
@@ -51,5 +78,22 @@ CCProgram spriteRender-fs %{
   vec4 frag () {
     vec4 o = texture(cc_spriteTexture, uv0) * mainColor;
     return o;
+  }
+}%
+
+CCProgram spriteGlow-fs %{
+  precision highp float;
+
+  in vec2 uv0;
+  #pragma builtin(local)
+  layout(set = 2, binding = 12) uniform sampler2D cc_spriteTexture;
+
+  uniform Constant {
+    vec4 mainColor;
+  };
+
+  vec4 frag () {
+    float alpha = texture(cc_spriteTexture, uv0).a * mainColor.a;
+    return vec4(0.29411765, 0.21568627, 0.61568627, alpha);
   }
 }%

@@ -35,6 +35,7 @@ module.exports = function createRendererPorter(deps) {
         resolved.meshUuid,
         overrideMaterialUuids.length ? overrideMaterialUuids : (resolved.materialUuids || (resolved.materialUuid ? [resolved.materialUuid] : [])),
         componentFileId,
+        { castShadows: true, receiveShadows: true },
       );
       reporter.low('NESTED_MODEL_RENDERER_CREATED', modelAsset.relativePath, gameObject.name, 'Nested model asset resolved to Cocos MeshRenderer', resolved.source);
       return;
@@ -48,6 +49,7 @@ module.exports = function createRendererPorter(deps) {
         missing.resolved.meshUuid,
         overrideMaterialUuids.length ? overrideMaterialUuids : (missing.resolved.materialUuids || (missing.resolved.materialUuid ? [missing.resolved.materialUuid] : [])),
         componentFileId,
+        { castShadows: true, receiveShadows: true },
       );
       reporter.low(
         missing.pendingImport ? 'NESTED_MODEL_PENDING_MESH_WIRED' : 'NESTED_MODEL_RENDERER_CREATED',
@@ -67,6 +69,7 @@ module.exports = function createRendererPorter(deps) {
         '',
         overrideMaterialUuids.length ? overrideMaterialUuids : [],
         componentFileId,
+        { castShadows: true, receiveShadows: true },
       );
       recordPendingMeshRepair(options, options.out, componentFileId, modelAsset.stem, meshNameHint, modelAsset.relativePath);
       reporter.low(
@@ -169,7 +172,10 @@ module.exports = function createRendererPorter(deps) {
       recordPendingMeshRepair(options, options.out, componentFileId, meshAsset.stem, gameObject.name, meshAsset.relativePath);
     }
     if (!meshUuid && !meshPendingImport) reporter.high('MESH_UNRESOLVED', model.file, gameObject.name, 'MeshRenderer has no resolved Cocos mesh');
-    builder.addMeshRenderer(nodeId, componentId, meshUuid, materialUuids, componentFileId);
+    builder.addMeshRenderer(nodeId, componentId, meshUuid, materialUuids, componentFileId, {
+      castShadows: Number(getField(doc, 'm_CastShadows', 1) || 0) !== 0,
+      receiveShadows: Number(getField(doc, 'm_ReceiveShadows', 1) || 0) !== 0,
+    });
   }
 
   return {

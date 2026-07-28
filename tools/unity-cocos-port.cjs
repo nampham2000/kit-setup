@@ -118,6 +118,7 @@ const {
   emitRigidbody2D: emitRigidbody2DImpl,
   emitCircleCollider2D: emitCircleCollider2DImpl,
   emitBoxCollider2D: emitBoxCollider2DImpl,
+  emitBoxCollider: emitBoxColliderImpl,
   emitPolygonCollider2D: emitPolygonCollider2DImpl,
   emitMeshCollider: emitMeshColliderImpl,
 } = createColliderPorter({
@@ -214,6 +215,7 @@ const componentDispatcher = createComponentDispatcher({
   emitCircleCollider2D,
   emitPolygonCollider2D,
   emitBoxCollider2D,
+  emitBoxCollider,
 });
 
 function printHelp() {
@@ -972,6 +974,26 @@ function convertTransformEuler(transform) {
   return convertEuler(transform?.euler);
 }
 
+function multiplyQuaternion(left, right) {
+  return {
+    x: left.w * right.x + left.x * right.w + left.y * right.z - left.z * right.y,
+    y: left.w * right.y - left.x * right.z + left.y * right.w + left.z * right.x,
+    z: left.w * right.z + left.x * right.y - left.y * right.x + left.z * right.w,
+    w: left.w * right.w - left.x * right.x - left.y * right.y - left.z * right.z,
+  };
+}
+
+function correctNestedModelForwardAxis(transform) {
+  const source = transform || {};
+  const rotation = source.localRotation || { x: 0, y: 0, z: 0, w: 1 };
+  const euler = source.euler || { x: 0, y: 0, z: 0 };
+  return {
+    ...source,
+    localRotation: multiplyQuaternion(rotation, { x: 0, y: 1, z: 0, w: 0 }),
+    euler: { ...euler, y: Number(euler.y || 0) + 180 },
+  };
+}
+
 function unityColorToCocos(value, alphaOverride = null) {
   const c = value || {};
   const scale = (n) => {
@@ -1242,6 +1264,58 @@ class CocosAssetDatabase {
           meshUuid: mesh,
           materialUuid: materials[0]?.uuid || '',
           materialUuids: materials.map((material) => material.uuid),
+          source: record.relativePath,
+          fallbackExt: record.ext,
+        };
+      }
+    }
+    return null;
+  }
+
+  resolveModelPrefabByStem(stem) {
+    const records = this.findByStem(stem);
+    const candidates = records.filter((record) => ['.fbx', '.gltf', '.glb'].includes(record.ext));
+    for (const record of candidates) {
+      const scenes = subMetaRecords(record.uuid, record.subMetas, 'gltf-scene')
+        .filter(({ subMeta }) => !isPendingGeneratedSubMeta(subMeta));
+      for (const scene of scenes) {
+        const objects = readJsonIfExists(libraryJsonPathForUuid({ cocosRoot: this.root }, scene.uuid));
+        const rootId = objects?.[0]?.data?.__id__;
+        const rootNode = Number.isInteger(rootId) ? objects[rootId] : null;
+        const prefabInfoId = rootNode?._prefab?.__id__;
+        const rootLocalId = Number.isInteger(prefabInfoId) ? objects[prefabInfoId]?.fileId : '';
+        if (!rootNode || !rootLocalId) continue;
+        const materialNames = new Map(
+          subMetaRecords(record.uuid, record.subMetas, 'gltf-material')
+            .map((material) => [
+              material.uuid,
+              String(material.subMeta.name || material.subMeta.displayName || '')
+                .replace(/\.material$/i, ''),
+            ]),
+        );
+        const materialSlots = [];
+        for (const component of objects) {
+          if (!['cc.MeshRenderer', 'cc.SkinnedMeshRenderer'].includes(component?.__type__)) continue;
+          const componentPrefabInfoId = component.__prefab?.__id__;
+          const rendererLocalId = Number.isInteger(componentPrefabInfoId)
+            ? objects[componentPrefabInfoId]?.fileId
+            : '';
+          if (!rendererLocalId) continue;
+          for (let slot = 0; slot < (component._materials || []).length; slot += 1) {
+            const materialUuid = component._materials[slot]?.__uuid__ || '';
+            materialSlots.push({
+              rendererLocalId,
+              slot,
+              materialUuid,
+              materialName: materialNames.get(materialUuid) || '',
+            });
+          }
+        }
+        return {
+          prefabUuid: scene.uuid,
+          rootLocalId,
+          rootName: rootNode._name || stem,
+          materialSlots,
           source: record.relativePath,
           fallbackExt: record.ext,
         };
@@ -1812,6 +1886,12 @@ function ensureImageAssetMeta(assetFile, config = {}) {
   const ext = path.extname(assetFile).toLowerCase();
   const displayName = path.basename(assetFile, ext);
   const isParticleTexture = Boolean(config.particleTexture);
+  const fixAlphaTransparencyArtifacts = config.fixAlphaTransparencyArtifacts
+    ?? existing.userData?.fixAlphaTransparencyArtifacts
+    ?? false;
+  const spriteTrimType = ['auto', 'custom', 'none'].includes(config.spriteTrimType)
+    ? config.spriteTrimType
+    : 'auto';
   const requestedImageType = String(config.imageType || '').toLowerCase();
   const wantsTextureType = isParticleTexture || requestedImageType === 'texture';
   const wantsSpriteFrameType = requestedImageType === 'sprite-frame' || !wantsTextureType;
@@ -1897,7 +1977,7 @@ function ensureImageAssetMeta(assetFile, config = {}) {
     };
   }
 
-  const existingSpriteFrame = meta.subMetas[COCOS_IMAGE_SPRITE_FRAME_SUBMETA_ID]?.importer === 'sprite-frame'
+  let existingSpriteFrame = meta.subMetas[COCOS_IMAGE_SPRITE_FRAME_SUBMETA_ID]?.importer === 'sprite-frame'
     ? meta.subMetas[COCOS_IMAGE_SPRITE_FRAME_SUBMETA_ID]
     : null;
   if (wantsSpriteFrameType && !existingSpriteFrame) {
@@ -1933,7 +2013,7 @@ function ensureImageAssetMeta(assetFile, config = {}) {
         isUuid: true,
         imageUuidOrDatabaseUri: textureRecord.uuid,
         atlasUuid: '',
-        trimType: 'auto',
+        trimType: spriteTrimType,
         unityCocosPortPendingImport: true,
       },
       ver: '1.0.12',
@@ -1942,12 +2022,34 @@ function ensureImageAssetMeta(assetFile, config = {}) {
       subMetas: {},
     };
     changed = true;
+    existingSpriteFrame = meta.subMetas[id];
+  }
+
+  if (existingSpriteFrame) {
+    existingSpriteFrame.userData = {
+      ...(existingSpriteFrame.userData || {}),
+      trimType: spriteTrimType,
+    };
+    if (spriteTrimType === 'none') {
+      const { width, height } = getImageDimensions(assetFile);
+      Object.assign(existingSpriteFrame.userData, {
+        offsetX: 0,
+        offsetY: 0,
+        trimX: 0,
+        trimY: 0,
+        width,
+        height,
+        rawWidth: width,
+        rawHeight: height,
+        vertices: spriteFrameVertices(width, height),
+      });
+    }
   }
 
   meta.userData = {
     ...meta.userData,
     type: wantsTextureType ? 'texture' : 'sprite-frame',
-    fixAlphaTransparencyArtifacts: false,
+    fixAlphaTransparencyArtifacts,
     hasAlpha: true,
     redirect: textureRecord.uuid,
   };
@@ -1957,7 +2059,7 @@ function ensureImageAssetMeta(assetFile, config = {}) {
       ...meta.userData,
       type: 'texture',
       flipVertical: false,
-      fixAlphaTransparencyArtifacts: false,
+      fixAlphaTransparencyArtifacts,
       flipGreenChannel: false,
       hasAlpha: true,
       redirect: textureRecord.uuid,
@@ -2852,11 +2954,52 @@ function materializeStrippedTransforms(context) {
       gameObject.syntheticModelAsset = sourceAsset;
       gameObject.syntheticModelName = name;
       gameObject.syntheticModelMaterialOverrideGroups = materialOverrideGroups;
+      gameObject.syntheticModelExternalMaterialRemaps = collectUnityModelExternalMaterialRemaps(sourceAsset, unityDb);
     } else {
       const detail = sourceAsset ? sourceAsset.relativePath : `instance ${instanceId}`;
       reporter.medium('NESTED_PREFAB_PLACEHOLDER', file, name, 'Nested prefab emitted as placeholder node', detail);
     }
   }
+}
+
+function collectUnityModelExternalMaterialRemaps(modelAsset, unityDb) {
+  const metaFile = modelAsset?.path ? `${modelAsset.path}.meta` : '';
+  if (!metaFile || !fs.existsSync(metaFile)) return [];
+
+  const lines = fs.readFileSync(metaFile, 'utf8').split(/\r?\n/);
+  const remaps = [];
+  let inExternalObjects = false;
+  let materialEntry = false;
+  let name = '';
+
+  for (const line of lines) {
+    if (/^  externalObjects:\s*$/.test(line)) {
+      inExternalObjects = true;
+      continue;
+    }
+    if (!inExternalObjects) continue;
+    if (/^  [A-Za-z_][^:]*:\s*/.test(line) && !/^  -\s/.test(line)) break;
+
+    const typeMatch = /^\s+type:\s*(.+?)\s*$/.exec(line);
+    if (typeMatch) {
+      materialEntry = /(?:^|:)Material$/i.test(String(parseUnityScalar(typeMatch[1])));
+      continue;
+    }
+    const nameMatch = /^\s+name:\s*(.+?)\s*$/.exec(line);
+    if (nameMatch && materialEntry) {
+      name = String(parseUnityScalar(nameMatch[1]) || '');
+      continue;
+    }
+    const targetMatch = /^\s+second:\s*(\{.*\})\s*$/.exec(line);
+    if (!targetMatch || !materialEntry || !name) continue;
+    const target = parseUnityScalar(targetMatch[1]);
+    const materialAsset = unityDb.get(unityRefGuid(target));
+    if (materialAsset) remaps.push({ name, materialAsset });
+    materialEntry = false;
+    name = '';
+  }
+
+  return remaps;
 }
 
 function describeNestedPrefabAsset(options, sourceAsset, unityDb, reporter, recursionDepth = 0) {
@@ -3518,7 +3661,7 @@ class CocosPrefabBuilder {
     return this.add({
       __type__: 'CCPropertyOverrideInfo',
       targetInfo: cocosRef(targetInfoId),
-      propertyPath: [propertyPath],
+      propertyPath: Array.isArray(propertyPath) ? propertyPath : [propertyPath],
       value,
     });
   }
@@ -3643,7 +3786,7 @@ class CocosPrefabBuilder {
     });
   }
 
-  addMeshRenderer(nodeId, unityComponentId, meshUuid, materialUuid, fileId) {
+  addMeshRenderer(nodeId, unityComponentId, meshUuid, materialUuid, fileId, config = {}) {
     const materialUuids = Array.isArray(materialUuid)
       ? materialUuid.filter(Boolean)
       : materialUuid
@@ -3654,8 +3797,8 @@ class CocosPrefabBuilder {
       _visFlags: 0,
       bakeSettings: cocosRef(this.addModelBakeSettings()),
       _mesh: meshUuid ? cocosUuid(meshUuid, 'cc.Mesh') : null,
-      _shadowCastingMode: 0,
-      _shadowReceivingMode: 1,
+      _shadowCastingMode: config.castShadows ? 1 : 0,
+      _shadowReceivingMode: config.receiveShadows === false ? 0 : 1,
       _shadowBias: 0,
       _shadowNormalBias: 0,
       _reflectionProbeId: -1,
@@ -4723,6 +4866,89 @@ function emitNodeRecursive(transform, parentNodeId, model, builder, layerResolve
     return;
   }
 
+  if (gameObject.syntheticModelAsset) {
+    const modelPrefab = cocosDb.resolveModelPrefabByStem(gameObject.syntheticModelAsset.stem);
+    if (modelPrefab?.prefabUuid && modelPrefab?.rootLocalId) {
+      const materialOverrides = [];
+      const remaps = gameObject.syntheticModelExternalMaterialRemaps || [];
+      const shadowOverrideRenderers = new Set();
+      for (const slot of modelPrefab.materialSlots || []) {
+        if (!shadowOverrideRenderers.has(slot.rendererLocalId)) {
+          shadowOverrideRenderers.add(slot.rendererLocalId);
+          materialOverrides.push({
+            localId: slot.rendererLocalId,
+            propertyPath: '_shadowCastingMode',
+            value: 1,
+          }, {
+            localId: slot.rendererLocalId,
+            propertyPath: '_shadowReceivingMode',
+            value: 1,
+          });
+        }
+        const normalizedSlotName = normalizeKey(slot.materialName);
+        const remap = remaps.find((entry) => normalizeKey(entry.name) === normalizedSlotName)
+          || (remaps.length === 1 && modelPrefab.materialSlots.length === 1 ? remaps[0] : null);
+        if (!remap) continue;
+        const materialUuid = resolveUnityMaterialUuid(
+          remap.materialAsset,
+          options,
+          unityDb,
+          cocosDb,
+          reporter,
+          gameObject.name,
+        );
+        if (!materialUuid) continue;
+        materialOverrides.push({
+          localId: slot.rendererLocalId,
+          propertyPath: ['_materials', String(slot.slot)],
+          value: cocosUuid(materialUuid, 'cc.Material'),
+        });
+        reporter.low(
+          'NESTED_MODEL_MATERIAL_OVERRIDE_WIRED',
+          remap.materialAsset.relativePath,
+          `${gameObject.name}/${slot.materialName || `material-${slot.slot}`}`,
+          'Unity FBX external material remap was converted and wired to the imported Cocos model renderer',
+          materialUuid,
+        );
+      }
+      const nodeId = builder.addNestedPrefabInstance(
+        gameObject.name,
+        parentNodeId,
+        correctNestedModelForwardAxis(resolvedTransform),
+        layerValue,
+        gameObject.active,
+        modelPrefab.prefabUuid,
+        modelPrefab.rootLocalId,
+        materialOverrides,
+      );
+      builder.nodeMapByGameObject.set(gameObject.fileId, nodeId);
+      builder.nodeMapByTransform.set(transform.fileId, nodeId);
+      gameObject.syntheticModelPrefabLinked = true;
+      reporter.low(
+        'NESTED_MODEL_PREFAB_LINKED',
+        gameObject.syntheticModelAsset.relativePath,
+        gameObject.name,
+        'Imported Cocos model prefab was linked so skeletal animation, skinned meshes, and the full rig hierarchy are preserved',
+        modelPrefab.source,
+      );
+      reporter.low(
+        'NESTED_MODEL_FORWARD_AXIS_CORRECTED',
+        gameObject.syntheticModelAsset.relativePath,
+        gameObject.name,
+        'Linked model root was rotated 180 degrees around Y to preserve Unity +Z forward after conversion to Cocos -Z forward',
+      );
+      for (const childId of transform.children) {
+        const child = model.transforms.get(childId);
+        if (!child) {
+          reporter.medium('MISSING_CHILD_TRANSFORM', model.file, gameObject.name, `Child transform ${childId} is missing`);
+          continue;
+        }
+        emitNodeRecursive(child, nodeId, model, builder, layerResolver, reporter, options, unityDb, cocosDb);
+      }
+      return;
+    }
+  }
+
   const nodeTransform = gameObjectHasWorldScaledParticleSystem(gameObject, model)
     ? compensateParentScale(transform, resolvedTransform, model)
     : resolvedTransform;
@@ -4873,7 +5099,20 @@ function emitSpriteRenderer(nodeId, componentId, doc, builder, reporter, options
   emitSpriteRendererImpl(nodeId, componentId, doc, builder, reporter, options, unityDb, cocosDb);
   const spriteRendererId = builder.componentMap.get(componentId);
   if (spriteRendererId != null) {
-    runtimeComponentPorter.attachUnitySpriteRendererColorAdapter(nodeId, componentId, spriteRendererId, builder, reporter);
+    const materialRef = getNestedList(doc, 'm_Materials')[0] || null;
+    const materialAsset = unityDb.get(unityRefGuid(materialRef));
+    const spriteAsset = unityDb.get(unityRefGuid(getField(doc, 'm_Sprite')));
+    const opaque = /opaque/i.test(materialAsset?.stem || '');
+    const glow = /glow/i.test(spriteAsset?.stem || '');
+    runtimeComponentPorter.attachUnitySpriteRendererColorAdapter(
+      nodeId,
+      componentId,
+      spriteRendererId,
+      builder,
+      reporter,
+      opaque,
+      glow,
+    );
   }
   return spriteRendererId;
 }
@@ -4899,6 +5138,10 @@ function emitCircleCollider2D(nodeId, componentId, doc, gameObject, model, build
 
 function emitBoxCollider2D(nodeId, componentId, doc, gameObject, model, builder, reporter) {
   return emitBoxCollider2DImpl(nodeId, componentId, doc, gameObject, model, builder, reporter);
+}
+
+function emitBoxCollider(nodeId, componentId, doc, builder) {
+  return emitBoxColliderImpl(nodeId, componentId, doc, builder);
 }
 
 function polygonPathArea(points) {

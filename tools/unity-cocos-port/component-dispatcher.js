@@ -18,6 +18,7 @@ function createComponentDispatcher(handlers) {
     [60, (ctx) => handlers.emitPolygonCollider2D(ctx.nodeId, ctx.componentId, ctx.doc, ctx.gameObject, ctx.model, ctx.builder, ctx.reporter)],
     [61, (ctx) => handlers.emitBoxCollider2D(ctx.nodeId, ctx.componentId, ctx.doc, ctx.gameObject, ctx.model, ctx.builder, ctx.reporter)],
     [64, (ctx) => handlers.emitMeshCollider(ctx.nodeId, ctx.componentId, ctx.doc, ctx.gameObject, ctx.model, ctx.builder, ctx.reporter, ctx.options, ctx.unityDb, ctx.cocosDb)],
+    [65, (ctx) => handlers.emitBoxCollider(ctx.nodeId, ctx.componentId, ctx.doc, ctx.builder)],
     [95, (ctx) => handlers.emitAnimator(ctx.nodeId, ctx.componentId, ctx.doc, ctx.builder, ctx.reporter, ctx.options, ctx.unityDb, ctx.cocosDb, ctx.gameObject, ctx.model)],
     [108, (ctx) => handlers.emitLight(ctx.nodeId, ctx.componentId, ctx.doc, ctx.builder, ctx.reporter)],
     [114, (ctx) => handlers.emitMonoBehaviour(ctx.nodeId, ctx.componentId, ctx.doc, ctx.model, ctx.builder, ctx.reporter, ctx.options, ctx.unityDb, ctx.cocosDb)],
@@ -76,7 +77,7 @@ function createComponentDispatcher(handlers) {
         emitUnityComponent({ gameObject, nodeId, componentId, doc, model, builder, reporter, options, unityDb, cocosDb });
       }
 
-      if (gameObject.syntheticModelAsset) {
+      if (gameObject.syntheticModelAsset && !gameObject.syntheticModelPrefabLinked) {
         handlers.emitSyntheticModelRenderer(gameObject, nodeId, builder, reporter, options, unityDb, cocosDb);
       }
     }

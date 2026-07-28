@@ -1,0 +1,35 @@
+CCEffect %{
+  techniques:
+  - name: depth-only
+    passes:
+    - vert: invisible-shadow-receiver-vs:vert
+      frag: invisible-shadow-receiver-fs:frag
+      depthStencilState:
+        depthTest: true
+        depthWrite: true
+      rasterizerState:
+        cullMode: none
+      blendState:
+        targets:
+        - blendColorMask: 0
+}%
+
+CCProgram invisible-shadow-receiver-vs %{
+  precision highp float;
+  #include <builtin/uniforms/cc-global>
+  #include <builtin/uniforms/cc-local>
+
+  in vec3 a_position;
+
+  vec4 vert () {
+    return cc_matViewProj * cc_matWorld * vec4(a_position, 1.0);
+  }
+}%
+
+CCProgram invisible-shadow-receiver-fs %{
+  precision mediump float;
+
+  vec4 frag () {
+    return vec4(0.0);
+  }
+}%

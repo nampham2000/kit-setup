@@ -142,11 +142,15 @@ module.exports = function createSpritePorter(deps) {
     }
     const materialRef = getNestedList(doc, 'm_Materials')[0] || null;
     const materialAsset = unityDb.get(unityRefGuid(materialRef));
-    const materialUuid = materialAsset && resolveUnitySpriteRendererMaterialUuid
+    const glowMaterialUuid = !materialAsset && /glow/i.test(spriteAsset?.stem || '')
+      ? cocosDb.resolveMaterialByStem('UnitySpriteRendererGlow')
+      : '';
+    if (glowMaterialUuid) builder.objects[nodeId]._lpos.z += 0.1;
+    const materialUuid = glowMaterialUuid || (materialAsset && resolveUnitySpriteRendererMaterialUuid
       ? resolveUnitySpriteRendererMaterialUuid(materialAsset, options, unityDb, cocosDb, reporter, '')
       : materialAsset
         ? cocosDb.resolveMaterialByStem(materialAsset.stem)
-        : '';
+        : '');
     builder.addSpriteRenderer(
       nodeId,
       componentId,

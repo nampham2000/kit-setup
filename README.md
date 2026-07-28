@@ -11,6 +11,7 @@ Bộ shared kit cho playable ads/Cocos: package dùng chung, tool build, tool po
 | `scripts/2_clean-unversioned.bat` | Quét và xóa thư mục sinh ra như `node_modules`, `temp`, `build`, `library`, `coverage`... nhưng tránh thư mục có file tracked. | Cần dọn workspace sạch. |
 | `scripts/3_update-submodule-remote.bat` | Chạy `git submodule update --init --remote --recursive` cho `playable-shared-kit`. | Muốn kéo shared-kit mới nhất vào game project. |
 | `scripts/4_create-playable-shared-kit-pr.bat` | Tạo branch/commit/push và mở trang PR cho repo `playable-shared-kit`; tránh tạo PR trùng diff. | Cần publish thay đổi của shared-kit. |
+| `scripts/5_fix-git-codex-refs.bat` | Xóa riêng local refs tạm `refs/codex/turn-diffs/*`, rồi chạy `git fetch origin --prune` để xác nhận. | Git fetch/pull báo `bad object refs/codex/turn-diffs/...` hoặc `did not send all necessary objects`. |
 
 ## 2) Tools chính và quick guide
 
