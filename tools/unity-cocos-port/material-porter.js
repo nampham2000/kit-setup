@@ -30,6 +30,11 @@ const COCOS_PARTICLE_TECHNIQUE_ADD_SMOOTH = 3;
 const COCOS_PARTICLE_TECHNIQUE_PREMULTIPLY_BLEND = 4;
 const INVISIBLE_SHADOW_RECEIVER_EFFECT_TEMPLATE = path.join(__dirname, 'invisible-shadow-receiver.effect');
 const INVISIBLE_SHADOW_RECEIVER_EFFECT_PATH = path.join('assets', 'effects', 'InvisibleShadowReceiver.effect');
+const TCP2_HYBRID_SHADER_2_EFFECT_PATH = path.join('assets', 'effects', 'TCP2HybridShader2.effect');
+const TCP2_HYBRID_SHADER_2_GUIDS = new Set([
+  '650dd9526735d5b46b79224bc6e94025',
+  '933532a4fcc9baf4fa0491de14d08ed7',
+]);
 const COCOS_PARTICLE_DEFAULT_TINT = 128 / 255;
 const COCOS_PARTICLE_DEFAULT_TINT_COLOR = [
   COCOS_PARTICLE_DEFAULT_TINT,
@@ -37,9 +42,11 @@ const COCOS_PARTICLE_DEFAULT_TINT_COLOR = [
   COCOS_PARTICLE_DEFAULT_TINT,
   COCOS_PARTICLE_DEFAULT_TINT,
 ];
+// URP particle shaders sample _BaseMap. _MainTex can remain populated with a
+// legacy compatibility texture, so only use it when _BaseMap is absent.
 const UNITY_PARTICLE_MATERIAL_TEXTURE_KEYS = [
-  '_MainTex',
   '_BaseMap',
+  '_MainTex',
   '_NormalMap',
   '_BumpMap',
   '_DistortionTex',
@@ -349,14 +356,27 @@ module.exports = function createMaterialPorter(deps) {
       shaderName = readUnityShaderName(shaderAsset) || shaderAsset?.relativePath || shaderGuid;
     }
     const invisibleShadowReceiver = /Invisible Shadow Receiver/i.test(shaderName);
+    const tcp2HybridShader2 = TCP2_HYBRID_SHADER_2_GUIDS.has(shaderGuid)
+      || /(?:Toony Colors Pro 2|TCP2).*Hybrid Shader 2/i.test(shaderName);
+    const tcp2EffectMeta = tcp2HybridShader2
+      ? readJsonIfExists(path.join(options.cocosRoot, `${TCP2_HYBRID_SHADER_2_EFFECT_PATH}.meta`))
+      : null;
+    const tcp2EffectUuid = tcp2EffectMeta?.uuid || '';
     if (shaderName) {
-      reporter[invisibleShadowReceiver ? 'low' : 'high'](
-        invisibleShadowReceiver ? 'INVISIBLE_SHADOW_RECEIVER_APPROXIMATED' : 'CUSTOM_SHADER_NOT_PORTED',
+      const supportedCustomShader = invisibleShadowReceiver || Boolean(tcp2EffectUuid);
+      reporter[supportedCustomShader ? 'low' : 'high'](
+        invisibleShadowReceiver
+          ? 'INVISIBLE_SHADOW_RECEIVER_APPROXIMATED'
+          : tcp2EffectUuid
+            ? 'TCP2_HYBRID_SHADER_2_PORTED'
+            : 'CUSTOM_SHADER_NOT_PORTED',
         materialAsset.relativePath,
         String(getField(materialDoc, 'm_Name', materialAsset.stem) || materialAsset.stem),
         invisibleShadowReceiver
           ? `Custom shader "${shaderName}" was mapped to a depth-only effect for Cocos planar shadows`
-          : `Custom shader "${shaderName}" has not been ported; material approximated with builtin-standard`,
+          : tcp2EffectUuid
+            ? `Custom shader "${shaderName}" was mapped to the Cocos TCP2 Hybrid Shader 2 effect`
+            : `Custom shader "${shaderName}" has not been ported; material approximated with builtin-standard`,
       );
     }
 
@@ -407,6 +427,26 @@ module.exports = function createMaterialPorter(deps) {
     if (emissiveTextureUuid) props.emissiveMap = { __uuid__: emissiveTextureUuid };
     if (alphaClip) props.alphaThreshold = cutoff;
 
+    const tcp2Props = {
+      mainColor: unityColorToCocos(mainColor),
+      highlightColor: unityColorToCocos(firstDefinedMaterialValue(colors, ['_HColor'], { r: 1, g: 1, b: 1, a: 1 })),
+      shadowColor: unityColorToCocos(firstDefinedMaterialValue(colors, ['_SColor'], { r: 0.2, g: 0.2, b: 0.2, a: 1 })),
+      rampThreshold: clamp01(firstDefinedMaterialValue(floats, ['_RampThreshold'], 0.75), 0.75),
+      rampSmoothing: clamp01(firstDefinedMaterialValue(floats, ['_RampSmoothing'], 0.1), 0.1),
+      indirectStrength: clamp01(firstDefinedMaterialValue(floats, ['_IndirectIntensity'], 1), 1),
+      shadowLightAtten: clamp01(firstDefinedMaterialValue(floats, ['_ShadowColorLightAtten'], 1), 1),
+      rimColor: unityColorToCocos(firstDefinedMaterialValue(colors, ['_RimColor'], { r: 0.8, g: 0.8, b: 0.8, a: 1 })),
+      rimMin: Number(firstDefinedMaterialValue(floats, ['_RimMin'], 0.5)),
+      rimMax: Number(firstDefinedMaterialValue(floats, ['_RimMax'], 1)),
+      rimLightMask: Number(firstDefinedMaterialValue(floats, ['_UseRimLightMask'], 1)),
+      rimStrength: Number(firstDefinedMaterialValue(floats, ['_UseRim'], 0)) > 0 ? 1 : 0,
+      specularColor: unityColorToCocos(firstDefinedMaterialValue(colors, ['_SpecularColor'], { r: 0.75, g: 0.75, b: 0.75, a: 1 })),
+      specularRoughness: clamp01(firstDefinedMaterialValue(floats, ['_SpecularRoughness'], 0.5), 0.5),
+      specularStrength: Number(firstDefinedMaterialValue(floats, ['_UseSpecular'], 0)) > 0 ? 1 : 0,
+      emissive: unityColorToCocos(emissionColor),
+    };
+    if (mainTextureUuid) tcp2Props.mainTexture = { __uuid__: mainTextureUuid };
+
     const states = [];
     if (transparent || doubleSided) {
       const state = {
@@ -431,13 +471,17 @@ module.exports = function createMaterialPorter(deps) {
       _effectAsset: cocosUuid(
         invisibleShadowReceiver
           ? ensureInvisibleShadowReceiverEffect(options, reporter)
-          : BUILTIN_STANDARD_EFFECT_UUID,
+          : tcp2EffectUuid || BUILTIN_STANDARD_EFFECT_UUID,
         'cc.EffectAsset',
       ),
-      _techIdx: invisibleShadowReceiver ? 0 : transparent ? BUILTIN_STANDARD_TRANSPARENT_TECHNIQUE_INDEX : 0,
-      _defines: [invisibleShadowReceiver ? {} : defines],
+      _techIdx: invisibleShadowReceiver || tcp2EffectUuid
+        ? 0
+        : transparent
+          ? BUILTIN_STANDARD_TRANSPARENT_TECHNIQUE_INDEX
+          : 0,
+      _defines: [invisibleShadowReceiver || tcp2EffectUuid ? {} : defines],
       _states: invisibleShadowReceiver ? [] : states,
-      _props: [invisibleShadowReceiver ? {} : props],
+      _props: [invisibleShadowReceiver ? {} : tcp2EffectUuid ? tcp2Props : props],
     };
 
     if (options.dryRun) return fs.existsSync(convertedDest) ? convertedDest : '';
@@ -501,14 +545,24 @@ module.exports = function createMaterialPorter(deps) {
 
     const particleShaderRef = getField(materialDoc, 'm_Shader', null);
     const particleShaderGuid = unityRefGuid(particleShaderRef);
+    const particleShaderAsset = particleShaderGuid
+      ? unityDb?.get(particleShaderGuid)
+      : null;
+    const particleShaderName = readUnityShaderName(particleShaderAsset)
+      || particleShaderAsset?.relativePath
+      || particleShaderGuid;
     if (particleShaderGuid && particleShaderGuid !== UNITY_BUILTIN_SHADER_GUID) {
-      const particleShaderAsset = unityDb?.get(particleShaderGuid);
-      const particleShaderName = readUnityShaderName(particleShaderAsset) || particleShaderAsset?.relativePath || particleShaderGuid;
-      reporter.high(
-        'CUSTOM_SHADER_NOT_PORTED',
+      const tcp2ParticleMaterial = TCP2_HYBRID_SHADER_2_GUIDS.has(particleShaderGuid)
+        || /(?:Toony Colors Pro 2|TCP2).*Hybrid Shader 2/i.test(particleShaderName);
+      reporter[tcp2ParticleMaterial ? 'low' : 'high'](
+        tcp2ParticleMaterial
+          ? 'TCP2_PARTICLE_MATERIAL_APPROXIMATED'
+          : 'CUSTOM_SHADER_NOT_PORTED',
         materialAsset.relativePath,
         String(getField(materialDoc, 'm_Name', materialAsset.stem) || materialAsset.stem),
-        `Custom shader "${particleShaderName}" has not been ported; material approximated with builtin particle effect`,
+        tcp2ParticleMaterial
+          ? `TCP2 mesh-particle material "${particleShaderName}" was mapped to Cocos' particle-compatible effect`
+          : `Custom shader "${particleShaderName}" has not been ported; material approximated with builtin particle effect`,
       );
     }
 

@@ -246,6 +246,57 @@ function parseUnityRendererDoc(doc) {
   return parsed.ParticleSystemRenderer || parsed;
 }
 
+function serializedPropertyTokens(propertyPath) {
+  return String(propertyPath || '')
+    .replace(/^['"]|['"]$/g, '')
+    .replace(/\.Array\.data\[(\d+)\]/g, '.$1')
+    .split('.')
+    .filter(Boolean)
+    .map((token) => (/^\d+$/.test(token) ? Number(token) : token));
+}
+
+function setUnitySerializedProperty(root, propertyPath, value) {
+  if (!root || typeof root !== 'object' || !propertyPath) return false;
+  const sizePath = String(propertyPath).match(/^(.*)\.Array\.size$/);
+  const tokens = serializedPropertyTokens(sizePath ? sizePath[1] : propertyPath);
+  if (!tokens.length) return false;
+
+  let target = root;
+  for (let index = 0; index < tokens.length - 1; index += 1) {
+    const token = tokens[index];
+    const nextIsIndex = typeof tokens[index + 1] === 'number';
+    if (target[token] == null || typeof target[token] !== 'object') {
+      target[token] = nextIsIndex ? [] : {};
+    }
+    target = target[token];
+  }
+
+  const key = tokens[tokens.length - 1];
+  if (sizePath) {
+    if (!Array.isArray(target[key])) target[key] = [];
+    const size = Math.max(0, Math.floor(num(value, 0)));
+    target[key].length = size;
+    for (let index = 0; index < size; index += 1) {
+      if (target[key][index] == null) target[key][index] = {};
+    }
+    return true;
+  }
+  target[key] = value;
+  return true;
+}
+
+function applyUnitySerializedOverrides(root, properties) {
+  const entries = Object.entries(properties || {});
+  let applied = 0;
+  for (const [propertyPath, value] of entries.filter(([path]) => path.endsWith('.Array.size'))) {
+    if (setUnitySerializedProperty(root, propertyPath, value)) applied += 1;
+  }
+  for (const [propertyPath, value] of entries.filter(([path]) => !path.endsWith('.Array.size'))) {
+    if (setUnitySerializedProperty(root, propertyPath, value)) applied += 1;
+  }
+  return applied;
+}
+
 function num(value, fallback = 0) {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
@@ -1136,7 +1187,10 @@ function applyShapeModule(builder, particle, data) {
   if (!enabled || shouldUsePointShapeFallback(data)) {
     setKnown(module, ['_shapeType'], 0);
     setKnown(module, ['shapeType'], 0);
-    module.emitFrom = 0;
+    // Cocos' box emitter accepts Edge/Shell/Volume only. A zero-sized Volume
+    // is the point-emitter equivalent used when Unity's mesh source cannot be
+    // represented, without producing one warning per emitted particle.
+    module.emitFrom = 3;
     module.radius = 0;
     module.length = 0;
     module.randomPositionAmount = 0;
@@ -1395,6 +1449,12 @@ function applyEmission(builder, particle, data) {
 function applyRenderer(builder, particle, data) {
   const renderer = refObject(builder.objects, particle?.renderer);
   if (!renderer || !data || typeof data !== 'object') return false;
+  // Cocos merges the renderer into cc.ParticleSystem. If Unity disables only
+  // ParticleSystemRenderer, disable the merged Cocos component as well;
+  // otherwise the template renderer remains visible after conversion.
+  if (data.m_Enabled != null) {
+    particle._enabled = bool(data.m_Enabled, true);
+  }
   renderer._renderMode = UNITY_RENDER_MODE_TO_COCOS[num(data.m_RenderMode, 0)] ?? 0;
   renderer._alignSpace = num(data.m_RenderAlignment, renderer._alignSpace ?? 0);
   renderer._velocityScale = num(data.m_VelocityScale, renderer._velocityScale ?? 1);
@@ -1436,12 +1496,10 @@ function isMeshParticleRenderer(rendererData) {
   return num(rendererData?.m_RenderMode, 0) === 4;
 }
 
-function applyUnityParticleSystemToCocos(builder, particleId, unityDoc, rendererDoc = null) {
+function applyUnityParticleDataToCocos(builder, particleId, data = {}, rendererData = {}) {
   const particle = builder?.objects?.[particleId];
   if (!particle) return { applied: 0 };
 
-  const data = parseUnityParticleDoc(unityDoc);
-  const rendererData = parseUnityRendererDoc(rendererDoc);
   const forceMeshCommon3D = isMeshParticleRenderer(rendererData);
   const initial = data.InitialModule || {};
   let gravityData = initial.gravityModifier;
@@ -1535,8 +1593,19 @@ function applyUnityParticleSystemToCocos(builder, particleId, unityDoc, renderer
   return { applied };
 }
 
+function applyUnityParticleSystemToCocos(builder, particleId, unityDoc, rendererDoc = null) {
+  return applyUnityParticleDataToCocos(
+    builder,
+    particleId,
+    parseUnityParticleDoc(unityDoc),
+    parseUnityRendererDoc(rendererDoc),
+  );
+}
+
 module.exports = {
+  applyUnityParticleDataToCocos,
   applyUnityParticleSystemToCocos,
+  applyUnitySerializedOverrides,
   applyParticleRendererMesh,
   applyParticleRendererMaterial,
   parseUnityParticleDoc,

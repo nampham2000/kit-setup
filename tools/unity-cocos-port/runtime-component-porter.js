@@ -37,6 +37,11 @@ const RUNTIME_SCRIPTS = {
     missingCode: 'PARTICLE_HIERARCHY_TRANSFORM_SYNC_TEMPLATE_MISSING',
     missingMessage: 'Unity particle hierarchy transform sync runtime script template is missing; generated prefabs cannot attach the helper component',
   },
+  particleRateOverDistanceEmitter: {
+    className: 'UnityParticleRateOverDistanceEmitter',
+    missingCode: 'PARTICLE_RATE_OVER_DISTANCE_EMITTER_TEMPLATE_MISSING',
+    missingMessage: 'Unity particle Rate over Distance needs a runtime script adapter, but the template is missing',
+  },
   spriteRendererColorAdapter: {
     className: 'UnitySpriteRendererColorAdapter',
     missingCode: 'SPRITE_RENDERER_COLOR_ADAPTER_TEMPLATE_MISSING',
@@ -508,6 +513,54 @@ function createRuntimeComponentPorter(deps) {
     );
   }
 
+  function attachParticleRateOverDistanceEmitters(model, builder, reporter) {
+    const script = RUNTIME_SCRIPTS.particleRateOverDistanceEmitter;
+    const helperClassId = readRuntimeScriptClassId(script, builder.cocosDb);
+
+    for (const [componentId, doc] of model.componentDocs.entries()) {
+      const classId = Number(doc?.classId || 0);
+      if (classId !== 198 && classId !== 223) continue;
+
+      const data = parseUnityParticleDoc(doc);
+      const rateRange = data?.EmissionModule?.rateOverDistance;
+      if (Number(rateRange?.minMaxState || 0) !== 0) continue;
+
+      const rateOverDistance = Number(rateRange?.scalar || 0);
+      if (!(rateOverDistance > 0)) continue;
+
+      const particleId = builder.componentMap.get(componentId);
+      const particle = builder.objects[particleId];
+      const nodeId = Number(particle?.node?.__id__);
+      const node = Number.isInteger(nodeId) ? builder.objects[nodeId] : null;
+      if (!particle || !node) continue;
+
+      if (!helperClassId) {
+        reporter.medium(
+          'PARTICLE_RATE_OVER_DISTANCE_EMITTER_SCRIPT_MISSING',
+          model.file,
+          node._name || '',
+          `Unity Rate over Distance needs ${toPosix(scriptTargetPath(script))} but the script was not found in Cocos assets`
+        );
+        continue;
+      }
+
+      setCocosCurveConstant(builder.objects, particle, 'rateOverDistance', 0);
+      if (!nodeHasComponentType(builder, nodeId, helperClassId)) {
+        builder.addComponent(nodeId, helperClassId, {
+          particleSystem: cocosRef(particleId),
+          rateOverDistance,
+        }, null, `cmp-unity-particle-rate-over-distance-${componentId}`);
+      }
+
+      reporter.low(
+        'PARTICLE_RATE_OVER_DISTANCE_EMITTER',
+        model.file,
+        node._name || '',
+        `Attached ${script.className} to distribute ${rateOverDistance} particle(s) per world unit along high-speed movement`
+      );
+    }
+  }
+
   function attachUnitySpriteRendererColorAdapter(nodeId, unityComponentId, spriteRendererId, builder, reporter, opaque = false, glow = false) {
     const script = RUNTIME_SCRIPTS.spriteRendererColorAdapter;
     const adapterClassId = readRuntimeScriptClassId(script, builder.cocosDb);
@@ -545,10 +598,12 @@ function createRuntimeComponentPorter(deps) {
   return {
     ensureParticleSubEmitterFollowerScript: (options, reporter) => ensureRuntimeScript(RUNTIME_SCRIPTS.particleSubEmitterFollower, options, reporter),
     ensureParticleHierarchyTransformSyncScript: (options, reporter) => ensureRuntimeScript(RUNTIME_SCRIPTS.particleHierarchyTransformSync, options, reporter),
+    ensureParticleRateOverDistanceEmitterScript: (options, reporter) => ensureRuntimeScript(RUNTIME_SCRIPTS.particleRateOverDistanceEmitter, options, reporter),
     ensureSpriteRendererColorAdapterScript: (options, reporter) => ensureRuntimeScript(RUNTIME_SCRIPTS.spriteRendererColorAdapter, options, reporter),
     ensureSpriteRendererColorAssets,
     attachParticleSubEmitterFollowers,
     attachParticleHierarchyTransformSync,
+    attachParticleRateOverDistanceEmitters,
     attachUnitySpriteRendererColorAdapter,
   };
 }

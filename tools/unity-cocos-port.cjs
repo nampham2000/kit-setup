@@ -54,6 +54,13 @@ const createScriptPorter = require('./unity-cocos-port/script-porter');
 const createUiSpriteAlphaPorter = require('./unity-cocos-port/ui-sprite-alpha-porter');
 const createComponentDispatcher = require('./unity-cocos-port/component-dispatcher');
 const createRuntimeComponentPorter = require('./unity-cocos-port/runtime-component-porter');
+const {
+  applyParticleRendererMaterial,
+  applyUnityParticleDataToCocos,
+  applyUnitySerializedOverrides,
+  parseUnityParticleDoc,
+  parseUnityRendererDoc,
+} = require('./unity-cocos-port/particle-system-converter');
 
 const {
   importedUnityAssetPath: importedUnityAssetPathImpl,
@@ -565,6 +572,16 @@ function getUnityLayerNames(options) {
 
 function cocosProjectSettingsFile(root) {
   return path.join(root, 'settings', 'v2', 'packages', 'project.json');
+}
+
+function getCocosDesignResolution(options) {
+  if (options._cocosDesignResolution !== undefined) return options._cocosDesignResolution;
+  const project = readJsonIfExists(cocosProjectSettingsFile(options.cocosRoot));
+  const resolution = project?.general?.designResolution;
+  const width = finiteNumber(resolution?.width, 0);
+  const height = finiteNumber(resolution?.height, 0);
+  options._cocosDesignResolution = width > 0 && height > 0 ? { x: width, y: height } : null;
+  return options._cocosDesignResolution;
 }
 
 function bitFromLayerValue(value) {
@@ -1272,9 +1289,17 @@ class CocosAssetDatabase {
     return null;
   }
 
-  resolveModelPrefabByStem(stem) {
+  resolveModelPrefabByStem(stem, preferredUnityRelativePath = '') {
     const records = this.findByStem(stem);
-    const candidates = records.filter((record) => ['.fbx', '.gltf', '.glb'].includes(record.ext));
+    const preferredSuffix = toPosix(preferredUnityRelativePath).toLowerCase();
+    const candidates = records
+      .filter((record) => ['.fbx', '.gltf', '.glb'].includes(record.ext))
+      .sort((left, right) => {
+        if (!preferredSuffix) return 0;
+        const leftPreferred = toPosix(left.relativePath).toLowerCase().endsWith(preferredSuffix);
+        const rightPreferred = toPosix(right.relativePath).toLowerCase().endsWith(preferredSuffix);
+        return Number(rightPreferred) - Number(leftPreferred);
+      });
     for (const record of candidates) {
       const scenes = subMetaRecords(record.uuid, record.subMetas, 'gltf-scene')
         .filter(({ subMeta }) => !isPendingGeneratedSubMeta(subMeta));
@@ -1316,12 +1341,57 @@ class CocosAssetDatabase {
           rootLocalId,
           rootName: rootNode._name || stem,
           materialSlots,
+          assetPath: record.path,
           source: record.relativePath,
           fallbackExt: record.ext,
         };
       }
     }
     return null;
+  }
+
+  resolveModelAnimationByStem(stem, animationNameHint = '') {
+    const normalizedHint = normalizeKey(animationNameHint);
+    const shortHint = normalizeKey(String(animationNameHint || '').split('|').pop());
+    const records = this.findByStem(stem);
+    const candidates = records.filter((record) => ['.fbx', '.gltf', '.glb'].includes(record.ext));
+    for (const record of candidates) {
+      const animations = subMetaRecords(record.uuid, record.subMetas, 'gltf-animation');
+      const match = animations.find(({ subMeta }) => {
+        const name = normalizeKey(subMeta.name || subMeta.displayName || '');
+        return name === normalizedHint
+          || (shortHint && (name.endsWith(shortHint) || name.includes(shortHint)));
+      });
+      if (match) {
+        return {
+          uuid: match.uuid,
+          name: String(match.subMeta.name || match.subMeta.displayName || animationNameHint)
+            .replace(/\.animation$/i, ''),
+          source: record.relativePath,
+        };
+      }
+    }
+    return null;
+  }
+
+  resolveModelAnimationsByStem(stem) {
+    const records = this.findByStem(stem);
+    const candidates = records.filter((record) => ['.fbx', '.gltf', '.glb'].includes(record.ext));
+    for (const record of candidates) {
+      const animations = subMetaRecords(record.uuid, record.subMetas, 'gltf-animation')
+        .sort((left, right) => (
+          Number(left.subMeta?.userData?.gltfIndex ?? Number.MAX_SAFE_INTEGER)
+          - Number(right.subMeta?.userData?.gltfIndex ?? Number.MAX_SAFE_INTEGER)
+        ));
+      if (animations.length) {
+        return animations.map(({ uuid, subMeta }) => ({
+          uuid,
+          name: String(subMeta.name || subMeta.displayName || '').replace(/\.animation$/i, ''),
+          source: record.relativePath,
+        }));
+      }
+    }
+    return [];
   }
 
   resolveAnimationGraphByStem(stem) {
@@ -2878,12 +2948,11 @@ function materializeStrippedTransforms(context) {
     if (transform.gameObjectId) continue;
     const doc = byId.get(transform.fileId);
     if (!doc?.stripped) continue;
-    if (!referencedTransformIds.has(transform.fileId)) {
-      continue;
-    }
-
     const instanceId = unityRefFileId(getField(doc, 'm_PrefabInstance'));
     const instanceInfo = prefabInstanceInfos.get(instanceId);
+    if (!referencedTransformIds.has(transform.fileId) && instanceInfo?.parentTransformId) {
+      continue;
+    }
     const correspondingSourceObject = getField(doc, 'm_CorrespondingSourceObject');
     const props = instanceInfo ? prefabOverrideProps(instanceInfo, correspondingSourceObject) : {};
     const sourceGuid = unityRefGuid(instanceInfo?.sourcePrefab);
@@ -2955,10 +3024,95 @@ function materializeStrippedTransforms(context) {
       gameObject.syntheticModelName = name;
       gameObject.syntheticModelMaterialOverrideGroups = materialOverrideGroups;
       gameObject.syntheticModelExternalMaterialRemaps = collectUnityModelExternalMaterialRemaps(sourceAsset, unityDb);
+      for (const [componentId, componentDoc] of componentDocs.entries()) {
+        if (!componentDoc?.stripped || Number(componentDoc.classId) !== 95) continue;
+        if (unityRefFileId(getField(componentDoc, 'm_PrefabInstance')) !== instanceId) continue;
+        const animatorSourceObject = getField(componentDoc, 'm_CorrespondingSourceObject');
+        const animatorProps = prefabOverrideProps(instanceInfo, animatorSourceObject);
+        const controllerRef = animatorProps.m_Controller;
+        const controllerGuid = unityRefGuid(controllerRef);
+        if (!controllerGuid) continue;
+        const controllerFileId = unityRefFileId(controllerRef) || '9100000';
+        const controllerType = Number(controllerRef?.type || 2);
+        componentDocs.set(componentId, {
+          ...componentDoc,
+          stripped: false,
+          lines: [
+            ...componentDoc.lines,
+            `  m_Controller: {fileID: ${controllerFileId}, guid: ${controllerGuid}, type: ${controllerType}}`,
+          ],
+        });
+        gameObject.components.push(componentId);
+        reporter.low(
+          'STRIPPED_MODEL_ANIMATOR_MATERIALIZED',
+          sourceAsset.relativePath,
+          name,
+          'Animator override on the nested Unity model was materialized as a mounted Cocos AnimationController',
+          controllerGuid,
+        );
+      }
     } else {
       const detail = sourceAsset ? sourceAsset.relativePath : `instance ${instanceId}`;
       reporter.medium('NESTED_PREFAB_PLACEHOLDER', file, name, 'Nested prefab emitted as placeholder node', detail);
     }
+  }
+
+  for (const [instanceId, instanceInfo] of prefabInstanceInfos.entries()) {
+    const alreadyMaterialized = [...transforms.values()].some((transform) => {
+      const transformDoc = byId.get(transform.fileId);
+      return unityRefFileId(getField(transformDoc, 'm_PrefabInstance')) === instanceId;
+    });
+    if (alreadyMaterialized || instanceInfo.parentTransformId) continue;
+
+    const sourceGuid = unityRefGuid(instanceInfo.sourcePrefab);
+    const sourceAsset = unityDb.get(sourceGuid);
+    if (!sourceAsset || !['.fbx', '.gltf', '.glb'].includes(sourceAsset.ext)) continue;
+
+    const transformProps = firstTransformOverrideProps(instanceInfo, sourceGuid);
+    const gameObjectProps = firstGameObjectOverrideProps(instanceInfo, sourceGuid);
+    const transformId = `${instanceId}:root-transform`;
+    const gameObjectId = `${instanceId}:root-game-object`;
+    const transform = transformFromPrefabOverrides({
+      fileId: transformId,
+      gameObjectId,
+      parentId: 0,
+      children: [],
+      isRect: false,
+      localPosition: { x: 0, y: 0, z: 0 },
+      localRotation: { x: 0, y: 0, z: 0, w: 1 },
+      localScale: { x: 1, y: 1, z: 1 },
+      euler: { x: 0, y: 0, z: 0 },
+      sizeDelta: { x: 100, y: 100 },
+      anchorMin: { x: 0.5, y: 0.5 },
+      anchorMax: { x: 0.5, y: 0.5 },
+      anchor: { x: 0.5, y: 0.5 },
+    }, transformProps);
+    Object.assign(transform, {
+      fileId: transformId,
+      gameObjectId,
+      parentId: 0,
+      children: [],
+      isRect: false,
+    });
+    transforms.set(transformId, transform);
+    gameObjects.set(gameObjectId, {
+      fileId: gameObjectId,
+      name: String(gameObjectProps.m_Name || sourceAsset.stem),
+      layer: Number(gameObjectProps.m_Layer || 0),
+      active: gameObjectProps.m_IsActive == null ? true : Number(gameObjectProps.m_IsActive) !== 0,
+      components: [],
+      transformId,
+      syntheticModelAsset: sourceAsset,
+      syntheticModelName: String(gameObjectProps.m_Name || sourceAsset.stem),
+      syntheticModelMaterialOverrideGroups: collectPrefabMaterialOverrideGroups(instanceInfo, sourceGuid, unityDb),
+      syntheticModelExternalMaterialRemaps: collectUnityModelExternalMaterialRemaps(sourceAsset, unityDb),
+    });
+    reporter.low(
+      'ROOT_MODEL_PREFAB_INSTANCE_MATERIALIZED',
+      sourceAsset.relativePath,
+      gameObjectProps.m_Name || sourceAsset.stem,
+      'Materialized a Unity prefab containing only a root model PrefabInstance',
+    );
   }
 }
 
@@ -3035,6 +3189,8 @@ function parsePrefabInstanceInfo(doc) {
     parentTransformId: unityRefFileId(getField(doc, 'm_TransformParent')),
     sourcePrefab: getField(doc, 'm_SourcePrefab'),
     overridesByTarget: new Map(),
+    removedGameObjectSourceIds: parsePrefabInstanceReferenceList(doc, 'm_RemovedGameObjects'),
+    removedComponentSourceIds: parsePrefabInstanceReferenceList(doc, 'm_RemovedComponents'),
   };
 
   let current = null;
@@ -3075,6 +3231,25 @@ function parsePrefabInstanceInfo(doc) {
   return info;
 }
 
+function parsePrefabInstanceReferenceList(doc, fieldName) {
+  const result = [];
+  const lines = doc?.lines || [];
+  const start = lines.findIndex((line) => new RegExp(`^\\s*${fieldName}:\\s*$`).test(line));
+  if (start < 0) return result;
+  const fieldIndent = String(lines[start]).match(/^\s*/)?.[0]?.length || 0;
+  for (let index = start + 1; index < lines.length; index += 1) {
+    const line = String(lines[index] || '');
+    if (!line.trim()) continue;
+    const indent = line.match(/^\s*/)?.[0]?.length || 0;
+    if (indent <= fieldIndent && !line.trimStart().startsWith('- ')) break;
+    const match = /^\s*-\s*(\{.*\})\s*$/.exec(line);
+    if (!match) continue;
+    const fileId = unityRefFileId(parseUnityScalar(match[1]));
+    if (fileId) result.push(fileId);
+  }
+  return result;
+}
+
 function prefabOverrideProps(info, correspondingSourceObject) {
   const guid = unityRefGuid(correspondingSourceObject);
   const fileId = unityRefFileId(correspondingSourceObject);
@@ -3095,6 +3270,22 @@ function firstGameObjectOverrideProps(info, sourceGuid) {
       Object.prototype.hasOwnProperty.call(props, 'm_Layer') ||
       Object.prototype.hasOwnProperty.call(props, 'm_IsActive')
     ) {
+      return props;
+    }
+  }
+  return {};
+}
+
+function firstTransformOverrideProps(info, sourceGuid) {
+  if (!info || !sourceGuid) return {};
+  for (const [key, props] of info.overridesByTarget.entries()) {
+    if (!key.startsWith(`${sourceGuid}:`)) continue;
+    if (Object.keys(props).some((propertyPath) => (
+      propertyPath.startsWith('m_LocalPosition.')
+      || propertyPath.startsWith('m_LocalRotation.')
+      || propertyPath.startsWith('m_LocalScale.')
+      || propertyPath.startsWith('m_LocalEulerAnglesHint.')
+    ))) {
       return props;
     }
   }
@@ -3459,6 +3650,155 @@ function buildNestedPrefabPropertyOverrides(gameObject, transform, sourceModel) 
   return overrides;
 }
 
+function nestedPrefabNeedsParticleOverrideFlattening(nestedPrefab) {
+  const { model, overrideInfo, sourceGuid } = nestedPrefab || {};
+  if (!model || !overrideInfo || !sourceGuid) return false;
+  if (overrideInfo.removedGameObjectSourceIds?.length || overrideInfo.removedComponentSourceIds?.length) {
+    return true;
+  }
+  for (const key of overrideInfo.overridesByTarget.keys()) {
+    if (!key.startsWith(`${sourceGuid}:`)) continue;
+    const sourceFileId = key.slice(sourceGuid.length + 1);
+    const classId = Number(model.componentDocs.get(sourceFileId)?.classId || 0);
+    if (classId === 198 || classId === 199) return true;
+    const props = overrideInfo.overridesByTarget.get(key) || {};
+    if (Object.keys(props).some((propertyPath) => /^m_Materials\.Array\.data\[\d+\]$/.test(propertyPath))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function applyNestedParticlePrefabOverrides(builder, nestedPrefab, reporter, options, unityDb, cocosDb) {
+  const { model, overrideInfo, sourceGuid } = nestedPrefab;
+  let applied = 0;
+
+  for (const transform of model.transforms.values()) {
+    const props = prefabOverridePropsByFileId(overrideInfo, sourceGuid, transform.fileId);
+    if (!Object.keys(props).length) continue;
+    const nodeId = builder.nodeMapByTransform.get(transform.fileId);
+    const node = builder.objects[nodeId];
+    if (!node) continue;
+    const resolved = transformFromPrefabOverrides(transform, props);
+    node._lpos = convertPosition(resolved.localPosition);
+    node._lrot = convertRotation(resolved.localRotation);
+    node._lscale = convertScale(resolved.localScale);
+    node._euler = convertTransformEuler(resolved);
+    applied += 1;
+  }
+
+  for (const gameObject of model.gameObjects.values()) {
+    const props = prefabOverridePropsByFileId(overrideInfo, sourceGuid, gameObject.fileId);
+    if (!Object.keys(props).length) continue;
+    const nodeId = builder.nodeMapByGameObject.get(gameObject.fileId);
+    const node = builder.objects[nodeId];
+    if (!node) continue;
+    if (props.m_Name != null) node._name = String(props.m_Name);
+    if (props.m_IsActive != null) node._active = Number(props.m_IsActive) !== 0;
+    applied += 1;
+  }
+
+  for (const sourceGameObjectId of overrideInfo.removedGameObjectSourceIds || []) {
+    const nodeId = builder.nodeMapByGameObject.get(sourceGameObjectId);
+    const node = builder.objects[nodeId];
+    if (!node) continue;
+    node._active = false;
+    applied += 1;
+  }
+
+  for (const gameObject of model.gameObjects.values()) {
+    const particleDoc = (gameObject.components || [])
+      .map((componentId) => model.componentDocs.get(componentId))
+      .find((doc) => Number(doc?.classId) === 198);
+    if (!particleDoc) continue;
+    const rendererDoc = (gameObject.components || [])
+      .map((componentId) => model.componentDocs.get(componentId))
+      .find((doc) => Number(doc?.classId) === 199) || null;
+    const particleProps = prefabOverridePropsByFileId(
+      overrideInfo,
+      sourceGuid,
+      particleDoc.fileId,
+    );
+    const rendererProps = rendererDoc
+      ? prefabOverridePropsByFileId(overrideInfo, sourceGuid, rendererDoc.fileId)
+      : {};
+    if (!Object.keys(particleProps).length && !Object.keys(rendererProps).length) continue;
+
+    const particleId = builder.componentMap.get(particleDoc.fileId);
+    if (!Number.isInteger(particleId)) continue;
+    const particleData = parseUnityParticleDoc(particleDoc);
+    const rendererData = parseUnityRendererDoc(rendererDoc);
+    applyUnitySerializedOverrides(particleData, particleProps);
+    applyUnitySerializedOverrides(rendererData, rendererProps);
+    applyUnityParticleDataToCocos(builder, particleId, particleData, rendererData);
+    if (particleProps.m_Enabled != null) {
+      builder.objects[particleId]._enabled = Number(particleProps.m_Enabled) !== 0;
+    }
+
+    const materialOverride = Object.entries(rendererProps)
+      .find(([propertyPath]) => /^m_Materials\.Array\.data\[0\]$/.test(propertyPath));
+    if (materialOverride) {
+      const materialAsset = unityDb.get(unityRefGuid(materialOverride[1]));
+      const material = materialAsset
+        ? resolveUnityParticleMaterial(materialAsset, options, unityDb, reporter, gameObject.name)
+        : null;
+      if (material?.materialUuid) {
+        applyParticleRendererMaterial(
+          builder,
+          particleId,
+          material.materialUuid,
+          material.textureUuid,
+        );
+      }
+    }
+    applied += Object.keys(particleProps).length + Object.keys(rendererProps).length;
+  }
+
+  const genericMaterialAssets = collectPrefabMaterialOverrideGroups(
+    overrideInfo,
+    sourceGuid,
+    unityDb,
+  )
+    .filter((group) => Number(model.componentDocs.get(group.sourceFileId)?.classId || 0) !== 199)
+    .flatMap((group) => group.materialAssets || [])
+    .filter(Boolean);
+  if (genericMaterialAssets.length) {
+    const materialOverrides = builder.objects.filter((object) => (
+      object?.__type__ === 'CCPropertyOverrideInfo'
+      && object.propertyPath?.[0] === '_materials'
+    ));
+    const meshRenderers = builder.objects.filter((object) => (
+      object?.__type__ === 'cc.MeshRenderer'
+      || object?.__type__ === 'cc.SkinnedMeshRenderer'
+    ));
+    genericMaterialAssets.forEach((materialAsset, slot) => {
+      const materialUuid = resolveUnityMaterialUuid(
+        materialAsset,
+        options,
+        unityDb,
+        cocosDb,
+        reporter,
+        nestedPrefab.rootName || '',
+      );
+      if (!materialUuid) return;
+      const materialRef = cocosUuid(materialUuid, 'cc.Material');
+      if (materialOverrides[slot]) materialOverrides[slot].value = materialRef;
+      else if (meshRenderers[0]) meshRenderers[0]._materials[slot] = materialRef;
+      applied += 1;
+    });
+  }
+
+  if (applied) {
+    reporter.low(
+      'NESTED_PARTICLE_OVERRIDES_APPLIED',
+      nestedPrefab.sourceAsset?.relativePath || '',
+      nestedPrefab.rootName || '',
+      `Applied ${applied} Unity nested-prefab particle, renderer, transform, and active-state overrides before flattening`,
+    );
+  }
+  return applied;
+}
+
 function resolveUnityMaterialUuids(materialAssets, options, unityDb, cocosDb, reporter, gameObjectName) {
   return (materialAssets || [])
     .map((materialAsset) => {
@@ -3585,6 +3925,7 @@ class CocosPrefabBuilder {
     this.nodePrefabInfoMap = new Map();
     this.nestedPrefabInstanceByNode = new Map();
     this.mountedChildrenByInstanceTarget = new Map();
+    this.mountedComponentsByInstanceTarget = new Map();
     this.prefabInfoIds = [];
     this.rootPrefabInfoId = 0;
     this.nestedPrefabInstanceRootIds = [];
@@ -3699,7 +4040,7 @@ class CocosPrefabBuilder {
     const instanceId = this.add({
       __type__: 'cc.PrefabInstance',
       fileId: randomLocalId(),
-      prefabRootNode: null,
+      prefabRootNode: cocosRef(1),
       mountedChildren: [],
       mountedComponents: [],
       propertyOverrides: propertyOverrides.map(cocosRef),
@@ -3744,6 +4085,28 @@ class CocosPrefabBuilder {
     return true;
   }
 
+  mountedComponentsInfo(targetLocalId) {
+    return this.add({
+      __type__: 'cc.MountedComponentsInfo',
+      targetInfo: cocosRef(this.addTargetInfo(targetLocalId)),
+      components: [],
+    });
+  }
+
+  mountComponentOnPrefabInstance(nodeId, componentId) {
+    const instance = this.nestedPrefabInstanceByNode.get(nodeId);
+    if (!instance?.instanceId || !instance.rootLocalId) return false;
+    const key = `${instance.instanceId}:${instance.rootLocalId}`;
+    let mountedInfoId = this.mountedComponentsByInstanceTarget.get(key);
+    if (mountedInfoId == null) {
+      mountedInfoId = this.mountedComponentsInfo(instance.rootLocalId);
+      this.mountedComponentsByInstanceTarget.set(key, mountedInfoId);
+      this.objects[instance.instanceId].mountedComponents.push(cocosRef(mountedInfoId));
+    }
+    this.objects[mountedInfoId].components.push(cocosRef(componentId));
+    return true;
+  }
+
   attachChild(parentId, childId) {
     if (parentId == null) return;
     if (this.mountChildOnPrefabInstance(parentId, childId)) return;
@@ -3753,18 +4116,21 @@ class CocosPrefabBuilder {
   }
 
   addComponent(nodeId, type, body, unityComponentId, fileId) {
+    const mounted = this.nestedPrefabInstanceByNode.has(nodeId);
     const componentId = this.add({
       __type__: type,
       _name: '',
       _objFlags: 0,
-      __editorExtras__: {},
+      __editorExtras__: mounted ? { mountedRoot: cocosRef(nodeId) } : {},
       node: cocosRef(nodeId),
       _enabled: true,
       __prefab: cocosRef(this.compPrefabInfo(fileId)),
       ...body,
       _id: '',
     });
-    this.objects[nodeId]._components.push(cocosRef(componentId));
+    if (!this.mountComponentOnPrefabInstance(nodeId, componentId)) {
+      this.objects[nodeId]._components.push(cocosRef(componentId));
+    }
     if (unityComponentId) this.componentMap.set(unityComponentId, componentId);
     return componentId;
   }
@@ -4015,6 +4381,29 @@ class CocosPrefabBuilder {
     }, unityComponentId, fileId);
     this.uiTransformByNode.set(nodeId, componentId);
     return componentId;
+  }
+
+  addFullStretchWidget(nodeId, fileId) {
+    return this.addComponent(nodeId, 'cc.Widget', {
+      _alignFlags: 45,
+      _target: null,
+      _left: 0,
+      _right: 0,
+      _top: 0,
+      _bottom: 0,
+      _horizontalCenter: 0,
+      _verticalCenter: 0,
+      _isAbsLeft: true,
+      _isAbsRight: true,
+      _isAbsTop: true,
+      _isAbsBottom: true,
+      _isAbsHorizontalCenter: true,
+      _isAbsVerticalCenter: true,
+      _originalWidth: 0,
+      _originalHeight: 0,
+      _alignMode: 2,
+      _lockFlags: 0,
+    }, null, fileId);
   }
 
   addCanvas(nodeId, unityComponentId, fileId) {
@@ -4272,6 +4661,7 @@ function buildCocosPrefabBuilder(model, outputFile, options, reporter, unityDb, 
   for (const root of model.roots) emitNodeRecursive(root, null, model, builder, layerResolver, reporter, options, unityDb, cocosDb);
   emitComponents(model, builder, reporter, options, unityDb, cocosDb);
   runtimeComponentPorter.attachParticleSubEmitterFollowers(model, builder, reporter);
+  runtimeComponentPorter.attachParticleRateOverDistanceEmitters(model, builder, reporter);
   runtimeComponentPorter.attachParticleHierarchyTransformSync(builder, reporter);
   if (builder.rootPrefabInfoId && builder.nestedPrefabInstanceRootIds.length) {
     const existing = Array.isArray(builder.objects[builder.rootPrefabInfoId].nestedPrefabInstanceRoots)
@@ -4289,7 +4679,9 @@ function buildCocosPrefabBuilder(model, outputFile, options, reporter, unityDb, 
 
   const errors = builder.validate();
   for (const error of errors) reporter.high('COCOS_PREFAB_INVALID_REF', outputFile, '', 'Generated prefab reference graph is invalid', error);
-  if (errors.length) fail(`Generated prefab is invalid with ${errors.length} reference errors`);
+  if (errors.length) {
+    fail(`Generated prefab "${outputFile}" is invalid with ${errors.length} reference errors: ${errors.join('; ')}`);
+  }
 
   return { builder, rootName };
 }
@@ -4612,6 +5004,7 @@ function portPrefab(options, reporter) {
   unityDb.scan();
   runtimeComponentPorter.ensureParticleSubEmitterFollowerScript(options, reporter);
   runtimeComponentPorter.ensureParticleHierarchyTransformSyncScript(options, reporter);
+  runtimeComponentPorter.ensureParticleRateOverDistanceEmitterScript(options, reporter);
   runtimeComponentPorter.ensureSpriteRendererColorAdapterScript(options, reporter);
   runtimeComponentPorter.ensureSpriteRendererColorAssets(options, reporter);
   const cocosDb = new CocosAssetDatabase(options.cocosRoot);
@@ -4775,6 +5168,27 @@ function emitNodeRecursive(transform, parentNodeId, model, builder, layerResolve
   const parentTransform = transform.parentId ? model.transforms.get(transform.parentId) : null;
   const resolvedTransform = resolveTransformLayout(transform, parentTransform);
   if (transform.isRect) {
+    if (!parentTransform) {
+      const designResolution = getCocosDesignResolution(options);
+      const anchorMin = transform.anchorMin || {};
+      const anchorMax = transform.anchorMax || {};
+      if (
+        designResolution
+        && Math.abs(finiteNumber(anchorMin.x, 0.5)) < 1e-6
+        && Math.abs(finiteNumber(anchorMax.x, 0.5) - 1) < 1e-6
+        && Math.abs(finiteNumber(transform.sizeDelta?.x, 0)) < 1e-6
+      ) {
+        resolvedTransform.sizeDelta.x = designResolution.x;
+      }
+      if (
+        designResolution
+        && Math.abs(finiteNumber(anchorMin.y, 0.5)) < 1e-6
+        && Math.abs(finiteNumber(anchorMax.y, 0.5) - 1) < 1e-6
+        && Math.abs(finiteNumber(transform.sizeDelta?.y, 0)) < 1e-6
+      ) {
+        resolvedTransform.sizeDelta.y = designResolution.y;
+      }
+    }
     const inferredSize = inferRectSizeFromHierarchy(transform, model);
     if (inferredSize) {
       if (finiteNumber(resolvedTransform.sizeDelta?.x, 0) <= 0 && inferredSize.x > 0) {
@@ -4791,7 +5205,8 @@ function emitNodeRecursive(transform, parentNodeId, model, builder, layerResolve
   };
 
   const layerValue = layerResolver(gameObject.layer, gameObject.name);
-  if (parentNodeId == null && gameObject.nestedPrefab?.model) {
+  const flattenParticleOverrides = nestedPrefabNeedsParticleOverrideFlattening(gameObject.nestedPrefab);
+  if ((parentNodeId == null || flattenParticleOverrides) && gameObject.nestedPrefab?.model) {
     const nestedOptions = {
       ...options,
       src: gameObject.nestedPrefab.sourceAsset?.path || options.src,
@@ -4805,8 +5220,37 @@ function emitNodeRecursive(transform, parentNodeId, model, builder, layerResolve
       unityDb,
       cocosDb,
     );
-    const flattened = builder.clonePrefabTree(nestedBuilder.objects, null);
+    if (flattenParticleOverrides) {
+      applyNestedParticlePrefabOverrides(
+        nestedBuilder,
+        gameObject.nestedPrefab,
+        reporter,
+        nestedOptions,
+        unityDb,
+        cocosDb,
+      );
+    }
+    const flattened = builder.clonePrefabTree(nestedBuilder.objects, parentNodeId);
     if (flattened?.rootId != null) {
+      for (const [unityComponentId, nestedComponentId] of nestedBuilder.componentMap.entries()) {
+        const componentId = flattened.idMap.get(nestedComponentId);
+        if (Number.isInteger(componentId)) builder.componentMap.set(unityComponentId, componentId);
+      }
+      for (const [unityComponentId, componentDoc] of model.componentDocs.entries()) {
+        if (!componentDoc?.stripped) continue;
+        if (
+          unityRefFileId(getField(componentDoc, 'm_PrefabInstance'))
+          !== gameObject.nestedPrefab.overrideInfo?.fileId
+        ) {
+          continue;
+        }
+        const sourceComponentId = unityRefFileId(
+          getField(componentDoc, 'm_CorrespondingSourceObject'),
+        );
+        const nestedComponentId = nestedBuilder.componentMap.get(sourceComponentId);
+        const componentId = flattened.idMap.get(nestedComponentId);
+        if (Number.isInteger(componentId)) builder.componentMap.set(unityComponentId, componentId);
+      }
       const node = builder.objects[flattened.rootId];
       node._name = gameObject.name;
       node._active = gameObject.active;
@@ -4820,10 +5264,14 @@ function emitNodeRecursive(transform, parentNodeId, model, builder, layerResolve
       });
 
       reporter.low(
-        'ROOT_NESTED_PREFAB_FLATTENED',
+        flattenParticleOverrides
+          ? 'NESTED_PARTICLE_PREFAB_FLATTENED'
+          : 'ROOT_NESTED_PREFAB_FLATTENED',
         model.file,
         gameObject.name,
-        'Top-level nested Unity prefab was flattened into local Cocos nodes so the full hierarchy stays visible in Creator',
+        flattenParticleOverrides
+          ? 'Nested Unity particle prefab was flattened so all authored component overrides and removals are preserved'
+          : 'Top-level nested Unity prefab was flattened into local Cocos nodes so the full hierarchy stays visible in Creator',
         gameObject.nestedPrefab.sourceAsset?.relativePath || gameObject.nestedPrefab.outputFile || gameObject.nestedPrefab.rootName || ''
       );
 
@@ -4867,10 +5315,39 @@ function emitNodeRecursive(transform, parentNodeId, model, builder, layerResolve
   }
 
   if (gameObject.syntheticModelAsset) {
-    const modelPrefab = cocosDb.resolveModelPrefabByStem(gameObject.syntheticModelAsset.stem);
+    const modelPrefab = cocosDb.resolveModelPrefabByStem(
+      gameObject.syntheticModelAsset.stem,
+      gameObject.syntheticModelAsset.relativePath,
+    );
     if (modelPrefab?.prefabUuid && modelPrefab?.rootLocalId) {
+      const sourceModelFile = gameObject.syntheticModelAsset.path;
+      const linkedModelFile = modelPrefab.assetPath;
+      if (
+        options.copyAssets
+        && !options.dryRun
+        && sourceModelFile
+        && linkedModelFile
+        && path.resolve(sourceModelFile) !== path.resolve(linkedModelFile)
+        && path.extname(sourceModelFile).toLowerCase() === path.extname(linkedModelFile).toLowerCase()
+      ) {
+        const sourceBytes = fs.readFileSync(sourceModelFile);
+        const linkedBytes = fs.existsSync(linkedModelFile) ? fs.readFileSync(linkedModelFile) : null;
+        if (!linkedBytes || !sourceBytes.equals(linkedBytes)) {
+          fs.copyFileSync(sourceModelFile, linkedModelFile);
+          reporter.low(
+            'NESTED_MODEL_SOURCE_REFRESHED',
+            gameObject.syntheticModelAsset.relativePath,
+            gameObject.name,
+            'Existing imported Cocos model source was refreshed in place so its stable UUID and prefab references are preserved',
+            modelPrefab.source,
+          );
+        }
+      }
       const materialOverrides = [];
       const remaps = gameObject.syntheticModelExternalMaterialRemaps || [];
+      const explicitMaterialAssets = (gameObject.syntheticModelMaterialOverrideGroups || [])
+        .flatMap((group) => group.materialAssets || [])
+        .filter(Boolean);
       const shadowOverrideRenderers = new Set();
       for (const slot of modelPrefab.materialSlots || []) {
         if (!shadowOverrideRenderers.has(slot.rendererLocalId)) {
@@ -4886,7 +5363,11 @@ function emitNodeRecursive(transform, parentNodeId, model, builder, layerResolve
           });
         }
         const normalizedSlotName = normalizeKey(slot.materialName);
-        const remap = remaps.find((entry) => normalizeKey(entry.name) === normalizedSlotName)
+        const explicitMaterialAsset = explicitMaterialAssets[slot.slot]
+          || (explicitMaterialAssets.length === 1 ? explicitMaterialAssets[0] : null);
+        const remap = explicitMaterialAsset
+          ? { materialAsset: explicitMaterialAsset }
+          : remaps.find((entry) => normalizeKey(entry.name) === normalizedSlotName)
           || (remaps.length === 1 && modelPrefab.materialSlots.length === 1 ? remaps[0] : null);
         if (!remap) continue;
         const materialUuid = resolveUnityMaterialUuid(
@@ -4981,6 +5462,19 @@ function emitNodeRecursive(transform, parentNodeId, model, builder, layerResolve
       resolvedTransform.anchor,
       `cmp-ui-transform-${transform.fileId}`
     );
+    const anchorMin = transform.anchorMin || {};
+    const anchorMax = transform.anchorMax || {};
+    const anchoredPosition = transform.anchoredPosition || {};
+    const sizeDelta = transform.sizeDelta || {};
+    const isFullStretch = Math.abs(finiteNumber(anchorMin.x, 0.5)) < 1e-6
+      && Math.abs(finiteNumber(anchorMin.y, 0.5)) < 1e-6
+      && Math.abs(finiteNumber(anchorMax.x, 0.5) - 1) < 1e-6
+      && Math.abs(finiteNumber(anchorMax.y, 0.5) - 1) < 1e-6
+      && Math.abs(finiteNumber(anchoredPosition.x, 0)) < 1e-6
+      && Math.abs(finiteNumber(anchoredPosition.y, 0)) < 1e-6
+      && Math.abs(finiteNumber(sizeDelta.x, 0)) < 1e-6
+      && Math.abs(finiteNumber(sizeDelta.y, 0)) < 1e-6;
+    if (isFullStretch) builder.addFullStretchWidget(nodeId, `cmp-widget-${transform.fileId}`);
   }
 
   for (const childId of transform.children) {

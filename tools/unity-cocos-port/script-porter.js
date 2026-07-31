@@ -237,6 +237,24 @@ module.exports = function createScriptPorter(deps) {
     const fields = getTopLevelSerializedFields(doc, options);
     const translated = {};
     for (const [key, value] of Object.entries(fields)) {
+      if (className === 'MilosMeoController' && key === 'clips' && Array.isArray(value)) {
+        const modelAsset = value
+          .map((entry) => unityDb.get(unityRefGuid(entry)))
+          .find((entry) => entry && ['.fbx', '.gltf', '.glb'].includes(entry.ext));
+        const importedClips = modelAsset
+          ? cocosDb.resolveModelAnimationsByStem(modelAsset.stem)
+          : [];
+        if (importedClips.length >= value.length) {
+          translated[key] = value.map((_, index) => cocosUuid(importedClips[index].uuid, 'cc.AnimationClip'));
+          reporter.low(
+            'SCRIPT_MODEL_ANIMATION_CLIPS_WIRED',
+            modelAsset.relativePath,
+            className,
+            `${value.length} embedded Unity model animation references were wired by imported clip order`,
+          );
+          continue;
+        }
+      }
       translated[key] = translateUnitySerializedValue(value, builder, reporter, model.file, key);
     }
 

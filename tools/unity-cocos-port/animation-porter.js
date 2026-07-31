@@ -759,6 +759,7 @@ module.exports = function createAnimationPorter(deps) {
           fileId: doc.fileId,
           name: String(getField(doc, 'm_Name', 'State')),
           motionGuid: unityRefGuid(motionRef),
+          motionFileId: unityRefFileId(motionRef),
           transitionIds: deps.getNestedList(doc, 'm_Transitions').map(unityRefFileId).filter(Boolean),
         });
       } else if (doc.classId === 1101) {
@@ -1108,7 +1109,14 @@ module.exports = function createAnimationPorter(deps) {
     }
   }
 
-  function convertAnimatorControllerAsset(controllerAsset, options, reporter, unityDb, animationContext = null) {
+  function convertAnimatorControllerAsset(
+    controllerAsset,
+    options,
+    reporter,
+    unityDb,
+    animationContext = null,
+    cocosDb = null,
+  ) {
     if (!controllerAsset?.path || !fs.existsSync(controllerAsset.path)) return '';
     const outDir = animationOutputDirForController(options, controllerAsset);
     const graphFile = path.join(outDir, `${sanitizeAssetDisplayName(controllerAsset.stem, 'Animator')}.animgraph`);
@@ -1128,10 +1136,33 @@ module.exports = function createAnimationPorter(deps) {
         reporter.medium('ANIMATION_CLIP_GUID_UNRESOLVED', controllerAsset.relativePath, state.name, 'Animator state motion guid was not found in Unity meta database', state.motionGuid);
         continue;
       }
-      const clipInfo = writeConvertedAnimationClip(clipAsset, outDir, options, reporter, animationContext);
+      let clipInfo = null;
+      if (['.fbx', '.gltf', '.glb'].includes(clipAsset.ext)) {
+        clipInfo = cocosDb?.resolveModelAnimationByStem(clipAsset.stem, state.name) || null;
+        if (clipInfo?.uuid) {
+          clipInfo = { ...clipInfo, name: state.name };
+          reporter.low(
+            'ANIMATOR_EMBEDDED_MODEL_CLIP_WIRED',
+            clipAsset.relativePath,
+            state.name,
+            'Animator state was wired to the matching animation sub-asset of the imported Cocos model',
+            clipInfo.uuid,
+          );
+        } else {
+          reporter.medium(
+            'ANIMATOR_EMBEDDED_MODEL_CLIP_UNRESOLVED',
+            clipAsset.relativePath,
+            state.name,
+            'Animator state references an embedded model clip that has no matching imported Cocos animation sub-asset',
+            state.motionFileId,
+          );
+        }
+      } else {
+        clipInfo = writeConvertedAnimationClip(clipAsset, outDir, options, reporter, animationContext);
+      }
       if (clipInfo?.uuid) {
         clipInfoByState.set(stateId, clipInfo);
-        convertedClipGuids.add(clipAsset.guid);
+        convertedClipGuids.add(`${clipAsset.guid}:${state.motionFileId || stateId}`);
       }
     }
     if (animationContext) {
@@ -1195,10 +1226,10 @@ module.exports = function createAnimationPorter(deps) {
     let graphUuid = '';
     if (controllerAsset) {
       controller = parseUnityAnimatorController(controllerAsset.path, unityDb, reporter, options);
-      if (options.overwrite) graphUuid = convertAnimatorControllerAsset(controllerAsset, options, reporter, unityDb, animationContext);
+      if (options.overwrite) graphUuid = convertAnimatorControllerAsset(controllerAsset, options, reporter, unityDb, animationContext, cocosDb);
       if (!graphUuid) graphUuid = cocosDb.resolveAnimationGraphByStem(controllerAsset.stem);
       if (!graphUuid) {
-        graphUuid = convertAnimatorControllerAsset(controllerAsset, options, reporter, unityDb, animationContext);
+        graphUuid = convertAnimatorControllerAsset(controllerAsset, options, reporter, unityDb, animationContext, cocosDb);
         if (!graphUuid) reporter.medium('ANIMATOR_GRAPH_UNRESOLVED', controllerAsset.relativePath, '', 'Animator controller has no matching Cocos animation graph');
       }
       bakeAnimatorDefaultPose(controllerAsset, controller, builder, animationContext, unityDb, reporter);

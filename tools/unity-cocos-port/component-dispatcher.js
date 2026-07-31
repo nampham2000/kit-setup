@@ -66,6 +66,8 @@ function createComponentDispatcher(handlers) {
   }
 
   function emitComponents(model, builder, reporter, options, unityDb, cocosDb) {
+    // Emit engine components first so MonoBehaviour fields can resolve references
+    // to mounted Animators and other components regardless of GameObject order.
     for (const gameObject of model.gameObjects.values()) {
       const nodeId = builder.nodeMapByGameObject.get(gameObject.fileId);
       if (nodeId == null) continue;
@@ -73,12 +75,22 @@ function createComponentDispatcher(handlers) {
       for (const componentId of gameObject.components) {
         if (model.transforms.has(componentId)) continue;
         const doc = model.componentDocs.get(componentId) || model.transforms.get(componentId);
-        if (!doc) continue;
+        if (!doc || Number(doc.classId) === 114) continue;
         emitUnityComponent({ gameObject, nodeId, componentId, doc, model, builder, reporter, options, unityDb, cocosDb });
       }
 
       if (gameObject.syntheticModelAsset && !gameObject.syntheticModelPrefabLinked) {
         handlers.emitSyntheticModelRenderer(gameObject, nodeId, builder, reporter, options, unityDb, cocosDb);
+      }
+    }
+
+    for (const gameObject of model.gameObjects.values()) {
+      const nodeId = builder.nodeMapByGameObject.get(gameObject.fileId);
+      if (nodeId == null) continue;
+      for (const componentId of gameObject.components) {
+        const doc = model.componentDocs.get(componentId);
+        if (!doc || Number(doc.classId) !== 114) continue;
+        emitUnityComponent({ gameObject, nodeId, componentId, doc, model, builder, reporter, options, unityDb, cocosDb });
       }
     }
   }
