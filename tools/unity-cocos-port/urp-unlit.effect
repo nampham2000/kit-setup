@@ -1,0 +1,90 @@
+// Cocos material-compatible port of Unity Universal Render Pipeline/Unlit.
+CCEffect %{
+  temporaries:
+    p1: &p1
+      tilingOffset: { value: [1, 1, 0, 0] }
+      mainTexture: { value: white }
+      mainColor: { value: [1, 1, 1, 1], linear: true, editor: { type: color } }
+      alphaThreshold: { value: 0.5, target: unlitParams.x }
+    d1: &d1 { depthTest: true, depthWrite: false }
+    b1: &b1
+      targets:
+      - blend: true
+        blendSrc: src_alpha
+        blendDst: one_minus_src_alpha
+        blendDstAlpha: one_minus_src_alpha
+
+  techniques:
+  - name: opaque
+    passes:
+    - vert: urp-unlit-vs:vert
+      frag: urp-unlit-fs:frag
+      depthStencilState: { depthTest: true, depthWrite: true }
+      properties: *p1
+    - vert: urp-unlit-vs:vert
+      frag: urp-unlit-fs:frag
+      phase: deferred-forward
+      propertyIndex: 0
+      depthStencilState: { depthTest: true, depthWrite: true }
+  - name: transparent
+    passes:
+    - vert: urp-unlit-vs:vert
+      frag: urp-unlit-fs:frag
+      depthStencilState: *d1
+      blendState: *b1
+      properties: *p1
+    - vert: urp-unlit-vs:vert
+      frag: urp-unlit-fs:frag
+      phase: deferred-forward
+      propertyIndex: 0
+      depthStencilState: *d1
+      blendState: *b1
+}%
+
+CCProgram urp-unlit-shared %{
+  uniform URPUnlitParams {
+    vec4 tilingOffset;
+    vec4 mainColor;
+    vec4 unlitParams;
+  };
+}%
+
+CCProgram urp-unlit-vs %{
+  precision highp float;
+  #include <legacy/input>
+  #include <builtin/uniforms/cc-global>
+  #include <legacy/decode-base>
+  #include <legacy/local-batch>
+  #include <urp-unlit-shared>
+
+  out vec2 v_uv;
+
+  vec4 vert () {
+    vec4 position;
+    CCVertInput(position);
+    mat4 matWorld, matWorldIT;
+    CCGetWorldMatrixFull(matWorld, matWorldIT);
+    v_uv = a_texCoord * tilingOffset.xy + tilingOffset.zw;
+    return cc_matProj * cc_matView * matWorld * position;
+  }
+}%
+
+CCProgram urp-unlit-fs %{
+  precision highp float;
+  #include <legacy/output>
+  #include <common/color/gamma>
+  #include <urp-unlit-shared>
+
+  in vec2 v_uv;
+  uniform sampler2D mainTexture;
+
+  vec4 frag () {
+    vec4 color = texture(mainTexture, v_uv);
+    color.rgb = SRGBToLinear(color.rgb);
+    color *= mainColor;
+    #if USE_ALPHA_TEST
+      if (color.a < unlitParams.x) discard;
+    #endif
+    return CCFragOutput(color);
+  }
+}%

@@ -1,0 +1,262 @@
+// Cocos port of Unity Universal Render Pipeline/Lit for imported playable assets.
+CCEffect %{
+  temporaries:
+    p1: &p1
+      tilingOffset: { value: [1, 1, 0, 0] }
+      mainTexture: { value: white }
+      mainColor: { value: [1, 1, 1, 1], linear: true, editor: { type: color } }
+      roughness: { value: 0.5, target: pbrParams.x }
+      metallic: { value: 0, target: pbrParams.y }
+      alphaThreshold: { value: 0.5, target: pbrParams.z }
+      emissive: { value: [0, 0, 0, 1], linear: true, editor: { type: color } }
+      planarShadowDirection: { value: [-0.3213938, -0.7660444, -0.5566705, 0] }
+    d1: &d1 { depthTest: true, depthWrite: false }
+    b1: &b1
+      targets:
+      - blend: true
+        blendSrc: src_alpha
+        blendDst: one_minus_src_alpha
+        blendDstAlpha: one_minus_src_alpha
+
+  techniques:
+  - name: opaque
+    passes:
+    - vert: urp-lit-vs:vert
+      frag: urp-lit-fs:frag
+      depthStencilState: { depthTest: true, depthWrite: true }
+      properties: *p1
+    - vert: urp-lit-shadow-vs:vert
+      frag: urp-lit-shadow-fs:frag
+      phase: shadow-caster
+      propertyIndex: 0
+      rasterizerState: { cullMode: front }
+    - vert: urp-lit-planar-vs:vert
+      frag: urp-lit-planar-fs:frag
+      phase: planar-shadow
+      propertyIndex: 0
+      depthStencilState:
+        depthTest: true
+        depthWrite: false
+        stencilTestFront: true
+        stencilFuncFront: not_equal
+        stencilPassOpFront: replace
+        stencilRef: 0x80
+        stencilReadMask: 0x80
+        stencilWriteMask: 0x80
+      blendState: *b1
+    - vert: urp-lit-vs:vert
+      frag: urp-lit-fs:frag
+      phase: deferred-forward
+      propertyIndex: 0
+      depthStencilState: { depthTest: true, depthWrite: true }
+  - name: transparent
+    passes:
+    - vert: urp-lit-vs:vert
+      frag: urp-lit-fs:frag
+      depthStencilState: *d1
+      blendState: *b1
+      properties: *p1
+    - vert: urp-lit-vs:vert
+      frag: urp-lit-fs:frag
+      phase: deferred-forward
+      propertyIndex: 0
+      depthStencilState: *d1
+      blendState: *b1
+}%
+
+CCProgram urp-lit-shared %{
+  uniform URPLitParams {
+    vec4 tilingOffset;
+    vec4 mainColor;
+    vec4 pbrParams;
+    vec4 emissive;
+    vec4 planarShadowDirection;
+  };
+}%
+
+CCProgram urp-lit-vs %{
+  precision highp float;
+  #include <legacy/input-standard>
+  #include <builtin/uniforms/cc-global>
+  #include <legacy/decode-base>
+  #include <legacy/local-batch>
+  #include <legacy/shadow-map-vs>
+  #include <urp-lit-shared>
+
+  out highp vec3 v_worldPosition;
+  out mediump vec3 v_worldNormal;
+  out vec2 v_uv;
+  #if CC_RECEIVE_SHADOW
+    out mediump vec2 v_shadowBias;
+  #endif
+
+  vec4 vert () {
+    StandardVertInput In;
+    CCVertInput(In);
+    mat4 matWorld, matWorldIT;
+    CCGetWorldMatrixFull(matWorld, matWorldIT);
+    vec4 worldPosition = matWorld * In.position;
+    v_worldPosition = worldPosition.xyz;
+    v_worldNormal = (matWorldIT * vec4(In.normal, 0.0)).xyz;
+    v_uv = a_texCoord * tilingOffset.xy + tilingOffset.zw;
+    #if CC_RECEIVE_SHADOW
+      v_shadowBias = CCGetShadowBias();
+    #endif
+    CC_TRANSFER_SHADOW(worldPosition);
+    return cc_matProj * cc_matView * worldPosition;
+  }
+}%
+
+CCProgram urp-lit-fs %{
+  precision highp float;
+  #include <builtin/uniforms/cc-global>
+  #include <legacy/output-standard>
+  #include <common/color/gamma>
+  #include <urp-lit-shared>
+  #if CC_RECEIVE_SHADOW
+    #include <legacy/shadow-map-fs>
+  #endif
+
+  in highp vec3 v_worldPosition;
+  in mediump vec3 v_worldNormal;
+  in vec2 v_uv;
+  #if CC_RECEIVE_SHADOW
+    in mediump vec2 v_shadowBias;
+  #endif
+  uniform sampler2D mainTexture;
+
+  float shadowFactor (vec3 normal) {
+    float shadow = 1.0;
+    #if CC_RECEIVE_SHADOW && CC_SHADOW_TYPE == CC_SHADOW_MAP
+      if (cc_mainLitDir.w > 0.0) {
+        #if CC_DIR_LIGHT_SHADOW_TYPE == CC_DIR_LIGHT_SHADOW_CASCADED
+          shadow = CCCSMFactorBase(v_worldPosition, normal, v_shadowBias);
+        #endif
+        #if CC_DIR_LIGHT_SHADOW_TYPE == CC_DIR_LIGHT_SHADOW_UNIFORM
+          shadow = CCShadowFactorBase(CC_SHADOW_POSITION, normal, v_shadowBias);
+        #endif
+      }
+    #endif
+    return shadow;
+  }
+
+  float distributionGGX (float noH, float roughness) {
+    float a = max(roughness * roughness, 0.002);
+    float a2 = a * a;
+    float d = noH * noH * (a2 - 1.0) + 1.0;
+    return a2 / max(3.14159265 * d * d, 0.0001);
+  }
+
+  float geometrySmith (float noL, float noV, float roughness) {
+    float k = roughness + 1.0;
+    k = k * k * 0.125;
+    return noL / mix(noL, 1.0, k) * noV / mix(noV, 1.0, k);
+  }
+
+  vec4 frag () {
+    vec4 baseColor = texture(mainTexture, v_uv);
+    baseColor.rgb = SRGBToLinear(baseColor.rgb);
+    baseColor *= mainColor;
+    #if USE_ALPHA_TEST
+      if (baseColor.a < pbrParams.z) discard;
+    #endif
+
+    vec3 normal = normalize(v_worldNormal);
+    vec3 lightDirection = normalize(-cc_mainLitDir.xyz);
+    vec3 viewDirection = normalize(cc_cameraPos.xyz - v_worldPosition);
+    vec3 halfDirection = normalize(lightDirection + viewDirection);
+    float noL = max(dot(normal, lightDirection), 0.0);
+    float noV = max(dot(normal, viewDirection), 0.0001);
+    float noH = max(dot(normal, halfDirection), 0.0);
+    float voH = max(dot(viewDirection, halfDirection), 0.0);
+    float shadow = shadowFactor(normal);
+    vec3 lightColor = cc_mainLitColor.rgb * cc_mainLitColor.w;
+
+    vec3 f0 = mix(vec3(0.04), baseColor.rgb, pbrParams.y);
+    vec3 fresnel = f0 + (vec3(1.0) - f0) * pow(1.0 - voH, 5.0);
+    vec3 specular = distributionGGX(noH, pbrParams.x)
+      * geometrySmith(noL, noV, pbrParams.x) * fresnel;
+    vec3 diffuse = baseColor.rgb * (1.0 - pbrParams.y) / 3.14159265;
+    vec3 direct = (diffuse + specular) * lightColor * noL * shadow;
+    float hemisphere = normal.y * 0.5 + 0.5;
+    vec3 ambient = mix(cc_ambientGround.rgb, cc_ambientSky.rgb, hemisphere) * cc_ambientSky.w * baseColor.rgb;
+    return CCFragOutput(vec4(direct + ambient + emissive.rgb, baseColor.a));
+  }
+}%
+
+CCProgram urp-lit-shadow-vs %{
+  precision highp float;
+  #include <legacy/input-standard>
+  #include <legacy/decode-base>
+  #include <legacy/local-batch>
+  #include <builtin/uniforms/cc-shadow>
+  out highp vec4 v_worldPosition;
+  out highp vec2 v_clipDepth;
+
+  vec4 vert () {
+    StandardVertInput In;
+    CCVertInput(In);
+    mat4 matWorld, matWorldIT;
+    CCGetWorldMatrixFull(matWorld, matWorldIT);
+    v_worldPosition = matWorld * In.position;
+    vec4 clipPosition = cc_matLightViewProj * v_worldPosition;
+    v_clipDepth = clipPosition.zw;
+    return clipPosition;
+  }
+}%
+
+CCProgram urp-lit-shadow-fs %{
+  precision highp float;
+  #include <common/data/packing>
+  #include <legacy/shadow-map-base>
+  in highp vec4 v_worldPosition;
+  in highp vec2 v_clipDepth;
+
+  vec4 frag () {
+    highp float clipDepth = v_clipDepth.x / v_clipDepth.y * 0.5 + 0.5;
+    #if CC_SHADOWMAP_USE_LINEAR_DEPTH
+      if (IS_SPOT_LIGHT(cc_shadowLPNNInfo.x)) clipDepth = CCGetLinearDepth(v_worldPosition.xyz);
+    #endif
+    #if CC_SHADOWMAP_FORMAT == SHADOWMAP_FORMAT_RGBA8
+      return packDepthToRGBA(clipDepth);
+    #else
+      return vec4(clipDepth, 1.0, 1.0, 1.0);
+    #endif
+  }
+}%
+
+CCProgram urp-lit-planar-vs %{
+  precision highp float;
+  #include <legacy/input>
+  #include <builtin/uniforms/cc-global>
+  #include <legacy/decode-base>
+  #include <legacy/local-batch>
+  #include <builtin/uniforms/cc-shadow>
+  #include <common/lighting/functions>
+  #include <urp-lit-shared>
+  out float v_distance;
+
+  vec4 vert () {
+    vec4 position;
+    CCVertInput(position);
+    mat4 matWorld, matWorldIT;
+    CCGetWorldMatrixFull(matWorld, matWorldIT);
+    vec3 worldPosition = (matWorld * position).xyz;
+    vec4 shadowPosition = CalculatePlanarShadowPos(worldPosition, cc_cameraPos.xyz, normalize(planarShadowDirection.xyz), cc_planarNDInfo);
+    position = CalculatePlanarShadowClipPos(shadowPosition, cc_cameraPos.xyz, cc_matView, cc_matProj, cc_nearFar, cc_shadowWHPBInfo.w);
+    v_distance = shadowPosition.w;
+    return position;
+  }
+}%
+
+CCProgram urp-lit-planar-fs %{
+  precision highp float;
+  #include <builtin/uniforms/cc-shadow>
+  #include <legacy/output>
+  in float v_distance;
+
+  vec4 frag () {
+    if (v_distance < 0.0) discard;
+    return CCFragOutput(cc_shadowColor);
+  }
+}%

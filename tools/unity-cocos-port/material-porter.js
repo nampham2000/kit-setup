@@ -33,10 +33,16 @@ const INVISIBLE_SHADOW_RECEIVER_EFFECT_PATH = path.join('assets', 'effects', 'In
 const TCP2_HYBRID_SHADER_2_EFFECT_PATH = path.join('assets', 'effects', 'TCP2HybridShader2.effect');
 const TCP2_HYBRID_PARTICLE_EFFECT_TEMPLATE = path.join(__dirname, 'tcp2-hybrid-particle.effect');
 const TCP2_HYBRID_PARTICLE_EFFECT_PATH = path.join('assets', 'effects', 'TCP2HybridParticle.effect');
+const URP_LIT_EFFECT_TEMPLATE = path.join(__dirname, 'urp-lit.effect');
+const URP_LIT_EFFECT_PATH = path.join('assets', 'effects', 'URPLit.effect');
+const URP_UNLIT_EFFECT_TEMPLATE = path.join(__dirname, 'urp-unlit.effect');
+const URP_UNLIT_EFFECT_PATH = path.join('assets', 'effects', 'URPUnlit.effect');
 const TCP2_HYBRID_SHADER_2_GUIDS = new Set([
   'edd7abf643fa4bc4e8561d4c280c97cf',
   'df5bb027d94a6c44bb32b3c31ec1303f',
 ]);
+const URP_LIT_SHADER_GUIDS = new Set(['933532a4fcc9baf4fa0491de14d08ed7']);
+const URP_UNLIT_SHADER_GUIDS = new Set(['650dd9526735d5b46b79224bc6e94025']);
 const COCOS_PARTICLE_DEFAULT_TINT = 128 / 255;
 const COCOS_PARTICLE_DEFAULT_TINT_COLOR = [
   COCOS_PARTICLE_DEFAULT_TINT,
@@ -338,15 +344,15 @@ module.exports = function createMaterialPorter(deps) {
     return meta.uuid;
   }
 
-  function ensureTcp2HybridParticleEffect(options, reporter) {
-    const effectFile = path.join(options.cocosRoot, TCP2_HYBRID_PARTICLE_EFFECT_PATH);
+  function ensureTemplateEffect(options, reporter, config) {
+    const effectFile = path.join(options.cocosRoot, config.effectPath);
     const relativePath = toPosix(path.relative(options.cocosRoot, effectFile));
     if (options.dryRun) return stableUuid(`effect:${relativePath}`);
-    if (options._tcp2HybridParticleEffectUuid) return options._tcp2HybridParticleEffectUuid;
+    if (options[config.cacheKey]) return options[config.cacheKey];
 
     ensureDir(path.dirname(effectFile));
     ensureDirectoryMetas(path.dirname(effectFile), path.join(options.cocosRoot, 'assets'));
-    const effectText = fs.readFileSync(TCP2_HYBRID_PARTICLE_EFFECT_TEMPLATE, 'utf8');
+    const effectText = fs.readFileSync(config.template, 'utf8');
     if (!fs.existsSync(effectFile) || fs.readFileSync(effectFile, 'utf8') !== effectText) {
       fs.writeFileSync(effectFile, effectText, 'utf8');
     }
@@ -366,15 +372,45 @@ module.exports = function createMaterialPorter(deps) {
       fs.writeFileSync(metaFile, `${JSON.stringify(meta, null, 2)}\n`, 'utf8');
     }
 
-    options._tcp2HybridParticleEffectUuid = meta.uuid;
+    options[config.cacheKey] = meta.uuid;
     reporter.low(
-      'TCP2_HYBRID_PARTICLE_EFFECT_PREPARED',
+      config.reportCode,
       relativePath,
       '',
-      'Prepared the Cocos TCP2 Hybrid Shader 2 mesh-particle effect',
+      config.message,
       meta.uuid,
     );
     return meta.uuid;
+  }
+
+  function ensureTcp2HybridParticleEffect(options, reporter) {
+    return ensureTemplateEffect(options, reporter, {
+      effectPath: TCP2_HYBRID_PARTICLE_EFFECT_PATH,
+      template: TCP2_HYBRID_PARTICLE_EFFECT_TEMPLATE,
+      cacheKey: '_tcp2HybridParticleEffectUuid',
+      reportCode: 'TCP2_HYBRID_PARTICLE_EFFECT_PREPARED',
+      message: 'Prepared the Cocos TCP2 Hybrid Shader 2 mesh-particle effect',
+    });
+  }
+
+  function ensureUrpLitEffect(options, reporter) {
+    return ensureTemplateEffect(options, reporter, {
+      effectPath: URP_LIT_EFFECT_PATH,
+      template: URP_LIT_EFFECT_TEMPLATE,
+      cacheKey: '_urpLitEffectUuid',
+      reportCode: 'URP_LIT_EFFECT_PREPARED',
+      message: 'Prepared the Cocos port of Unity URP Lit',
+    });
+  }
+
+  function ensureUrpUnlitEffect(options, reporter) {
+    return ensureTemplateEffect(options, reporter, {
+      effectPath: URP_UNLIT_EFFECT_PATH,
+      template: URP_UNLIT_EFFECT_TEMPLATE,
+      cacheKey: '_urpUnlitEffectUuid',
+      reportCode: 'URP_UNLIT_EFFECT_PREPARED',
+      message: 'Prepared the Cocos port of Unity URP Unlit',
+    });
   }
 
   function convertUnityMaterialToCocos(materialAsset, options, unityDb, reporter) {
@@ -403,21 +439,36 @@ module.exports = function createMaterialPorter(deps) {
       ? readJsonIfExists(path.join(options.cocosRoot, `${TCP2_HYBRID_SHADER_2_EFFECT_PATH}.meta`))
       : null;
     const tcp2EffectUuid = tcp2EffectMeta?.uuid || '';
+    const urpLit = URP_LIT_SHADER_GUIDS.has(shaderGuid)
+      || /Universal Render Pipeline\/Lit/i.test(shaderName);
+    const urpUnlit = URP_UNLIT_SHADER_GUIDS.has(shaderGuid)
+      || /Universal Render Pipeline\/Unlit/i.test(shaderName);
+    const urpLitEffectUuid = urpLit ? ensureUrpLitEffect(options, reporter) : '';
+    const urpUnlitEffectUuid = urpUnlit ? ensureUrpUnlitEffect(options, reporter) : '';
     if (shaderName) {
-      const supportedCustomShader = invisibleShadowReceiver || Boolean(tcp2EffectUuid);
+      const supportedCustomShader = invisibleShadowReceiver
+        || Boolean(tcp2EffectUuid || urpLitEffectUuid || urpUnlitEffectUuid);
       reporter[supportedCustomShader ? 'low' : 'high'](
         invisibleShadowReceiver
           ? 'INVISIBLE_SHADOW_RECEIVER_APPROXIMATED'
           : tcp2EffectUuid
             ? 'TCP2_HYBRID_SHADER_2_PORTED'
-            : 'CUSTOM_SHADER_NOT_PORTED',
+            : urpLitEffectUuid
+              ? 'URP_LIT_SHADER_PORTED'
+              : urpUnlitEffectUuid
+                ? 'URP_UNLIT_SHADER_PORTED'
+                : 'CUSTOM_SHADER_NOT_PORTED',
         materialAsset.relativePath,
         String(getField(materialDoc, 'm_Name', materialAsset.stem) || materialAsset.stem),
         invisibleShadowReceiver
           ? `Custom shader "${shaderName}" was mapped to a depth-only effect for Cocos planar shadows`
           : tcp2EffectUuid
             ? `Custom shader "${shaderName}" was mapped to the Cocos TCP2 Hybrid Shader 2 effect`
-            : `Custom shader "${shaderName}" has not been ported; material approximated with builtin-standard`,
+            : urpLitEffectUuid
+              ? `Unity shader "${shaderName}" was mapped to the Cocos URP Lit effect`
+              : urpUnlitEffectUuid
+                ? `Unity shader "${shaderName}" was mapped to the Cocos URP Unlit effect`
+                : `Custom shader "${shaderName}" has not been ported; material approximated with builtin-standard`,
       );
     }
 
@@ -468,6 +519,10 @@ module.exports = function createMaterialPorter(deps) {
     if (emissiveTextureUuid) props.emissiveMap = { __uuid__: emissiveTextureUuid };
     if (alphaClip) props.alphaThreshold = cutoff;
 
+    const urpUnlitProps = { mainColor: unityColorToCocos(mainColor) };
+    if (mainTextureUuid) urpUnlitProps.mainTexture = { __uuid__: mainTextureUuid };
+    if (alphaClip) urpUnlitProps.alphaThreshold = cutoff;
+
     const tcp2Props = {
       mainColor: unityColorToCocos(mainColor),
       highlightColor: unityColorToCocos(firstDefinedMaterialValue(colors, ['_HColor'], { r: 1, g: 1, b: 1, a: 1 })),
@@ -512,7 +567,7 @@ module.exports = function createMaterialPorter(deps) {
       _effectAsset: cocosUuid(
         invisibleShadowReceiver
           ? ensureInvisibleShadowReceiverEffect(options, reporter)
-          : tcp2EffectUuid || BUILTIN_STANDARD_EFFECT_UUID,
+          : tcp2EffectUuid || urpLitEffectUuid || urpUnlitEffectUuid || BUILTIN_STANDARD_EFFECT_UUID,
         'cc.EffectAsset',
       ),
       _techIdx: invisibleShadowReceiver || tcp2EffectUuid
@@ -520,9 +575,19 @@ module.exports = function createMaterialPorter(deps) {
         : transparent
           ? BUILTIN_STANDARD_TRANSPARENT_TECHNIQUE_INDEX
           : 0,
-      _defines: [invisibleShadowReceiver || tcp2EffectUuid ? {} : defines],
+      _defines: [invisibleShadowReceiver || tcp2EffectUuid
+        ? {}
+        : urpUnlitEffectUuid
+          ? alphaClip ? { USE_ALPHA_TEST: true } : {}
+          : defines],
       _states: invisibleShadowReceiver ? [] : states,
-      _props: [invisibleShadowReceiver ? {} : tcp2EffectUuid ? tcp2Props : props],
+      _props: [invisibleShadowReceiver
+        ? {}
+        : tcp2EffectUuid
+          ? tcp2Props
+          : urpUnlitEffectUuid
+            ? urpUnlitProps
+            : props],
     };
 
     if (options.dryRun) return fs.existsSync(convertedDest) ? convertedDest : '';
