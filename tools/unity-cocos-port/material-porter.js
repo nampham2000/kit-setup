@@ -31,9 +31,11 @@ const COCOS_PARTICLE_TECHNIQUE_PREMULTIPLY_BLEND = 4;
 const INVISIBLE_SHADOW_RECEIVER_EFFECT_TEMPLATE = path.join(__dirname, 'invisible-shadow-receiver.effect');
 const INVISIBLE_SHADOW_RECEIVER_EFFECT_PATH = path.join('assets', 'effects', 'InvisibleShadowReceiver.effect');
 const TCP2_HYBRID_SHADER_2_EFFECT_PATH = path.join('assets', 'effects', 'TCP2HybridShader2.effect');
+const TCP2_HYBRID_PARTICLE_EFFECT_TEMPLATE = path.join(__dirname, 'tcp2-hybrid-particle.effect');
+const TCP2_HYBRID_PARTICLE_EFFECT_PATH = path.join('assets', 'effects', 'TCP2HybridParticle.effect');
 const TCP2_HYBRID_SHADER_2_GUIDS = new Set([
-  '650dd9526735d5b46b79224bc6e94025',
-  '933532a4fcc9baf4fa0491de14d08ed7',
+  'edd7abf643fa4bc4e8561d4c280c97cf',
+  'df5bb027d94a6c44bb32b3c31ec1303f',
 ]);
 const COCOS_PARTICLE_DEFAULT_TINT = 128 / 255;
 const COCOS_PARTICLE_DEFAULT_TINT_COLOR = [
@@ -336,6 +338,45 @@ module.exports = function createMaterialPorter(deps) {
     return meta.uuid;
   }
 
+  function ensureTcp2HybridParticleEffect(options, reporter) {
+    const effectFile = path.join(options.cocosRoot, TCP2_HYBRID_PARTICLE_EFFECT_PATH);
+    const relativePath = toPosix(path.relative(options.cocosRoot, effectFile));
+    if (options.dryRun) return stableUuid(`effect:${relativePath}`);
+    if (options._tcp2HybridParticleEffectUuid) return options._tcp2HybridParticleEffectUuid;
+
+    ensureDir(path.dirname(effectFile));
+    ensureDirectoryMetas(path.dirname(effectFile), path.join(options.cocosRoot, 'assets'));
+    const effectText = fs.readFileSync(TCP2_HYBRID_PARTICLE_EFFECT_TEMPLATE, 'utf8');
+    if (!fs.existsSync(effectFile) || fs.readFileSync(effectFile, 'utf8') !== effectText) {
+      fs.writeFileSync(effectFile, effectText, 'utf8');
+    }
+
+    const metaFile = `${effectFile}.meta`;
+    const existing = readJsonIfExists(metaFile) || {};
+    const meta = {
+      ver: existing.ver || '1.7.1',
+      importer: 'effect',
+      imported: existing.imported ?? true,
+      uuid: existing.uuid || stableUuid(`effect:${relativePath}`),
+      files: Array.isArray(existing.files) && existing.files.length ? existing.files : ['.json'],
+      subMetas: {},
+      userData: { ...(existing.userData || {}) },
+    };
+    if (JSON.stringify(existing) !== JSON.stringify(meta)) {
+      fs.writeFileSync(metaFile, `${JSON.stringify(meta, null, 2)}\n`, 'utf8');
+    }
+
+    options._tcp2HybridParticleEffectUuid = meta.uuid;
+    reporter.low(
+      'TCP2_HYBRID_PARTICLE_EFFECT_PREPARED',
+      relativePath,
+      '',
+      'Prepared the Cocos TCP2 Hybrid Shader 2 mesh-particle effect',
+      meta.uuid,
+    );
+    return meta.uuid;
+  }
+
   function convertUnityMaterialToCocos(materialAsset, options, unityDb, reporter) {
     if (!materialAsset?.path || !fs.existsSync(materialAsset.path)) return '';
 
@@ -551,21 +592,25 @@ module.exports = function createMaterialPorter(deps) {
     const particleShaderName = readUnityShaderName(particleShaderAsset)
       || particleShaderAsset?.relativePath
       || particleShaderGuid;
+    const tcp2ParticleMaterial = TCP2_HYBRID_SHADER_2_GUIDS.has(particleShaderGuid)
+      || /(?:Toony Colors Pro 2|TCP2).*Hybrid Shader 2/i.test(particleShaderName);
+    const tcp2ParticleEffectUuid = tcp2ParticleMaterial
+      ? ensureTcp2HybridParticleEffect(options, reporter)
+      : '';
     if (particleShaderGuid && particleShaderGuid !== UNITY_BUILTIN_SHADER_GUID) {
-      const tcp2ParticleMaterial = TCP2_HYBRID_SHADER_2_GUIDS.has(particleShaderGuid)
-        || /(?:Toony Colors Pro 2|TCP2).*Hybrid Shader 2/i.test(particleShaderName);
       reporter[tcp2ParticleMaterial ? 'low' : 'high'](
         tcp2ParticleMaterial
-          ? 'TCP2_PARTICLE_MATERIAL_APPROXIMATED'
+          ? 'TCP2_PARTICLE_SHADER_PORTED'
           : 'CUSTOM_SHADER_NOT_PORTED',
         materialAsset.relativePath,
         String(getField(materialDoc, 'm_Name', materialAsset.stem) || materialAsset.stem),
         tcp2ParticleMaterial
-          ? `TCP2 mesh-particle material "${particleShaderName}" was mapped to Cocos' particle-compatible effect`
+          ? `TCP2 mesh-particle material "${particleShaderName}" was mapped to the Cocos TCP2 Hybrid Shader 2 particle effect`
           : `Custom shader "${particleShaderName}" has not been ported; material approximated with builtin particle effect`,
       );
     }
 
+    const floats = parseUnitySerializedScalarMap(materialDoc, 'm_Floats');
     const colors = parseUnitySerializedScalarMap(materialDoc, 'm_Colors');
     const texEnvs = parseUnityTextureEnvMap(materialDoc);
     const env = firstDefinedMaterialValue(texEnvs, UNITY_PARTICLE_MATERIAL_TEXTURE_KEYS, null);
@@ -585,9 +630,32 @@ module.exports = function createMaterialPorter(deps) {
     });
     const scale = env?.m_Scale || { x: 1, y: 1 };
     const offset = env?.m_Offset || { x: 0, y: 0 };
-    const techniqueIndex = resolveUnityParticleMaterialTechnique(materialDoc, unityDb);
+    const customRenderQueue = Number(getField(materialDoc, 'm_CustomRenderQueue', -1) || -1);
+    const transparent = Number(firstDefinedMaterialValue(floats, ['_Surface', '_Mode', '_RenderingMode'], 0) || 0) > 0
+      || customRenderQueue >= 3000
+      || clamp01(mainColor.a, 1) < 1;
+    const techniqueIndex = tcp2ParticleMaterial
+      ? transparent ? 1 : 0
+      : resolveUnityParticleMaterialTechnique(materialDoc, unityDb);
 
-    const props = {};
+    const props = tcp2ParticleMaterial ? {
+      mainColor: unityColorToCocos(mainColor),
+      highlightColor: unityColorToCocos(firstDefinedMaterialValue(colors, ['_HColor'], { r: 1, g: 1, b: 1, a: 1 })),
+      shadowColor: unityColorToCocos(firstDefinedMaterialValue(colors, ['_SColor'], { r: 0.2, g: 0.2, b: 0.2, a: 1 })),
+      rampThreshold: clamp01(firstDefinedMaterialValue(floats, ['_RampThreshold'], 0.75), 0.75),
+      rampSmoothing: clamp01(firstDefinedMaterialValue(floats, ['_RampSmoothing'], 0.1), 0.1),
+      indirectStrength: clamp01(firstDefinedMaterialValue(floats, ['_IndirectIntensity'], 1), 1),
+      shadowLightAtten: clamp01(firstDefinedMaterialValue(floats, ['_ShadowColorLightAtten'], 1), 1),
+      rimColor: unityColorToCocos(firstDefinedMaterialValue(colors, ['_RimColor'], { r: 0.8, g: 0.8, b: 0.8, a: 1 })),
+      rimMin: Number(firstDefinedMaterialValue(floats, ['_RimMin'], 0.5)),
+      rimMax: Number(firstDefinedMaterialValue(floats, ['_RimMax'], 1)),
+      rimLightMask: Number(firstDefinedMaterialValue(floats, ['_UseRimLightMask'], 1)),
+      rimStrength: Number(firstDefinedMaterialValue(floats, ['_UseRim'], 0)) > 0 ? 1 : 0,
+      specularColor: unityColorToCocos(firstDefinedMaterialValue(colors, ['_SpecularColor'], { r: 0.75, g: 0.75, b: 0.75, a: 1 })),
+      specularRoughness: clamp01(firstDefinedMaterialValue(floats, ['_SpecularRoughness'], 0.5), 0.5),
+      specularStrength: Number(firstDefinedMaterialValue(floats, ['_UseSpecular'], 0)) > 0 ? 1 : 0,
+      emissive: unityColorToCocos(firstDefinedMaterialValue(colors, ['_EmissionColor', '_EmissiveColor'], { r: 0, g: 0, b: 0, a: 1 })),
+    } : {};
     if (!isDefaultParticleTilingOffset(scale, offset)) {
       props.mainTiling_Offset = [
         Number(scale.x ?? 1),
@@ -597,12 +665,14 @@ module.exports = function createMaterialPorter(deps) {
       ];
     }
     if (mainTextureUuid) props.mainTexture = cocosUuid(mainTextureUuid, 'cc.Texture2D');
-    const hasExplicitTintColor = hasUnityMaterialColor(colors, ['_TintColor', '_Color', '_BaseColor']);
-    const hasMeaningfulExplicitTintColor = hasExplicitTintColor && !isNeutralUnityParticleTintColor(mainColor);
-    if (techniqueIndex === COCOS_PARTICLE_TECHNIQUE_ADD) {
-      props.tintColor = materialColor(null, COCOS_PARTICLE_DEFAULT_TINT_COLOR);
-    } else if (particleTechniqueUsesTintColor(techniqueIndex) && hasMeaningfulExplicitTintColor) {
-      props.tintColor = materialColor(mainColor);
+    if (!tcp2ParticleMaterial) {
+      const hasExplicitTintColor = hasUnityMaterialColor(colors, ['_TintColor', '_Color', '_BaseColor']);
+      const hasMeaningfulExplicitTintColor = hasExplicitTintColor && !isNeutralUnityParticleTintColor(mainColor);
+      if (techniqueIndex === COCOS_PARTICLE_TECHNIQUE_ADD) {
+        props.tintColor = materialColor(null, COCOS_PARTICLE_DEFAULT_TINT_COLOR);
+      } else if (particleTechniqueUsesTintColor(techniqueIndex) && hasMeaningfulExplicitTintColor) {
+        props.tintColor = materialColor(mainColor);
+      }
     }
 
     const materialData = {
@@ -611,7 +681,7 @@ module.exports = function createMaterialPorter(deps) {
       _objFlags: 0,
       __editorExtras__: {},
       _native: '',
-      _effectAsset: cocosUuid(BUILTIN_PARTICLE_EFFECT_UUID, 'cc.EffectAsset'),
+      _effectAsset: cocosUuid(tcp2ParticleEffectUuid || BUILTIN_PARTICLE_EFFECT_UUID, 'cc.EffectAsset'),
       _techIdx: techniqueIndex,
       _defines: [{}, {}],
       _states: [emptyParticlePassState(), emptyParticlePassState()],
