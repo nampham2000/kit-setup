@@ -9,5 +9,8 @@
     "./analytics/GameTrackingService": "./analytics/GameTrackingService.ts",
     "./platform/SuperHtmlPlayable": "./platform/SuperHtmlPlayable.ts",
     "./platform/PlayableAdDownloadEvent": "./platform/PlayableAdDownloadEvent.ts"
+  },
+  "dependencies": {
+    "gameanalytics": "^5.0.0"
   }
 }
