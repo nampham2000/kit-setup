@@ -102,6 +102,35 @@ module.exports = function createColliderPorter(deps) {
     }, `cmp-rigid-body-${componentId}`);
   }
 
+  // Unity Rigidbody (class 54). cc.ERigidBodyType: DYNAMIC 1, STATIC 2, KINEMATIC 4.
+  function emitRigidbody(nodeId, componentId, doc, builder) {
+    const isKinematic = Number(getField(doc, 'm_IsKinematic', 0) || 0) !== 0;
+    builder.addRigidBody(nodeId, componentId, {
+      type: isKinematic ? 4 : 1,
+      mass: finiteNumber(getField(doc, 'm_Mass', 1), 1),
+      linearDamping: finiteNumber(getField(doc, 'm_Drag', 0), 0),
+      angularDamping: finiteNumber(getField(doc, 'm_AngularDrag', 0.05), 0.05),
+      useGravity: Number(getField(doc, 'm_UseGravity', 1) || 0) !== 0,
+      // Unity has no per-body sleep toggle on Rigidbody; Cocos defaults to allowing it.
+      allowSleep: true,
+    }, `cmp-rigid-body-${componentId}`);
+  }
+
+  // Unity SphereCollider (class 135).
+  function emitSphereCollider(nodeId, componentId, doc, builder) {
+    const center = getField(doc, 'm_Center', { x: 0, y: 0, z: 0 });
+    builder.addSphereCollider(nodeId, componentId, {
+      enabled: Number(getField(doc, 'm_Enabled', 1) || 0) !== 0,
+      isTrigger: Number(getField(doc, 'm_IsTrigger', 0) || 0) !== 0,
+      center: {
+        x: finiteNumber(center?.x, 0),
+        y: finiteNumber(center?.y, 0),
+        z: finiteNumber(center?.z, 0),
+      },
+      radius: Math.abs(finiteNumber(getField(doc, 'm_Radius', 0.5), 0.5)),
+    }, `cmp-sphere-collider-${componentId}`);
+  }
+
   function emitCircleCollider2D(nodeId, componentId, doc, gameObject, model, builder, reporter) {
     if (!model.is3DObject) {
       reporter.low('COMPONENT_UNSUPPORTED', model.file, gameObject.name, 'Unity CircleCollider2D is skipped because this prefab is not detected as a 3D object');
@@ -267,6 +296,8 @@ module.exports = function createColliderPorter(deps) {
     emitCircleCollider2D,
     emitBoxCollider2D,
     emitBoxCollider,
+    emitRigidbody,
+    emitSphereCollider,
     polygonPathArea,
     emitPolygonCollider2D,
     emitMeshCollider,

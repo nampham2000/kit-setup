@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { ensureDir, randomUuid, toPosix } = require('./core-utils');
+const { copyAssetIfChanged, ensureDir, randomUuid, toPosix } = require('./core-utils');
 const { exportUnityMeshAssetToGltf } = require('./unity-mesh-fbx-exporter');
 
 module.exports = function createAssetImportPorter(deps) {
@@ -66,7 +66,17 @@ module.exports = function createAssetImportPorter(deps) {
     }
     ensureDir(path.dirname(dest));
     ensureDirectoryMetas(path.dirname(dest), path.join(options.cocosRoot, 'assets'));
-    if (!fs.existsSync(dest)) fs.copyFileSync(unityAsset.path, dest);
+    const copyResult = copyAssetIfChanged(unityAsset.path, dest);
+    if (copyResult === 'refreshed') {
+      // The .meta and its uuid are left alone so existing references keep resolving;
+      // the editor re-imports on the changed file.
+      reporter.low(
+        'ASSET_REFRESHED',
+        unityAsset.relativePath,
+        toPosix(path.relative(options.cocosRoot, dest)),
+        'Existing Cocos copy differed from the Unity source and was replaced; refresh/import is required',
+      );
+    }
     if (kind === 'model') recoverModelMetaFromLibrary(dest, options);
     const importConfig = kind === 'image'
       ? { ...unityTextureImporterConfig(unityAsset.path), ...config }

@@ -14,6 +14,7 @@ function createComponentDispatcher(handlers) {
     [20, ({ nodeId, componentId, doc, builder }) => builder.addCamera(nodeId, componentId, doc, `cmp-camera-${componentId}`)],
     [23, (ctx) => handlers.emitMeshRenderer(ctx.gameObject, ctx.nodeId, ctx.componentId, ctx.doc, ctx.model, ctx.builder, ctx.reporter, ctx.options, ctx.unityDb, ctx.cocosDb)],
     [50, (ctx) => handlers.emitRigidbody2D(ctx.nodeId, ctx.componentId, ctx.doc, ctx.gameObject, ctx.model, ctx.builder, ctx.reporter)],
+    [54, (ctx) => handlers.emitRigidbody(ctx.nodeId, ctx.componentId, ctx.doc, ctx.builder)],
     [58, (ctx) => handlers.emitCircleCollider2D(ctx.nodeId, ctx.componentId, ctx.doc, ctx.gameObject, ctx.model, ctx.builder, ctx.reporter)],
     [60, (ctx) => handlers.emitPolygonCollider2D(ctx.nodeId, ctx.componentId, ctx.doc, ctx.gameObject, ctx.model, ctx.builder, ctx.reporter)],
     [61, (ctx) => handlers.emitBoxCollider2D(ctx.nodeId, ctx.componentId, ctx.doc, ctx.gameObject, ctx.model, ctx.builder, ctx.reporter)],
@@ -22,8 +23,17 @@ function createComponentDispatcher(handlers) {
     [95, (ctx) => handlers.emitAnimator(ctx.nodeId, ctx.componentId, ctx.doc, ctx.builder, ctx.reporter, ctx.options, ctx.unityDb, ctx.cocosDb, ctx.gameObject, ctx.model)],
     [108, (ctx) => handlers.emitLight(ctx.nodeId, ctx.componentId, ctx.doc, ctx.builder, ctx.reporter)],
     [114, (ctx) => handlers.emitMonoBehaviour(ctx.nodeId, ctx.componentId, ctx.doc, ctx.model, ctx.builder, ctx.reporter, ctx.options, ctx.unityDb, ctx.cocosDb)],
+    [135, (ctx) => handlers.emitSphereCollider(ctx.nodeId, ctx.componentId, ctx.doc, ctx.builder)],
     [212, (ctx) => handlers.emitSpriteRenderer(ctx.nodeId, ctx.componentId, ctx.doc, ctx.builder, ctx.reporter, ctx.options, ctx.unityDb, ctx.cocosDb)],
-    [223, (ctx) => handlers.emitParticleSystem(ctx.nodeId, ctx.componentId, ctx.doc, ctx.gameObject, ctx.builder, ctx.reporter, ctx.options, ctx.unityDb, ctx.cocosDb)],
+    // Unity ParticleSystem is class 198 and is dispatched below. Class 223 is
+    // Canvas: it has no 1:1 Cocos counterpart, since cc.Canvas owns a camera and
+    // belongs at the root of a UI tree rather than on every nested uGUI layer.
+    [223, (ctx) => ctx.reporter.medium(
+      'CANVAS_NOT_PORTED',
+      ctx.model.file,
+      ctx.gameObject.name,
+      'Unity Canvas has no direct Cocos equivalent; add cc.UITransform plus cc.Widget on the layer node, or a single cc.Canvas at the UI root',
+    )],
   ]);
 
   function emitUnityComponent(ctx) {

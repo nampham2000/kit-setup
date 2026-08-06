@@ -116,9 +116,33 @@ module.exports = function createScriptPorter(deps) {
     return fontUuid || '';
   }
 
+  /**
+   * Unity serializes `bool` as 0/1 and `Vector2`/`Vector3` as an untagged {x,y[,z]}.
+   * Cocos needs a real boolean and a `__type__`-tagged vector, so the declared type
+   * of the target field (collected while indexing the Cocos script) is applied here.
+   */
+  function coerceToCocosFieldType(script, fieldName, value) {
+    if (script?.booleanFields?.has(fieldName) && typeof value === 'number') return value !== 0;
+    const vectorType = script?.vectorFields?.get(fieldName);
+    if (vectorType && value && typeof value === 'object' && !Array.isArray(value)
+      && !value.__type__ && !value.__uuid__ && !value.__id__ && 'x' in value && 'y' in value) {
+      return vectorType === 'cc.Vec2'
+        ? { __type__: 'cc.Vec2', x: Number(value.x) || 0, y: Number(value.y) || 0 }
+        : { __type__: 'cc.Vec3', x: Number(value.x) || 0, y: Number(value.y) || 0, z: Number(value.z) || 0 };
+    }
+    return value;
+  }
+
   function translateUnitySerializedValue(value, builder, reporter, source, fieldName) {
     if (Array.isArray(value)) return value.map((item) => translateUnitySerializedValue(item, builder, reporter, source, fieldName));
     if (value && typeof value === 'object') {
+      // Unity serializes LayerMask as { serializedVersion, m_Bits }. Cocos stores the
+      // mask as a plain number, so unwrap it instead of emitting a nested object the
+      // Cocos deserializer would drop.
+      if (Object.prototype.hasOwnProperty.call(value, 'm_Bits')) {
+        const bits = Number(value.m_Bits);
+        return Number.isFinite(bits) ? bits : 0;
+      }
       if (Object.prototype.hasOwnProperty.call(value, 'fileID')) {
         const fileId = deps.unityRefFileId(value);
         if (!fileId) return null;
@@ -255,7 +279,11 @@ module.exports = function createScriptPorter(deps) {
           continue;
         }
       }
-      translated[key] = translateUnitySerializedValue(value, builder, reporter, model.file, key);
+      translated[key] = coerceToCocosFieldType(
+        script,
+        key,
+        translateUnitySerializedValue(value, builder, reporter, model.file, key),
+      );
     }
 
     builder.addComponent(nodeId, script.classId, translated, componentId, `cmp-script-${className}-${componentId}`);

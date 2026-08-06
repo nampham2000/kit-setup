@@ -45,7 +45,11 @@ const BUILTIN_PRIMITIVE_MESH_UUIDS = {
 };
 const UNITY_BUILTIN_MESH_FILE_ID_TO_PRIMITIVE = {
   10202: 'box',
+  10206: 'cylinder',
+  10207: 'sphere',
+  10208: 'capsule',
   10209: 'plane',
+  10210: 'quad',
 };
 const UNITY_MATERIAL_BASE_TEXTURE_KEYS = ['_BaseMap', '_MainTex'];
 const UNITY_MATERIAL_NORMAL_TEXTURE_KEYS = ['_BumpMap', '_NormalMap'];

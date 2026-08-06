@@ -534,6 +534,15 @@ function createRuntimeComponentPorter(deps) {
       const node = Number.isInteger(nodeId) ? builder.objects[nodeId] : null;
       if (!particle || !node) continue;
 
+      // The Unity doc holds the SOURCE prefab value. When this system came from a
+      // nested PrefabInstance, the effective rate is whatever the flattening pass
+      // already wrote onto the Cocos curve, so prefer that.
+      const emittedCurve = objectByRef(builder.objects, particle.rateOverDistance);
+      const effectiveRate = Number(emittedCurve?.constant);
+      const rate = Number.isFinite(effectiveRate) && effectiveRate > 0
+        ? effectiveRate
+        : rateOverDistance;
+
       if (!helperClassId) {
         reporter.medium(
           'PARTICLE_RATE_OVER_DISTANCE_EMITTER_SCRIPT_MISSING',
@@ -548,7 +557,7 @@ function createRuntimeComponentPorter(deps) {
       if (!nodeHasComponentType(builder, nodeId, helperClassId)) {
         builder.addComponent(nodeId, helperClassId, {
           particleSystem: cocosRef(particleId),
-          rateOverDistance,
+          rateOverDistance: rate,
         }, null, `cmp-unity-particle-rate-over-distance-${componentId}`);
       }
 
@@ -556,7 +565,7 @@ function createRuntimeComponentPorter(deps) {
         'PARTICLE_RATE_OVER_DISTANCE_EMITTER',
         model.file,
         node._name || '',
-        `Attached ${script.className} to distribute ${rateOverDistance} particle(s) per world unit along high-speed movement`
+        `Attached ${script.className} to distribute ${rate} particle(s) per world unit along high-speed movement`
       );
     }
   }

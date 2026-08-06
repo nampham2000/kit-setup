@@ -1234,8 +1234,23 @@ module.exports = function createAnimationPorter(deps) {
       }
       bakeAnimatorDefaultPose(controllerAsset, controller, builder, animationContext, unityDb, reporter);
     }
-    if (animationContext?.clipInfos?.length && typeof builder.addAnimation === 'function') {
+    // A linked model prefab instance already carries the FBX SkeletalAnimation
+    // holding these very clips. Mounting another cc.Animation on its root would
+    // build a second set of AnimationStates over the same rig.
+    const isLinkedModelInstanceRoot = builder.nestedPrefabInstanceByNode?.has?.(nodeId) === true;
+    if (
+      animationContext?.clipInfos?.length
+      && !isLinkedModelInstanceRoot
+      && typeof builder.addAnimation === 'function'
+    ) {
       builder.addAnimation(nodeId, animationContext.clipInfos, animationContext.defaultClipInfo, `cmp-animation-${componentId}`);
+    } else if (isLinkedModelInstanceRoot && animationContext?.clipInfos?.length) {
+      reporter.low(
+        'ANIMATOR_CLIP_LIST_SKIPPED_ON_MODEL_INSTANCE',
+        controllerAsset?.relativePath || '',
+        gameObject?.name || '',
+        'Animator clip list was not mounted as cc.Animation because the linked Cocos model prefab already provides a SkeletalAnimation with the same clips',
+      );
     }
     builder.addAnimationController(nodeId, componentId, graphUuid, `cmp-animation-controller-${componentId}`);
   }

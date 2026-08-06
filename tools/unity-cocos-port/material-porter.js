@@ -14,6 +14,7 @@ const {
   UNITY_MATERIAL_EMISSIVE_TEXTURE_KEYS,
 } = require('./constants');
 const {
+  copyAssetIfChanged,
   ensureDir,
   readJsonIfExists,
   stableUuid,
@@ -283,6 +284,17 @@ module.exports = function createMaterialPorter(deps) {
       || Boolean(requestedImageType && existingMeta?.userData?.type !== requestedImageType);
 
     if (importedDest && fs.existsSync(importedDest) && !needsMetaRefresh) {
+      // An already-imported texture is reused for its stable uuid, but its bytes still
+      // have to track the Unity source. Without this the playable silently keeps the art
+      // from the first port after Unity re-exports the texture, and nothing reports it.
+      if (!options.dryRun && copyAssetIfChanged(textureAsset.path, importedDest) === 'refreshed') {
+        reporter.low(
+          'ASSET_REFRESHED',
+          textureAsset.relativePath,
+          toPosix(path.relative(options.cocosRoot, importedDest)),
+          'Existing Cocos texture differed from the Unity source and was replaced; refresh/import is required',
+        );
+      }
       const textureUuid = resolveCurrentTextureUuid(importedDest);
       if (textureUuid) return textureUuid;
     }

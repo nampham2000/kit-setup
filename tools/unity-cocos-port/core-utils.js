@@ -75,6 +75,28 @@ function stableSubAssetId(seed, usedIds = new Set()) {
   return randomUuid().replace(/-/g, '').slice(0, 5);
 }
 
+/**
+ * Copies a Unity asset into the Cocos project, replacing an existing copy whose bytes
+ * no longer match. Skipping the overwrite silently keeps stale art in the playable
+ * whenever the Unity source is re-exported, and the reference still resolves so nothing
+ * reports it. Returns 'created' | 'refreshed' | 'unchanged' | '' (source missing).
+ */
+function copyAssetIfChanged(sourceFile, destFile) {
+  if (!sourceFile || !destFile || !fs.existsSync(sourceFile)) return '';
+  if (!fs.existsSync(destFile)) {
+    fs.copyFileSync(sourceFile, destFile);
+    return 'created';
+  }
+  const source = fs.statSync(sourceFile);
+  const dest = fs.statSync(destFile);
+  if (source.size === dest.size) {
+    const hash = (file) => crypto.createHash('sha1').update(fs.readFileSync(file)).digest('hex');
+    if (hash(sourceFile) === hash(destFile)) return 'unchanged';
+  }
+  fs.copyFileSync(sourceFile, destFile);
+  return 'refreshed';
+}
+
 function ensureDir(dir) {
   fs.mkdirSync(dir, { recursive: true });
 }
@@ -211,6 +233,7 @@ module.exports = {
   randomLocalId,
   stableSubAssetId,
   ensureDir,
+  copyAssetIfChanged,
   readJsonIfExists,
   csvEscape,
   escapeRegex,
