@@ -45,6 +45,14 @@ Bộ shared kit cho playable ads/Cocos: package dùng chung, tool build, tool po
   2. Thêm `--transparent`, `--opaque`, `--alpha-clip` để ép render state.
   3. Thêm `--dry-run` để kiểm tra trước; xem CSV report nếu còn phần phải sửa tay.
 
+### `tools/strip-fbx-textures.cjs`
+- Mục đích: loại `Texture`/`Video` link khỏi binary FBX để Cocos không sinh texture sub-asset trong model, nhưng vẫn giữ material slot, mesh, skeleton và animation.
+- Quick guide:
+  1. `node playable-shared-kit/tools/strip-fbx-textures.cjs <fbx...>` — dry-run và in JSON report.
+  2. Thêm `--write` để cập nhật FBX cùng file `.fbx.meta` tương ứng.
+  3. Thêm `--no-meta` khi xử lý FBX độc lập không nằm trong Cocos project.
+  4. Xem hướng dẫn đầy đủ tại `tools/strip-fbx-textures/README.md`.
+
 ### `tools/work-memory.cjs`
 - Mục đích: lưu note/lesson learned cục bộ bằng SQLite + semantic search.
 - Quick guide:
