@@ -39,6 +39,17 @@ const ORBITAL_FALLBACK_PHASE_SPREAD = Math.PI;
 const ORBITAL_FALLBACK_SAMPLE_COUNT = 72;
 const UNITY_GRAVITY_ACCELERATION = 9.81;
 const COCOS_TRAIL_MIN_LIFETIME = 1;
+// cc.ShapeModule.emit() dispatches per shape and each emitter only implements a
+// subset of cc.ParticleEmitLocation (Base 0 / Edge 1 / Shell 2 / Volume 3).
+// An unsupported pair warns once per emitted particle, so every shape write has
+// to be normalised to a location the emitter actually handles.
+const COCOS_SHAPE_EMIT_LOCATIONS = {
+  0: { allowed: [1, 2, 3], fallback: 3 }, // Box: Edge / Shell / Volume
+  1: { allowed: [0, 1, 2, 3], fallback: 0 }, // Circle ignores emitFrom
+  2: { allowed: [0, 2, 3], fallback: 0 }, // Cone: Base / Shell / Volume
+  3: { allowed: [2, 3], fallback: 3 }, // Sphere: Shell / Volume
+  4: { allowed: [2, 3], fallback: 3 }, // Hemisphere: Shell / Volume
+};
 
 function splitTopLevel(text, delimiter) {
   const result = [];
@@ -510,6 +521,14 @@ function cocosCurveRangeConstantValue(data, fallback = 0) {
   return fallback;
 }
 
+function cocosCurveRangeMaxValue(data, fallback = 0) {
+  if (!data || typeof data !== 'object') return fallback;
+  const mode = num(data.mode ?? data._mode, 0);
+  if (mode === 0) return num(data.constant, fallback);
+  if (mode === 3) return num(data.constantMax, fallback);
+  return num(data.multiplier, fallback);
+}
+
 function curveRangeLooksZero(data) {
   return Math.abs(curveRangeConstantValue(data)) < 1e-6;
 }
@@ -813,6 +832,14 @@ function shapeSupportsArcApproximation(shapeModule) {
   return shapeType === 1 || shapeType === 2;
 }
 
+function normalizeShapeEmitFrom(shapeModule) {
+  if (!shapeModule) return false;
+  const rule = COCOS_SHAPE_EMIT_LOCATIONS[shapeTypeValue(shapeModule)];
+  if (!rule || rule.allowed.includes(num(shapeModule.emitFrom, rule.fallback))) return false;
+  shapeModule.emitFrom = rule.fallback;
+  return true;
+}
+
 function shapeTypeValue(shapeModule) {
   return num(shapeModule?._shapeType ?? shapeModule?.shapeType, -1);
 }
@@ -878,6 +905,7 @@ function forceOrbitalShapeEmission(shapeModule) {
     shapeModule.radiusThickness = 0;
     shapeModule.randomPositionAmount = 0;
   }
+  normalizeShapeEmitFrom(shapeModule);
 }
 
 function shouldUseOrbitalCurveApproximation(builder, particle, data) {
@@ -1196,6 +1224,7 @@ function applyShapeModule(builder, particle, data) {
     module.randomPositionAmount = 0;
     module._scale = vec3({ x: 0, y: 0, z: 0 }, module._scale);
   }
+  normalizeShapeEmitFrom(module);
   applyCurveRange(builder, refObject(builder.objects, module.arcSpeed), data.arc?.speed);
   return true;
 }
@@ -1413,7 +1442,14 @@ function applyTrailModule(builder, particle, data) {
   module.widthFromParticle = bool(data.sizeAffectsWidth, true);
   module.textureMode = num(data.textureMode, module.textureMode ?? 0);
   const lifeTime = refObject(builder.objects, module.lifeTime);
-  applyCurveRange(builder, lifeTime, data.lifetime);
+  // Unity stores the trail lifetime as a multiplier of the owning particle's
+  // lifetime; cc.TrailModule.lifeTime is an absolute time in seconds.
+  const startLifetime = cocosCurveRangeMaxValue(refObject(builder.objects, particle?.startLifetime), 1);
+  applyCurveRange(builder, lifeTime, data.lifetime, startLifetime > 0 ? startLifetime : 1);
+  // cc.Trail sizes its vertex buffer from ceil(lifeTime.getMax()) and warns
+  // below 1s. Raising the floor is inert for the common case because
+  // ParticleSystemRendererCPU drops a trail as soon as its particle dies, so a
+  // trail element can never outlive the particle it is attached to.
   ensureCocosCurveRangeMaxAtLeast(lifeTime, COCOS_TRAIL_MIN_LIFETIME);
   applyCurveRange(builder, refObject(builder.objects, module.widthRatio), data.widthOverTrail);
   applyGradientRange(builder, refObject(builder.objects, module.colorOverTrail), data.colorOverTrail);
