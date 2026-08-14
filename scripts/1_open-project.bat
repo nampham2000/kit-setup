@@ -25,6 +25,12 @@ $CocosMcpPort = 3000
 $CocosMcpExtensionName = 'cocos-mcp'
 $CocosMcpUrl = "http://127.0.0.1:$CocosMcpPort/mcp"
 
+# blender-mcp and gimp-mcp are stdio bridges: each AI client spawns its own copy on
+# demand, so there is no server of ours to start. What has to be running is the app
+# behind them, which listens on these ports.
+$BlenderMcpPort = 9876
+$GimpMcpPort = 9877
+
 function Set-JsonProperty($Object, $Name, $Value) {
     if ($Object.PSObject.Properties[$Name]) {
         $Object.$Name = $Value
@@ -112,6 +118,22 @@ function Sync-CocosMcpExtension {
     }
 }
 
+function Sync-McpClients {
+    $SyncScript = Join-Path $SharedKitDir 'tools\mcp-clients-sync.ps1'
+    if (-not (Test-Path $SyncScript)) {
+        Write-Host "  [warn] MCP client sync script not found: $SyncScript" -ForegroundColor Yellow
+        Ensure-VSCodeMcpConfig
+        return
+    }
+
+    try {
+        & $SyncScript -ProjectDir $ProjectDir -CocosMcpPort $CocosMcpPort
+    } catch {
+        Write-Host "  [warn] MCP client sync failed: $($_.Exception.Message)" -ForegroundColor Yellow
+        Ensure-VSCodeMcpConfig
+    }
+}
+
 function Sync-VSCodeMcpAutostart {
     $Source = Join-Path $SharedKitDir 'tools\vscode-mcp-autostart'
     if (-not (Test-Path (Join-Path $Source 'package.json'))) {
@@ -151,6 +173,78 @@ function Wait-Port($HostName, $Port, $TimeoutSeconds) {
         Start-Sleep -Seconds 1
     }
     return $false
+}
+
+function Find-NewestExe($Patterns) {
+    $Found = @()
+    foreach ($Pattern in $Patterns) {
+        try { $Found += @(Get-ChildItem -Path $Pattern -File -ErrorAction SilentlyContinue) } catch { }
+    }
+    if ($Found.Count -eq 0) { return $null }
+    return ($Found | Sort-Object LastWriteTime -Descending | Select-Object -First 1).FullName
+}
+
+function Start-BlenderMcpBackend {
+    if (Test-Port '127.0.0.1' $BlenderMcpPort) {
+        Write-Host "  [mcp] blender-mcp backend already up on $BlenderMcpPort" -ForegroundColor DarkGray
+        return $false
+    }
+
+    $BlenderExe = Find-NewestExe @(
+        'C:\Program Files\Blender Foundation\Blender*\blender.exe',
+        (Join-Path $env:LOCALAPPDATA 'Programs\Blender Foundation\Blender*\blender.exe'),
+        'D:\Tools\Blender*\blender.exe'
+    )
+    if (-not $BlenderExe) {
+        Write-Host "  [warn] Blender not found - blender-mcp will have no backend." -ForegroundColor Yellow
+        return $false
+    }
+
+    # The MCP addon binds the port itself a second after Blender registers it.
+    Write-Host "  [mcp] Launching Blender for blender-mcp..." -ForegroundColor DarkGray
+    Start-Detached $BlenderExe ''
+    return $true
+}
+
+function Start-GimpMcpBackend {
+    if (Test-Port '127.0.0.1' $GimpMcpPort) {
+        Write-Host "  [mcp] gimp-mcp backend already up on $GimpMcpPort" -ForegroundColor DarkGray
+        return $false
+    }
+
+    $GimpExe = Find-NewestExe @(
+        'C:\Program Files\GIMP 3\bin\gimp-3*.exe',
+        'C:\Program Files\GIMP 2\bin\gimp-2*.exe'
+    )
+    if (-not $GimpExe) {
+        Write-Host "  [warn] GIMP not found - gimp-mcp will have no backend." -ForegroundColor Yellow
+        return $false
+    }
+
+    # The plug-in only binds its socket while the procedure runs, so ask for it up front
+    # instead of leaving the user to click Tools > MCP > Start MCP Server.
+    Write-Host "  [mcp] Launching GIMP for gimp-mcp..." -ForegroundColor DarkGray
+    Start-Detached $GimpExe '--batch-interpreter=plug-in-script-fu-eval -b "(plug-in-mcp-server RUN-NONINTERACTIVE)"'
+    return $true
+}
+
+function Wait-McpBackend($Name, $Port, $TimeoutSeconds, $Hint) {
+    if (Wait-Port '127.0.0.1' $Port $TimeoutSeconds) {
+        Write-Host "  [mcp] $Name backend ready on port $Port" -ForegroundColor DarkGray
+        return $true
+    }
+    Write-Host "  [warn] $Name backend did not come up on port $Port. $Hint" -ForegroundColor Yellow
+    return $false
+}
+
+function Test-McpServers {
+    $SyncScript = Join-Path $SharedKitDir 'tools\mcp-clients-sync.ps1'
+    if (-not (Test-Path $SyncScript)) { return }
+    try {
+        & $SyncScript -ProjectDir $ProjectDir -CocosMcpPort $CocosMcpPort -VerifyOnly
+    } catch {
+        Write-Host "  [warn] MCP verification failed: $($_.Exception.Message)" -ForegroundColor Yellow
+    }
 }
 
 function Get-CocosProcessProject($CommandLine) {
@@ -258,7 +352,7 @@ if (Test-Path $CocosCreatorExe) {
     Sync-VSCodeMcpAutostart
     Sync-CocosMcpExtension
     Ensure-CocosMcpSettings
-    Ensure-VSCodeMcpConfig
+    Sync-McpClients
 
     $ResolvedProjectDir = [System.IO.Path]::GetFullPath($ProjectDir).TrimEnd('\')
     $AllCocosProcesses = @(Get-CimInstance Win32_Process -Filter "name = 'CocosCreator.exe'" -ErrorAction SilentlyContinue)
@@ -275,11 +369,29 @@ if (Test-Path $CocosCreatorExe) {
     Write-Host "==> Launching Cocos Creator 3.8.8..." -ForegroundColor Cyan
     Start-Detached $CocosCreatorExe "--project `"$ProjectDir`""
 
+    # Kick the other two backends off now so they boot while Cocos is still starting.
+    $StartedBlender = $false
+    $StartedGimp = $false
+    if ($env:PLAYABLE_SKIP_MCP_BACKENDS -eq '1') {
+        Write-Host "==> Skipping Blender/GIMP backends (PLAYABLE_SKIP_MCP_BACKENDS=1)." -ForegroundColor DarkGray
+    } else {
+        Write-Host "==> Starting MCP backends..." -ForegroundColor Cyan
+        $StartedBlender = Start-BlenderMcpBackend
+        $StartedGimp = Start-GimpMcpBackend
+    }
+
     Write-Host "==> Waiting for Cocos MCP server..." -ForegroundColor Cyan
     if (Wait-Port '127.0.0.1' $CocosMcpPort 90) {
         Write-Host "  [mcp] Cocos MCP server ready: $CocosMcpUrl" -ForegroundColor DarkGray
     } else {
         Write-Host "  [warn] Cocos launched but MCP port $CocosMcpPort is not ready yet." -ForegroundColor Yellow
+    }
+
+    if ($StartedBlender) {
+        Wait-McpBackend 'blender-mcp' $BlenderMcpPort 90 'Open Blender > Edit > Preferences > Add-ons > MCP and start it.' | Out-Null
+    }
+    if ($StartedGimp) {
+        Wait-McpBackend 'gimp-mcp' $GimpMcpPort 120 'Open GIMP > Tools > MCP > Start MCP Server.' | Out-Null
     }
 
     Write-Host "==> Opening VSCode..." -ForegroundColor Cyan
@@ -293,6 +405,13 @@ if (Test-Path $CocosCreatorExe) {
         }
     } else {
         Write-Host "  [warn] VSCode command 'code' not found." -ForegroundColor Yellow
+    }
+
+    # Last, so the editors are already coming up while the handshakes run.
+    if ($env:PLAYABLE_SKIP_MCP_VERIFY -eq '1') {
+        Write-Host "==> Skipping MCP verification (PLAYABLE_SKIP_MCP_VERIFY=1)." -ForegroundColor DarkGray
+    } else {
+        Test-McpServers
     }
 
     if (-not ([System.Management.Automation.PSTypeName]'Win32Console').Type) {

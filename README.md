@@ -7,7 +7,7 @@ Bộ shared kit cho playable ads/Cocos: package dùng chung, tool build, tool po
 | File | Ý nghĩa | Dùng khi |
 |---|---|---|
 | `scripts/0_setup-all.bat` | Cài npm cho root project và từng extension; tự gắn `playable-sdk`, `playable-core` vào `dependencies` nếu có `package.json`. | Lần đầu setup / refresh dependency. |
-| `scripts/1_open-project.bat` | Mở VS Code + Cocos Creator 3.8.8; cố gắng khôi phục token đăng nhập Cocos. | Bắt đầu làm việc hằng ngày. |
+| `scripts/1_open-project.bat` | Mở VS Code + Cocos Creator 3.8.8; khôi phục token đăng nhập Cocos; sync MCP config cho mọi AI client; bật backend Blender/GIMP rồi verify cả 4 MCP server. Bỏ qua bằng `PLAYABLE_SKIP_MCP_BACKENDS=1` / `PLAYABLE_SKIP_MCP_VERIFY=1`. | Bắt đầu làm việc hằng ngày. |
 | `scripts/2_clean-unversioned.bat` | Quét và xóa thư mục sinh ra như `node_modules`, `temp`, `build`, `library`, `coverage`... nhưng tránh thư mục có file tracked. | Cần dọn workspace sạch. |
 | `scripts/3_update-submodule-remote.bat` | Chạy `git submodule update --init --remote --recursive` cho `playable-shared-kit`. | Muốn kéo shared-kit mới nhất vào game project. |
 | `scripts/4_create-playable-shared-kit-pr.bat` | Tạo branch/commit/push và mở trang PR cho repo `playable-shared-kit`; tránh tạo PR trùng diff. | Cần publish thay đổi của shared-kit. |
@@ -71,6 +71,33 @@ Bộ shared kit cho playable ads/Cocos: package dùng chung, tool build, tool po
   2. Mở workspace; helper tự bật toàn bộ workspace MCP server không phụ thuộc vào `localhost:3000`.
   3. `cocos-mcp` vẫn chỉ bật sau khi `localhost:3000` sẵn sàng.
   4. Workspace hiện có thể expose `workMemory` qua `.vscode/mcp.json` để query/save memory trực tiếp từ chat tools.
+
+### `tools/mcp-clients-sync.ps1`
+- Mục đích: đăng ký cùng một bộ MCP server (`cocos-mcp`, `blender-mcp`, `gimp-mcp`, `node_repl`) vào config của mọi AI client trên máy, để Claude Code / Antigravity / GitHub Copilot / Codex đều thấy đủ tool. `scripts/1_open-project.bat` tự gọi script này.
+- Đường dẫn binary được **dò tại runtime** (venv Blender, `uv.exe`, runtime `cua_node` của Codex có hash đổi mỗi lần update), không hardcode.
+- File được ghi:
+
+| Client | File config | Server được ghi |
+|---|---|---|
+| Claude Code desktop + Claude Desktop | `%APPDATA%\Claude\claude_desktop_config.json` | cả 4 |
+| Antigravity | `%USERPROFILE%\.gemini\config\mcp_config.json` | cả 4 (`serverUrl` cho HTTP) |
+| Copilot / VS Code (workspace) | `<project>\.vscode\mcp.json` | `cocos-mcp` |
+| Copilot / VS Code + Insiders (user) | `%APPDATA%\Code[ - Insiders]\User\mcp.json` | `blender-mcp`, `gimp-mcp`, `node_repl` |
+| Copilot / JetBrains | `%LOCALAPPDATA%\github-copilot\intellij\mcp.json` | cả 4 |
+| Codex / ChatGPT desktop | `%USERPROFILE%\.codex\config.toml` | chỉ kiểm tra, không ghi |
+
+- Mỗi tên server chỉ nằm ở **một scope cho mỗi client** nên client không bao giờ thấy trùng tool. `cocos-mcp` ở workspace scope của VS Code vì nó là endpoint của editor project này.
+- Quick guide:
+  1. `powershell -NoProfile -ExecutionPolicy Bypass -File playable-shared-kit\tools\mcp-clients-sync.ps1 -ProjectDir .` — ghi lại toàn bộ config.
+  2. Thêm `-Verify` để bắt tay MCP `initialize` thật với từng server; `-VerifyOnly` để chỉ kiểm tra mà không ghi file.
+  3. Thêm `-ClaudeUserScope` nếu dùng Claude Code từ terminal (ghi `~/.claude.json` qua CLI `claude` bundled). Mặc định tắt vì app desktop đã đọc `claude_desktop_config.json`, bật cả hai sẽ nhân đôi tool.
+  4. Lần ghi đầu tiên tạo backup `<file>.mcp-sync-backup` cho từng config.
+  5. Sau khi sync phải **restart client** — không client nào đọc lại config khi đang chạy.
+
+### `tools/mcp-probe.cjs`
+- Mục đích: health-check MCP server bằng `initialize` + `tools/list` thật, dùng bởi `-Verify` ở trên.
+- Chạy qua Node chứ không phải PowerShell vì `StandardInput` bị redirect trong Windows PowerShell sẽ ghi thêm encoding preamble trước dòng JSON đầu, mọi MCP server đều reject.
+- Quick guide: `node playable-shared-kit/tools/mcp-probe.cjs <spec.json>` — in `name<TAB>ok|fail<TAB>detail`, exit code khác 0 nếu có server fail.
 
 ## 3) Các lệnh npm cần thiết
 
