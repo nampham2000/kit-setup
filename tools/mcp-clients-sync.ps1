@@ -176,8 +176,20 @@ function Resolve-McpCatalog {
     $Catalog = New-Object System.Collections.ArrayList
     $Skipped = New-Object System.Collections.ArrayList
 
-    # --- 1) cocos-mcp: HTTP, served by the editor extension in this project.
-    [void] $Catalog.Add((New-McpServer 'cocos-mcp' 'http' $CocosMcpUrl $null @() ([ordered]@{})))
+    # --- 1) cocos-mcp: Smart Stdio Proxy (handles startup order independence with auto-reconnect to HTTP port 3000)
+    $CocosProxyScript = Join-Path $ProjectDir 'playable-shared-kit\tools\cocos-mcp-proxy.cjs'
+    if (-not (Test-Path -LiteralPath $CocosProxyScript)) {
+        $CocosProxyScript = Join-Path $ProjectDir 'playable-shared-kit/tools/cocos-mcp-proxy.cjs'
+    }
+    if (Test-Path -LiteralPath $CocosProxyScript) {
+        $NodeCmd = Get-Command node -ErrorAction SilentlyContinue
+        $NodeBin = if ($NodeCmd) { $NodeCmd.Source } else { 'node' }
+        [void] $Catalog.Add((New-McpServer 'cocos-mcp' 'stdio' $null $NodeBin @($CocosProxyScript) ([ordered]@{
+            COCOS_MCP_URL = $CocosMcpUrl
+        })))
+    } else {
+        [void] $Catalog.Add((New-McpServer 'cocos-mcp' 'http' $CocosMcpUrl $null @() ([ordered]@{})))
+    }
 
     # --- 2) work-memory: stdio bridge to local SQLite & semantic memory in shared kit.
     $WorkMemoryScript = Join-Path $ProjectDir 'playable-shared-kit\tools\work-memory-mcp.cjs'

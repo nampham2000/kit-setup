@@ -1,1 +1,24 @@
+# Dependencies downloaded automatically by ensure-dependencies.cjs
+tools/dependency/ffmpeg/
+tools/dependency/python/
+tools/dependency/uv/
+tools/dependency/*.exe
+tools/dependency/*.zip
+tools/dependency/*.tar.gz
+tools/dependency/*.7z
+tools/dependency/*.pyd
+tools/dependency/*.dll
+
+# Work memory cache
 tools/work-memory/data/cache/*.json
+
+# Node & Build artifacts
+node_modules/
+dist/
+temp/
+local/
+.DS_Store
+Thumbs.db
+
+# GitHub Workflows (avoids workflow scope rejection on submodule PR sync)
+.github/workflows/

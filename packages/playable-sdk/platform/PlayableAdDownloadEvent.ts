@@ -1,6 +1,6 @@
 import { _decorator, Component } from 'cc';
-import { GameTrackingService } from '../analytics/GameTrackingService.ts';
-import superHtmlPlayable from './SuperHtmlPlayable.ts';
+import { GameTrackingService } from '../analytics/GameTrackingService';
+import superHtmlPlayable from './SuperHtmlPlayable';
 
 const { ccclass } = _decorator;
 

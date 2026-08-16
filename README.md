@@ -115,9 +115,6 @@ Bộ shared kit cho playable ads/Cocos: package dùng chung, tool build, tool po
 | `npm run build:fast` | Build nhanh theo preset của project. |
 | `npm run build:seq` | Build tuần tự 1 job; ổn định hơn khi máy yếu. |
 | `npm run build:maxcpu` | Build ưu tiên tận dụng CPU tối đa. |
-| `npm run build:Short` | Build preset brief `Short`. |
-| `npm run build:Mid` | Build preset brief `Mid`. |
-| `npm run build:Long` | Build preset brief `Long`. |
 | `npm run subtree:pull` | Kéo cập nhật `playable_core` bằng subtree. |
 
 ### Nhóm extension `packages/extensions/super-html`

@@ -27,6 +27,9 @@ if not exist "%SHARED_KIT%\" (
 call :syncRootScript "%SHARED_KIT%" "%ROOT%"
 if !errorlevel! neq 0 exit /b !errorlevel!
 
+call :ensureDependencies "%ROOT%" "%SHARED_KIT%"
+if !errorlevel! neq 0 exit /b !errorlevel!
+
 call :applyTemplateConfig "%ROOT%" "%SHARED_KIT%\template-config" "%SHARED_KIT%"
 if !errorlevel! neq 0 exit /b !errorlevel!
 
@@ -39,6 +42,9 @@ if !errorlevel! neq 0 exit /b !errorlevel!
 call :ensureSharedKitDependencies "%ROOT%" "%SHARED_KIT%"
 if !errorlevel! neq 0 exit /b !errorlevel!
 
+call :syncExtensions "%ROOT%" "%SHARED_KIT%"
+if !errorlevel! neq 0 exit /b !errorlevel!
+
 call :install "%ROOT%" "root"
 
 if exist "%ROOT%\extensions\" (
@@ -48,10 +54,11 @@ if exist "%ROOT%\extensions\" (
 )
 
 call :initWorkMemory "%ROOT%" "%SHARED_KIT%"
+call :deployAiKnowledge "%ROOT%" "%SHARED_KIT%"
 call :syncMcpClients "%ROOT%" "%SHARED_KIT%"
 
 echo.
-echo All packages and MCP configurations installed successfully.
+echo All packages, AI skills, and MCP configurations installed successfully.
 if /I not "%SETUP_ALL_NO_PAUSE%"=="1" pause
 exit /b 0
 
@@ -80,7 +87,7 @@ call :mergeConfigTree "%~2\settings" "%~1\settings" "settings"
 if !errorlevel! neq 0 exit /b !errorlevel!
 call :copyTree "%~2\.vscode" "%~1\.vscode" ".vscode"
 if !errorlevel! neq 0 exit /b !errorlevel!
-call :copyFileIfExists "%~2\.gitignore" "%~1\.gitignore" ".gitignore"
+call :applyGitIgnore "%~1\.gitignore" "%~2\.gitignore"
 if !errorlevel! neq 0 exit /b !errorlevel!
 if exist "%~2\tsconfig_TEMPLATE.json" (
     call :copyFile "%~2\tsconfig_TEMPLATE.json" "%~1\tsconfig.json" "tsconfig.json"
@@ -166,6 +173,19 @@ if errorlevel 1 (
     exit /b 1
 )
 echo [ok] %~3
+exit /b 0
+
+:applyGitIgnore
+if not exist "%~2" (
+    echo [skip] Template .gitignore not found.
+    exit /b 0
+)
+call node -e "const fs=require('fs'),path=require('path');const targetPath=process.argv[1],tmplPath=process.argv[2];if(fs.existsSync(targetPath)===false){fs.copyFileSync(tmplPath,targetPath);console.log('[ok] .gitignore created from template');process.exit(0);}const parseLines=c=>c.split(/\r?\n/).map(l=>l.trim()).filter(l=>Boolean(l)&&l.startsWith('#')===false);const targetRaw=fs.readFileSync(targetPath,'utf8');const targetLines=new Set(parseLines(targetRaw));const tmplRaw=fs.readFileSync(tmplPath,'utf8');const missingRules=[];for(const line of tmplRaw.split(/\r?\n/)){const trimmed=line.trim();if(Boolean(trimmed)&&trimmed.startsWith('#')===false&&targetLines.has(trimmed)===false){missingRules.push(trimmed);}}if(missingRules.length>0){const sep=targetRaw.endsWith('\n')?'\n':'\n\n';fs.appendFileSync(targetPath,sep+'# Added by playable-shared-kit setup\n'+missingRules.join('\n')+'\n');console.log('[ok] .gitignore updated ('+missingRules.length+' missing rules added)');}else{console.log('[ok] .gitignore is up to date');}" "%~1" "%~2"
+if errorlevel 1 (
+    echo [ERROR] Failed to apply .gitignore.
+    if /I not "%SETUP_ALL_NO_PAUSE%"=="1" pause
+    exit /b 1
+)
 exit /b 0
 
 :updatePackageMetadata
@@ -257,19 +277,47 @@ if !INSTALL_EXIT! neq 0 (
 echo [ok] %~2
 exit /b 0
 
+:ensureDependencies
+if not exist "%~2\tools\ensure-dependencies.cjs" (
+    echo [skip] ensure-dependencies.cjs not found.
+    exit /b 0
+)
+echo.
+call node "%~2\tools\ensure-dependencies.cjs"
+if errorlevel 1 (
+    echo [warn] Dependency scanner completed with warnings.
+) else (
+    echo [ok] System runtimes and dependencies verified.
+)
+exit /b 0
+
 :initWorkMemory
 if not exist "%~2\tools\work-memory.cjs" (
     echo [skip] work-memory.cjs not found.
     exit /b 0
 )
 echo.
-echo ==^> Initializing Work-Memory SQLite database
-call node "%~2\tools\work-memory.cjs" init --repo-root "%~1"
+echo ==^> Synchronizing Work-Memory knowledge database from Git
+call node "%~2\tools\work-memory.cjs" sync --repo-root "%~1"
 if errorlevel 1 (
-    echo [warn] Failed to initialize work memory.
+    echo [warn] Work memory sync completed with warnings.
     exit /b 0
 )
-echo [ok] work-memory initialized
+echo [ok] work-memory synchronized
+exit /b 0
+
+:deployAiKnowledge
+if not exist "%~2\tools\ai-knowledge-sync.cjs" (
+    echo [skip] ai-knowledge-sync.cjs not found.
+    exit /b 0
+)
+echo.
+call node "%~2\tools\ai-knowledge-sync.cjs"
+if errorlevel 1 (
+    echo [warn] AI knowledge deployment completed with warnings.
+) else (
+    echo [ok] AI knowledge and skills deployed.
+)
 exit /b 0
 
 :syncMcpClients
@@ -284,6 +332,28 @@ if errorlevel 1 (
     echo [warn] MCP sync completed with some warnings.
 ) else (
     echo [ok] MCP clients registered.
+)
+exit /b 0
+
+:syncExtensions
+if not exist "%~2\packages\extensions\" (
+    echo [skip] No packages/extensions folder in shared-kit.
+    exit /b 0
+)
+echo.
+echo ==^> Syncing editor extensions from shared kit
+if not exist "%~1\extensions\" mkdir "%~1\extensions"
+for /d %%E in ("%~2\packages\extensions\*") do (
+    set "EXT_NAME=%%~nxE"
+    if not exist "%~1\extensions\!EXT_NAME!\" mkdir "%~1\extensions\!EXT_NAME!"
+    robocopy "%%E" "%~1\extensions\!EXT_NAME!" /E /NFL /NDL /NJH /NJS /NC /NS /NP >nul
+    set "ROBO_EXIT=!errorlevel!"
+    if !ROBO_EXIT! geq 8 (
+        echo [ERROR] Failed to sync extension !EXT_NAME!.
+        if /I not "%SETUP_ALL_NO_PAUSE%"=="1" pause
+        exit /b !ROBO_EXIT!
+    )
+    echo [ok] extension: !EXT_NAME!
 )
 exit /b 0
 
