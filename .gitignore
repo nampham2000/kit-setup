@@ -1,14 +1,3 @@
-# Dependencies downloaded automatically by ensure-dependencies.cjs
-tools/dependency/ffmpeg/
-tools/dependency/python/
-tools/dependency/uv/
-tools/dependency/*.exe
-tools/dependency/*.zip
-tools/dependency/*.tar.gz
-tools/dependency/*.7z
-tools/dependency/*.pyd
-tools/dependency/*.dll
-
 # Work memory cache
 tools/work-memory/data/cache/*.json
 

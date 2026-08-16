@@ -383,7 +383,7 @@ builder.addComponent(heroNodeId, {
 });
 // Interactive3DHero script component
 const heroCompId = builder.addComponent(heroNodeId, {
-  __type__: compressUuid("9efed29f-4345-4b03-b95f-25e1eebe27f4"), // Interactive3DHero
+  __type__: "9e67eji6AlBI4ZR8zI9Tst1",
   _name: "",
   _objFlags: 0,
   __editorExtras__: {},
@@ -975,7 +975,7 @@ const ctrlNodeId = builder.createNode("PlayableControllers", sceneId, { pos: [0,
 
 // PlayableCTAController
 const ctaCtrlCompId = builder.addComponent(ctrlNodeId, {
-  __type__: compressUuid("739f152b-492a-4e52-be70-9a58cea6bf9a"),
+  __type__: "fe8b62bYlRBrYRaf1+UfAgF",
   _name: "",
   _objFlags: 0,
   __editorExtras__: {},
@@ -990,7 +990,7 @@ const ctaCtrlCompId = builder.addComponent(ctrlNodeId, {
 
 // PlayableAudioController
 const audioCtrlCompId = builder.addComponent(ctrlNodeId, {
-  __type__: compressUuid("8926f415-292c-44e3-8f87-7d1ee0629544"),
+  __type__: "54e0at1HNNOD4awjd5VtifN",
   _name: "",
   _objFlags: 0,
   __editorExtras__: {},
@@ -1007,7 +1007,7 @@ const audioCtrlCompId = builder.addComponent(ctrlNodeId, {
 
 // PlayableTrackingController
 const trackCtrlCompId = builder.addComponent(ctrlNodeId, {
-  __type__: compressUuid("4a6aaafe-910b-4cac-aa3d-5acfeb885055"),
+  __type__: "a54f8JjQ/tPHYX28pxx94Jt",
   _name: "",
   _objFlags: 0,
   __editorExtras__: {},
@@ -1020,7 +1020,7 @@ const trackCtrlCompId = builder.addComponent(ctrlNodeId, {
 
 // CameraController
 const camCtrlCompId = builder.addComponent(ctrlNodeId, {
-  __type__: compressUuid("a421f7f7-4c1a-4644-9004-c40d0f935a4b"),
+  __type__: "ab52aD02cdFZo0kD95pHdJJ",
   _name: "",
   _objFlags: 0,
   __editorExtras__: {},
@@ -1034,7 +1034,7 @@ const camCtrlCompId = builder.addComponent(ctrlNodeId, {
 
 // PlayableUIHUD
 const hudCompId = builder.addComponent(ctrlNodeId, {
-  __type__: compressUuid("afd5ce14-9bdf-4b2a-a60b-86783d9175f3"),
+  __type__: "5fe795rm9NJ/YPJhE3bKQyi",
   _name: "",
   _objFlags: 0,
   __editorExtras__: {},
@@ -1056,7 +1056,7 @@ const hudCompId = builder.addComponent(ctrlNodeId, {
 
 // PlayableEntry (Master Controller)
 builder.addComponent(ctrlNodeId, {
-  __type__: compressUuid("225b9665-e883-419b-b872-c2956c6e8094"),
+  __type__: "2a9d5K88vJClI6vmuY5557H",
   _name: "",
   _objFlags: 0,
   __editorExtras__: {},

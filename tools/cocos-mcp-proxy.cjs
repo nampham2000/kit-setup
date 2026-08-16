@@ -52,6 +52,21 @@ function forwardHttp(messageObj) {
       let data = '';
       res.on('data', (chunk) => { data += chunk.toString(); });
       res.on('end', () => {
+        const contentType = res.headers['content-type'] || '';
+        if (contentType.includes('text/event-stream') || data.includes('data:')) {
+          const sseLines = data.split('\n');
+          for (const sseLine of sseLines) {
+            if (sseLine.startsWith('data:')) {
+              const dataStr = sseLine.slice(5).trim();
+              if (dataStr) {
+                try {
+                  const parsed = JSON.parse(dataStr);
+                  return resolve(parsed);
+                } catch (_) {}
+              }
+            }
+          }
+        }
         try {
           const parsed = JSON.parse(data);
           resolve(parsed);

@@ -5,3 +5,4 @@ export { ObjectPool, PoolHandle, type PoolConfig, type PoolKey } from "./utils/p
 export { makeNodePoolConfig } from "./utils/pool/NodePoolAdapter";
 export { Poolable } from "./utils/pool/Poolable";
 export * from "./config";
+export * from "./components";

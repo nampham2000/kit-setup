@@ -95,9 +95,11 @@ function copyDirectoryRecursive(src, dest) {
     } else if (entry.isFile() && (entry.name.endsWith('.ts') || entry.name.endsWith('.js') || entry.name.endsWith('.json'))) {
       let srcContent = fs.readFileSync(srcPath, 'utf8');
       if (entry.name.endsWith('.ts')) {
+        const destDir = path.dirname(destPath);
+        const relToShared = path.relative(destDir, TARGET_SHARED_DIR).replace(/\\/g, '/');
         srcContent = srcContent
-          .replace(/from\s+['"](?:\.\.\/)?playable-sdk\/(.*?)['"]/g, "from '../sdk/$1'")
-          .replace(/from\s+['"](?:\.\.\/)?playable-core\/(.*?)['"]/g, "from '../core/$1'");
+          .replace(/from\s+['"](?:\.\.\/)*playable-sdk\/(.*?)['"]/g, `from '${relToShared}/sdk/$1'`)
+          .replace(/from\s+['"](?:\.\.\/)*playable-core\/(.*?)['"]/g, `from '${relToShared}/core/$1'`);
       }
       let shouldWrite = true;
       if (fs.existsSync(destPath)) {
