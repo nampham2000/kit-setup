@@ -9,7 +9,11 @@ let databaseSyncLoadError = null;
 try {
   ({ DatabaseSync } = require('node:sqlite'));
 } catch (error) {
-  databaseSyncLoadError = error;
+  try {
+    DatabaseSync = require('better-sqlite3');
+  } catch (err2) {
+    databaseSyncLoadError = error;
+  }
 }
 const {
   DEFAULT_EMBEDDING_DIMENSIONS,
@@ -185,8 +189,8 @@ function semanticDistanceToScore(distance) {
 
 function createStore(options) {
   if (!DatabaseSync) {
-    const reason = databaseSyncLoadError && databaseSyncLoadError.message ? databaseSyncLoadError.message : 'node:sqlite is unavailable';
-    throw new Error(`Work Memory CLI requires a Node.js runtime with node:sqlite support. Current runtime cannot load node:sqlite: ${reason}`);
+    const reason = databaseSyncLoadError && databaseSyncLoadError.message ? databaseSyncLoadError.message : 'node:sqlite and better-sqlite3 are unavailable';
+    throw new Error(`Work Memory CLI requires a Node.js runtime with node:sqlite or better-sqlite3 support: ${reason}`);
   }
   const dbPath = path.resolve(options.dbPath);
   ensureDirectory(path.dirname(dbPath));
@@ -199,7 +203,9 @@ function createStore(options) {
 
   function prepare(sql) {
     const statement = db.prepare(sql);
-    statement.setAllowBareNamedParameters(true);
+    if (typeof statement.setAllowBareNamedParameters === 'function') {
+      statement.setAllowBareNamedParameters(true);
+    }
     return statement;
   }
 

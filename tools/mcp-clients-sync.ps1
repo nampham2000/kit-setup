@@ -1,25 +1,26 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Registers the project's MCP servers with every AI client installed on this machine.
+    Registers the project's MCP servers with every AI client installed on this machine (Windows & macOS).
 
 .DESCRIPTION
     One catalog, many client config formats. The catalog is resolved from what is
     actually installed (binaries are probed, never assumed), then written into each
     client's own config file:
 
-      cocos-mcp    Streamable HTTP served by the Cocos Creator editor extension.
+      cocos-mcp    Streamable HTTP served by the Cocos Creator editor extension (Port 3000).
       blender-mcp  stdio bridge to the Blender MCP addon (TCP 9876).
       gimp-mcp     stdio bridge to the GIMP MCP plug-in (TCP 9877).
-      node_repl    stdio JS sandbox shipped with the Codex runtime.
+      work-memory  stdio SQLite + semantic memory store in playable-shared-kit.
+      node_repl    stdio JS sandbox shipped with the Codex runtime (Codex only).
 
     Only stdio servers are spawned by the clients themselves - a stdio server is not
     a daemon, so there is nothing to "start" for those beyond making sure the app they
     talk to (Blender / GIMP) is running. 1_open-project.bat handles that part.
 
     Scope rule: a server name is written to exactly one scope per client, so no client
-    ever sees the same server twice. cocos-mcp stays in the workspace file for VSCode
-    (it is a per-project editor endpoint); everything else lands in the user config.
+    ever sees the same server twice. cocos-mcp & work-memory stay in the workspace file for VSCode
+    (they are per-project endpoints); everything else lands in the user config.
 
 .PARAMETER ProjectDir
     Cocos project root. Defaults to the current directory.
@@ -56,8 +57,23 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$ProjectDir = [System.IO.Path]::GetFullPath($ProjectDir).TrimEnd('\')
+$ProjectDir = [System.IO.Path]::GetFullPath($ProjectDir).TrimEnd('\').TrimEnd('/')
 $CocosMcpUrl = "http://127.0.0.1:$CocosMcpPort/mcp"
+
+$IsMacOS = $false
+try {
+    if ($PSVersionTable.PSObject.Properties['PSVersion'] -and $PSVersionTable.PSVersion.Major -ge 6) {
+        $IsMacOS = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::OSX)
+    }
+} catch { $IsMacOS = $false }
+
+function Get-UserHome {
+    if ($env:USERPROFILE) { return $env:USERPROFILE }
+    if ($env:HOME) { return $env:HOME }
+    return [Environment]::GetFolderPath('UserProfile')
+}
+
+$HomeDir = Get-UserHome
 
 function Write-Step($Message, $Color = 'Cyan') {
     if (-not $Quiet) { Write-Host $Message -ForegroundColor $Color }
@@ -125,7 +141,12 @@ function Resolve-UvExe {
     $Candidates = @(
         (Join-Path $env:APPDATA 'Python\Python*\Scripts\uv.exe'),
         (Join-Path $env:LOCALAPPDATA 'Programs\Python\Python*\Scripts\uv.exe'),
-        (Join-Path $env:USERPROFILE '.local\bin\uv.exe')
+        (Join-Path $HomeDir '.local\bin\uv.exe'),
+        (Join-Path $HomeDir '.cargo\bin\uv.exe'),
+        (Join-Path $HomeDir '.local/bin/uv'),
+        (Join-Path $HomeDir '.cargo/bin/uv'),
+        '/usr/local/bin/uv',
+        '/opt/homebrew/bin/uv'
     )
     $Uv = Get-NewestFile $Candidates
     if ($Uv) { return $Uv }
@@ -155,40 +176,76 @@ function Resolve-McpCatalog {
     $Catalog = New-Object System.Collections.ArrayList
     $Skipped = New-Object System.Collections.ArrayList
 
-    # --- cocos-mcp: HTTP, served by the editor extension in this project.
+    # --- 1) cocos-mcp: HTTP, served by the editor extension in this project.
     [void] $Catalog.Add((New-McpServer 'cocos-mcp' 'http' $CocosMcpUrl $null @() ([ordered]@{})))
 
-    # --- blender-mcp: stdio bridge, talks to the Blender addon over TCP 9876.
-    $BlenderPython = Join-Path $env:USERPROFILE '.codex\mcp\blender-1.0.0-official\.runtime-venv\Scripts\python.exe'
-    if (Test-Path -LiteralPath $BlenderPython) {
-        [void] $Catalog.Add((New-McpServer 'blender-mcp' 'stdio' $null $BlenderPython @('-m', 'blmcp') ([ordered]@{
-            BLENDER_HOST = 'localhost'
+    # --- 2) work-memory: stdio bridge to local SQLite & semantic memory in shared kit.
+    $WorkMemoryScript = Join-Path $ProjectDir 'playable-shared-kit\tools\work-memory-mcp.cjs'
+    if (-not (Test-Path -LiteralPath $WorkMemoryScript)) {
+        $WorkMemoryScript = Join-Path $ProjectDir 'playable-shared-kit/tools/work-memory-mcp.cjs'
+    }
+    if (Test-Path -LiteralPath $WorkMemoryScript) {
+        $NodeCmd = Get-Command node -ErrorAction SilentlyContinue
+        $NodeBin = if ($NodeCmd) { $NodeCmd.Source } else { 'node' }
+        [void] $Catalog.Add((New-McpServer 'work-memory' 'stdio' $null $NodeBin @($WorkMemoryScript) ([ordered]@{
+            WORK_MEMORY_REPO_ROOT = $ProjectDir
+        })))
+    } else {
+        [void] $Skipped.Add("work-memory (missing script: $WorkMemoryScript)")
+    }
+
+    # --- 3) blender-mcp: stdio bridge, talks to the Blender addon over TCP 9876.
+    $BlenderNodeServer = Join-Path $ProjectDir 'playable-shared-kit\tools\blender-mcp\blender-mcp-server.cjs'
+    if (-not (Test-Path -LiteralPath $BlenderNodeServer)) {
+        $BlenderNodeServer = Join-Path $ProjectDir 'playable-shared-kit/tools/blender-mcp/blender-mcp-server.cjs'
+    }
+    if (Test-Path -LiteralPath $BlenderNodeServer) {
+        $NodeCmd = Get-Command node -ErrorAction SilentlyContinue
+        $NodeBin = if ($NodeCmd) { $NodeCmd.Source } else { 'node' }
+        [void] $Catalog.Add((New-McpServer 'blender-mcp' 'stdio' $null $NodeBin @($BlenderNodeServer) ([ordered]@{
+            BLENDER_HOST = '127.0.0.1'
             BLENDER_PORT = '9876'
         })))
     } else {
-        [void] $Skipped.Add("blender-mcp (missing runtime venv: $BlenderPython)")
+        $BlenderPythonCandidates = @(
+            (Join-Path $HomeDir '.codex\mcp\blender-1.0.0-official\.runtime-venv\Scripts\python.exe'),
+            (Join-Path $HomeDir '.codex/mcp/blender-1.0.0-official/.runtime-venv/bin/python'),
+            (Join-Path $HomeDir '.codex/mcp/blender-1.0.0-official/.runtime-venv/bin/python3')
+        )
+        $BlenderPython = $null
+        foreach ($candidate in $BlenderPythonCandidates) {
+            if (Test-Path -LiteralPath $candidate) { $BlenderPython = $candidate; break }
+        }
+        if ($BlenderPython) {
+            [void] $Catalog.Add((New-McpServer 'blender-mcp' 'stdio' $null $BlenderPython @('-m', 'blmcp') ([ordered]@{
+                BLENDER_HOST = 'localhost'
+                BLENDER_PORT = '9876'
+            })))
+        } else {
+            [void] $Skipped.Add("blender-mcp (blender-mcp-server script or blmcp runtime not found)")
+        }
     }
 
-    # --- gimp-mcp: stdio bridge, talks to the GIMP plug-in over TCP 9877.
-    $GimpDir = Join-Path $env:USERPROFILE '.codex\mcp\gimp-mcp'
+    # --- 4) gimp-mcp: stdio bridge, talks to the GIMP plug-in over TCP 9877.
+    $GimpDir = Join-Path $HomeDir '.codex\mcp\gimp-mcp'
+    if (-not (Test-Path -LiteralPath $GimpDir)) {
+        $GimpDir = Join-Path $HomeDir '.codex/mcp/gimp-mcp'
+    }
     $GimpEntry = Join-Path $GimpDir 'gimp_mcp_server.py'
     $UvExe = Resolve-UvExe
     if ((Test-Path -LiteralPath $GimpEntry) -and $UvExe) {
         [void] $Catalog.Add((New-McpServer 'gimp-mcp' 'stdio' $null $UvExe @('run', '--directory', $GimpDir, 'gimp_mcp_server.py') ([ordered]@{})))
     } elseif (-not $UvExe) {
-        [void] $Skipped.Add('gimp-mcp (uv.exe not found)')
+        [void] $Skipped.Add('gimp-mcp (uv.exe / uv not found)')
     } else {
         [void] $Skipped.Add("gimp-mcp (missing entry point: $GimpEntry)")
     }
 
-    # --- node_repl: stdio JS sandbox from the Codex runtime.
+    # --- optional) node_repl: stdio JS sandbox from the Codex runtime.
     $NodeRepl = Resolve-NodeReplBin
     if ($NodeRepl) {
         $ReplBinDir = Split-Path $NodeRepl -Parent
-        $CodexHome = Join-Path $env:USERPROFILE '.codex'
-        # Codex also injects SKY_CUA_* browser-pipe variables tied to one live desktop
-        # session; those cannot be reproduced here, so the browser tools stay Codex-only.
-        # The JS sandbox tools (js / js_reset / js_add_node_module_dir) need only these.
+        $CodexHome = Join-Path $HomeDir '.codex'
         [void] $Catalog.Add((New-McpServer 'node_repl' 'stdio' $null $NodeRepl @() ([ordered]@{
             NODE_REPL_NATIVE_PIPE_CONNECT_TIMEOUT_MS = '1000'
             NODE_REPL_NODE_MODULE_DIRS               = (Join-Path $ReplBinDir 'node_modules')
@@ -196,8 +253,6 @@ function Resolve-McpCatalog {
             NODE_REPL_TRUSTED_CODE_PATHS             = "$CodexHome;$(Join-Path $ReplBinDir 'node_modules')"
             CODEX_HOME                               = $CodexHome
         })))
-    } else {
-        [void] $Skipped.Add('node_repl (Codex cua_node runtime not found)')
     }
 
     return [pscustomobject]@{ Servers = @($Catalog); Skipped = @($Skipped) }
@@ -231,13 +286,37 @@ function ConvertTo-AntigravityEntry($Server) {
     return [pscustomobject] $Entry
 }
 
+# Claude Desktop (claude_desktop_config.json) only supports stdio servers (command, args, env).
+# It strictly rejects "type" and "url" fields.
+# Remote HTTP endpoints (like cocos-mcp) are bridged via cocos-mcp-bridge.cjs.
+function ConvertTo-ClaudeEntry($Server) {
+    if ($Server.Kind -eq 'http') {
+        $BridgeScript = Join-Path $ProjectDir 'playable-shared-kit\tools\cocos-mcp-bridge.cjs'
+        if (-not (Test-Path -LiteralPath $BridgeScript)) {
+            $BridgeScript = Join-Path $ProjectDir 'playable-shared-kit/tools/cocos-mcp-bridge.cjs'
+        }
+        $NodeCmd = Get-Command node -ErrorAction SilentlyContinue
+        $NodeBin = if ($NodeCmd) { $NodeCmd.Source } else { 'node' }
+        $Entry = [ordered]@{
+            command = $NodeBin
+            args    = @($BridgeScript)
+            env     = ConvertTo-EnvObject ([ordered]@{ COCOS_MCP_URL = $Server.Url })
+        }
+        return [pscustomobject] $Entry
+    }
+    $Entry = [ordered]@{ command = $Server.Command; args = @($Server.Args) }
+    if ($Server.Env.Count -gt 0) { $Entry['env'] = ConvertTo-EnvObject $Server.Env }
+    return [pscustomobject] $Entry
+}
+
 function Sync-ClientConfig {
     param(
         [string]   $Label,
         [string]   $Path,
         [string]   $RootKey,      # 'mcpServers' or 'servers'
         [object[]] $Servers,
-        [string]   $Format,       # 'typed' or 'antigravity'
+        [string]   $Format,       # 'typed', 'antigravity', or 'claude'
+        [string[]] $RemoveKeys = @('node_repl'),
         [switch]   $MustExist     # only write when the client is actually installed
     )
 
@@ -245,7 +324,7 @@ function Sync-ClientConfig {
         Write-Detail "[skip] $Label - not installed"
         return $false
     }
-    if ($Servers.Count -eq 0) {
+    if (($null -eq $Servers -or $Servers.Count -eq 0) -and ($null -eq $RemoveKeys -or $RemoveKeys.Count -eq 0)) {
         Write-Detail "[skip] $Label - nothing to write"
         return $false
     }
@@ -256,9 +335,21 @@ function Sync-ClientConfig {
         Set-JsonProperty $Config $RootKey ([pscustomobject]@{})
     }
 
+    # Clean up explicitly excluded / unsupported servers for this client (e.g. node_repl for non-Codex)
+    if ($RemoveKeys) {
+        foreach ($Key in $RemoveKeys) {
+            if ($Config.$RootKey.PSObject.Properties[$Key]) {
+                $Config.$RootKey.PSObject.Properties.Remove($Key)
+                Write-Detail "[clean] $Label -> removed $Key" 'DarkYellow'
+            }
+        }
+    }
+
     foreach ($Server in $Servers) {
         if ($Format -eq 'antigravity') {
             $Entry = ConvertTo-AntigravityEntry $Server
+        } elseif ($Format -eq 'claude') {
+            $Entry = ConvertTo-ClaudeEntry $Server
         } else {
             $Entry = ConvertTo-TypedEntry $Server
         }
@@ -271,7 +362,13 @@ function Sync-ClientConfig {
 }
 
 function Sync-ClaudeUserScope($Servers) {
-    $ClaudeExe = Get-NewestFile @((Join-Path $env:APPDATA 'Claude\claude-code\*\claude.exe'))
+    $ClaudeCandidates = @(
+        (Join-Path $env:APPDATA 'Claude\claude-code\*\claude.exe'),
+        (Join-Path $HomeDir '.local/bin/claude'),
+        '/usr/local/bin/claude',
+        '/opt/homebrew/bin/claude'
+    )
+    $ClaudeExe = Get-NewestFile $ClaudeCandidates
     if (-not $ClaudeExe) {
         $OnPath = Get-Command claude -ErrorAction SilentlyContinue
         if ($OnPath) { $ClaudeExe = $OnPath.Source }
@@ -281,10 +378,12 @@ function Sync-ClaudeUserScope($Servers) {
         return
     }
 
+    # Clean up node_repl from Claude user scope if present
+    & $ClaudeExe mcp remove node_repl --scope user 2>&1 | Out-Null
+
     foreach ($Server in $Servers) {
         $Entry = ConvertTo-TypedEntry $Server
         $Json = $Entry | ConvertTo-Json -Depth 30 -Compress
-        # add-json refuses to overwrite, so drop any previous registration first.
         & $ClaudeExe mcp remove $Server.Name --scope user 2>&1 | Out-Null
         $Output = & $ClaudeExe mcp add-json $Server.Name $Json --scope user 2>&1
         if ($LASTEXITCODE -eq 0) {
@@ -295,26 +394,55 @@ function Sync-ClaudeUserScope($Servers) {
     }
 }
 
-function Test-CodexConfig($Servers) {
-    $ConfigPath = Join-Path $env:USERPROFILE '.codex\config.toml'
-    if (-not (Test-Path -LiteralPath $ConfigPath)) {
-        Write-Detail '[skip] Codex / ChatGPT desktop - config.toml not found'
+function Sync-CodexConfig($Servers) {
+    $CodexDir = Join-Path $HomeDir '.codex'
+    $ConfigPath = Join-Path $CodexDir 'config.toml'
+    if (-not (Test-Path -LiteralPath $CodexDir)) {
+        Write-Detail '[skip] Codex / ChatGPT desktop - .codex folder not found'
         return
     }
-    $Raw = Get-Content -LiteralPath $ConfigPath -Raw
-    $Missing = @($Servers | Where-Object { $Raw -notmatch [regex]::Escape("[mcp_servers.$($_.Name)]") } | ForEach-Object { $_.Name })
-    if ($Missing.Count -eq 0) {
-        Write-Detail '[ok] Codex / ChatGPT desktop already has every server' 'Gray'
-    } else {
-        Write-Detail "[warn] Codex / ChatGPT desktop is missing: $($Missing -join ', ') (add via its MCP settings)" 'Yellow'
+
+    Backup-Once $ConfigPath
+    $Raw = if (Test-Path -LiteralPath $ConfigPath) { Get-Content -LiteralPath $ConfigPath -Raw } else { "" }
+    $Updated = $Raw
+
+    foreach ($Server in $Servers) {
+        $TomlKey = $Server.Name -replace '-', '_'
+        $SectionHeader = "[mcp_servers.$TomlKey]"
+        
+        $Lines = New-Object System.Collections.Generic.List[string]
+        $Lines.Add($SectionHeader)
+        if ($Server.Kind -eq 'http') {
+            $Lines.Add("url = `"$($Server.Url)`"")
+        } else {
+            $EscapedCmd = ($Server.Command -replace '\\', '/')
+            $Lines.Add("command = `"$EscapedCmd`"")
+            $ArgsToml = @($Server.Args | ForEach-Object { '"' + ($_ -replace '\\', '/') + '"' }) -join ', '
+            $Lines.Add("args = [$ArgsToml]")
+            if ($Server.Env.Count -gt 0) {
+                $EnvPairs = @($Server.Env.Keys | ForEach-Object { "$_ = `"$($Server.Env[$_] -replace '\\', '/')`"" }) -join ', '
+                $Lines.Add("env = { $EnvPairs }")
+            }
+        }
+        $Block = ($Lines -join [Environment]::NewLine) + [Environment]::NewLine
+
+        if ($Updated -match [regex]::Escape($SectionHeader)) {
+            $Pattern = "(?ms)^\s*" + [regex]::Escape($SectionHeader) + ".*?(?=^\s*\[|\z)"
+            $Updated = [regex]::Replace($Updated, $Pattern, $Block)
+        } else {
+            if (-not [string]::IsNullOrWhiteSpace($Updated) -and -not $Updated.EndsWith([Environment]::NewLine)) {
+                $Updated += [Environment]::NewLine
+            }
+            $Updated += [Environment]::NewLine + $Block
+        }
     }
+
+    [System.IO.File]::WriteAllText($ConfigPath, $Updated.Trim() + [Environment]::NewLine, (New-Object System.Text.UTF8Encoding($false)))
+    Write-Detail "[ok] Codex / ChatGPT desktop -> $(($Servers | ForEach-Object { $_.Name }) -join ', ')" 'Gray'
 }
 
 # ----------------------------------------------------------------- verification
 
-# The handshake runs through Node, not PowerShell: a redirected StandardInput in
-# Windows PowerShell writes an encoding preamble ahead of the first line, which every
-# MCP server rejects as malformed JSON.
 function Invoke-McpVerification($Servers) {
     Write-Step '==> Verifying MCP servers...'
 
@@ -371,50 +499,83 @@ function Invoke-McpVerification($Servers) {
 $Resolved = Resolve-McpCatalog
 $AllServers = $Resolved.Servers
 
+# node_repl is an internal runtime sandbox specifically for OpenAI Codex.
+# Exclude it from all standard AI providers (Claude, Antigravity/Gemini, VSCode/Copilot, JetBrains).
+$StandardServers = @($AllServers | Where-Object { $_.Name -ne 'node_repl' })
+$CodexServers = $AllServers
+
 if ($VerifyOnly) {
     foreach ($Note in $Resolved.Skipped) { Write-Host "  [skip] $Note" -ForegroundColor Yellow }
-    Invoke-McpVerification $AllServers | Out-Null
+    Invoke-McpVerification $StandardServers | Out-Null
     return
 }
 
 Write-Step '==> Syncing MCP clients...'
 foreach ($Note in $Resolved.Skipped) { Write-Detail "[skip] $Note" 'Yellow' }
 
-$WorkspaceOnly = @($AllServers | Where-Object { $_.Name -eq 'cocos-mcp' })
-$UserOnly = @($AllServers | Where-Object { $_.Name -ne 'cocos-mcp' })
+$WorkspaceOnly = @($StandardServers | Where-Object { $_.Name -in @('cocos-mcp', 'work-memory') })
+$UserOnly = @($StandardServers | Where-Object { $_.Name -notin @('cocos-mcp', 'work-memory') })
 
-# Claude Code desktop + Claude Desktop read this one file; keep all four here so the
-# clients see each server exactly once.
-Sync-ClientConfig -Label 'Claude (desktop + Claude Code)' `
-    -Path (Join-Path $env:APPDATA 'Claude\claude_desktop_config.json') `
-    -RootKey 'mcpServers' -Servers $AllServers -Format 'typed' | Out-Null
+# 1) Claude Desktop (Anthropic stdio schema, bridges HTTP endpoints)
+$ClaudeDesktopPath = if ($IsMacOS) {
+    Join-Path $HomeDir 'Library/Application Support/Claude/claude_desktop_config.json'
+} else {
+    Join-Path $env:APPDATA 'Claude\claude_desktop_config.json'
+}
+Sync-ClientConfig -Label 'Claude (desktop)' `
+    -Path $ClaudeDesktopPath `
+    -RootKey 'mcpServers' -Servers $StandardServers -Format 'claude' -RemoveKeys @('node_repl') | Out-Null
 
-# Antigravity: single global config, no workspace-level equivalent.
-Sync-ClientConfig -Label 'Antigravity' `
-    -Path (Join-Path $env:USERPROFILE '.gemini\config\mcp_config.json') `
-    -RootKey 'mcpServers' -Servers $AllServers -Format 'antigravity' | Out-Null
+# Also sync Windows Store / MSIX packaged Claude instances if present
+if (-not $IsMacOS) {
+    $PackagedClaudeDirs = Get-ChildItem -Path "$env:LOCALAPPDATA\Packages" -Filter "*Claude*" -ErrorAction SilentlyContinue
+    foreach ($PkgDir in $PackagedClaudeDirs) {
+        $PkgClaudePath = Join-Path $PkgDir.FullName 'LocalCache\Roaming\Claude\claude_desktop_config.json'
+        Sync-ClientConfig -Label 'Claude (MS Store / packaged)' `
+            -Path $PkgClaudePath `
+            -RootKey 'mcpServers' -Servers $StandardServers -Format 'claude' -RemoveKeys @('node_repl') | Out-Null
+    }
+}
 
-# Copilot in VSCode: cocos-mcp belongs to the workspace (it is this project's editor),
-# the machine-wide tools go to user scope so every folder gets them.
+# 2) Antigravity / Gemini (standard servers only)
+$AntigravityPath = Join-Path $HomeDir '.gemini/config/mcp_config.json'
+Sync-ClientConfig -Label 'Antigravity / Gemini' `
+    -Path $AntigravityPath `
+    -RootKey 'mcpServers' -Servers $StandardServers -Format 'antigravity' -RemoveKeys @('node_repl') | Out-Null
+
+# 3) Copilot in VSCode: cocos-mcp & work-memory belong to the workspace, machine-wide tools go to user scope
 Sync-ClientConfig -Label 'Copilot / VSCode (workspace)' `
     -Path (Join-Path $ProjectDir '.vscode\mcp.json') `
-    -RootKey 'servers' -Servers $WorkspaceOnly -Format 'typed' | Out-Null
+    -RootKey 'servers' -Servers $WorkspaceOnly -Format 'typed' -RemoveKeys @('node_repl') | Out-Null
 
+$VSCodeUserPath = if ($IsMacOS) {
+    Join-Path $HomeDir 'Library/Application Support/Code/User/mcp.json'
+} else {
+    Join-Path $env:APPDATA 'Code\User\mcp.json'
+}
 Sync-ClientConfig -Label 'Copilot / VSCode (user)' `
-    -Path (Join-Path $env:APPDATA 'Code\User\mcp.json') `
-    -RootKey 'servers' -Servers $UserOnly -Format 'typed' -MustExist | Out-Null
+    -Path $VSCodeUserPath `
+    -RootKey 'servers' -Servers $UserOnly -Format 'typed' -RemoveKeys @('node_repl') -MustExist | Out-Null
 
-Sync-ClientConfig -Label 'Copilot / VSCode Insiders (user)' `
-    -Path (Join-Path $env:APPDATA 'Code - Insiders\User\mcp.json') `
-    -RootKey 'servers' -Servers $UserOnly -Format 'typed' -MustExist | Out-Null
+if (-not $IsMacOS) {
+    Sync-ClientConfig -Label 'Copilot / VSCode Insiders (user)' `
+        -Path (Join-Path $env:APPDATA 'Code - Insiders\User\mcp.json') `
+        -RootKey 'servers' -Servers $UserOnly -Format 'typed' -RemoveKeys @('node_repl') -MustExist | Out-Null
+}
 
-# Copilot in JetBrains has no workspace config, so it takes the full set.
+# Copilot in JetBrains takes standard set
+$JetBrainsPath = if ($IsMacOS) {
+    Join-Path $HomeDir 'Library/Application Support/github-copilot/intellij/mcp.json'
+} else {
+    Join-Path $env:LOCALAPPDATA 'github-copilot\intellij\mcp.json'
+}
 Sync-ClientConfig -Label 'Copilot / JetBrains' `
-    -Path (Join-Path $env:LOCALAPPDATA 'github-copilot\intellij\mcp.json') `
-    -RootKey 'servers' -Servers $AllServers -Format 'typed' -MustExist | Out-Null
+    -Path $JetBrainsPath `
+    -RootKey 'servers' -Servers $StandardServers -Format 'typed' -RemoveKeys @('node_repl') -MustExist | Out-Null
 
-if ($ClaudeUserScope) { Sync-ClaudeUserScope $AllServers }
+if ($ClaudeUserScope) { Sync-ClaudeUserScope $StandardServers }
 
-Test-CodexConfig $AllServers
+# 4) Codex / ChatGPT Desktop (only client that receives node_repl)
+Sync-CodexConfig $CodexServers
 
-if ($Verify) { Invoke-McpVerification $AllServers | Out-Null }
+if ($Verify) { Invoke-McpVerification $StandardServers | Out-Null }

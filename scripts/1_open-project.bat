@@ -134,6 +134,19 @@ function Sync-McpClients {
     }
 }
 
+function Warmup-WorkMemory {
+    $WorkMemoryScript = Join-Path $SharedKitDir 'tools\work-memory.cjs'
+    if (Test-Path $WorkMemoryScript) {
+        $NodeCmd = Get-Command node -ErrorAction SilentlyContinue
+        if ($NodeCmd) {
+            Write-Host "  [mcp] Initializing / warming up work-memory cache..." -ForegroundColor DarkGray
+            try {
+                & $NodeCmd.Source $WorkMemoryScript init --repo-root $ProjectDir 2>&1 | Out-Null
+            } catch {}
+        }
+    }
+}
+
 function Sync-VSCodeMcpAutostart {
     $Source = Join-Path $SharedKitDir 'tools\vscode-mcp-autostart'
     if (-not (Test-Path (Join-Path $Source 'package.json'))) {
@@ -200,9 +213,11 @@ function Start-BlenderMcpBackend {
         return $false
     }
 
-    # The MCP addon binds the port itself a second after Blender registers it.
-    Write-Host "  [mcp] Launching Blender for blender-mcp..." -ForegroundColor DarkGray
-    Start-Detached $BlenderExe ''
+    $AddonScript = Join-Path $SharedKitDir 'tools\blender-mcp\blender_server_addon.py'
+    $BlenderArgs = if (Test-Path -LiteralPath $AddonScript) { "--python `"$AddonScript`"" } else { "" }
+
+    Write-Host "  [mcp] Launching Blender for blender-mcp (port $BlenderMcpPort)..." -ForegroundColor DarkGray
+    Start-Detached $BlenderExe $BlenderArgs
     return $true
 }
 
@@ -352,6 +367,7 @@ if (Test-Path $CocosCreatorExe) {
     Sync-VSCodeMcpAutostart
     Sync-CocosMcpExtension
     Ensure-CocosMcpSettings
+    Warmup-WorkMemory
     Sync-McpClients
 
     $ResolvedProjectDir = [System.IO.Path]::GetFullPath($ProjectDir).TrimEnd('\')

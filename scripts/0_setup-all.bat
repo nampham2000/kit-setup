@@ -47,8 +47,11 @@ if exist "%ROOT%\extensions\" (
     )
 )
 
+call :initWorkMemory "%ROOT%" "%SHARED_KIT%"
+call :syncMcpClients "%ROOT%" "%SHARED_KIT%"
+
 echo.
-echo All packages installed successfully.
+echo All packages and MCP configurations installed successfully.
 if /I not "%SETUP_ALL_NO_PAUSE%"=="1" pause
 exit /b 0
 
@@ -197,6 +200,14 @@ if not exist "%~2\packages\playable-core\package.json" (
 )
 echo.
 echo ==^> Ensuring root dependencies: playable-sdk, playable-core
+call :detectLinkSupport "%~1"
+if "!LINK_SUPPORTED!"=="0" (
+    echo [warn] This project is on a filesystem without symlink/junction support ^(exFAT/FAT32/network share^).
+    echo        npm cannot install folder-based file: dependencies there, so shared-kit
+    echo        packages are packed into .local-tarballs and installed from tarballs instead.
+    call :packSharedKitDependencies "%~1" "%~2"
+    exit /b !errorlevel!
+)
 call node -e "const fs=require('fs'),path=require('path');const file=path.join(process.argv[1],'package.json');const raw=fs.readFileSync(file,'utf8').replace(/^\uFEFF/,'');const pkg=JSON.parse(raw);pkg.dependencies={...(pkg.dependencies||{}),'playable-sdk':'file:./playable-shared-kit/packages/playable-sdk','playable-core':'file:./playable-shared-kit/packages/playable-core'};fs.writeFileSync(file,JSON.stringify(pkg,null,2)+'\n');" "%~1"
 if errorlevel 1 (
     echo [ERROR] Failed to update root package.json shared-kit dependencies.
@@ -204,6 +215,27 @@ if errorlevel 1 (
     exit /b 1
 )
 echo [ok] root shared-kit dependencies
+exit /b 0
+
+:detectLinkSupport
+set "LINK_SUPPORTED=1"
+call node -e "const fs=require('fs'),path=require('path');const dir=path.join(process.argv[1],'node_modules');const target=path.join(dir,'.link-probe-target');const link=path.join(dir,'.link-probe-link');const clean=()=>{try{fs.rmSync(link,{recursive:true,force:true})}catch(e){}try{fs.rmSync(target,{recursive:true,force:true})}catch(e){}};try{fs.mkdirSync(target,{recursive:true});fs.rmSync(link,{recursive:true,force:true});fs.symlinkSync(target,link,'junction')}catch(e){clean();process.exit(1)}clean();" "%~1"
+if errorlevel 1 set "LINK_SUPPORTED=0"
+exit /b 0
+
+:packSharedKitDependencies
+if not exist "%~2\scripts\pack-shared-kit-deps.js" (
+    echo [ERROR] Missing helper: %~2\scripts\pack-shared-kit-deps.js
+    if /I not "%SETUP_ALL_NO_PAUSE%"=="1" pause
+    exit /b 1
+)
+call node "%~2\scripts\pack-shared-kit-deps.js" "%~1" "%~2"
+if errorlevel 1 (
+    echo [ERROR] Failed to pack shared-kit tarball dependencies.
+    if /I not "%SETUP_ALL_NO_PAUSE%"=="1" pause
+    exit /b 1
+)
+echo [ok] root shared-kit dependencies (tarball mode)
 exit /b 0
 
 :install
@@ -224,3 +256,34 @@ if !INSTALL_EXIT! neq 0 (
 )
 echo [ok] %~2
 exit /b 0
+
+:initWorkMemory
+if not exist "%~2\tools\work-memory.cjs" (
+    echo [skip] work-memory.cjs not found.
+    exit /b 0
+)
+echo.
+echo ==^> Initializing Work-Memory SQLite database
+call node "%~2\tools\work-memory.cjs" init --repo-root "%~1"
+if errorlevel 1 (
+    echo [warn] Failed to initialize work memory.
+    exit /b 0
+)
+echo [ok] work-memory initialized
+exit /b 0
+
+:syncMcpClients
+if not exist "%~2\tools\mcp-clients-sync.ps1" (
+    echo [skip] mcp-clients-sync.ps1 not found.
+    exit /b 0
+)
+echo.
+echo ==^> Syncing MCP servers to AI clients (Claude, Antigravity, Copilot, Codex)
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~2\tools\mcp-clients-sync.ps1" -ProjectDir "%~1"
+if errorlevel 1 (
+    echo [warn] MCP sync completed with some warnings.
+) else (
+    echo [ok] MCP clients registered.
+)
+exit /b 0
+
