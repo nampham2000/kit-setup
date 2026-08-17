@@ -4408,6 +4408,8 @@ class CocosPrefabBuilder {
   }
 
   addRigidBody(nodeId, unityComponentId, config, fileId) {
+    const linearFactor = config?.linearFactor ? vec3(config.linearFactor.x, config.linearFactor.y, config.linearFactor.z) : vec3(1, 1, 1);
+    const angularFactor = config?.angularFactor ? vec3(config.angularFactor.x, config.angularFactor.y, config.angularFactor.z) : vec3(1, 1, 1);
     return this.addComponent(nodeId, 'cc.RigidBody', {
       _group: Number(config?.group ?? 1),
       _type: Number(config?.type ?? 1),
@@ -4416,8 +4418,24 @@ class CocosPrefabBuilder {
       _linearDamping: Number(config?.linearDamping ?? 0.1),
       _angularDamping: Number(config?.angularDamping ?? 0.1),
       _useGravity: Boolean(config?.useGravity ?? true),
-      _linearFactor: vec3(1, 1, 1),
-      _angularFactor: vec3(1, 1, 1),
+      _linearFactor: linearFactor,
+      _angularFactor: angularFactor,
+    }, unityComponentId, fileId);
+  }
+
+  addCapsuleCollider(nodeId, unityComponentId, config, fileId) {
+    return this.addComponent(nodeId, 'cc.CapsuleCollider', {
+      _enabled: Boolean(config?.enabled ?? true),
+      _material: null,
+      _isTrigger: Boolean(config?.isTrigger ?? false),
+      _center: vec3(
+        Number(config?.center?.x || 0),
+        Number(config?.center?.y || 0),
+        Number(config?.center?.z || 0),
+      ),
+      _radius: Math.max(0, Number(config?.radius ?? 0.5)),
+      _cylinderHeight: Math.max(0, Number(config?.cylinderHeight ?? 1.0)),
+      _direction: Number(config?.direction ?? 1),
     }, unityComponentId, fileId);
   }
 
@@ -4526,10 +4544,20 @@ class CocosPrefabBuilder {
     const isOrthographic = Number(getField(doc, 'orthographic', getField(doc, 'm_Orthographic', 0)) || 0) !== 0;
     const projection = isOrthographic ? COCOS_CAMERA_PROJECTION_ORTHO : COCOS_CAMERA_PROJECTION_PERSPECTIVE;
     const fov = Number(getField(doc, 'field of view', getField(doc, 'm_FieldOfView', 60)) || 60);
-    const orthoHeight = Number(getField(doc, 'orthographic size', getField(doc, 'm_OrthographicSize', 5)) || 5);
+    const orthoSize = Number(getField(doc, 'orthographic size', getField(doc, 'm_OrthographicSize', 5)) || 5);
+    const orthoHeight = orthoSize * 2;
     const near = Number(getField(doc, 'near clip plane', getField(doc, 'm_NearClipPlane', 0.3)) || 0.3);
     const far = Number(getField(doc, 'far clip plane', getField(doc, 'm_FarClipPlane', 1000)) || 1000);
     const background = getField(doc, 'm_BackGroundColor', { r: 0, g: 0, b: 0, a: 0 });
+
+    const unityClearFlags = Number(getField(doc, 'm_ClearFlags', 1) || 1);
+    let cocosClearFlags = 6; // Solid color
+    if (unityClearFlags === 1) cocosClearFlags = 7; // Skybox
+    else if (unityClearFlags === 3) cocosClearFlags = 2; // Depth only
+    else if (unityClearFlags === 4) cocosClearFlags = 0; // Nothing
+
+    const cullingMask = Number(getField(doc, 'm_CullingMask.m_Bits', 0xffffffff) ?? 0xffffffff);
+
     return this.addComponent(nodeId, 'cc.Camera', {
       _projection: projection,
       _priority: 0,
@@ -4541,13 +4569,13 @@ class CocosPrefabBuilder {
       _color: unityColorToCocos(background),
       _depth: 1,
       _stencil: 0,
-      _clearFlags: 6,
+      _clearFlags: cocosClearFlags,
       _rect: rect(),
       _aperture: 19,
       _shutter: 8,
       _iso: 1,
       _screenScale: 1,
-      _visibility: 0xffffffff,
+      _visibility: cullingMask,
       _targetTexture: null,
       _postProcess: null,
       _usePostProcess: false,
@@ -4585,6 +4613,46 @@ class CocosPrefabBuilder {
       _shadowNear: 0.2,
       _shadowFar: 10,
       _shadowOrthoSize: 5,
+    }, unityComponentId, fileId);
+  }
+
+  addSphereLight(nodeId, unityComponentId, doc, fileId) {
+    const intensity = Number(getField(doc, 'm_Intensity', 1) || 1);
+    const range = Number(getField(doc, 'm_Range', 10) || 10);
+    const staticSettings = this.add({ __type__: 'cc.StaticLightSettings', _baked: false, _editorOnly: false, _castShadow: false });
+    return this.addComponent(nodeId, 'cc.SphereLight', {
+      _color: unityColorToCocos(getField(doc, 'm_Color', { r: 1, g: 1, b: 1, a: 1 })),
+      _useColorTemperature: false,
+      _colorTemperature: 6570,
+      _staticSettings: cocosRef(staticSettings),
+      _visibility: 0xffffffff,
+      _luminanceHDR: intensity * 1000,
+      _luminance: intensity * 1000,
+      _luminanceLDR: intensity,
+      _range: range,
+      _size: 0.15,
+    }, unityComponentId, fileId);
+  }
+
+  addSpotLight(nodeId, unityComponentId, doc, fileId) {
+    const intensity = Number(getField(doc, 'm_Intensity', 1) || 1);
+    const range = Number(getField(doc, 'm_Range', 10) || 10);
+    const spotAngleDeg = Number(getField(doc, 'm_SpotAngle', 30) || 30);
+    const spotAngleRad = (spotAngleDeg * Math.PI) / 180;
+    const staticSettings = this.add({ __type__: 'cc.StaticLightSettings', _baked: false, _editorOnly: false, _castShadow: false });
+    return this.addComponent(nodeId, 'cc.SpotLight', {
+      _color: unityColorToCocos(getField(doc, 'm_Color', { r: 1, g: 1, b: 1, a: 1 })),
+      _useColorTemperature: false,
+      _colorTemperature: 6570,
+      _staticSettings: cocosRef(staticSettings),
+      _visibility: 0xffffffff,
+      _luminanceHDR: intensity * 1000,
+      _luminance: intensity * 1000,
+      _luminanceLDR: intensity,
+      _range: range,
+      _size: 0.15,
+      _spotAngle: spotAngleRad,
+      _shadowEnabled: Number(getField(doc, 'm_Shadows.m_Type', 0) || 0) !== 0,
     }, unityComponentId, fileId);
   }
 

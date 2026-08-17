@@ -245,16 +245,61 @@ function parseYamlSequence(lines, startIndex, indent) {
   return { value: list, index: i };
 }
 
+function unflattenObject(obj) {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
+  const result = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (key.includes('.')) {
+      const parts = key.split('.');
+      let cur = result;
+      for (let i = 0; i < parts.length - 1; i++) {
+        cur[parts[i]] = cur[parts[i]] || {};
+        cur = cur[parts[i]];
+      }
+      cur[parts[parts.length - 1]] = value;
+    } else {
+      result[key] = (value && typeof value === 'object' && !Array.isArray(value)) ? unflattenObject(value) : value;
+    }
+  }
+  return result;
+}
+
 function parseUnityParticleDoc(doc) {
-  if (!doc?.lines?.length) return {};
-  const parsed = parseYamlNode(doc.lines, 0, 0).value || {};
-  return parsed.ParticleSystem || parsed.ParticleSystemForceField || parsed;
+  if (!doc) return {};
+  let lines = null;
+  if (Array.isArray(doc.lines)) {
+    lines = doc.lines;
+  } else if (typeof doc === 'string') {
+    lines = doc.split(/\r?\n/);
+  }
+  if (lines && lines.length > 0) {
+    const parsed = parseYamlNode(lines, 0, 0).value || {};
+    return parsed.ParticleSystem || parsed.ParticleSystemForceField || parsed;
+  }
+  if (typeof doc === 'object') {
+    const unflattened = unflattenObject(doc);
+    return unflattened.ParticleSystem || unflattened.ParticleSystemForceField || unflattened;
+  }
+  return {};
 }
 
 function parseUnityRendererDoc(doc) {
-  if (!doc?.lines?.length) return {};
-  const parsed = parseYamlNode(doc.lines, 0, 0).value || {};
-  return parsed.ParticleSystemRenderer || parsed;
+  if (!doc) return {};
+  let lines = null;
+  if (Array.isArray(doc.lines)) {
+    lines = doc.lines;
+  } else if (typeof doc === 'string') {
+    lines = doc.split(/\r?\n/);
+  }
+  if (lines && lines.length > 0) {
+    const parsed = parseYamlNode(lines, 0, 0).value || {};
+    return parsed.ParticleSystemRenderer || parsed;
+  }
+  if (typeof doc === 'object') {
+    const unflattened = unflattenObject(doc);
+    return unflattened.ParticleSystemRenderer || unflattened;
+  }
+  return {};
 }
 
 function serializedPropertyTokens(propertyPath) {
@@ -367,6 +412,7 @@ function uuidRef(uuid, expectedType = '') {
 }
 
 function refObject(objects, ref) {
+  if (ref && typeof ref === 'object' && !('__id__' in ref)) return ref;
   const id = Number(ref?.__id__);
   return Number.isInteger(id) ? objects[id] : null;
 }
@@ -1111,10 +1157,10 @@ function applyGradientRange(builder, gradientRange, data) {
   gradientRange._mode = mode;
 
   if (mode === 0) {
-    gradientRange.color = color(data.maxColor);
+    gradientRange.color = color(data.maxColor || data.color);
   } else if (mode === 2) {
     gradientRange.colorMin = color(data.minColor);
-    gradientRange.colorMax = color(data.maxColor);
+    gradientRange.colorMax = color(data.maxColor || data.color);
   } else if (mode === 1 || mode === 4) {
     gradientRange.gradient = addGradient(builder, data.maxGradient);
   } else if (mode === 3) {
