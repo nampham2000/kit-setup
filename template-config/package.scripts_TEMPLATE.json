@@ -1,0 +1,40 @@
+{
+  "scripts": {
+    "sync": "node playable-shared-kit/tools/sync-shared-kit.cjs",
+    "sync:shared": "node playable-shared-kit/tools/sync-shared-kit.cjs",
+    "doctor": "node playable-shared-kit/tools/playable-build.cjs doctor",
+    "build": "node playable-shared-kit/tools/playable-build.cjs build --all",
+    "build:fast": "node playable-shared-kit/tools/playable-build.cjs build --fast",
+    "port": "node playable-shared-kit/tools/unity-cocos-port.cjs",
+    "port:doctor": "node playable-shared-kit/tools/unity-cocos-port.cjs doctor",
+    "mcp:sync": "powershell -NoProfile -ExecutionPolicy Bypass -File playable-shared-kit/tools/mcp-clients-sync.ps1",
+    "mcp:verify": "powershell -NoProfile -ExecutionPolicy Bypass -File playable-shared-kit/tools/mcp-clients-sync.ps1 -VerifyOnly",
+    "memory:init": "node playable-shared-kit/tools/work-memory.cjs init",
+    "memory:sync": "node playable-shared-kit/tools/work-memory.cjs sync",
+    "memory:export": "node playable-shared-kit/tools/work-memory.cjs export",
+    "memory:stats": "node playable-shared-kit/tools/work-memory.cjs stats",
+    "ai:sync": "node playable-shared-kit/tools/ai-knowledge-sync.cjs",
+    "dependencies:scan": "node playable-shared-kit/tools/ensure-dependencies.cjs",
+    "dependencies:setup": "node playable-shared-kit/tools/ensure-dependencies.cjs --download-all",
+    "sound:optimize": "node playable-shared-kit/tools/audio-optimizer.cjs",
+    "sound:mp3": "node playable-shared-kit/tools/audio-optimizer.cjs --format mp3 --write",
+    "sound:ogg": "node playable-shared-kit/tools/audio-optimizer.cjs --format ogg --write",
+    "sound:doctor": "node playable-shared-kit/tools/audio-optimizer.cjs --doctor",
+    "deploy": "node playable-shared-kit/tools/deploy-preview.cjs",
+    "deploy:preview": "node playable-shared-kit/tools/deploy-preview.cjs",
+    "deploy:github": "node playable-shared-kit/tools/deploy-preview.cjs --provider github",
+    "deploy:netlify": "node playable-shared-kit/tools/deploy-preview.cjs --provider netlify",
+    "deploy:vercel": "node playable-shared-kit/tools/deploy-preview.cjs --provider vercel",
+    "deploy:all": "node playable-shared-kit/tools/deploy-preview.cjs --provider all",
+    "deploy:build": "node playable-shared-kit/tools/deploy-preview.cjs --build",
+    "deploy:doctor": "node playable-shared-kit/tools/deploy-preview.cjs --doctor",
+    "stats": "node playable-shared-kit/tools/resource-stats.cjs",
+    "stats:html": "node playable-shared-kit/tools/resource-stats.cjs --html",
+    "stats:json": "node playable-shared-kit/tools/resource-stats.cjs --json",
+    "stats:doctor": "node playable-shared-kit/tools/resource-stats.cjs --doctor",
+    "playbook": "node -e \"const {exec}=require('child_process'); exec(process.platform==='win32'?'start docs/playbook/index.html':(process.platform==='darwin'?'open docs/playbook/index.html':'xdg-open docs/playbook/index.html'))\""
+  },
+  "devDependencies": {
+    "ffmpeg-static": "^5.3.0"
+  }
+}

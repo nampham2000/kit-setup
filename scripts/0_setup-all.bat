@@ -219,7 +219,7 @@ if not exist "%~2\packages\playable-core\package.json" (
     exit /b 0
 )
 echo.
-echo ==> Ensuring root dependencies: playable-sdk, playable-core, @modelcontextprotocol/sdk
+echo ==^> Ensuring root dependencies and scripts
 call :detectLinkSupport "%~1"
 if "!LINK_SUPPORTED!"=="0" (
     echo [warn] This project is on a filesystem without symlink/junction support ^(exFAT/FAT32/network share^).
@@ -228,13 +228,13 @@ if "!LINK_SUPPORTED!"=="0" (
     call :packSharedKitDependencies "%~1" "%~2"
     exit /b !errorlevel!
 )
-call node -e "const fs=require('fs'),path=require('path');const file=path.join(process.argv[1],'package.json');const raw=fs.readFileSync(file,'utf8').replace(/^\uFEFF/,'');const pkg=JSON.parse(raw);pkg.dependencies={...(pkg.dependencies||{}),'playable-sdk':'file:./playable-shared-kit/packages/playable-sdk','playable-core':'file:./playable-shared-kit/packages/playable-core','@modelcontextprotocol/sdk':pkg.dependencies?.['@modelcontextprotocol/sdk']||'^1.29.0'};fs.writeFileSync(file,JSON.stringify(pkg,null,2)+'\n');" "%~1"
+call node -e "const fs=require('fs'),path=require('path');const root=process.argv[1],shared=process.argv[2];const file=path.join(root,'package.json');const raw=fs.readFileSync(file,'utf8').replace(/^\uFEFF/,'');const pkg=JSON.parse(raw);pkg.dependencies={...(pkg.dependencies||{}),'playable-sdk':'file:./playable-shared-kit/packages/playable-sdk','playable-core':'file:./playable-shared-kit/packages/playable-core','@modelcontextprotocol/sdk':pkg.dependencies?.['@modelcontextprotocol/sdk']||'^1.29.0'};const tmplFile=path.join(shared,'template-config','package.scripts_TEMPLATE.json');if(fs.existsSync(tmplFile)){const tmpl=JSON.parse(fs.readFileSync(tmplFile,'utf8').replace(/^\uFEFF/,''));if(tmpl.scripts)pkg.scripts={...(tmpl.scripts||{}),...(pkg.scripts||{})};if(tmpl.devDependencies)pkg.devDependencies={...(tmpl.devDependencies||{}),...(pkg.devDependencies||{})};}fs.writeFileSync(file,JSON.stringify(pkg,null,2)+'\n');" "%~1" "%~2"
 if errorlevel 1 (
-    echo [ERROR] Failed to update root package.json shared-kit dependencies.
+    echo [ERROR] Failed to update root package.json shared-kit dependencies and scripts.
     if /I not "%SETUP_ALL_NO_PAUSE%"=="1" pause
     exit /b 1
 )
-echo [ok] root shared-kit dependencies
+echo [ok] root shared-kit dependencies and scripts
 exit /b 0
 
 :detectLinkSupport

@@ -45,10 +45,12 @@ function fail(message) {
 }
 
 function formatBytes(bytes) {
-  if (bytes === 0) return '0 B';
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  if (!bytes || bytes === 0) return '0 B';
+  const sign = bytes < 0 ? '-' : '';
+  const abs = Math.abs(bytes);
+  if (abs < 1024) return `${sign}${abs} B`;
+  if (abs < 1024 * 1024) return `${sign}${(abs / 1024).toFixed(1)} KB`;
+  return `${sign}${(abs / (1024 * 1024)).toFixed(2)} MB`;
 }
 
 function toPosix(filePath) {
@@ -156,7 +158,7 @@ function parseArgs(argv) {
     sampleRate: null, // number in Hz or null
     write: false,
     backup: false,
-    skipIfLarger: false,
+    skipIfLarger: true, // Default: safe mode (do not increase file size)
     updateMeta: true,
     recursive: true,
     ffmpegPath: '',
@@ -178,6 +180,8 @@ function parseArgs(argv) {
       options.backup = true;
     } else if (arg === '--skip-if-larger' || arg === '--only-if-smaller') {
       options.skipIfLarger = true;
+    } else if (arg === '--no-skip-if-larger' || arg === '--force' || arg === '--allow-larger') {
+      options.skipIfLarger = false;
     } else if (arg === '--no-meta') {
       options.updateMeta = false;
     } else if (arg === '--mono') {
@@ -244,7 +248,8 @@ Options:
   --mono                           Force downmixing audio to Mono (1 channel, cuts SFX size in half).
   --stereo                         Preserve or force Stereo (2 channels).
   -r, --sample-rate <Hz>           Override sample rate (e.g. 16000, 22050, 32000, 44100).
-  --skip-if-larger                 Skip replacing if the optimized output is larger than source.
+  --skip-if-larger                 Skip replacing if optimized output is larger (Enabled by default).
+  --force, --allow-larger          Force re-encoding even if output is larger than source.
   --write                          Apply changes to disk. (Default is safe dry-run mode).
   --backup                         Create a .bak copy before modifying files.
   --no-meta                        Skip Cocos Creator .meta file updates.
@@ -514,19 +519,20 @@ function optimizeAudioFile(ffmpegPath, inputPath, options, qualityConfig) {
   const savingsBytes = origSize - newSize;
   const savingsPercent = origSize > 0 ? ((savingsBytes / origSize) * 100) : 0;
 
-  // Check skip if larger
-  if (options.skipIfLarger && newSize > origSize) {
+  // Check skip if larger (default safe behavior)
+  if (options.skipIfLarger && newSize >= origSize) {
     try {
       fs.unlinkSync(tempPath);
     } catch (_) {}
+    const diffPercent = origSize > 0 ? (((newSize - origSize) / origSize) * 100).toFixed(1) : '0.0';
     return {
       success: true,
       skipped: true,
-      reason: 'Output is larger than original file',
+      reason: `Output is larger or equal (${formatBytes(origSize)} -> ${formatBytes(newSize)}, +${diffPercent}%) - kept original`,
       inputPath,
       targetPath,
       origSize,
-      newSize,
+      newSize: origSize, // Size unchanged because original was preserved
       savingsBytes: 0,
       savingsPercent: 0,
       channels: qualityConfig.mono ? 'Mono' : 'Stereo',
@@ -647,6 +653,11 @@ function main() {
     console.log(` Quality Level : ${qualityConfig.label}`);
     console.log(` Configuration : ${qualityConfig.mono ? 'Mono' : 'Stereo'} | Sample Rate: ${qualityConfig.sampleRate} Hz | MP3: ${qualityConfig.mp3Bitrate} / OGG: q${qualityConfig.oggQuality}`);
     console.log(` Target Files  : ${audioFiles.length} file(s)`);
+    if (options.skipIfLarger) {
+      console.log(` Safe Mode     : Enabled (skips any file if optimized size increases)`);
+    } else {
+      console.log(` Safe Mode     : Disabled (--force enabled; overwrites even if size increases)`);
+    }
     console.log('--------------------------------------------------------------------------------\n');
   }
 
@@ -668,7 +679,8 @@ function main() {
         totalNewSize += report.origSize; // Kept original
         if (!options.json) {
           const relInput = toPosix(path.relative(process.cwd(), report.inputPath));
-          console.log(` [SKIP] ${relInput} (${report.reason})`);
+          console.log(` [SKIP] ${relInput}`);
+          console.log(`        ${report.reason}`);
         }
       } else {
         successCount++;
@@ -678,12 +690,17 @@ function main() {
         if (!options.json) {
           const relInput = toPosix(path.relative(process.cwd(), report.inputPath));
           const relTarget = toPosix(path.relative(process.cwd(), report.targetPath));
-          const savingSign = report.savingsBytes >= 0 ? '-' : '+';
-          const absPercent = Math.abs(report.savingsPercent).toFixed(1);
           const nameDisplay = relInput === relTarget ? relInput : `${relInput} -> ${relTarget}`;
 
-          console.log(` [OK] ${nameDisplay}`);
-          console.log(`      Size: ${formatBytes(report.origSize)} -> ${formatBytes(report.newSize)} (${savingSign}${absPercent}%) | ${report.channels} | ${report.sampleRate}Hz`);
+          if (report.savingsBytes >= 0) {
+            const absPercent = Math.abs(report.savingsPercent).toFixed(1);
+            console.log(` [OK] ${nameDisplay}`);
+            console.log(`      Size: ${formatBytes(report.origSize)} -> ${formatBytes(report.newSize)} (-${absPercent}%) | ${report.channels} | ${report.sampleRate}Hz`);
+          } else {
+            const absPercent = Math.abs(report.savingsPercent).toFixed(1);
+            console.log(` [OK] ${nameDisplay} (WARNING: size increased)`);
+            console.log(`      Size: ${formatBytes(report.origSize)} -> ${formatBytes(report.newSize)} (+${absPercent}%) | ${report.channels} | ${report.sampleRate}Hz`);
+          }
         }
       }
     } else {
@@ -696,7 +713,7 @@ function main() {
   }
 
   const totalSavedBytes = totalOrigSize - totalNewSize;
-  const totalSavedPercent = totalOrigSize > 0 ? ((totalSavedBytes / totalOrigSize) * 100).toFixed(1) : 0;
+  const totalSavedPercent = totalOrigSize > 0 ? ((totalSavedBytes / totalOrigSize) * 100).toFixed(1) : '0.0';
 
   if (options.json) {
     console.log(JSON.stringify({
@@ -725,7 +742,13 @@ function main() {
   console.log(` Total Files    : ${audioFiles.length} (${successCount} optimized, ${skippedCount} skipped, ${failCount} failed)`);
   console.log(` Total Original : ${formatBytes(totalOrigSize)}`);
   console.log(` Total Optimized: ${formatBytes(totalNewSize)}`);
-  console.log(` Net Savings    : ${formatBytes(totalSavedBytes)} (${totalSavedPercent}% reduction)`);
+  if (totalSavedBytes >= 0) {
+    console.log(` Net Savings    : ${formatBytes(totalSavedBytes)} (${totalSavedPercent}% reduction)`);
+  } else {
+    const incBytes = Math.abs(totalSavedBytes);
+    const incPercent = Math.abs(Number(totalSavedPercent)).toFixed(1);
+    console.log(` Net Size Change: +${formatBytes(incBytes)} (+${incPercent}% increase - WARNING: files got larger!)`);
+  }
   console.log('================================================================================');
 
   if (!options.write && successCount > 0) {

@@ -179,6 +179,8 @@ function decodePng(buffer) {
     let bitDepth = 8;
     let colorType = 6; // RGBA
     const idatChunks = [];
+    let palette = null;
+    let trns = null;
 
     while (offset < buffer.length) {
       const length = buffer.readUInt32BE(offset);
@@ -191,6 +193,10 @@ function decodePng(buffer) {
         height = data.readUInt32BE(4);
         bitDepth = data[8];
         colorType = data[9];
+      } else if (type === 'PLTE') {
+        palette = data;
+      } else if (type === 'tRNS') {
+        trns = data;
       } else if (type === 'IDAT') {
         idatChunks.push(data);
       } else if (type === 'IEND') {
@@ -272,6 +278,16 @@ function decodePng(buffer) {
           r = currentRow[x * 3];
           g = currentRow[x * 3 + 1];
           b = currentRow[x * 3 + 2];
+        } else if (colorType === 3) { // Indexed / Palette
+          const pIdx = currentRow[x];
+          if (palette && pIdx * 3 + 2 < palette.length) {
+            r = palette[pIdx * 3];
+            g = palette[pIdx * 3 + 1];
+            b = palette[pIdx * 3 + 2];
+          }
+          if (trns && pIdx < trns.length) {
+            a = trns[pIdx];
+          }
         } else if (colorType === 0) { // Grayscale
           r = g = b = currentRow[x];
         } else if (colorType === 4) { // Grayscale + Alpha
@@ -306,70 +322,127 @@ function decodePng(buffer) {
 }
 
 /**
- * Resizes an RGBA buffer to target dimensions and computes Difference Hash (dHash) & Average Hash (aHash)
+ * Computes high-precision 32x32 Structural SSIM profile, alpha silhouette mask,
+ * bounding content aspect ratio, coverage, and average color.
  */
-function computeImageHashes(rgba, srcW, srcH, targetW = 9, targetH = 8) {
-  if (!rgba || srcW <= 0 || srcH <= 0) return { dHash: '', aHash: '', thumbnail: [] };
+function computeImageHashes(rgba, srcW, srcH) {
+  if (!rgba || srcW <= 0 || srcH <= 0) {
+    return {
+      dHash: '',
+      aHash: '',
+      dHashBits: '',
+      aHashBits: '',
+      dHash2D: '',
+      avgLum: 0,
+      isSolid: false,
+      avgR: 0,
+      avgG: 0,
+      avgB: 0,
+      avgA: 0,
+      coverage: 0,
+      contentAspectRatio: 1.0,
+      aspectRatio: 1.0,
+      grid32: null,
+      alphaMask32: null,
+      mean: 0,
+      variance: 0,
+    };
+  }
 
-  // Sample into targetW x targetH grayscale thumbnail using area averaging
-  const grayThumb = new Float32Array(targetW * targetH);
-  const scaleX = srcW / targetW;
-  const scaleY = srcH / targetH;
+  const N = 32;
+  const numPixels = N * N;
+  const grid32 = new Float32Array(numPixels);
+  const alphaMask32 = new Uint8Array(numPixels);
 
-  for (let ty = 0; ty < targetH; ty++) {
-    const syStart = Math.floor(ty * scaleY);
-    const syEnd = Math.min(srcH, Math.floor((ty + 1) * scaleY) || syStart + 1);
+  let minX = srcW, maxX = 0, minY = srcH, maxY = 0;
+  let rSum = 0, gSum = 0, bSum = 0, aSum = 0, opaqueCount = 0;
+  let minR = 255, maxR = 0, minG = 255, maxG = 0, minB = 255, maxB = 0, minA = 255, maxA = 0;
 
-    for (let tx = 0; tx < targetW; tx++) {
-      const sxStart = Math.floor(tx * scaleX);
-      const sxEnd = Math.min(srcW, Math.floor((tx + 1) * scaleX) || sxStart + 1);
+  for (let y = 0; y < srcH; y++) {
+    for (let x = 0; x < srcW; x++) {
+      const idx = (y * srcW + x) * 4;
+      const r = rgba[idx];
+      const g = rgba[idx + 1];
+      const b = rgba[idx + 2];
+      const a = rgba[idx + 3];
 
-      let totalLum = 0;
-      let count = 0;
+      minR = Math.min(minR, r); maxR = Math.max(maxR, r);
+      minG = Math.min(minG, g); maxG = Math.max(maxG, g);
+      minB = Math.min(minB, b); maxB = Math.max(maxB, b);
+      minA = Math.min(minA, a); maxA = Math.max(maxA, a);
 
-      for (let y = syStart; y < syEnd; y++) {
-        for (let x = sxStart; x < sxEnd; x++) {
-          const idx = (y * srcW + x) * 4;
-          const r = rgba[idx];
-          const g = rgba[idx + 1];
-          const b = rgba[idx + 2];
-          const a = rgba[idx + 3] / 255;
-          // Weighted luminance with alpha consideration
-          const lum = (0.299 * r + 0.587 * g + 0.114 * b) * a;
-          totalLum += lum;
-          count++;
-        }
+      if (a > 15) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+        rSum += r;
+        gSum += g;
+        bSum += b;
+        aSum += a;
+        opaqueCount++;
       }
-
-      grayThumb[ty * targetW + tx] = count > 0 ? totalLum / count : 0;
     }
   }
 
-  // 1. dHash (Difference Hash): compare adjacent pixels per row -> 8 rows x 8 bits = 64 bits
-  let dHashBits = '';
-  for (let y = 0; y < targetH; y++) {
-    for (let x = 0; x < targetW - 1; x++) {
-      const left = grayThumb[y * targetW + x];
-      const right = grayThumb[y * targetW + x + 1];
-      dHashBits += left > right ? '1' : '0';
+  const isSolid = (maxR - minR < 5) && (maxG - minG < 5) && (maxB - minB < 5) && (maxA - minA < 5);
+  const avgR = opaqueCount > 0 ? rSum / opaqueCount : 0;
+  const avgG = opaqueCount > 0 ? gSum / opaqueCount : 0;
+  const avgB = opaqueCount > 0 ? bSum / opaqueCount : 0;
+  const avgA = opaqueCount > 0 ? aSum / opaqueCount : 0;
+
+  const contentW = maxX >= minX ? (maxX - minX + 1) : 0;
+  const contentH = maxY >= minY ? (maxY - minY + 1) : 0;
+  const contentAspectRatio = contentH > 0 ? Number((contentW / contentH).toFixed(3)) : 1.0;
+  const coverage = (srcW * srcH) > 0 ? Number((opaqueCount / (srcW * srcH)).toFixed(3)) : 0;
+
+  let totalIntensity = 0;
+  for (let ty = 0; ty < N; ty++) {
+    for (let tx = 0; tx < N; tx++) {
+      const srcX = Math.min(srcW - 1, Math.floor((tx / N) * srcW));
+      const srcY = Math.min(srcH - 1, Math.floor((ty / N) * srcH));
+      const idx = (srcY * srcW + srcX) * 4;
+      const r = rgba[idx];
+      const g = rgba[idx + 1];
+      const b = rgba[idx + 2];
+      const a = rgba[idx + 3];
+
+      const lum = (0.299 * r + 0.587 * g + 0.114 * b) * (a / 255);
+      const cellIdx = ty * N + tx;
+      grid32[cellIdx] = lum;
+      totalIntensity += lum;
+      alphaMask32[cellIdx] = a > 40 ? 1 : 0;
     }
   }
 
-  // 2. aHash (Average Hash): compare against global mean
-  let totalSum = 0;
-  for (let i = 0; i < grayThumb.length; i++) totalSum += grayThumb[i];
-  const avg = totalSum / grayThumb.length;
-
-  let aHashBits = '';
-  for (let i = 0; i < 64 && i < grayThumb.length; i++) {
-    aHashBits += grayThumb[i] >= avg ? '1' : '0';
+  const mean = totalIntensity / numPixels;
+  let variance = 0;
+  for (let i = 0; i < numPixels; i++) {
+    const d = grid32[i] - mean;
+    variance += d * d;
   }
+  variance /= numPixels;
+
+  const avgLum = Math.round(0.299 * avgR + 0.587 * avgG + 0.114 * avgB);
 
   return {
-    dHash: bitsToHex(dHashBits),
-    aHash: bitsToHex(aHashBits),
-    dHashBits,
-    aHashBits,
+    dHash: bitsToHex(String(Math.round(mean))),
+    aHash: '',
+    dHashBits: 'valid',
+    dHash2D: 'valid',
+    avgLum,
+    isSolid,
+    avgR: Math.round(avgR),
+    avgG: Math.round(avgG),
+    avgB: Math.round(avgB),
+    avgA: Math.round(avgA),
+    coverage,
+    contentAspectRatio,
+    aspectRatio: Number((srcW / srcH).toFixed(3)),
+    grid32,
+    alphaMask32,
+    mean,
+    variance,
   };
 }
 
@@ -382,19 +455,71 @@ function bitsToHex(bits) {
   return hex;
 }
 
-function hammingDistance(bitsA, bitsB) {
-  if (!bitsA || !bitsB || bitsA.length !== bitsB.length) return 64;
-  let dist = 0;
-  for (let i = 0; i < bitsA.length; i++) {
-    if (bitsA[i] !== bitsB[i]) dist++;
-  }
-  return dist;
-}
+function calculateTextureSimilarity(texA, texB) {
+  if (!texA.grid32 || !texB.grid32) return 0;
 
-function calculateSimilarity(bitsA, bitsB) {
-  if (!bitsA || !bitsB || bitsA.length === 0) return 0;
-  const dist = hammingDistance(bitsA, bitsB);
-  return Math.max(0, (1 - dist / bitsA.length) * 100);
+  // 1. Solid vs non-solid check
+  if (texA.isSolid !== texB.isSolid) return 0;
+  if (texA.isSolid && texB.isSolid) {
+    const colorDist = Math.hypot(
+      (texA.avgR || 0) - (texB.avgR || 0),
+      (texA.avgG || 0) - (texB.avgG || 0),
+      (texA.avgB || 0) - (texB.avgB || 0),
+      (texA.avgA || 0) - (texB.avgA || 0)
+    ) / (Math.sqrt(4) * 255);
+    return Number((Math.max(0, 1 - colorDist) * 100).toFixed(1));
+  }
+
+  // 2. Content Bounding Box Aspect Ratio Match
+  const arA = texA.contentAspectRatio || texA.aspectRatio || 1.0;
+  const arB = texB.contentAspectRatio || texB.aspectRatio || 1.0;
+  const arMin = Math.min(arA, arB);
+  const arMax = Math.max(arA, arB);
+  if (arMax > 0 && (arMin / arMax) < 0.80) return 0;
+
+  // 3. Alpha Coverage Match
+  const covA = texA.coverage !== undefined ? texA.coverage : 0.5;
+  const covB = texB.coverage !== undefined ? texB.coverage : 0.5;
+  const covMin = Math.min(covA, covB);
+  const covMax = Math.max(covA, covB);
+  if (covMax > 0 && (covMin / covMax) < 0.70) return 0;
+
+  // 4. Alpha Silhouette IoU (Intersection over Union)
+  const N = 32 * 32;
+  let inter = 0, un = 0;
+  for (let i = 0; i < N; i++) {
+    const a = texA.alphaMask32[i];
+    const b = texB.alphaMask32[i];
+    if (a && b) inter++;
+    if (a || b) un++;
+  }
+  const iou = un > 0 ? (inter / un) : 1.0;
+  if (iou < 0.85) return 0; // Distinct silhouette contours (e.g. 5-pt star vs round flare)
+
+  // 5. Structural SSIM
+  let cov = 0;
+  for (let i = 0; i < N; i++) {
+    cov += (texA.grid32[i] - texA.mean) * (texB.grid32[i] - texB.mean);
+  }
+  cov /= N;
+
+  const c1 = 6.5025; // (0.01 * 255)^2
+  const c2 = 58.5225; // (0.03 * 255)^2
+  const ssim = ((2 * texA.mean * texB.mean + c1) * (2 * cov + c2)) /
+               ((texA.mean * texA.mean + texB.mean * texB.mean + c1) * (texA.variance + texB.variance + c2));
+
+  // 6. Color Distance in normalized RGB space
+  const colorDist = Math.hypot(
+    (texA.avgR || 0) - (texB.avgR || 0),
+    (texA.avgG || 0) - (texB.avgG || 0),
+    (texA.avgB || 0) - (texB.avgB || 0)
+  ) / (Math.sqrt(3) * 255);
+  const colorSim = Math.max(0, 1 - colorDist);
+
+  // Combined score: high structural similarity (SSIM >= 92% and IoU >= 85%)
+  // captures texture duplicates and color palette variants (blue/orange/red)
+  const finalScore = Math.max(0, ssim) * iou * (0.80 + 0.20 * colorSim) * 100;
+  return Number(Math.max(0, Math.min(100, finalScore)).toFixed(1));
 }
 
 // Fallback image dimension reader for JPEG, WebP, etc.
@@ -638,17 +763,21 @@ function parseAudioDetails(filePath, buffer) {
   }
 
   // Playable audio recommendations
-  if (info.sampleRate > 32000) {
+  if (info.isUncompressed) {
     info.needsOptimization = true;
-    info.reason.push(`High sample rate (${info.sampleRate}Hz > 32000Hz)`);
+    info.reason.push('Uncompressed WAV format (should convert to MP3/OGG)');
   }
   if (info.channels > 1 && info.durationSec > 0 && info.durationSec < 10) {
     info.needsOptimization = true;
     info.reason.push(`Stereo sound effect (SFX should be mono)`);
   }
-  if (info.bitrateKbps > 96) {
+  if (info.bitrateKbps > 64) {
     info.needsOptimization = true;
-    info.reason.push(`High bitrate (${info.bitrateKbps}kbps > 96kbps for playables)`);
+    info.reason.push(`High bitrate (${info.bitrateKbps}kbps > 64kbps for playables)`);
+  }
+  if (info.sampleRate > 32000 && info.bitrateKbps > 64) {
+    info.needsOptimization = true;
+    info.reason.push(`High sample rate (${info.sampleRate}Hz > 32000Hz)`);
   }
 
   return info;
@@ -664,24 +793,38 @@ class PlayableResourceStats {
     this.options = options;
     this.assetsDir = path.join(this.projectRoot, 'assets');
     this.settingsDir = path.join(this.projectRoot, 'settings');
+    this.buildAssetsDir = path.join(this.projectRoot, 'build', 'web-mobile', 'assets');
+    this.superHtmlDir = path.join(this.projectRoot, 'build', 'super-html');
 
     this.uuidMap = new Map(); // uuid -> asset metadata
     this.pathMap = new Map(); // posixPath -> asset metadata
     this.spriteFrameMap = new Map(); // spriteFrame uuid -> texture info
+    this.uuidToBuildMap = new Map(); // uuid / subUuid -> { path, relPath, size, ext, bundle }
+
+    this.buildInfo = {
+      hasBuild: false,
+      buildDir: this.buildAssetsDir,
+      totalBuildSize: 0,
+      superHtmlArtifacts: [],
+    };
 
     this.stats = {
       totalSize: 0,
+      totalBuildSize: 0,
+      totalBuildAssetSize: 0,
+      totalBuildWithEngine: 0,
+      hasBuildData: false,
       categories: {
-        models: { label: '3D Models (FBX/GLTF)', size: 0, count: 0, files: [] },
-        textures: { label: 'Textures & Images', size: 0, count: 0, files: [] },
-        audio: { label: 'Audio Assets', size: 0, count: 0, files: [] },
-        scripts: { label: 'Gameplay Scripts (TS/JS)', size: 0, count: 0, loc: 0, files: [] },
-        sharedCore: { label: 'Shared Core & SDK', size: 0, count: 0, loc: 0, files: [] },
-        scenes: { label: 'Scenes & Prefabs', size: 0, count: 0, files: [] },
-        materials: { label: 'Materials & Effects', size: 0, count: 0, files: [] },
-        fonts: { label: 'Fonts (TTF/BMFont)', size: 0, count: 0, files: [] },
-        engine: { label: 'Cocos Engine Runtime', size: 0, count: 1, modules: [] },
-        other: { label: 'Configs & Other Assets', size: 0, count: 0, files: [] },
+        models: { label: '3D Models (FBX/GLTF -> .bin)', size: 0, buildSize: 0, count: 0, usedCount: 0, files: [] },
+        textures: { label: 'Textures & Images (WebP/PNG)', size: 0, buildSize: 0, count: 0, usedCount: 0, files: [] },
+        audio: { label: 'Audio Assets (SFX & BGM)', size: 0, buildSize: 0, count: 0, usedCount: 0, files: [] },
+        scripts: { label: 'Gameplay Scripts (TS -> Bundle JS)', size: 0, buildSize: 0, count: 0, usedCount: 0, loc: 0, files: [] },
+        sharedCore: { label: 'Shared Core & SDK', size: 0, buildSize: 0, count: 0, usedCount: 0, loc: 0, files: [] },
+        scenes: { label: 'Scenes & Prefabs (Compiled JSON)', size: 0, buildSize: 0, count: 0, usedCount: 0, files: [] },
+        materials: { label: 'Materials & Effects', size: 0, buildSize: 0, count: 0, usedCount: 0, files: [] },
+        fonts: { label: 'Fonts (TTF/BMFont)', size: 0, buildSize: 0, count: 0, usedCount: 0, files: [] },
+        engine: { label: 'Cocos Engine Runtime', size: 0, buildSize: 0, count: 1, modules: [] },
+        other: { label: 'Configs & Other Assets', size: 0, buildSize: 0, count: 0, usedCount: 0, files: [] },
       },
       oversizedTextures: [],
       exactDuplicates: [],
@@ -699,14 +842,106 @@ class PlayableResourceStats {
   }
 
   scanAll() {
+    this.indexBuildOutput();
     this.scanMetaFiles();
     this.scanAssetFiles();
     this.scanEngineSettings();
     this.scanScenesAndPrefabs();
     this.analyzeTextureDuplication();
     this.analyzeFbxModels();
+    this.finalizeBuildStats();
     this.computeQuickWinsAndHealth();
     return this.stats;
+  }
+
+  indexBuildOutput() {
+    if (fs.existsSync(this.buildAssetsDir)) {
+      this.buildInfo.hasBuild = true;
+
+      const scanDir = (dir) => {
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          const fullPath = path.join(dir, entry.name);
+          if (entry.isDirectory()) {
+            scanDir(fullPath);
+          } else if (entry.isFile()) {
+            const stat = fs.statSync(fullPath);
+            const size = stat.size;
+            const ext = path.extname(entry.name).toLowerCase();
+            const base = entry.name;
+            const dotIdx = base.lastIndexOf('.');
+            const uuidPart = dotIdx > 0 ? base.substring(0, dotIdx) : base;
+
+            this.uuidToBuildMap.set(uuidPart, {
+              path: fullPath,
+              relPath: toPosix(path.relative(this.projectRoot, fullPath)),
+              size,
+              ext,
+            });
+          }
+        }
+      };
+
+      scanDir(this.buildAssetsDir);
+
+      // Check main script bundle in web-mobile/assets/main/index.js
+      const mainBundleJs = path.join(this.buildAssetsDir, 'main', 'index.js');
+      if (fs.existsSync(mainBundleJs)) {
+        this.stats.categories.scripts.buildSize = fs.statSync(mainBundleJs).size;
+      }
+
+      // Check import packs in main
+      const mainImportDir = path.join(this.buildAssetsDir, 'main', 'import');
+      if (fs.existsSync(mainImportDir)) {
+        let packsSize = 0;
+        const scanPacks = (d) => {
+          for (const f of fs.readdirSync(d, { withFileTypes: true })) {
+            const p = path.join(d, f.name);
+            if (f.isDirectory()) scanPacks(p);
+            else if (f.name.endsWith('.json')) packsSize += fs.statSync(p).size;
+          }
+        };
+        scanPacks(mainImportDir);
+        this.stats.categories.scenes.buildSize = packsSize;
+      }
+
+      // Check Cocos engine runtime in web-mobile/cocos-js
+      const engineDir = path.join(this.projectRoot, 'build', 'web-mobile', 'cocos-js');
+      if (fs.existsSync(engineDir)) {
+        let engineSize = 0;
+        for (const f of fs.readdirSync(engineDir)) {
+          engineSize += fs.statSync(path.join(engineDir, f)).size;
+        }
+        this.stats.categories.engine.size = engineSize;
+        this.stats.categories.engine.buildSize = engineSize;
+      }
+    }
+
+    // Check build/super-html for single-file HTML & zip outputs
+    if (fs.existsSync(this.superHtmlDir)) {
+      const channelMap = new Map();
+      const artifacts = [];
+      const scanSuperHtml = (dir, depth = 0) => {
+        if (depth > 2) return;
+        for (const f of fs.readdirSync(dir, { withFileTypes: true })) {
+          const p = path.join(dir, f.name);
+          if (f.isDirectory()) {
+            scanSuperHtml(p, depth + 1);
+          } else if (f.name.endsWith('.html') || f.name.endsWith('.zip')) {
+            const size = fs.statSync(p).size;
+            const channel = path.basename(path.dirname(p)).toLowerCase();
+            const item = { channel, name: f.name, path: p, size, sizeFormatted: formatBytes(size), ext: path.extname(f.name) };
+            artifacts.push(item);
+            if (!channelMap.has(channel) || f.name.endsWith('.zip')) {
+              channelMap.set(channel, item);
+            }
+          }
+        }
+      };
+      scanSuperHtml(this.superHtmlDir);
+      this.buildInfo.superHtmlArtifacts = artifacts;
+      this.buildInfo.channelArtifacts = channelMap;
+    }
   }
 
   scanMetaFiles() {
@@ -744,10 +979,12 @@ class PlayableResourceStats {
                 });
 
                 if (subData.importer === 'sprite-frame') {
+                  const assetSize = fs.existsSync(assetPath) ? fs.statSync(assetPath).size : 0;
                   this.spriteFrameMap.set(subData.uuid, {
                     spriteFrameUuid: subData.uuid,
                     parentUuid: content.uuid,
                     relPath,
+                    size: assetSize,
                     name: subData.displayName || subData.name || path.basename(relPath),
                     rawWidth: subData.userData?.rawWidth || subData.userData?.width || 0,
                     rawHeight: subData.userData?.rawHeight || subData.userData?.height || 0,
@@ -798,24 +1035,52 @@ class PlayableResourceStats {
     const size = stat.size;
     this.stats.totalSize += size;
 
+    const meta = this.pathMap.get(relPath);
+    const uuid = meta ? meta.uuid : null;
+    const subMetas = meta ? (meta.subMetas || {}) : {};
+
+    let buildSize = 0;
+    let isPackaged = false;
+    let buildExt = '';
+
+    if (uuid && this.uuidToBuildMap.has(uuid)) {
+      const bFile = this.uuidToBuildMap.get(uuid);
+      buildSize += bFile.size;
+      isPackaged = true;
+      buildExt = bFile.ext;
+    }
+
+    for (const subKey of Object.keys(subMetas)) {
+      const subUuid = subMetas[subKey].uuid;
+      if (subUuid && this.uuidToBuildMap.has(subUuid)) {
+        const bFile = this.uuidToBuildMap.get(subUuid);
+        buildSize += bFile.size;
+        isPackaged = true;
+        if (!buildExt) buildExt = bFile.ext;
+      }
+    }
+
     const fileRecord = {
       relPath,
       name: path.basename(fullPath),
       size,
+      rawSize: size,
+      buildSize: isPackaged ? buildSize : 0,
+      isPackaged,
+      buildExt,
       sizeFormatted: formatBytes(size),
+      buildSizeFormatted: isPackaged ? formatBytes(buildSize) : 'Excluded',
       ext,
     };
 
+    let catKey = 'other';
     // 1. Models
     if (['.fbx', '.gltf', '.glb', '.obj'].includes(ext)) {
-      this.stats.categories.models.size += size;
-      this.stats.categories.models.count++;
-      this.stats.categories.models.files.push(fileRecord);
+      catKey = 'models';
     }
     // 2. Textures
     else if (['.png', '.jpg', '.jpeg', '.webp', '.tga', '.pvr'].includes(ext)) {
-      this.stats.categories.textures.size += size;
-      this.stats.categories.textures.count++;
+      catKey = 'textures';
       const buffer = fs.readFileSync(fullPath);
       const sha256 = crypto.createHash('sha256').update(buffer).digest('hex');
       fileRecord.sha256 = sha256;
@@ -831,6 +1096,19 @@ class PlayableResourceStats {
             fileRecord.dHash = hashes.dHash;
             fileRecord.aHash = hashes.aHash;
             fileRecord.dHashBits = hashes.dHashBits;
+            fileRecord.avgLum = hashes.avgLum;
+            fileRecord.isSolid = hashes.isSolid;
+            fileRecord.avgR = hashes.avgR;
+            fileRecord.avgG = hashes.avgG;
+            fileRecord.avgB = hashes.avgB;
+            fileRecord.avgA = hashes.avgA;
+            fileRecord.coverage = hashes.coverage;
+            fileRecord.contentAspectRatio = hashes.contentAspectRatio;
+            fileRecord.aspectRatio = hashes.aspectRatio;
+            fileRecord.grid32 = hashes.grid32;
+            fileRecord.alphaMask32 = hashes.alphaMask32;
+            fileRecord.mean = hashes.mean;
+            fileRecord.variance = hashes.variance;
           }
         }
       } else {
@@ -840,17 +1118,13 @@ class PlayableResourceStats {
           fileRecord.height = header.height;
         }
       }
-
-      this.stats.categories.textures.files.push(fileRecord);
     }
     // 3. Audio
     else if (['.mp3', '.wav', '.ogg', '.m4a', '.aac'].includes(ext)) {
-      this.stats.categories.audio.size += size;
-      this.stats.categories.audio.count++;
+      catKey = 'audio';
       const buffer = fs.readFileSync(fullPath);
       const audioInfo = parseAudioDetails(fullPath, buffer);
       fileRecord.audioInfo = audioInfo;
-      this.stats.categories.audio.files.push(fileRecord);
 
       if (audioInfo.needsOptimization) {
         this.stats.audioDiagnostics.push({
@@ -867,42 +1141,29 @@ class PlayableResourceStats {
       const content = fs.readFileSync(fullPath, 'utf8');
       const lines = content.split('\n').length;
       fileRecord.loc = lines;
-
-      if (relPath.includes('/shared/')) {
-        this.stats.categories.sharedCore.size += size;
-        this.stats.categories.sharedCore.count++;
-        this.stats.categories.sharedCore.loc += lines;
-        this.stats.categories.sharedCore.files.push(fileRecord);
-      } else {
-        this.stats.categories.scripts.size += size;
-        this.stats.categories.scripts.count++;
-        this.stats.categories.scripts.loc += lines;
-        this.stats.categories.scripts.files.push(fileRecord);
-      }
+      catKey = relPath.includes('/shared/') ? 'sharedCore' : 'scripts';
     }
     // 5. Scenes & Prefabs
     else if (['.scene', '.prefab'].includes(ext)) {
-      this.stats.categories.scenes.size += size;
-      this.stats.categories.scenes.count++;
-      this.stats.categories.scenes.files.push(fileRecord);
+      catKey = 'scenes';
     }
     // 6. Materials & Effects
-    else if (['.mtl', '.effect', '.chunk'].includes(ext)) {
-      this.stats.categories.materials.size += size;
-      this.stats.categories.materials.count++;
-      this.stats.categories.materials.files.push(fileRecord);
+    else if (['.mat', '.mtl', '.effect', '.chunk'].includes(ext)) {
+      catKey = 'materials';
     }
     // 7. Fonts
     else if (['.ttf', '.fnt', '.otf', '.woff'].includes(ext)) {
-      this.stats.categories.fonts.size += size;
-      this.stats.categories.fonts.count++;
-      this.stats.categories.fonts.files.push(fileRecord);
+      catKey = 'fonts';
     }
-    // 8. Other
-    else {
-      this.stats.categories.other.size += size;
-      this.stats.categories.other.count++;
-      this.stats.categories.other.files.push(fileRecord);
+
+    const cat = this.stats.categories[catKey];
+    cat.size += size;
+    cat.count++;
+    if (fileRecord.loc) cat.loc = (cat.loc || 0) + fileRecord.loc;
+    cat.files.push(fileRecord);
+    if (isPackaged) {
+      cat.buildSize = (cat.buildSize || 0) + buildSize;
+      cat.usedCount = (cat.usedCount || 0) + 1;
     }
   }
 
@@ -910,10 +1171,11 @@ class PlayableResourceStats {
     const scan = (d) => {
       const entries = fs.readdirSync(d, { withFileTypes: true });
       for (const entry of entries) {
+        if (['node_modules', 'dist', 'bin', 'build', '.git', 'coverage'].includes(entry.name)) continue;
         const full = path.join(d, entry.name);
-        if (entry.isDirectory() && entry.name !== 'node_modules') {
+        if (entry.isDirectory()) {
           scan(full);
-        } else if (entry.isFile() && (entry.name.endsWith('.ts') || entry.name.endsWith('.js'))) {
+        } else if (entry.isFile() && entry.name.endsWith('.ts') && !entry.name.endsWith('.d.ts')) {
           const content = fs.readFileSync(full, 'utf8');
           const lines = content.split('\n').length;
           const size = fs.statSync(full).size;
@@ -925,175 +1187,189 @@ class PlayableResourceStats {
             sizeFormatted: formatBytes(size),
             loc: lines,
           });
+          this.stats.categories.sharedCore.size += size;
+          this.stats.categories.sharedCore.count++;
+          this.stats.categories.sharedCore.loc += lines;
         }
       }
     };
     scan(dir);
   }
 
+  // ==========================================
+  // 5. SETTINGS & ENGINE AUDIT
+  // ==========================================
+
   scanEngineSettings() {
     const engineConfigPath = path.join(this.settingsDir, 'v2', 'packages', 'engine.json');
-    const enabledModules = [];
-    let estimatedEngineSize = 850 * 1024; // ~850 KB base
+    let enabledModules = [];
+    let customEngine = false;
 
     if (fs.existsSync(engineConfigPath)) {
       try {
-        const cfg = JSON.parse(fs.readFileSync(engineConfigPath, 'utf8'));
-        const cache = cfg.modules?.configs?.defaultConfig?.cache || {};
-        for (const [mod, val] of Object.entries(cache)) {
-          if (val && (val._value === true || val === true)) {
-            enabledModules.push(mod);
-            if (mod === '3d') estimatedEngineSize += 300 * 1024;
-            if (mod === 'physics') estimatedEngineSize += 250 * 1024;
-            if (mod === 'particle') estimatedEngineSize += 120 * 1024;
-            if (mod === 'skeletal-animation') estimatedEngineSize += 180 * 1024;
-          }
-        }
-      } catch (e) {
-        // fallback
-      }
+        const engineData = JSON.parse(fs.readFileSync(engineConfigPath, 'utf8'));
+        enabledModules = engineData.modules || [];
+        customEngine = engineData.useCustomEngine || false;
+      } catch (e) {}
     }
 
-    this.stats.engineDiagnostics.enabledModules = enabledModules;
-    this.stats.engineDiagnostics.estimatedEngineSize = estimatedEngineSize;
-    this.stats.categories.engine.size = estimatedEngineSize;
+    const estimatedEngineSize = Math.max(800 * 1024, enabledModules.length * 90 * 1024);
+
+    this.stats.engineDiagnostics = {
+      enabledModules,
+      unusedModules: [],
+      estimatedEngineSize,
+      customEngine,
+    };
     this.stats.categories.engine.modules = enabledModules;
+    if (!this.stats.categories.engine.buildSize) {
+      this.stats.categories.engine.size = estimatedEngineSize;
+      this.stats.categories.engine.buildSize = estimatedEngineSize;
+    }
   }
 
   // ==========================================
-  // 5. SCENE & PREFAB PARSER (Transform vs Texture)
+  // 6. SCENE / PREFAB OVERSIZED TEXTURE DETECTION
   // ==========================================
 
   scanScenesAndPrefabs() {
-    const sceneAndPrefabFiles = [
+    const sceneFiles = [
       ...this.stats.categories.scenes.files,
     ];
 
-    for (const item of sceneAndPrefabFiles) {
-      const fullPath = path.join(this.projectRoot, item.relPath);
+    for (const fileRecord of sceneFiles) {
+      const fullPath = path.join(this.projectRoot, fileRecord.relPath);
       try {
         const content = fs.readFileSync(fullPath, 'utf8');
         const objects = JSON.parse(content);
         if (!Array.isArray(objects)) continue;
 
-        // Build object map by array index (id 0, 1, 2...)
-        const objMap = new Map();
-        objects.forEach((obj, idx) => {
-          if (obj && typeof obj === 'object') {
-            objMap.set(idx, obj);
-          }
-        });
-
-        // First pass: Index Nodes and Components
-        const nodes = [];
-        const components = [];
-
-        objects.forEach((obj, idx) => {
-          if (!obj) return;
-          if (obj.__type__ === 'cc.Node') {
-            nodes.push({ id: idx, node: obj });
-          } else if (obj.__type__ && obj.__type__.startsWith('cc.')) {
-            components.push({ id: idx, comp: obj });
-          }
-        });
-
-        // Map Node ID to components
-        const nodeComponentsMap = new Map();
-        for (const { comp } of components) {
-          if (comp.node && typeof comp.node.__id__ === 'number') {
-            const nodeId = comp.node.__id__;
-            if (!nodeComponentsMap.has(nodeId)) nodeComponentsMap.set(nodeId, []);
-            nodeComponentsMap.get(nodeId).push(comp);
-          }
-        }
-
-        // Build node paths and evaluate scale
-        const getNodePath = (nodeId) => {
-          const names = [];
-          let currId = nodeId;
-          let depth = 0;
-          while (typeof currId === 'number' && depth < 20) {
-            const nObj = objMap.get(currId);
-            if (!nObj || nObj.__type__ !== 'cc.Node') break;
-            names.unshift(nObj._name || `Node_${currId}`);
-            if (nObj._parent && typeof nObj._parent.__id__ === 'number') {
-              currId = nObj._parent.__id__;
-            } else {
-              break;
-            }
-            depth++;
-          }
-          return names.join('/');
-        };
-
-        // Inspect Sprite components on nodes
-        for (const { id: nodeId, node } of nodes) {
-          const nodeComps = nodeComponentsMap.get(nodeId) || [];
-          const spriteComp = nodeComps.find((c) => c.__type__ === 'cc.Sprite');
-          const uiTransformComp = nodeComps.find((c) => c.__type__ === 'cc.UITransform');
-
-          if (spriteComp && spriteComp._spriteFrame && spriteComp._spriteFrame.__uuid__) {
-            const spriteFrameUuid = spriteComp._spriteFrame.__uuid__;
-            const spriteInfo = this.spriteFrameMap.get(spriteFrameUuid);
-
-            if (spriteInfo) {
-              const nodeScaleX = Math.abs(node._lscale?.x !== undefined ? node._lscale.x : 1);
-              const nodeScaleY = Math.abs(node._lscale?.y !== undefined ? node._lscale.y : 1);
-
-              const contentW = uiTransformComp?._contentSize?.width || spriteInfo.trimWidth || spriteInfo.rawWidth || 100;
-              const contentH = uiTransformComp?._contentSize?.height || spriteInfo.trimHeight || spriteInfo.rawHeight || 100;
-
-              const displayW = Math.max(1, Math.round(contentW * nodeScaleX));
-              const displayH = Math.max(1, Math.round(contentH * nodeScaleY));
-
-              const rawW = spriteInfo.rawWidth || spriteInfo.trimWidth || 0;
-              const rawH = spriteInfo.rawHeight || spriteInfo.trimHeight || 0;
-
-              if (rawW > 0 && rawH > 0 && displayW > 0 && displayH > 0) {
-                const rawArea = rawW * rawH;
-                const displayArea = displayW * displayH;
-                const wasteRatio = Number((rawArea / displayArea).toFixed(2));
-
-                if (wasteRatio >= this.options.minWasteRatio) {
-                  // Find original texture file size
-                  const texFile = this.stats.categories.textures.files.find(
-                    (f) => f.relPath === spriteInfo.relPath
-                  );
-                  const originalSize = texFile ? texFile.size : 0;
-                  // Recommended size: 2x retina display dimensions rounded to power-of-two or neat multiples
-                  const recW = Math.min(rawW, Math.max(16, Math.ceil((displayW * 1.5) / 16) * 16));
-                  const recH = Math.min(rawH, Math.max(16, Math.ceil((displayH * 1.5) / 16) * 16));
-                  const recArea = recW * recH;
-                  const estimatedSavings = originalSize > 0 && recArea < rawArea
-                    ? Math.round(originalSize * (1 - recArea / rawArea) * 0.8)
-                    : 0;
-
-                  this.stats.oversizedTextures.push({
-                    sceneOrPrefab: item.relPath,
-                    nodeName: node._name || `Node_${nodeId}`,
-                    nodePath: getNodePath(nodeId),
-                    texturePath: spriteInfo.relPath,
-                    spriteFrame: spriteInfo.name,
-                    rawResolution: `${rawW}x${rawH}`,
-                    rawArea,
-                    displaySize: `${displayW}x${displayH}`,
-                    displayArea,
-                    wasteRatio,
-                    severity: wasteRatio >= 4.0 ? 'CRITICAL' : 'WARN',
-                    recommendedResolution: `${recW}x${recH}`,
-                    originalSize,
-                    estimatedSavings,
-                    spriteType: spriteComp._type === 1 ? 'Sliced' : 'Simple',
-                  });
-                }
-              }
-            }
-          }
-        }
-      } catch (err) {
-        // non fatal
+        this.inspectSceneObjects(fileRecord.relPath, objects);
+      } catch (e) {
+        // non JSON or parse failure
       }
     }
+  }
+
+  inspectSceneObjects(scenePath, objects) {
+    const nodeMap = new Map();
+    const spriteComponents = [];
+
+    objects.forEach((obj, index) => {
+      if (!obj) return;
+      if (obj.__type__ === 'cc.Node') {
+        nodeMap.set(index, {
+          name: obj._name || `Node_${index}`,
+          parentIndex: obj._parent ? obj._parent.__id__ : null,
+          scale: obj._scale ? { x: obj._scale.x || 1, y: obj._scale.y || 1, z: obj._scale.z || 1 } : { x: 1, y: 1, z: 1 },
+          uiTransform: null,
+        });
+      } else if (obj.__type__ === 'cc.UITransform') {
+        const nodeIdx = obj.node ? obj.node.__id__ : null;
+        if (nodeIdx !== null && nodeMap.has(nodeIdx)) {
+          nodeMap.get(nodeIdx).uiTransform = {
+            width: obj._contentSize ? obj._contentSize.width : 100,
+            height: obj._contentSize ? obj._contentSize.height : 100,
+            anchorX: obj._anchorPoint ? obj._anchorPoint.x : 0.5,
+            anchorY: obj._anchorPoint ? obj._anchorPoint.y : 0.5,
+          };
+        }
+      } else if (obj.__type__ === 'cc.Sprite') {
+        spriteComponents.push({
+          index,
+          nodeIndex: obj.node ? obj.node.__id__ : null,
+          spriteFrame: obj._spriteFrame ? obj._spriteFrame.__uuid__ : null,
+          type: obj._type || 0, // 0 = SIMPLE, 1 = SLICED, 2 = TILED, 3 = FILLED
+          sizeMode: obj._sizeMode || 0,
+        });
+      }
+    });
+
+    const getNodePath = (idx) => {
+      const pathArr = [];
+      let cur = idx;
+      while (cur !== null && nodeMap.has(cur)) {
+        const n = nodeMap.get(cur);
+        pathArr.unshift(n.name);
+        cur = n.parentIndex;
+      }
+      return pathArr.join('/');
+    };
+
+    const getGlobalScale = (idx) => {
+      let scaleX = 1;
+      let scaleY = 1;
+      let cur = idx;
+      while (cur !== null && nodeMap.has(cur)) {
+        const n = nodeMap.get(cur);
+        scaleX *= Math.abs(n.scale.x);
+        scaleY *= Math.abs(n.scale.y);
+        cur = n.parentIndex;
+      }
+      return { x: scaleX, y: scaleY };
+    };
+
+    for (const sprite of spriteComponents) {
+      if (!sprite.spriteFrame) continue;
+      const sfInfo = this.spriteFrameMap.get(sprite.spriteFrame);
+      if (!sfInfo) continue;
+
+      const node = nodeMap.get(sprite.nodeIndex);
+      if (!node || !node.uiTransform) continue;
+
+      const gScale = getGlobalScale(sprite.nodeIndex);
+      const displayW = Math.round(node.uiTransform.width * gScale.x);
+      const displayH = Math.round(node.uiTransform.height * gScale.y);
+
+      const rawW = sfInfo.rawWidth || 1;
+      const rawH = sfInfo.rawHeight || 1;
+
+      if (displayW <= 0 || displayH <= 0) continue;
+
+      const SPRITE_TYPE_NAMES = ['Simple', 'Sliced', 'Tiled', 'Filled'];
+      const spriteType = SPRITE_TYPE_NAMES[sprite.type] || 'Simple';
+
+      if (sprite.type === 1) {
+        continue;
+      }
+
+      const displayArea = displayW * displayH;
+      const rawArea = rawW * rawH;
+      const wasteRatio = rawArea / displayArea;
+
+      if (wasteRatio >= this.options.minWasteRatio && rawW > 64 && rawH > 64) {
+        const targetW = Math.min(rawW, Math.max(16, Math.ceil((displayW * 1.5) / 16) * 16));
+        const targetH = Math.min(rawH, Math.max(16, Math.ceil((displayH * 1.5) / 16) * 16));
+        const texFile = this.stats.categories.textures.files.find((f) => f.relPath === sfInfo.relPath);
+        const hasBuild = this.buildInfo?.hasBuild;
+        const isPackaged = hasBuild && texFile ? texFile.isPackaged : true;
+        const effectiveSize = hasBuild ? (isPackaged ? (texFile?.buildSize || sfInfo.size) : 0) : (sfInfo.size || (rawArea * 0.5));
+        const estimatedSavings = Math.round((1 - (targetW * targetH) / rawArea) * effectiveSize);
+
+        this.stats.oversizedTextures.push({
+          sceneOrPrefab: scenePath,
+          nodePath: getNodePath(sprite.nodeIndex),
+          texturePath: sfInfo.relPath,
+          spriteFrameUuid: sprite.spriteFrame,
+          spriteType,
+          rawResolution: `${rawW}x${rawH}`,
+          displaySize: `${displayW}x${displayH}`,
+          wasteRatio: Number(wasteRatio.toFixed(2)),
+          recommendedResolution: `${targetW}x${targetH}`,
+          estimatedSavings: Math.max(0, estimatedSavings),
+          severity: wasteRatio >= 4.0 ? 'CRITICAL' : 'WARN',
+          originalSize: sfInfo.size || 0,
+          buildSize: texFile?.buildSize || 0,
+          isPackaged,
+        });
+      }
+    }
+
+    // Sort oversized textures by actual build savings descending (packaged in build first)
+    this.stats.oversizedTextures.sort((a, b) => {
+      if (a.isPackaged !== b.isPackaged) return b.isPackaged ? 1 : -1;
+      return b.estimatedSavings - a.estimatedSavings;
+    });
   }
 
   // ==========================================
@@ -1113,45 +1389,115 @@ class PlayableResourceStats {
 
     for (const [sha, list] of shaMap.entries()) {
       if (list.length > 1) {
-        const totalWastedBytes = list.slice(1).reduce((acc, cur) => acc + cur.size, 0);
+        const totalWastedBytes = list.slice(1).reduce((acc, cur) => {
+          const sz = this.buildInfo?.hasBuild ? (cur.isPackaged ? (cur.buildSize || 0) : 0) : cur.size;
+          return acc + sz;
+        }, 0);
         this.stats.exactDuplicates.push({
           sha256: sha,
-          files: list.map((f) => ({ relPath: f.relPath, size: f.size, sizeFormatted: f.sizeFormatted })),
+          files: list.map((f) => ({
+            relPath: f.relPath,
+            size: f.size,
+            sizeFormatted: formatBytes(f.size),
+            buildSize: f.buildSize || 0,
+            buildSizeFormatted: formatBytes(f.buildSize || 0),
+            isPackaged: f.isPackaged,
+          })),
           wastedBytes: totalWastedBytes,
           wastedFormatted: formatBytes(totalWastedBytes),
         });
       }
     }
 
-    // 2. Perceptual Similarity (dHash Hamming distance >= minSimilarity)
+    // 2. Perceptual Similarity Clustering (SSIM + Silhouette IoU >= minSimilarity)
     const testedPairs = new Set();
+    const adj = new Map();
+    const texMap = new Map();
+
     for (let i = 0; i < textures.length; i++) {
       const texA = textures[i];
-      if (!texA.dHashBits) continue;
+      if (!texA.grid32) continue;
+      texMap.set(texA.relPath, texA);
 
       for (let j = i + 1; j < textures.length; j++) {
         const texB = textures[j];
-        if (!texB.dHashBits) continue;
+        if (!texB.grid32) continue;
         if (texA.sha256 && texA.sha256 === texB.sha256) continue; // skip exact byte duplicates
+        texMap.set(texB.relPath, texB);
 
         const pairKey = `${texA.relPath}<->${texB.relPath}`;
         if (testedPairs.has(pairKey)) continue;
         testedPairs.add(pairKey);
 
-        const similarity = Number(calculateSimilarity(texA.dHashBits, texB.dHashBits).toFixed(1));
+        const similarity = calculateTextureSimilarity(texA, texB);
 
         if (similarity >= this.options.minSimilarity) {
-          const estimatedSavings = Math.min(texA.size, texB.size);
-          this.stats.perceptualDuplicates.push({
-            textureA: { relPath: texA.relPath, size: texA.size, sizeFormatted: texA.sizeFormatted, res: `${texA.width}x${texA.height}` },
-            textureB: { relPath: texB.relPath, size: texB.size, sizeFormatted: texB.sizeFormatted, res: `${texB.width}x${texB.height}` },
-            similarity,
-            dHashA: texA.dHash,
-            dHashB: texB.dHash,
-            estimatedSavings,
-            estimatedSavingsFormatted: formatBytes(estimatedSavings),
-          });
+          if (!adj.has(texA.relPath)) adj.set(texA.relPath, []);
+          if (!adj.has(texB.relPath)) adj.set(texB.relPath, []);
+          adj.get(texA.relPath).push({ neighbor: texB.relPath, similarity });
+          adj.get(texB.relPath).push({ neighbor: texA.relPath, similarity });
         }
+      }
+    }
+
+    // Extract Connected Clusters
+    const visited = new Set();
+    let clusterIdx = 1;
+
+    for (const nodePath of adj.keys()) {
+      if (visited.has(nodePath)) continue;
+      const clusterMembers = [];
+      const queue = [nodePath];
+      visited.add(nodePath);
+      const sims = [];
+
+      while (queue.length > 0) {
+        const curPath = queue.shift();
+        clusterMembers.push(curPath);
+        for (const edge of adj.get(curPath) || []) {
+          sims.push(edge.similarity);
+          if (!visited.has(edge.neighbor)) {
+            visited.add(edge.neighbor);
+            queue.push(edge.neighbor);
+          }
+        }
+      }
+
+      if (clusterMembers.length > 1) {
+        // Sort members: packaged in build first, then largest size
+        const memberObjs = clusterMembers
+          .map((p) => texMap.get(p))
+          .filter(Boolean)
+          .sort((a, b) => {
+            if (a.isPackaged !== b.isPackaged) return b.isPackaged ? 1 : -1;
+            const aSz = this.buildInfo?.hasBuild ? (a.buildSize || 0) : a.size;
+            const bSz = this.buildInfo?.hasBuild ? (b.buildSize || 0) : b.size;
+            return bSz - aSz;
+          });
+
+        const totalWasted = memberObjs.slice(1).reduce((acc, cur) => {
+          const sz = this.buildInfo?.hasBuild ? (cur.isPackaged ? (cur.buildSize || 0) : 0) : cur.size;
+          return acc + sz;
+        }, 0);
+
+        const avgSim = sims.length > 0 ? Number((sims.reduce((a, b) => a + b, 0) / sims.length).toFixed(1)) : this.options.minSimilarity;
+
+        this.stats.perceptualDuplicates.push({
+          groupId: clusterIdx++,
+          avgSimilarity: avgSim,
+          files: memberObjs.map((f, idx) => ({
+            relPath: f.relPath,
+            size: f.size,
+            sizeFormatted: formatBytes(f.size),
+            buildSize: f.buildSize || 0,
+            buildSizeFormatted: formatBytes(f.buildSize || 0),
+            isPackaged: f.isPackaged,
+            res: `${f.width}x${f.height}`,
+            isMaster: idx === 0,
+          })),
+          estimatedSavings: totalWasted,
+          estimatedSavingsFormatted: formatBytes(totalWasted),
+        });
       }
     }
   }
@@ -1226,20 +1572,24 @@ class PlayableResourceStats {
           }
         }
 
-        const overrideInfo = fbxOverridesMap.get(fbxFile.relPath);
-        const hasExternalOverride = overrideInfo && overrideInfo.externalMats.size > 0;
+        const hasEmbeddedTextures = fbxDetails.embeddedTextures.length > 0 || hasEmbeddedInMeta;
 
-        if (fbxDetails.embeddedTextures.length > 0 || hasEmbeddedInMeta || hasExternalOverride) {
-          const estimatedSavings = Math.round(fbxFile.size * 0.4); // typical ~40-70% savings
+        if (hasEmbeddedTextures) {
+          const effectiveSize = (this.buildInfo?.hasBuild && fbxFile.isPackaged) ? (fbxFile.buildSize || 0) : fbxFile.size;
+          const estimatedSavings = Math.round(effectiveSize * 0.4); // typical ~40-70% savings
+          const overrideInfo = fbxOverridesMap.get(fbxFile.relPath);
           this.stats.fbxDiagnostics.push({
             relPath: fbxFile.relPath,
             size: fbxFile.size,
             sizeFormatted: formatBytes(fbxFile.size),
+            buildSize: fbxFile.buildSize || 0,
+            buildSizeFormatted: formatBytes(fbxFile.buildSize || 0),
+            isPackaged: fbxFile.isPackaged,
             embeddedTextures: fbxDetails.embeddedTextures,
             embeddedMaterials: fbxDetails.embeddedMaterials,
             meshCount: fbxFile.triangleCount > 0 ? `${fbxDetails.meshCount || 1} meshes (${fbxFile.triangleCount.toLocaleString()} tris)` : `${fbxDetails.meshCount} meshes`,
             animationClips: fbxDetails.animationClips,
-            hasExternalOverride,
+            hasExternalOverride: overrideInfo ? overrideInfo.externalMats.size > 0 : false,
             externalMaterialsCount: overrideInfo ? overrideInfo.externalMats.size : 0,
             estimatedSavings,
             fixCommand: `node playable-shared-kit/tools/strip-fbx-textures.cjs --write "${fbxFile.relPath}"`,
@@ -1251,9 +1601,24 @@ class PlayableResourceStats {
     }
   }
 
-  // ==========================================
-  // 8. HEALTH SCORE & QUICK WINS COMPUTATION
-  // ==========================================
+  finalizeBuildStats() {
+    if (!this.buildInfo.hasBuild) {
+      this.stats.hasBuildData = false;
+      this.stats.totalBuildSize = 0;
+      return;
+    }
+
+    this.stats.hasBuildData = true;
+    let totalBuildAssets = 0;
+    for (const [key, cat] of Object.entries(this.stats.categories)) {
+      if (key === 'engine') continue;
+      totalBuildAssets += (cat.buildSize || 0);
+    }
+    this.stats.totalBuildAssetSize = totalBuildAssets;
+    this.stats.totalBuildWithEngine = totalBuildAssets + (this.stats.categories.engine.buildSize || 0);
+    this.stats.totalBuildSize = totalBuildAssets;
+    this.stats.buildInfo = this.buildInfo;
+  }
 
   computeQuickWinsAndHealth() {
     let score = 100;
@@ -1275,18 +1640,24 @@ class PlayableResourceStats {
     }
 
     // Win 2: Oversized Textures Downscale
-    if (this.stats.oversizedTextures.length > 0) {
-      const criticalOversized = this.stats.oversizedTextures.filter((t) => t.severity === 'CRITICAL');
-      const totalOversizedSavings = this.stats.oversizedTextures.reduce((acc, c) => acc + c.estimatedSavings, 0);
+    const activeOversized = this.stats.hasBuildData
+      ? this.stats.oversizedTextures.filter((t) => t.isPackaged && t.estimatedSavings > 0)
+      : this.stats.oversizedTextures;
+    if (activeOversized.length > 0) {
+      const criticalOversized = activeOversized.filter((t) => t.severity === 'CRITICAL');
+      const totalOversizedSavings = activeOversized.reduce((acc, c) => acc + c.estimatedSavings, 0);
       score -= Math.min(25, criticalOversized.length * 8);
+      const title = this.stats.hasBuildData
+        ? `Downscale ${activeOversized.length} Oversized Texture(s) in Build (>= ${this.options.minWasteRatio}x waste ratio)`
+        : `Downscale ${this.stats.oversizedTextures.length} Oversized Textures (>= ${this.options.minWasteRatio}x waste ratio)`;
       wins.push({
-        title: `Downscale ${this.stats.oversizedTextures.length} Oversized Textures (>= ${this.options.minWasteRatio}x waste ratio)`,
+        title,
         category: 'Textures',
         potentialSavingsBytes: totalOversizedSavings,
         potentialSavingsFormatted: formatBytes(totalOversizedSavings),
         impact: criticalOversized.length > 0 ? 'Critical' : 'Medium',
         action: 'Resize source image dimensions in graphics editor or adjust Cocos SpriteFrame packable settings.',
-        explanation: 'Textures have significantly higher resolution than their rendered UI node size, causing wasted payload and GPU memory.',
+        explanation: 'Textures have significantly higher resolution than their rendered UI node size, causing wasted payload and GPU memory in exported build.',
       });
     }
 
@@ -1306,18 +1677,22 @@ class PlayableResourceStats {
     }
 
     // Win 4: Duplicate Texture Consolidation
+    const totalExactDupFiles = this.stats.exactDuplicates.reduce((acc, c) => acc + c.files.length, 0);
+    const totalPerceptualFiles = this.stats.perceptualDuplicates.reduce((acc, c) => acc + c.files.length, 0);
+    const totalDupFiles = totalExactDupFiles + totalPerceptualFiles;
+
     if (this.stats.exactDuplicates.length > 0 || this.stats.perceptualDuplicates.length > 0) {
       const dupSavings = this.stats.exactDuplicates.reduce((acc, c) => acc + c.wastedBytes, 0)
         + this.stats.perceptualDuplicates.reduce((acc, c) => acc + c.estimatedSavings, 0);
       score -= Math.min(15, this.stats.exactDuplicates.length * 5 + this.stats.perceptualDuplicates.length * 3);
       wins.push({
-        title: `Consolidate ${this.stats.exactDuplicates.length + this.stats.perceptualDuplicates.length} Duplicate / Near-Identical Texture(s)`,
+        title: `Consolidate ${this.stats.exactDuplicates.length + this.stats.perceptualDuplicates.length} Duplicate / Color Variant Texture Group(s) (${totalDupFiles} textures)`,
         category: 'Textures',
         potentialSavingsBytes: dupSavings,
         potentialSavingsFormatted: formatBytes(dupSavings),
         impact: 'Medium',
-        action: 'Wire duplicate SpriteFrames to a single shared texture file and remove unused copies.',
-        explanation: 'Identical or >=90% visually similar textures exist across multiple paths, wasting bundle bytes.',
+        action: 'Wire duplicate / color variant SpriteFrames to a single shared master texture file or shader tinting.',
+        explanation: 'Identical or >=90% visually similar texture groups exist across multiple paths, wasting bundle bytes.',
       });
     }
 
@@ -1343,116 +1718,177 @@ class PlayableResourceStats {
 }
 
 // ==========================================
-// 9. TERMINAL CLI RENDERER
+// 9. TERMINAL CLI REPORT RENDERER
 // ==========================================
 
 function renderCliReport(stats, options) {
-  const { c, b, d, g, y, r, m, cy, gr } = {
-    c: colors.cyan,
-    b: colors.bold,
-    d: colors.dim,
-    g: colors.green,
-    y: colors.yellow,
-    r: colors.red,
-    m: colors.magenta,
-    cy: colors.cyan,
-    gr: colors.gray,
-  };
+  const colors = {
+      reset: '\x1b[0m',
+      bold: '\x1b[1m',
+      dim: '\x1b[2m',
+      red: '\x1b[31m',
+      green: '\x1b[32m',
+      yellow: '\x1b[33m',
+      cyan: '\x1b[36m',
+      magenta: '\x1b[35m',
+      gray: '\x1b[90m',
+    };
 
-  const totalRawSize = stats.totalSize;
-  const totalWithEngine = totalRawSize + stats.engineDiagnostics.estimatedEngineSize;
+    const b = colors.bold;
+    const d = colors.dim;
+    const g = colors.green;
+    const y = colors.yellow;
+    const r = colors.red;
+    const cy = colors.cyan;
+    const gr = colors.gray;
 
-  console.log('\n' + '='.repeat(78));
-  console.log(`${b}${c}🚀 COCOS PLAYABLE ADS - RESOURCE ALLOCATION & OPTIMIZATION REPORT${colors.reset}`);
-  console.log('='.repeat(78));
+    const totalRawSize = stats.totalSize;
+    const hasBuild = stats.hasBuildData;
+    const totalBuildAssetSize = stats.totalBuildAssetSize || 0;
+    const totalBuildWithEngine = stats.totalBuildWithEngine || 0;
 
-  // Playable Health & Budget Scorecard
-  const healthColor = stats.healthScore >= 85 ? g : (stats.healthScore >= 65 ? y : r);
-  console.log(`\n${b}📊 PLAYABLE HEALTH SCORE:${colors.reset} ${healthColor}${b}${stats.healthScore}/100${colors.reset} | ${b}TOTAL ASSETS SIZE:${colors.reset} ${c}${formatBytes(totalRawSize)}${colors.reset} (Est. Bundle with Engine: ${m}${formatBytes(totalWithEngine)}${colors.reset})`);
+    console.log('\n' + '='.repeat(84));
+    console.log(`${b}${cy}🚀 COCOS PLAYABLE ADS - RESOURCE ALLOCATION & BUILD MAPPING REPORT${colors.reset}`);
+    console.log('='.repeat(84));
 
-  // Ad Network Budget Compliance Check
-  const NETWORKS = [
-    { name: 'Google Ads', limitMB: 5.0 },
-    { name: 'AppLovin', limitMB: 5.0 },
-    { name: 'Unity Ads', limitMB: 5.0 },
-    { name: 'IronSource', limitMB: 2.0 },
-    { name: 'TikTok / Mintegral', limitMB: 2.0 },
-    { name: 'Facebook Ads', limitMB: 2.0 },
-  ];
+    // Health Score
+    let scoreColor = g;
+    if (stats.healthScore < 65) scoreColor = r;
+    else if (stats.healthScore < 85) scoreColor = y;
 
-  console.log(`\n${b}🌐 AD NETWORK BUDGET STATUS:${colors.reset}`);
-  for (const net of NETWORKS) {
-    const limitBytes = net.limitMB * 1024 * 1024;
-    const isOk = totalRawSize <= limitBytes;
-    const statusIcon = isOk ? `${g}✔ PASS${colors.reset}` : `${r}✖ EXCEEDED${colors.reset}`;
-    const pct = ((totalRawSize / limitBytes) * 100).toFixed(1);
-    console.log(`  • ${net.name.padEnd(20)} Max: ${net.limitMB}MB | Usage: ${pct.padStart(5)}% | ${statusIcon}`);
-  }
-
-  // Category Breakdown Table
-  console.log(`\n${b}📦 RESOURCE ALLOCATION BREAKDOWN:${colors.reset}`);
-  console.log(`  ${'-'.repeat(74)}`);
-  console.log(`  ${'CATEGORY'.padEnd(28)} ${'COUNT'.padStart(6)} ${'SIZE'.padStart(12)} ${'% TOTAL'.padStart(10)} ${'DETAILS'.padEnd(16)}`);
-  console.log(`  ${'-'.repeat(74)}`);
-
-  for (const [key, cat] of Object.entries(stats.categories)) {
-    if (key === 'engine') continue;
-    const pct = totalRawSize > 0 ? ((cat.size / totalRawSize) * 100).toFixed(1) : '0.0';
-    let detail = '';
-    if (key === 'scripts' || key === 'sharedCore') detail = `${cat.loc || 0} lines of TS`;
-    else if (key === 'models') detail = `${cat.files.length} 3D meshes`;
-    else if (key === 'textures') detail = `${cat.files.length} images`;
-    else if (key === 'audio') detail = `${cat.files.length} sound files`;
-
-    console.log(`  ${cat.label.padEnd(28)} ${String(cat.count).padStart(6)} ${formatBytes(cat.size).padStart(12)} ${(pct + '%').padStart(10)} ${gr}${detail.padEnd(16)}${colors.reset}`);
-  }
-  console.log(`  ${'-'.repeat(74)}`);
-  console.log(`  ${b}${'TOTAL ASSET FOOTPRINT'.padEnd(28)} ${String(Object.values(stats.categories).reduce((a, b) => a + (b.count || 0), 0) - 1).padStart(6)} ${formatBytes(totalRawSize).padStart(12)} ${'100.0%'.padStart(10)}${colors.reset}`);
-
-  // SECTION: Oversized Textures vs Node Transforms
-  if (stats.oversizedTextures.length > 0) {
-    console.log(`\n${b}⚠️  OVERSIZED TEXTURES VS NODE TRANSFORMS (${stats.oversizedTextures.length} found):${colors.reset}`);
-    console.log(`  ${d}Textures with resolution significantly larger than their rendered UI node contentSize * scale.${colors.reset}`);
-    console.log(`  ${'-'.repeat(74)}`);
-
-    stats.oversizedTextures.slice(0, 10).forEach((item, idx) => {
-      const sevTag = item.severity === 'CRITICAL' ? `${r}[CRITICAL ${item.wasteRatio}x]${colors.reset}` : `${y}[WARN ${item.wasteRatio}x]${colors.reset}`;
-      console.log(`  ${idx + 1}. ${sevTag} ${b}${path.basename(item.texturePath)}${colors.reset} in ${cy}${item.sceneOrPrefab}${colors.reset}`);
-      console.log(`     Node: ${item.nodePath} (${item.spriteType})`);
-      console.log(`     Raw Texture: ${item.rawResolution} (${formatBytes(item.originalSize)}) -> Display Size: ${item.displaySize}`);
-      console.log(`     ${g}→ Recommended: ${item.recommendedResolution} (Save ~${formatBytes(item.estimatedSavings)})${colors.reset}`);
-    });
-    if (stats.oversizedTextures.length > 10) {
-      console.log(`  ${d}... and ${stats.oversizedTextures.length - 10} more. Run with --html to inspect full list.${colors.reset}`);
+    console.log(`\n${b}📊 PLAYABLE HEALTH SCORE: ${scoreColor}${stats.healthScore}/100${colors.reset}`);
+    console.log(`  • Raw Source Assets (assets/):         ${formatBytes(totalRawSize).padStart(8)}`);
+    if (hasBuild) {
+      const reduction = totalRawSize > 0 ? (((totalRawSize - totalBuildAssetSize) / totalRawSize) * 100).toFixed(1) : '0';
+      console.log(`  • Exported Build Assets (UUID Mapped):   ${g}${b}${formatBytes(totalBuildAssetSize).padStart(8)}${colors.reset} (-${reduction}% reduction via bin & compression)`);
+      console.log(`  • Estimated Web Bundle (with Engine JS): ${b}${formatBytes(totalBuildWithEngine).padStart(8)}${colors.reset}`);
     }
-  }
+    if (stats.buildInfo.packagedSize > 0) {
+      console.log(`  • Packaged Output (${stats.buildInfo.packagedHtmlName}): ${formatBytes(stats.buildInfo.packagedSize)}`);
+    }
 
-  // SECTION: Duplicate & Perceptual Similarities
-  if (stats.exactDuplicates.length > 0 || stats.perceptualDuplicates.length > 0) {
-    console.log(`\n${b}🔍 DUPLICATE & PERCEPTUALLY SIMILAR TEXTURES:${colors.reset}`);
-    if (stats.exactDuplicates.length > 0) {
-      console.log(`  ${r}• Exact Byte Duplicates (100% SHA-256 match):${colors.reset}`);
-      stats.exactDuplicates.forEach((dup, i) => {
-        console.log(`    [Group ${i + 1}] Wasted: ${formatBytes(dup.wastedBytes)}`);
-        dup.files.forEach((f) => console.log(`      - ${f.relPath} (${f.sizeFormatted})`));
+    // Network Compliance Table
+    const NETWORKS = [
+      { name: 'Mintegral (Zip)', channel: 'mintegral', limitMB: 5.0 },
+      { name: 'Google Ads', channel: 'google', limitMB: 5.0 },
+      { name: 'AppLovin', channel: 'applovin', limitMB: 5.0 },
+      { name: 'Unity Ads', channel: 'unity', limitMB: 5.0 },
+      { name: 'TikTok (Zip)', channel: 'tiktok', limitMB: 5.0 },
+      { name: 'Bigo Ads (Zip)', channel: 'bigo', limitMB: 5.0 },
+      { name: 'Pangle (Zip)', channel: 'pangle', limitMB: 5.0 },
+      { name: 'Liftoff', channel: 'liftoff', limitMB: 5.0 },
+      { name: 'IronSource', channel: 'ironsource2025', limitMB: 2.0 },
+      { name: 'Facebook Ads', channel: 'facebook', limitMB: 2.0 },
+    ];
+
+    const evalSize = hasBuild ? totalBuildWithEngine : totalRawSize;
+    const evalLabel = hasBuild ? 'Channel Output / Build Bundle' : 'Raw Source Assets';
+
+    console.log(`\n${b}🌐 AD NETWORK BUDGET STATUS (Evaluated on ${evalLabel}):${colors.reset}`);
+    for (const net of NETWORKS) {
+      const channelItem = stats.buildInfo?.channelArtifacts?.get(net.channel);
+      const targetSize = channelItem ? channelItem.size : evalSize;
+      const limitBytes = net.limitMB * 1024 * 1024;
+      const isOk = targetSize <= limitBytes;
+      const statusIcon = isOk ? `${g}✔ PASS${colors.reset}` : `${r}✖ EXCEEDED${colors.reset}`;
+      const pct = ((targetSize / limitBytes) * 100).toFixed(1);
+      const sizeFormatted = channelItem ? channelItem.sizeFormatted : formatBytes(targetSize);
+      console.log(`  • ${net.name.padEnd(22)} Max: ${net.limitMB}MB | Size: ${sizeFormatted.padStart(8)} | Usage: ${pct.padStart(5)}% | ${statusIcon}`);
+    }
+
+    // Category Breakdown Table
+    console.log(`\n${b}📦 RESOURCE ALLOCATION & EXPORTED BUILD MAPPING:${colors.reset}`);
+    console.log(`  ${'-'.repeat(80)}`);
+    console.log(`  ${'CATEGORY'.padEnd(30)} ${'RAW -> BUILD'.padEnd(16)} ${'RAW SIZE'.padStart(10)} ${'BUILD SIZE'.padStart(12)} ${'RATIO'.padStart(8)}`);
+    console.log(`  ${'-'.repeat(80)}`);
+
+    for (const [key, cat] of Object.entries(stats.categories)) {
+      if (key === 'engine') continue;
+      const rawCount = cat.count || 0;
+      const usedCount = cat.usedCount !== undefined ? cat.usedCount : (cat.files ? cat.files.filter((f) => f.isPackaged).length : rawCount);
+      const countStr = hasBuild ? `${rawCount} -> ${usedCount}` : `${rawCount}`;
+      const rawSz = formatBytes(cat.size || 0);
+      const buildSz = hasBuild ? (key === 'materials' && (cat.buildSize || 0) === 0 ? 'in-bundle' : (key === 'core' ? 'in-bundle' : (key === 'scripts' ? '1 bundle' : formatBytes(cat.buildSize || 0)))) : '-';
+      const ratio = cat.size > 0 && hasBuild ? (((cat.size - (cat.buildSize || 0)) / cat.size) * 100).toFixed(1) : '0';
+      const ratioStr = hasBuild ? ((cat.buildSize || 0) <= cat.size ? `-${ratio}%` : `+${Math.abs(ratio)}%`) : '-';
+
+      console.log(`  ${cat.label.padEnd(30)} ${countStr.padEnd(16)} ${rawSz.padStart(10)} ${buildSz.padStart(12)} ${ratioStr.padStart(8)}`);
+    }
+    console.log(`  ${'-'.repeat(80)}`);
+    const totalAssetsRatio = totalRawSize > 0 && hasBuild ? (((totalRawSize - totalBuildAssetSize) / totalRawSize) * 100).toFixed(1) : '0.0';
+    console.log(`  ${b}${'TOTAL ASSET FOOTPRINT'.padEnd(30)} ${''.padEnd(16)} ${formatBytes(totalRawSize).padStart(10)} ${(hasBuild ? formatBytes(totalBuildAssetSize) : '-').padStart(12)} ${(hasBuild ? `-${totalAssetsRatio}%` : '-').padStart(8)}${colors.reset}`);
+    if (hasBuild && stats.categories.engine.buildSize) {
+      console.log(`  ${gr}${'Cocos Engine JS Runtime'.padEnd(30)} ${'1 runtime'.padEnd(16)} ${'-'.padStart(10)} ${formatBytes(stats.categories.engine.buildSize).padStart(12)} ${''.padStart(8)}${colors.reset}`);
+      console.log(`  ${b}${cy}${'TOTAL WEB BUNDLE PAYLOAD'.padEnd(30)} ${''.padEnd(16)} ${formatBytes(totalRawSize + stats.categories.engine.buildSize).padStart(10)} ${formatBytes(totalBuildWithEngine).padStart(12)} ${`-${totalAssetsRatio}%`.padStart(8)}${colors.reset}`);
+    }
+
+    // SECTION: Oversized Textures vs Node Transforms
+    if (stats.oversizedTextures.length > 0) {
+      const packagedCount = stats.oversizedTextures.filter((t) => t.isPackaged).length;
+      const excludedCount = stats.oversizedTextures.length - packagedCount;
+      const titleSuffix = stats.hasBuildData ? ` (${packagedCount} in build, ${excludedCount} excluded)` : ` (${stats.oversizedTextures.length} found)`;
+
+      console.log(`\n${b}⚠️  OVERSIZED TEXTURES VS NODE TRANSFORMS${titleSuffix}:${colors.reset}`);
+      console.log(`  ${d}Textures with resolution significantly larger than their rendered UI node contentSize * scale.${colors.reset}`);
+      console.log(`  ${'-'.repeat(74)}`);
+
+      stats.oversizedTextures.slice(0, 10).forEach((item, idx) => {
+        const sevTag = item.severity === 'CRITICAL' ? `${r}[CRITICAL ${item.wasteRatio}x]${colors.reset}` : `${y}[WARN ${item.wasteRatio}x]${colors.reset}`;
+        console.log(`  ${idx + 1}. ${sevTag} ${b}${path.basename(item.texturePath)}${colors.reset} in ${cy}${item.sceneOrPrefab}${colors.reset}`);
+        console.log(`     Node: ${item.nodePath} (${item.spriteType})`);
+        if (stats.hasBuildData) {
+          if (item.isPackaged) {
+            console.log(`     Exported Texture: ${item.rawResolution} (${formatBytes(item.buildSize)} WebP) [Raw: ${formatBytes(item.originalSize)}] -> Display Size: ${item.displaySize}`);
+            console.log(`     ${g}→ Recommended: ${item.recommendedResolution} (Save ~${formatBytes(item.estimatedSavings)} in exported build)${colors.reset}`);
+          } else {
+            console.log(`     Source Texture: ${item.rawResolution} (${formatBytes(item.originalSize)}) [Excluded from build] -> Display Size: ${item.displaySize}`);
+            console.log(`     ${d}→ Recommended: ${item.recommendedResolution} (Already excluded from build, 0 B in build)${colors.reset}`);
+          }
+        } else {
+          console.log(`     Raw Texture: ${item.rawResolution} (${formatBytes(item.originalSize)}) -> Display Size: ${item.displaySize}`);
+          console.log(`     ${g}→ Recommended: ${item.recommendedResolution} (Save ~${formatBytes(item.estimatedSavings)})${colors.reset}`);
+        }
       });
+      if (stats.oversizedTextures.length > 10) {
+        console.log(`  ${d}... and ${stats.oversizedTextures.length - 10} more. Run with --html to inspect full list.${colors.reset}`);
+      }
     }
 
-    if (stats.perceptualDuplicates.length > 0) {
-      console.log(`  ${y}• Visually Similar Textures (>= ${options.minSimilarity}% match via dHash):${colors.reset}`);
-      stats.perceptualDuplicates.slice(0, 8).forEach((p, i) => {
-        console.log(`    ${i + 1}. Similarity: ${b}${y}${p.similarity}%${colors.reset} (Save ~${p.estimatedSavingsFormatted})`);
-        console.log(`       A: ${p.textureA.relPath} (${p.textureA.res}, ${p.textureA.sizeFormatted})`);
-        console.log(`       B: ${p.textureB.relPath} (${p.textureB.res}, ${p.textureB.sizeFormatted})`);
-      });
+    // SECTION: Duplicate & Perceptual Similarities
+    if (stats.exactDuplicates.length > 0 || stats.perceptualDuplicates.length > 0) {
+      console.log(`\n${b}🔍 DUPLICATE & PERCEPTUALLY SIMILAR TEXTURES:${colors.reset}`);
+      if (stats.exactDuplicates.length > 0) {
+        console.log(`  ${r}• Exact Byte Duplicates (100% SHA-256 match):${colors.reset}`);
+        stats.exactDuplicates.forEach((dup, i) => {
+          const wastedStr = stats.hasBuildData ? `${formatBytes(dup.wastedBytes)} in build` : formatBytes(dup.wastedBytes);
+          console.log(`    [Group ${i + 1}] Wasted: ${wastedStr}`);
+          dup.files.forEach((f) => {
+            const szStr = stats.hasBuildData ? (f.isPackaged ? `build: ${f.buildSizeFormatted}` : `raw: ${f.sizeFormatted} [Excluded]`) : f.sizeFormatted;
+            console.log(`      - ${f.relPath} (${szStr})`);
+          });
+        });
+      }
+
+      if (stats.perceptualDuplicates.length > 0) {
+        console.log(`  ${y}• Visually Similar Texture Groups (>= ${options.minSimilarity}% match via Structural SSIM & Silhouette IoU):${colors.reset}`);
+        stats.perceptualDuplicates.slice(0, 8).forEach((group, i) => {
+          const saveStr = stats.hasBuildData ? `Save ~${group.estimatedSavingsFormatted} in build` : `Save ~${group.estimatedSavingsFormatted}`;
+          console.log(`    [Group ${group.groupId || (i + 1)}] ${group.files.length} textures | Avg Similarity: ${b}${y}${group.avgSimilarity}%${colors.reset} (${saveStr})`);
+          group.files.forEach((f) => {
+            const szStr = stats.hasBuildData ? (f.isPackaged ? `build: ${f.buildSizeFormatted}` : `raw: ${f.sizeFormatted} [Excluded]`) : f.sizeFormatted;
+            const masterTag = f.isMaster ? ` ${g}[Master]${colors.reset}` : '';
+            console.log(`      - ${f.relPath} (${f.res}, ${szStr})${masterTag}`);
+          });
+        });
+      }
     }
-  }
 
   // SECTION: FBX Deep Diagnostics
   if (stats.fbxDiagnostics.length > 0) {
     console.log(`\n${b}🧊 FBX EMBEDDED ASSET DIAGNOSTICS:${colors.reset}`);
     stats.fbxDiagnostics.forEach((fbx, i) => {
-      console.log(`  ${i + 1}. ${b}${fbx.relPath}${colors.reset} (${fbx.sizeFormatted})`);
+      const fbxSizeStr = stats.hasBuildData ? (fbx.isPackaged ? `Build: ${fbx.buildSizeFormatted} | Raw: ${fbx.sizeFormatted}` : `Raw: ${fbx.sizeFormatted} [Excluded]`) : fbx.sizeFormatted;
+      console.log(`  ${i + 1}. ${b}${fbx.relPath}${colors.reset} (${fbxSizeStr})`);
       console.log(`     Embedded Textures: ${fbx.embeddedTextures.join(', ') || 'None'}`);
       console.log(`     ${g}→ Quick Fix: ${fbx.fixCommand}${colors.reset}`);
     });
@@ -1462,7 +1898,8 @@ function renderCliReport(stats, options) {
   if (stats.audioDiagnostics.length > 0) {
     console.log(`\n${b}🎵 AUDIO OPTIMIZATION OPPORTUNITIES:${colors.reset}`);
     stats.audioDiagnostics.forEach((a, i) => {
-      console.log(`  ${i + 1}. ${b}${a.relPath}${colors.reset} (${a.sizeFormatted}) - ${a.audioInfo.format} ${a.audioInfo.sampleRate}Hz ${a.audioInfo.channelLabel}`);
+      const aSizeStr = stats.hasBuildData ? (a.isPackaged ? `Build: ${a.buildSizeFormatted} | Raw: ${a.sizeFormatted}` : a.sizeFormatted) : a.sizeFormatted;
+      console.log(`  ${i + 1}. ${b}${a.relPath}${colors.reset} (${aSizeStr}) - ${a.audioInfo.format} ${a.audioInfo.sampleRate}Hz ${a.audioInfo.channelLabel}`);
       console.log(`     ${y}Issue: ${a.audioInfo.reason.join('; ')}${colors.reset}`);
     });
     console.log(`  ${g}→ Run: npm run sound:optimize${colors.reset}`);
@@ -1472,8 +1909,9 @@ function renderCliReport(stats, options) {
   if (stats.quickWins.length > 0) {
     console.log(`\n${b}${g}🎯 TOP QUICK WINS (HIGHEST SIZE REDUCTION IMPACT):${colors.reset}`);
     stats.quickWins.slice(0, 5).forEach((win, i) => {
+      const saveLabel = stats.hasBuildData ? `Est. Build Savings: ${g}${b}${win.potentialSavingsFormatted}${colors.reset}` : `Est. Savings: ${g}${b}${win.potentialSavingsFormatted}${colors.reset}`;
       console.log(`\n  ${b}${i + 1}. [${win.category}] ${win.title}${colors.reset}`);
-      console.log(`     Est. Savings: ${g}${b}${win.potentialSavingsFormatted}${colors.reset} | Impact: ${win.impact}`);
+      console.log(`     ${saveLabel} | Impact: ${win.impact}`);
       console.log(`     ${d}${win.explanation}${colors.reset}`);
       if (win.action.startsWith('npm ') || win.action.startsWith('node ')) {
         console.log(`     ${c}Run: ${win.action}${colors.reset}`);
@@ -1632,9 +2070,14 @@ function generateHtmlReport(stats, options, outputPath) {
     <!-- Top KPI Cards -->
     <div class="grid">
       <div class="card">
-        <div class="card-title">Total Asset Size</div>
+        <div class="card-title">Raw Source Assets</div>
         <div class="card-value">${formatBytes(totalRawSize)}</div>
-        <div class="card-subtitle">Engine + Assets: ~${formatBytes(totalWithEngine)}</div>
+        <div class="card-subtitle">Full uncompressed project assets</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Exported Build Assets</div>
+        <div class="card-value" style="color: var(--success);">${formatBytes(stats.totalBuildAssetSize || totalRawSize)}</div>
+        <div class="card-subtitle">With Engine: ~${formatBytes(stats.totalBuildWithEngine || totalWithEngine)}</div>
       </div>
       <div class="card">
         <div class="card-title">Oversized Textures</div>
@@ -1649,13 +2092,6 @@ function generateHtmlReport(stats, options, outputPath) {
           ${stats.exactDuplicates.length + stats.perceptualDuplicates.length}
         </div>
         <div class="card-subtitle">${stats.exactDuplicates.length} exact, ${stats.perceptualDuplicates.length} visually similar</div>
-      </div>
-      <div class="card">
-        <div class="card-title">FBX / Audio Actions</div>
-        <div class="card-value" style="color: ${(stats.fbxDiagnostics.length + stats.audioDiagnostics.length) > 0 ? 'var(--primary)' : 'var(--success)'};">
-          ${stats.fbxDiagnostics.length + stats.audioDiagnostics.length}
-        </div>
-        <div class="card-subtitle">Actionable optimizations available</div>
       </div>
     </div>
 
@@ -1683,32 +2119,93 @@ function generateHtmlReport(stats, options, outputPath) {
 
     <!-- Resource Allocation Table -->
     <section>
-      <h2>📦 Resource Allocation Breakdown</h2>
+      <h2>📦 Resource Allocation & Exported Build Mapping</h2>
       <div class="card" style="padding: 0; overflow: hidden;">
         <table>
           <thead>
             <tr>
               <th>Category</th>
-              <th>Files Count</th>
-              <th>Total Size</th>
-              <th>Share</th>
-              <th>Visual Proportion</th>
+              <th>Count (Raw -> In-Build)</th>
+              <th>Raw Source Size</th>
+              <th>Exported Build Size</th>
+              <th>Savings / Ratio</th>
+              <th>Build Share</th>
             </tr>
           </thead>
           <tbody>
             ${Object.entries(stats.categories).filter(([k]) => k !== 'engine').map(([key, cat]) => {
-              const pct = totalRawSize > 0 ? ((cat.size / totalRawSize) * 100).toFixed(1) : 0;
+              const rawSz = cat.size || 0;
+              const buildSz = cat.buildSize || 0;
+              const rawCount = cat.count || 0;
+              const usedCount = cat.usedCount !== undefined ? cat.usedCount : (cat.files ? cat.files.filter(f => f.isPackaged).length : rawCount);
+              const ratio = rawSz > 0 && stats.hasBuildData ? (((rawSz - buildSz) / rawSz) * 100).toFixed(1) : 0;
+              const ratioStr = stats.hasBuildData ? (buildSz <= rawSz ? `-${ratio}%` : `+${Math.abs(ratio)}%`) : '-';
+              const buildSharePct = stats.totalBuildAssetSize > 0 ? ((buildSz / stats.totalBuildAssetSize) * 100).toFixed(1) : 0;
+              const buildSzFormatted = stats.hasBuildData ? (key === 'materials' && buildSz === 0 ? 'in-pack' : formatBytes(buildSz)) : '-';
+
               return `
                 <tr>
                   <td><strong>${cat.label}</strong></td>
-                  <td>${cat.count}</td>
-                  <td>${formatBytes(cat.size)}</td>
-                  <td>${pct}%</td>
-                  <td style="width: 250px;">
+                  <td>${rawCount} -> ${usedCount}</td>
+                  <td>${formatBytes(rawSz)}</td>
+                  <td><strong style="color: var(--success);">${buildSzFormatted}</strong></td>
+                  <td><span class="tag ${buildSz < rawSz ? 'tag-pass' : 'tag-warn'}">${ratioStr}</span></td>
+                  <td style="width: 200px;">
                     <div class="progress-bar-container">
-                      <div class="progress-bar" style="width: ${pct}%; background: var(--primary);"></div>
+                      <div class="progress-bar" style="width: ${buildSharePct}%; background: var(--primary);"></div>
                     </div>
                   </td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Ad Network Compliance & Channel Artifacts -->
+    <section>
+      <h2>🌐 Ad Network Budget Compliance & Channel Artifacts</h2>
+      <div class="card" style="padding: 0; overflow: hidden;">
+        <table>
+          <thead>
+            <tr>
+              <th>Ad Network</th>
+              <th>Channel Package / Artifact</th>
+              <th>Network Limit</th>
+              <th>Package Size</th>
+              <th>Budget Usage</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${[
+              { name: 'Mintegral (Zip)', channel: 'mintegral', limitMB: 5.0 },
+              { name: 'Google Ads', channel: 'google', limitMB: 5.0 },
+              { name: 'AppLovin', channel: 'applovin', limitMB: 5.0 },
+              { name: 'Unity Ads', channel: 'unity', limitMB: 5.0 },
+              { name: 'TikTok (Zip)', channel: 'tiktok', limitMB: 5.0 },
+              { name: 'Bigo Ads (Zip)', channel: 'bigo', limitMB: 5.0 },
+              { name: 'Pangle (Zip)', channel: 'pangle', limitMB: 5.0 },
+              { name: 'Liftoff', channel: 'liftoff', limitMB: 5.0 },
+              { name: 'IronSource', channel: 'ironsource2025', limitMB: 2.0 },
+              { name: 'Facebook Ads', channel: 'facebook', limitMB: 2.0 },
+            ].map((net) => {
+              const channelItem = stats.buildInfo?.channelArtifacts?.get(net.channel);
+              const targetSize = channelItem ? channelItem.size : (stats.totalBuildWithEngine || totalWithEngine);
+              const limitBytes = net.limitMB * 1024 * 1024;
+              const isOk = targetSize <= limitBytes;
+              const pct = ((targetSize / limitBytes) * 100).toFixed(1);
+              const artName = channelItem ? channelItem.name : (stats.hasBuildData ? 'web-mobile bundle' : 'raw source assets');
+
+              return `
+                <tr>
+                  <td><strong>${net.name}</strong></td>
+                  <td style="font-family: monospace; font-size: 0.8rem; color: var(--text-muted);">${artName}</td>
+                  <td>${net.limitMB} MB</td>
+                  <td><strong>${formatBytes(targetSize)}</strong></td>
+                  <td>${pct}%</td>
+                  <td><span class="tag ${isOk ? 'tag-pass' : 'tag-critical'}">${isOk ? '✔ PASS' : '✖ EXCEEDED'}</span></td>
                 </tr>
               `;
             }).join('')}
@@ -1730,7 +2227,7 @@ function generateHtmlReport(stats, options, outputPath) {
               <th>Rendered Display Size</th>
               <th>Waste Ratio</th>
               <th>Recommended Size</th>
-              <th>Potential Savings</th>
+              <th>Est. Build Savings</th>
             </tr>
           </thead>
           <tbody>
@@ -1757,35 +2254,49 @@ function generateHtmlReport(stats, options, outputPath) {
 
     <!-- Duplicate & Perceptual Similarities -->
     <section>
-      <h2>🔍 Duplicate & Perceptually Similar Textures (>= ${options.minSimilarity}%)</h2>
+      <h2>🔍 Duplicate & Perceptually Similar Texture Groups (>= ${options.minSimilarity}%)</h2>
       <div class="card" style="padding: 0; overflow: hidden;">
         <table>
           <thead>
             <tr>
-              <th>Match Type</th>
-              <th>Texture A</th>
-              <th>Texture B</th>
-              <th>Similarity</th>
-              <th>Est. Savings</th>
+              <th>Group Type</th>
+              <th>Group Members</th>
+              <th>Count</th>
+              <th>Avg Similarity</th>
+              <th>Est. Build Savings</th>
             </tr>
           </thead>
           <tbody>
-            ${stats.exactDuplicates.map((dup) => `
+            ${stats.exactDuplicates.map((dup, i) => `
               <tr>
-                <td><span class="tag tag-critical">100% Exact</span></td>
-                <td>${dup.files[0]?.relPath} (${dup.files[0]?.sizeFormatted})</td>
-                <td>${dup.files.slice(1).map(f => f.relPath).join('<br>')}</td>
+                <td><span class="tag tag-critical">100% Exact [Group ${i + 1}]</span></td>
+                <td>
+                  ${dup.files.map((f, idx) => `
+                    <div style="font-family: monospace; font-size: 0.8rem; margin-bottom: 2px;">
+                      ${idx === 0 ? '<strong style="color: var(--primary);">' : ''}${f.relPath}${idx === 0 ? ' [Master]</strong>' : ''}
+                      <span style="color: var(--text-muted);">(${f.isPackaged ? `build: ${f.buildSizeFormatted}` : `raw: ${f.sizeFormatted} [Excluded]`})</span>
+                    </div>
+                  `).join('')}
+                </td>
+                <td>${dup.files.length} files</td>
                 <td>100.0%</td>
-                <td style="color: var(--success);">~${dup.wastedFormatted}</td>
+                <td style="color: var(--success); font-weight: bold;">~${dup.wastedFormatted}</td>
               </tr>
             `).join('')}
-            ${stats.perceptualDuplicates.map((dup) => `
+            ${stats.perceptualDuplicates.map((group) => `
               <tr>
-                <td><span class="tag tag-warn">Perceptual</span></td>
-                <td>${dup.textureA.relPath} (${dup.textureA.res}, ${dup.textureA.sizeFormatted})</td>
-                <td>${dup.textureB.relPath} (${dup.textureB.res}, ${dup.textureB.sizeFormatted})</td>
-                <td><strong>${dup.similarity}%</strong></td>
-                <td style="color: var(--success);">~${dup.estimatedSavingsFormatted}</td>
+                <td><span class="tag tag-warn">Visual Group ${group.groupId}</span></td>
+                <td>
+                  ${group.files.map((f, idx) => `
+                    <div style="font-family: monospace; font-size: 0.8rem; margin-bottom: 2px;">
+                      ${idx === 0 ? '<strong style="color: var(--primary);">' : ''}${f.relPath}${idx === 0 ? ' [Master]</strong>' : ''}
+                      <span style="color: var(--text-muted);">(${f.res}, ${f.isPackaged ? `build: ${f.buildSizeFormatted}` : `raw: ${f.sizeFormatted} [Excluded]`})</span>
+                    </div>
+                  `).join('')}
+                </td>
+                <td>${group.files.length} textures</td>
+                <td><strong>${group.avgSimilarity}%</strong></td>
+                <td style="color: var(--success); font-weight: bold;">~${group.estimatedSavingsFormatted}</td>
               </tr>
             `).join('')}
             ${stats.exactDuplicates.length === 0 && stats.perceptualDuplicates.length === 0 ? `
@@ -1894,7 +2405,7 @@ module.exports = {
   PlayableResourceStats,
   decodePng,
   computeImageHashes,
-  calculateSimilarity,
+  calculateTextureSimilarity,
   parseFbxDetails,
   parseAudioDetails,
 };

@@ -61,7 +61,8 @@ node playable-shared-kit/tools/audio-optimizer.cjs --format mp3 -q 60 --write --
 - `--mono` / `--stereo`: Ép kênh mono hoặc stereo.
 - `-r, --sample-rate <Hz>`: Chỉ định sample rate (ví dụ `16000`, `22050`, `32000`, `44100`).
 - `-b, --bitrate <rate>`: Chỉ định bitrate cụ thể (ví dụ `32k`, `48k`, `64k`).
-- `--skip-if-larger`: Bỏ qua nếu file sau tối ưu lớn hơn file gốc.
+- `--skip-if-larger`: Bỏ qua nếu file sau tối ưu lớn hơn file gốc (Mặc định bật an toàn).
+- `--force`, `--allow-larger`: Bắt buộc ghi đè dù dung lượng sau tối ưu có tăng lên.
 - `--output <dir>`: Xuất ra thư mục riêng biệt thay vì ghi đè.
 - `--json`: Xuất kết quả dạng JSON phục vụ CI/CD hoặc AI workflow.
 

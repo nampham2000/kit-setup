@@ -192,6 +192,50 @@ export * from './core';
   ensureScriptMeta(indexPath);
 }
 
+function syncPackageJson() {
+  const tmplPath = path.join(SHARED_KIT_ROOT, 'template-config', 'package.scripts_TEMPLATE.json');
+  const pkgPath = path.join(PROJECT_ROOT, 'package.json');
+  if (!fs.existsSync(tmplPath) || !fs.existsSync(pkgPath)) return;
+
+  console.log('[sync-shared-kit] Merging standard scripts into package.json ...');
+  const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8').replace(/^\uFEFF/, ''));
+  const tmpl = JSON.parse(fs.readFileSync(tmplPath, 'utf8').replace(/^\uFEFF/, ''));
+
+  let modified = false;
+  if (tmpl.scripts) {
+    if (!pkg.scripts) {
+      pkg.scripts = {};
+      modified = true;
+    }
+    for (const [key, val] of Object.entries(tmpl.scripts)) {
+      if (!pkg.scripts[key]) {
+        pkg.scripts[key] = val;
+        modified = true;
+      }
+    }
+  }
+
+  if (tmpl.devDependencies) {
+    if (!pkg.devDependencies) {
+      pkg.devDependencies = {};
+      modified = true;
+    }
+    for (const [key, val] of Object.entries(tmpl.devDependencies)) {
+      if (!pkg.devDependencies[key]) {
+        pkg.devDependencies[key] = val;
+        modified = true;
+      }
+    }
+  }
+
+  if (modified) {
+    fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n', 'utf8');
+    console.log('  [ok] Merged template scripts & devDependencies into package.json');
+  } else {
+    console.log('  [ok] package.json scripts are up to date');
+  }
+}
+
 function syncSharedKit(options = {}) {
   console.log('[sync-shared-kit] Syncing packages from playable-shared-kit -> assets/script/shared ...');
 
@@ -219,7 +263,8 @@ function syncSharedKit(options = {}) {
 
   generateSharedIndex(TARGET_SHARED_DIR);
   syncExtensions();
-  console.log('[sync-shared-kit] Successfully synchronized shared modules & extensions.\\n');
+  syncPackageJson();
+  console.log('[sync-shared-kit] Successfully synchronized shared modules & extensions.\n');
 }
 
 if (require.main === module) {

@@ -61,9 +61,9 @@ if [ -f "$SHARED_KIT/tools/ensure-dependencies.cjs" ]; then
     node "$SHARED_KIT/tools/ensure-dependencies.cjs" || true
 fi
 
-# 3) Ensure shared-kit dependencies
-echo "==> Ensuring root dependencies: playable-sdk, playable-core"
-node -e "const fs=require('fs'),path=require('path');const file=path.join(process.argv[1],'package.json');const raw=fs.readFileSync(file,'utf8').replace(/^\uFEFF/,'');const pkg=JSON.parse(raw);pkg.dependencies={...(pkg.dependencies||{}),'playable-sdk':'file:./playable-shared-kit/packages/playable-sdk','playable-core':'file:./playable-shared-kit/packages/playable-core'};fs.writeFileSync(file,JSON.stringify(pkg,null,2)+'\n');" "$ROOT"
+# 3) Ensure shared-kit dependencies & scripts
+echo "==> Ensuring root dependencies: playable-sdk, playable-core, @modelcontextprotocol/sdk & scripts"
+node -e "const fs=require('fs'),path=require('path');const root=process.argv[1],sharedKit=process.argv[2];const file=path.join(root,'package.json');const raw=fs.readFileSync(file,'utf8').replace(/^\uFEFF/,'');const pkg=JSON.parse(raw);pkg.dependencies={...(pkg.dependencies||{}),'playable-sdk':'file:./playable-shared-kit/packages/playable-sdk','playable-core':'file:./playable-shared-kit/packages/playable-core','@modelcontextprotocol/sdk':pkg.dependencies?.['@modelcontextprotocol/sdk']||'^1.29.0'};const tmplFile=path.join(sharedKit,'template-config','package.scripts_TEMPLATE.json');if(fs.existsSync(tmplFile)){const tmpl=JSON.parse(fs.readFileSync(tmplFile,'utf8').replace(/^\uFEFF/,''));if(tmpl.scripts)pkg.scripts={...(tmpl.scripts||{}),...(pkg.scripts||{})};if(tmpl.devDependencies)pkg.devDependencies={...(tmpl.devDependencies||{}),...(pkg.devDependencies||{})};}fs.writeFileSync(file,JSON.stringify(pkg,null,2)+'\n');" "$ROOT" "$SHARED_KIT"
 
 # 4) Install root packages
 echo "==> Installing root npm packages..."
