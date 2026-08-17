@@ -105,12 +105,36 @@ module.exports = function createColliderPorter(deps) {
   // Unity Rigidbody (class 54). cc.ERigidBodyType: DYNAMIC 1, STATIC 2, KINEMATIC 4.
   function emitRigidbody(nodeId, componentId, doc, builder) {
     const isKinematic = Number(getField(doc, 'm_IsKinematic', 0) || 0) !== 0;
+    const constraints = Number(getField(doc, 'm_Constraints', 0) || 0);
+
+    // Freeze Position: X=2, Y=4, Z=8
+    const freezePosX = (constraints & 2) !== 0;
+    const freezePosY = (constraints & 4) !== 0;
+    const freezePosZ = (constraints & 8) !== 0;
+    const linearFactor = {
+      x: freezePosX ? 0 : 1,
+      y: freezePosY ? 0 : 1,
+      z: freezePosZ ? 0 : 1,
+    };
+
+    // Freeze Rotation: X=16, Y=32, Z=64
+    const freezeRotX = (constraints & 16) !== 0;
+    const freezeRotY = (constraints & 32) !== 0;
+    const freezeRotZ = (constraints & 64) !== 0;
+    const angularFactor = {
+      x: freezeRotX ? 0 : 1,
+      y: freezeRotY ? 0 : 1,
+      z: freezeRotZ ? 0 : 1,
+    };
+
     builder.addRigidBody(nodeId, componentId, {
       type: isKinematic ? 4 : 1,
       mass: finiteNumber(getField(doc, 'm_Mass', 1), 1),
       linearDamping: finiteNumber(getField(doc, 'm_Drag', 0), 0),
       angularDamping: finiteNumber(getField(doc, 'm_AngularDrag', 0.05), 0.05),
       useGravity: Number(getField(doc, 'm_UseGravity', 1) || 0) !== 0,
+      linearFactor,
+      angularFactor,
       // Unity has no per-body sleep toggle on Rigidbody; Cocos defaults to allowing it.
       allowSleep: true,
     }, `cmp-rigid-body-${componentId}`);
@@ -129,6 +153,28 @@ module.exports = function createColliderPorter(deps) {
       },
       radius: Math.abs(finiteNumber(getField(doc, 'm_Radius', 0.5), 0.5)),
     }, `cmp-sphere-collider-${componentId}`);
+  }
+
+  // Unity CapsuleCollider (class 136).
+  function emitCapsuleCollider(nodeId, componentId, doc, builder) {
+    const center = getField(doc, 'm_Center', { x: 0, y: 0, z: 0 });
+    const radius = Math.abs(finiteNumber(getField(doc, 'm_Radius', 0.5), 0.5));
+    const height = Math.abs(finiteNumber(getField(doc, 'm_Height', 2.0), 2.0));
+    const direction = Number(getField(doc, 'm_Direction', 1) || 1); // 0: X, 1: Y, 2: Z
+    const cylinderHeight = Math.max(0, height - 2 * radius);
+
+    builder.addCapsuleCollider(nodeId, componentId, {
+      enabled: Number(getField(doc, 'm_Enabled', 1) || 0) !== 0,
+      isTrigger: Number(getField(doc, 'm_IsTrigger', 0) || 0) !== 0,
+      center: {
+        x: finiteNumber(center?.x, 0),
+        y: finiteNumber(center?.y, 0),
+        z: finiteNumber(center?.z, 0),
+      },
+      radius: radius,
+      cylinderHeight: cylinderHeight,
+      direction: direction,
+    }, `cmp-capsule-collider-${componentId}`);
   }
 
   function emitCircleCollider2D(nodeId, componentId, doc, gameObject, model, builder, reporter) {
@@ -298,6 +344,7 @@ module.exports = function createColliderPorter(deps) {
     emitBoxCollider,
     emitRigidbody,
     emitSphereCollider,
+    emitCapsuleCollider,
     polygonPathArea,
     emitPolygonCollider2D,
     emitMeshCollider,

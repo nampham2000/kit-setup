@@ -24,6 +24,7 @@ function createComponentDispatcher(handlers) {
     [108, (ctx) => handlers.emitLight(ctx.nodeId, ctx.componentId, ctx.doc, ctx.builder, ctx.reporter)],
     [114, (ctx) => handlers.emitMonoBehaviour(ctx.nodeId, ctx.componentId, ctx.doc, ctx.model, ctx.builder, ctx.reporter, ctx.options, ctx.unityDb, ctx.cocosDb)],
     [135, (ctx) => handlers.emitSphereCollider(ctx.nodeId, ctx.componentId, ctx.doc, ctx.builder)],
+    [136, (ctx) => handlers.emitCapsuleCollider(ctx.nodeId, ctx.componentId, ctx.doc, ctx.builder)],
     [212, (ctx) => handlers.emitSpriteRenderer(ctx.nodeId, ctx.componentId, ctx.doc, ctx.builder, ctx.reporter, ctx.options, ctx.unityDb, ctx.cocosDb)],
     // Unity ParticleSystem is class 198 and is dispatched below. Class 223 is
     // Canvas: it has no 1:1 Cocos counterpart, since cc.Canvas owns a camera and
