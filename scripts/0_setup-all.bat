@@ -219,7 +219,7 @@ if not exist "%~2\packages\playable-core\package.json" (
     exit /b 0
 )
 echo.
-echo ==^> Ensuring root dependencies: playable-sdk, playable-core
+echo ==> Ensuring root dependencies: playable-sdk, playable-core, @modelcontextprotocol/sdk
 call :detectLinkSupport "%~1"
 if "!LINK_SUPPORTED!"=="0" (
     echo [warn] This project is on a filesystem without symlink/junction support ^(exFAT/FAT32/network share^).
@@ -228,7 +228,7 @@ if "!LINK_SUPPORTED!"=="0" (
     call :packSharedKitDependencies "%~1" "%~2"
     exit /b !errorlevel!
 )
-call node -e "const fs=require('fs'),path=require('path');const file=path.join(process.argv[1],'package.json');const raw=fs.readFileSync(file,'utf8').replace(/^\uFEFF/,'');const pkg=JSON.parse(raw);pkg.dependencies={...(pkg.dependencies||{}),'playable-sdk':'file:./playable-shared-kit/packages/playable-sdk','playable-core':'file:./playable-shared-kit/packages/playable-core'};fs.writeFileSync(file,JSON.stringify(pkg,null,2)+'\n');" "%~1"
+call node -e "const fs=require('fs'),path=require('path');const file=path.join(process.argv[1],'package.json');const raw=fs.readFileSync(file,'utf8').replace(/^\uFEFF/,'');const pkg=JSON.parse(raw);pkg.dependencies={...(pkg.dependencies||{}),'playable-sdk':'file:./playable-shared-kit/packages/playable-sdk','playable-core':'file:./playable-shared-kit/packages/playable-core','@modelcontextprotocol/sdk':pkg.dependencies?.['@modelcontextprotocol/sdk']||'^1.29.0'};fs.writeFileSync(file,JSON.stringify(pkg,null,2)+'\n');" "%~1"
 if errorlevel 1 (
     echo [ERROR] Failed to update root package.json shared-kit dependencies.
     if /I not "%SETUP_ALL_NO_PAUSE%"=="1" pause
@@ -298,7 +298,8 @@ if not exist "%~2\tools\work-memory.cjs" (
 )
 echo.
 echo ==^> Synchronizing Work-Memory knowledge database from Git
-call node "%~2\tools\work-memory.cjs" sync --repo-root "%~1"
+call node "%~2\tools\work-memory.cjs" init --repo-root "%~1"
+call node "%~2\tools\work-memory.cjs" import-sources --repo-root "%~1"
 if errorlevel 1 (
     echo [warn] Work memory sync completed with warnings.
     exit /b 0

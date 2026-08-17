@@ -1,7 +1,7 @@
-export { CameraController, CameraAngleMode } from './CameraController';
-export { Interactive3DHero } from './Interactive3DHero';
-export { PlayableAudioController } from './PlayableAudioController';
-export { PlayableCTAController } from './PlayableCTAController';
-export { PlayableEntry } from './PlayableEntry';
-export { PlayableTrackingController, type PlayableEventType } from './PlayableTrackingController';
-export { PlayableUIHUD } from './PlayableUIHUD';
+export { CameraController, CameraAngleMode } from './CameraController.ts';
+export { Interactive3DHero } from './Interactive3DHero.ts';
+export { PlayableAudioController } from './PlayableAudioController.ts';
+export { PlayableCTAController } from './PlayableCTAController.ts';
+export { PlayableEntry } from './PlayableEntry.ts';
+export { PlayableTrackingController, type PlayableEventType } from './PlayableTrackingController.ts';
+export { PlayableUIHUD } from './PlayableUIHUD.ts';

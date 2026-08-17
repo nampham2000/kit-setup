@@ -1,2 +1,2 @@
-export * from './PlayableConfig';
-export * from './PlayableConfigManager';
+export * from './PlayableConfig.ts';
+export * from './PlayableConfigManager.ts';

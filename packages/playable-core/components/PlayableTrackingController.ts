@@ -1,5 +1,5 @@
 import { _decorator, Component, Label } from 'cc';
-import { PlayableConfigManager } from '../config';
+import { PlayableConfigManager } from '../config/index.ts';
 import { GameTrackingService } from 'playable-sdk/analytics/GameTrackingService';
 
 const { ccclass, property } = _decorator;

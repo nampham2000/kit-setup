@@ -1,5 +1,5 @@
 import { _decorator, Component, Node, Button, tween, Vec3, sys } from 'cc';
-import { PlayableConfigManager } from '../config';
+import { PlayableConfigManager } from '../config/index.ts';
 import { superHtmlPlayable } from 'playable-sdk/platform/SuperHtmlPlayable';
 
 const { ccclass, property } = _decorator;

@@ -1,7 +1,7 @@
 // NodePoolAdapter.ts
 import { Node, Prefab, instantiate, Tween, Component, Vec3, Quat } from 'cc';
-import { Poolable } from './Poolable';
-import type { PoolConfig } from './ObjectPool';
+import { Poolable } from './Poolable.ts';
+import type { PoolConfig } from './ObjectPool.ts';
 
 type LocalTransform = {
   position: Vec3;

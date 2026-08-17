@@ -1,11 +1,11 @@
 import { _decorator, Component, Button } from 'cc';
-import { PlayableCTAController } from './PlayableCTAController';
-import { PlayableAudioController } from './PlayableAudioController';
-import { PlayableTrackingController } from './PlayableTrackingController';
-import { CameraController } from './CameraController';
-import { PlayableUIHUD } from './PlayableUIHUD';
-import { Interactive3DHero } from './Interactive3DHero';
-import { PlayableConfigManager } from '../config';
+import { PlayableCTAController } from './PlayableCTAController.ts';
+import { PlayableAudioController } from './PlayableAudioController.ts';
+import { PlayableTrackingController } from './PlayableTrackingController.ts';
+import { CameraController } from './CameraController.ts';
+import { PlayableUIHUD } from './PlayableUIHUD.ts';
+import { Interactive3DHero } from './Interactive3DHero.ts';
+import { PlayableConfigManager } from '../config/index.ts';
 import { superHtmlPlayable } from 'playable-sdk/platform/SuperHtmlPlayable';
 
 const { ccclass } = _decorator;

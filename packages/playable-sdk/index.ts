@@ -1,3 +1,3 @@
-export { GameTrackingService } from "./analytics/GameTrackingService";
-export { SuperHtmlPlayable, superHtmlPlayable } from "./platform/SuperHtmlPlayable";
-export { PlayableAdDownloadEvent } from "./platform/PlayableAdDownloadEvent";
+export { GameTrackingService } from "./analytics/GameTrackingService.ts";
+export { SuperHtmlPlayable, superHtmlPlayable } from "./platform/SuperHtmlPlayable.ts";
+export { PlayableAdDownloadEvent } from "./platform/PlayableAdDownloadEvent.ts";

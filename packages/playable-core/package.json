@@ -11,7 +11,9 @@
     "./utils/GameUtils": "./utils/GameUtils.ts",
     "./utils/pool/ObjectPool": "./utils/pool/ObjectPool.ts",
     "./utils/pool/NodePoolAdapter": "./utils/pool/NodePoolAdapter.ts",
-    "./utils/pool/Poolable": "./utils/pool/Poolable.ts"
+    "./utils/pool/Poolable": "./utils/pool/Poolable.ts",
+    "./config": "./config/index.ts",
+    "./components": "./components/index.ts"
   },
   "dependencies": {
     "playable-sdk": "file:../playable-sdk"
