@@ -309,6 +309,21 @@ module.exports = function createMaterialPorter(deps) {
     return textureGuid ? resolveUnityTextureUuid(unityDb.get(textureGuid), options, reporter, importConfig) : '';
   }
 
+  function unityMaterialTilingOffset(texEnvs, keys) {
+    const env = firstDefinedMaterialValue(texEnvs, keys, null);
+    if (!env) return null;
+    const scale = env.m_Scale || { x: 1, y: 1 };
+    const offset = env.m_Offset || { x: 0, y: 0 };
+    if (isDefaultParticleTilingOffset(scale, offset)) return null;
+    return {
+      __type__: 'cc.Vec4',
+      x: Number(scale.x ?? 1),
+      y: Number(scale.y ?? 1),
+      z: Number(offset.x ?? 0),
+      w: Number(offset.y ?? 0),
+    };
+  }
+
   function syncImportedMaterialLibraryCache(materialData, meta, options) {
     if (!meta?.uuid || !materialData || options.dryRun) return false;
     const libraryFile = libraryJsonPathForUuid(options, meta.uuid);
@@ -503,6 +518,7 @@ module.exports = function createMaterialPorter(deps) {
     const emissionEnabled = Number(firstDefinedMaterialValue(floats, ['_UseEmission'], 0) || 0) > 0;
 
     const mainTextureUuid = resolveUnityMaterialTextureUuid(texEnvs, UNITY_MATERIAL_BASE_TEXTURE_KEYS, unityDb, options, reporter);
+    const mainTilingOffset = unityMaterialTilingOffset(texEnvs, UNITY_MATERIAL_BASE_TEXTURE_KEYS);
     const normalTextureUuid = resolveUnityMaterialTextureUuid(texEnvs, UNITY_MATERIAL_NORMAL_TEXTURE_KEYS, unityDb, options, reporter);
     const occlusionTextureUuid = resolveUnityMaterialTextureUuid(texEnvs, UNITY_MATERIAL_OCCLUSION_TEXTURE_KEYS, unityDb, options, reporter);
     const emissiveTextureUuid = resolveUnityMaterialTextureUuid(texEnvs, UNITY_MATERIAL_EMISSIVE_TEXTURE_KEYS, unityDb, options, reporter);
@@ -520,6 +536,7 @@ module.exports = function createMaterialPorter(deps) {
       metallic,
     };
     if (mainTextureUuid) props.mainTexture = { __uuid__: mainTextureUuid };
+    if (mainTilingOffset) props.tilingOffset = mainTilingOffset;
     if (normalTextureUuid) props.normalMap = { __uuid__: normalTextureUuid };
     if (occlusionTextureUuid) {
       props.occlusionMap = { __uuid__: occlusionTextureUuid };
@@ -533,6 +550,7 @@ module.exports = function createMaterialPorter(deps) {
 
     const urpUnlitProps = { mainColor: unityColorToCocos(mainColor) };
     if (mainTextureUuid) urpUnlitProps.mainTexture = { __uuid__: mainTextureUuid };
+    if (mainTilingOffset) urpUnlitProps.tilingOffset = mainTilingOffset;
     if (alphaClip) urpUnlitProps.alphaThreshold = cutoff;
 
     const tcp2Props = {
@@ -554,6 +572,17 @@ module.exports = function createMaterialPorter(deps) {
       emissive: unityColorToCocos(emissionColor),
     };
     if (mainTextureUuid) tcp2Props.mainTexture = { __uuid__: mainTextureUuid };
+    if (mainTilingOffset) tcp2Props.tilingOffset = mainTilingOffset;
+
+    if (mainTilingOffset) {
+      reporter.low(
+        'MATERIAL_TILING_OFFSET_PORTED',
+        materialAsset.relativePath,
+        String(getField(materialDoc, 'm_Name', materialAsset.stem) || materialAsset.stem),
+        'Unity base texture scale and offset were mapped to the Cocos material tilingOffset property',
+        `${mainTilingOffset.x},${mainTilingOffset.y},${mainTilingOffset.z},${mainTilingOffset.w}`,
+      );
+    }
 
     const states = [];
     if (transparent || doubleSided) {
