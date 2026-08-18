@@ -23,6 +23,7 @@
     "ai:scene": "node playable-shared-kit/tools/scene-inspector.cjs",
     "ai:verify": "node playable-shared-kit/tools/headless-verifier.cjs --json",
     "ai:lint": "node playable-shared-kit/tools/zero-gc-linter.cjs --json",
+    "ai:diagrams": "node playable-shared-kit/tools/export-diagrams.cjs",
     "ai:sync": "node playable-shared-kit/tools/ai-knowledge-sync.cjs",
     "dependencies:scan": "node playable-shared-kit/tools/ensure-dependencies.cjs",
     "dependencies:setup": "node playable-shared-kit/tools/ensure-dependencies.cjs --download-all",
