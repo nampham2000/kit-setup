@@ -100,8 +100,8 @@ function copyDirectoryRecursive(src, dest) {
         srcContent = srcContent
           .replace(/from\s+['"](?:\.\.\/)*playable-sdk\/(.*?)['"]/g, `from '${relToShared}/sdk/$1'`)
           .replace(/from\s+['"](?:\.\.\/)*playable-core\/(.*?)['"]/g, `from '${relToShared}/core/$1'`)
-          .replace(/(from\s+['"][^'"]*?)\.ts(['"])/g, '$1$2')
-          .replace(/(export\s+[^;]+?from\s+['"][^'"]*?)\.ts(['"])/g, '$1$2');
+          .replace(/(['"]\.[^'"]*?)\.ts(['"])/g, '$1$2')
+          .replace(/(['"]\.[^'"]*?)\.js(['"])/g, '$1$2');
       }
       let shouldWrite = true;
       if (fs.existsSync(destPath)) {
