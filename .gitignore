@@ -1,5 +1,11 @@
-# Work memory cache
+# Work memory cache & SQLite temporary files
 tools/work-memory/data/cache/*.json
+*.db-shm
+*.db-wal
+*.db-journal
+tools/work-memory/data/**/*.db-shm
+tools/work-memory/data/**/*.db-wal
+tools/work-memory/data/**/*.db-journal
 
 # Node & Build artifacts
 node_modules/
