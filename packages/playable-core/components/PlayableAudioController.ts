@@ -1,6 +1,6 @@
 import { _decorator, Component, AudioClip, AudioSource, Node, resources } from 'cc';
-import { SoundManager } from '../SoundManager.ts';
-import { PlayableConfigManager } from '../config/index.ts';
+import { SoundManager } from '../SoundManager';
+import { PlayableConfigManager } from '../config/index';
 import { superHtmlPlayable } from 'playable-sdk/platform/SuperHtmlPlayable';
 
 const { ccclass, property } = _decorator;

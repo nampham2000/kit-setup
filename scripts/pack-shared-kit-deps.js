@@ -114,6 +114,17 @@ pkg.dependencies = { ...(pkg.dependencies || {}) };
 for (const entry of packed) {
     pkg.dependencies[entry.name] = `file:./${TARBALL_DIR_NAME}/${entry.filename}`;
 }
+
+const tmplFile = path.join(sharedKitRoot, 'template-config', 'package.scripts_TEMPLATE.json');
+if (fs.existsSync(tmplFile)) {
+    const tmpl = readJson(tmplFile);
+    if (tmpl.scripts) {
+        pkg.scripts = { ...(tmpl.scripts || {}), ...(pkg.scripts || {}) };
+    }
+    if (tmpl.devDependencies) {
+        pkg.devDependencies = { ...(tmpl.devDependencies || {}), ...(pkg.devDependencies || {}) };
+    }
+}
 fs.writeFileSync(manifestFile, JSON.stringify(pkg, null, 2) + '\n');
 
 // A repacked tarball keeps its filename but changes content. Clearing the installed

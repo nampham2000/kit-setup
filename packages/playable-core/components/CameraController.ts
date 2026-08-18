@@ -1,5 +1,5 @@
 import { _decorator, Component, Camera, Vec3, Quat, tween, view, screen } from 'cc';
-import { PlayableConfigManager } from '../config/index.ts';
+import { PlayableConfigManager } from '../config/index';
 const { ccclass, property } = _decorator;
 
 export enum CameraAngleMode {

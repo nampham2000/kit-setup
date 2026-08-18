@@ -226,9 +226,12 @@ if "!LINK_SUPPORTED!"=="0" (
     echo        npm cannot install folder-based file: dependencies there, so shared-kit
     echo        packages are packed into .local-tarballs and installed from tarballs instead.
     call :packSharedKitDependencies "%~1" "%~2"
-    exit /b !errorlevel!
+    if !errorlevel! neq 0 exit /b !errorlevel!
+) else (
+    call node -e "const fs=require('fs'),path=require('path');const root=process.argv[1],shared=process.argv[2];const file=path.join(root,'package.json');const raw=fs.readFileSync(file,'utf8').replace(/^\uFEFF/,'');const pkg=JSON.parse(raw);pkg.dependencies={...(pkg.dependencies||{}),'playable-sdk':'file:./playable-shared-kit/packages/playable-sdk','playable-core':'file:./playable-shared-kit/packages/playable-core','@modelcontextprotocol/sdk':pkg.dependencies?.['@modelcontextprotocol/sdk']||'^1.29.0'};fs.writeFileSync(file,JSON.stringify(pkg,null,2)+'\n');" "%~1" "%~2"
+    if !errorlevel! neq 0 exit /b !errorlevel!
 )
-call node -e "const fs=require('fs'),path=require('path');const root=process.argv[1],shared=process.argv[2];const file=path.join(root,'package.json');const raw=fs.readFileSync(file,'utf8').replace(/^\uFEFF/,'');const pkg=JSON.parse(raw);pkg.dependencies={...(pkg.dependencies||{}),'playable-sdk':'file:./playable-shared-kit/packages/playable-sdk','playable-core':'file:./playable-shared-kit/packages/playable-core','@modelcontextprotocol/sdk':pkg.dependencies?.['@modelcontextprotocol/sdk']||'^1.29.0'};const tmplFile=path.join(shared,'template-config','package.scripts_TEMPLATE.json');if(fs.existsSync(tmplFile)){const tmpl=JSON.parse(fs.readFileSync(tmplFile,'utf8').replace(/^\uFEFF/,''));if(tmpl.scripts)pkg.scripts={...(tmpl.scripts||{}),...(pkg.scripts||{})};if(tmpl.devDependencies)pkg.devDependencies={...(tmpl.devDependencies||{}),...(pkg.devDependencies||{})};}fs.writeFileSync(file,JSON.stringify(pkg,null,2)+'\n');" "%~1" "%~2"
+call node -e "const fs=require('fs'),path=require('path');const root=process.argv[1],shared=process.argv[2];const file=path.join(root,'package.json');const raw=fs.readFileSync(file,'utf8').replace(/^\uFEFF/,'');const pkg=JSON.parse(raw);const tmplFile=path.join(shared,'template-config','package.scripts_TEMPLATE.json');if(fs.existsSync(tmplFile)){const tmpl=JSON.parse(fs.readFileSync(tmplFile,'utf8').replace(/^\uFEFF/,''));if(tmpl.scripts)pkg.scripts={...(tmpl.scripts||{}),...(pkg.scripts||{})};if(tmpl.devDependencies)pkg.devDependencies={...(tmpl.devDependencies||{}),...(pkg.devDependencies||{})};}fs.writeFileSync(file,JSON.stringify(pkg,null,2)+'\n');" "%~1" "%~2"
 if errorlevel 1 (
     echo [ERROR] Failed to update root package.json shared-kit dependencies and scripts.
     if /I not "%SETUP_ALL_NO_PAUSE%"=="1" pause
