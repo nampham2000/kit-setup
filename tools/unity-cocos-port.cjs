@@ -56,6 +56,10 @@ const createUiSpriteAlphaPorter = require('./unity-cocos-port/ui-sprite-alpha-po
 const createComponentDispatcher = require('./unity-cocos-port/component-dispatcher');
 const createRuntimeComponentPorter = require('./unity-cocos-port/runtime-component-porter');
 const {
+  scaffoldCSharpToTypeScript,
+  scaffoldFile
+} = require('./unity-cocos-port/script-scaffolder');
+const {
   applyParticleRendererMaterial,
   applyUnityParticleDataToCocos,
   applyUnitySerializedOverrides,
@@ -234,11 +238,12 @@ const componentDispatcher = createComponentDispatcher({
 
 function printHelp() {
   console.log(`
-Unity -> Cocos Prefab Porter
+Unity -> Cocos Porting Suite
 
 Usage:
   node playable-shared-kit/tools/unity-cocos-port.cjs port --src <UnityPrefab> --out <CocosPrefab> [options]
-  node playable-shared-kit/tools/unity-cocos-port.cjs port --src <UnityPrefabFolder> --out <CocosPrefabFolder> [options]
+  node playable-shared-kit/tools/unity-cocos-port.cjs scaffold-script --src <CSharpFileOrFolder> --out <TsFolder>
+  node playable-shared-kit/tools/unity-cocos-port.cjs smart-port --src <UnityFolder> --out assets/ [options]
   node playable-shared-kit/tools/unity-cocos-port.cjs doctor [options]
 
 Options:
@@ -489,10 +494,21 @@ function parseArgs(argv) {
       options.layerMap = JSON.parse(arg.slice('--layer-map='.length));
       continue;
     }
+    if (!arg.startsWith('-')) {
+      if (!options.src) {
+        options.src = arg;
+        continue;
+      }
+      if (!options.out) {
+        options.out = arg;
+        continue;
+      }
+    }
     fail(`Unknown option: ${arg}`);
   }
 
-  if (!['help', 'port', 'doctor'].includes(options.command)) fail(`Unknown command: ${options.command}`);
+  const validCommands = ['help', 'port', 'doctor', 'scaffold-script', 'port-script', 'smart-port', 'auto'];
+  if (!validCommands.includes(options.command)) fail(`Unknown command: ${options.command}`);
   if (!['skip', 'wire-if-present', 'require'].includes(options.scriptMode)) {
     fail('--script-mode must be skip, wire-if-present, or require');
   }
@@ -6651,6 +6667,87 @@ function doctor(options) {
   log(`Report: ${toPosix(path.relative(options.cocosRoot, actualReport))}`);
 }
 
+function runScriptScaffold(options) {
+  if (!options.src) {
+    fail('Missing --src <csharp_file_or_directory>');
+  }
+
+  const srcPath = path.resolve(options.src);
+  if (!fs.existsSync(srcPath)) {
+    fail(`Source path not found: ${srcPath}`);
+  }
+
+  const outDir = options.out ? path.resolve(options.out) : path.join(ROOT_DIR, 'assets', 'script');
+  const stat = fs.statSync(srcPath);
+
+  if (stat.isFile()) {
+    const res = scaffoldFile(srcPath, path.join(outDir, `${path.basename(srcPath, path.extname(srcPath))}.ts`));
+    log(`Scaffolded C# -> TS: ${toPosix(path.relative(ROOT_DIR, res.outputPath))} (${res.fieldCount} properties)`);
+    return [res];
+  }
+
+  const results = [];
+  function scanCs(dir) {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const e of entries) {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) {
+        scanCs(full);
+      } else if (e.isFile() && e.name.endsWith('.cs')) {
+        try {
+          const res = scaffoldFile(full, path.join(outDir, `${path.basename(full, '.cs')}.ts`));
+          log(`Scaffolded C# -> TS: ${toPosix(path.relative(ROOT_DIR, res.outputPath))} (${res.fieldCount} properties)`);
+          results.push(res);
+        } catch (err) {
+          log(`[warn] Failed to scaffold ${full}: ${err.message}`);
+        }
+      }
+    }
+  }
+  scanCs(srcPath);
+  log(`Total scripts scaffolded: ${results.length}`);
+  return results;
+}
+
+function runSmartPort(options) {
+  log(`==> [Smart Port] Starting automated porting pipeline for: ${options.src}`);
+  const srcPath = path.resolve(options.src);
+  if (!fs.existsSync(srcPath)) {
+    fail(`Source path not found: ${srcPath}`);
+  }
+
+  // 1. Port Prefabs if any
+  try {
+    portPrefabBatch(options);
+    log(`  [ok] Prefab batch porting completed.`);
+  } catch (err) {
+    log(`  [warn] Prefab porting: ${err.message}`);
+  }
+
+  // 2. Scaffold C# Scripts if present
+  try {
+    const scriptResults = runScriptScaffold(options);
+    log(`  [ok] Scaffolded ${scriptResults.length} C# scripts to TypeScript.`);
+  } catch (err) {
+    log(`  [info] Script scaffolding note: ${err.message}`);
+  }
+
+  // 3. Automated Post-Port Verification
+  try {
+    const { runVerificationSuite } = require('./headless-verifier.cjs');
+    log(`==> [Verification] Running post-porting automated checks...`);
+    const report = runVerificationSuite();
+    log(`  [${report.status === 'PASS' ? 'ok' : 'warn'}] Post-Port Verification: ${report.status} (${report.passedChecks}/${report.totalChecks} checks passed).`);
+    if (report.totalErrors > 0) {
+      log(`  [error] ${report.totalErrors} error(s) found. Run 'npm run ai:verify' for details.`);
+    }
+  } catch (err) {
+    log(`  [info] Post-port verification note: ${err.message}`);
+  }
+
+  log(`==> [Smart Port] Automated port pipeline finished.`);
+}
+
 function main() {
   const options = parseArgs(process.argv.slice(2));
   if (options.command === 'help') {
@@ -6659,6 +6756,14 @@ function main() {
   }
   if (options.command === 'doctor') {
     doctor(options);
+    return;
+  }
+  if (options.command === 'scaffold-script' || options.command === 'port-script') {
+    runScriptScaffold(options);
+    return;
+  }
+  if (options.command === 'smart-port' || options.command === 'auto') {
+    runSmartPort(options);
     return;
   }
   portPrefabBatch(options);

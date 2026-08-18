@@ -11,9 +11,17 @@ This skill provides step-by-step guidance and architectural rules for converting
 ## 1. Automated Tooling First
 
 Before manually rewriting assets or prefabs, use the built-in shared kit tools:
+- **Smart All-in-One Port**:
+  ```bash
+  npm run port:smart -- --src <unity_dir> --out assets/
+  ```
 - **Port Prefabs, Meshes & Materials**:
   ```bash
-  node playable-shared-kit/tools/unity-cocos-port.cjs convert-prefab --source <unity_prefab_or_dir> --dest assets/prefabs/
+  node playable-shared-kit/tools/unity-cocos-port.cjs port --src <unity_prefab_or_dir> --out assets/prefabs/
+  ```
+- **Scaffold C# Scripts to TypeScript**:
+  ```bash
+  npm run port:script -- --src <csharp_path> --out assets/script/
   ```
 - **Port Shaders**:
   ```bash
@@ -75,3 +83,12 @@ All game managers must inherit or wire into `GameManager` from `playable-core`:
 - `GameManager.instance.onGameWin()`: Trigger EndCard & CTA button.
 - `GameManager.instance.onGameLose()`: Trigger EndCard & CTA retry.
 - `SuperHtmlPlayable.download()`: Redirect player to App Store / Google Play.
+
+---
+
+## 5. Mandatory Post-Porting & Post-Code Verification Gate
+
+Immediately after porting assets, prefabs, or writing/refactoring TypeScript code, you **MUST** run the verification suite before reporting done:
+1. `npm run ai:verify` (or `npm run verify`): Confirms 0 TypeScript errors, valid configs, intact .meta files, and bundle size budget.
+2. `npm run ai:lint` (or `npm run lint:gc`): Confirms Zero-GC compliance.
+3. `npm run ai:scene -- <sceneName>`: Confirms node hierarchy and component attachments without reading raw JSON.

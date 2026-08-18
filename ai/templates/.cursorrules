@@ -1,10 +1,9 @@
 # Cursor Rules - Cocos Creator Playable Framework
 
-- **Zero-Scene-Tweak & Scriptable JSON**: Never hardcode/tweak node properties in scene inspector. Store all gameplay, audio, CTA URLs, camera, and timer configs in `assets/resources/playable-config.json`.
-- Access configuration via `PlayableConfigManager.instance` (e.g. `PlayableConfigManager.instance.cta`, `PlayableConfigManager.instance.gameplay`).
-- Always use Cocos Creator 3.8.8+ TypeScript conventions (@ccclass, @property).
-- Never allocate new Vec3, Quat, or Color in update() loops; reuse static temp variables (Zero GC).
-- Use ObjectPool from playable-core for hypercasual spawning.
-- For porting Unity assets, refer to tools in playable-shared-kit/tools/.
-- For build commands, use `npm run build` or `npm run doctor`.
-- Persist valuable lessons with: `<!-- WORK_MEMORY: {"scope":"global","category":"tip","title":"...","content":"...","tags":["..."]} -->`
+- Role: Lead Playable Ads Engineer (Cocos Creator 3.8.8+ TypeScript).
+- Fast Onboarding: Read `PROJECT_MAP.json` (`npm run ai:map`) and inspect scenes with `npm run ai:scene -- <sceneName>` (<200 tokens).
+- Performance: ZERO GC in `update(dt)` loops. Reuse static `Vec3`, `Quat`, `Color`. Use `ObjectPool` for hypercasual spawning.
+- Architecture: Never hardcode gameplay/CTA parameters. Read everything from `PlayableConfigManager.instance` (backed by `assets/resources/playable-config.json` and typed via `PlayableConfigTypes.d.ts`).
+- Lifecycle: Wire `GameManager.instance.onGameReady()`, `onGameStart()`, `onGameWin()`, `onGameLose()`. Use `SuperHtmlPlayable.download()` for CTA clicks.
+- MANDATORY VERIFICATION GATE: After writing code or porting assets, ALWAYS run `npm run verify` (`npm run ai:verify`) and `npm run lint:gc` (`npm run ai:lint`) to ensure 0 compiler errors and 0 Zero-GC violations.
+- Build & Deploy: Run `npm run build` and `npm run deploy` for mobile QR preview.

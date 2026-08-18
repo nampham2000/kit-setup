@@ -109,6 +109,15 @@ Commands:
   doctor
       Validate local setup and print detected Cocos Creator path.
 
+  verify [--json]
+      Run headless verification suite (TypeScript, Zero-GC, Config, Asset Bindings, Meta, Build Size).
+
+  lint-zero-gc [--json] [--strict]
+      Scan TypeScript files for Zero-GC violations and hardcoded CTA URLs.
+
+  map [--stdout] [--compact]
+      Generate high-density PROJECT_MAP.json manifest for AI agents.
+
   export-build-configs [--source <path>] [--out <path>]
       Export build task options from profiles/v2/packages/builder.json into ./configs.
       --source <path>     Override builder profile json path.
@@ -1220,6 +1229,34 @@ async function main() {
     if (command === 'doctor') {
       runDoctor();
       return;
+    }
+
+    if (command === 'verify' || command === 'ai:verify') {
+      const { spawnSync } = require('child_process');
+      const verifierPath = path.join(__dirname, '..', 'headless-verifier.cjs');
+      const proc = spawnSync(process.execPath, [verifierPath, ...args], { stdio: 'inherit' });
+      process.exit(proc.status || 0);
+    }
+
+    if (command === 'lint-zero-gc' || command === 'lint:gc' || command === 'lint') {
+      const { spawnSync } = require('child_process');
+      const linterPath = path.join(__dirname, '..', 'zero-gc-linter.cjs');
+      const proc = spawnSync(process.execPath, [linterPath, ...args], { stdio: 'inherit' });
+      process.exit(proc.status || 0);
+    }
+
+    if (command === 'map' || command === 'ai:map') {
+      const { spawnSync } = require('child_process');
+      const mapPath = path.join(__dirname, '..', 'project-map-generator.cjs');
+      const proc = spawnSync(process.execPath, [mapPath, ...args], { stdio: 'inherit' });
+      process.exit(proc.status || 0);
+    }
+
+    if (command === 'scene-inspect' || command === 'scene' || command === 'ai:scene') {
+      const { spawnSync } = require('child_process');
+      const scenePath = path.join(__dirname, '..', 'scene-inspector.cjs');
+      const proc = spawnSync(process.execPath, [scenePath, ...args], { stdio: 'inherit' });
+      process.exit(proc.status || 0);
     }
 
     if (command === 'install') {

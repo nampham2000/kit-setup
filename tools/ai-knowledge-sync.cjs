@@ -7,13 +7,17 @@
  * Automatically copies and deploys AI instructions, rules, and skills for:
  * - Claude (CLAUDE.md)
  * - OpenAI Codex / ChatGPT Desktop (AGENTS.md, ~/.codex/skills/)
- * - Gemini / Antigravity (GEMINI.md, ~/.gemini/antigravity/skills/)
+ * - Gemini / Antigravity (GEMINI.md, .gemini/GEMINI.md, ~/.gemini/antigravity/skills/)
  * - GitHub Copilot / Cursor / VS Code (.github/copilot-instructions.md, .cursorrules, .github/skills/)
+ *
+ * Also generates the high-density ai/PROJECT_MAP.json for instant AI onboarding.
  */
 
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { generateProjectMap } = require('./project-map-generator.cjs');
+const { generateTypings } = require('./config-typings-generator.cjs');
 
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
 const SHARED_KIT_AI = path.join(PROJECT_ROOT, 'playable-shared-kit', 'ai');
@@ -47,7 +51,23 @@ function copyFileSafe(src, dest) {
 }
 
 function main() {
-  console.log('==> Deploying AI Provider Knowledge & Skills...');
+  console.log('==> [1/3] Generating AI Project Map...');
+  try {
+    generateProjectMap();
+    console.log('  [ok] PROJECT_MAP.json generated successfully.');
+  } catch (err) {
+    console.warn(`  [warn] Could not generate PROJECT_MAP.json: ${err.message}`);
+  }
+
+  console.log('==> [2/3] Generating Config TypeScript Typings...');
+  try {
+    generateTypings();
+    console.log('  [ok] PlayableConfigTypes.d.ts generated.');
+  } catch (err) {
+    console.warn(`  [warn] Could not generate config typings: ${err.message}`);
+  }
+
+  console.log('==> [3/3] Deploying AI Provider Knowledge & Skills...');
 
   const templatesDir = path.join(SHARED_KIT_AI, 'templates');
   const skillsDir = path.join(SHARED_KIT_AI, 'skills');
@@ -78,9 +98,17 @@ function main() {
   console.log('  [ok] Gemini / Antigravity -> GEMINI.md, ~/.gemini/antigravity/skills/');
 
   // 4. GitHub Copilot / Cursor (.github/copilot-instructions.md, .cursorrules, .github/skills/)
-  const copilotSrc = path.join(PROJECT_ROOT, 'playable-shared-kit', '.github', 'copilot-instructions.md');
-  const copilotDest = path.join(PROJECT_ROOT, '.github', 'copilot-instructions.md');
-  copyFileSafe(copilotSrc, copilotDest);
+  const copilotSrcCandidates = [
+    path.join(templatesDir, '.github', 'copilot-instructions.md'),
+    path.join(templatesDir, 'copilot-instructions.md'),
+    path.join(PROJECT_ROOT, 'playable-shared-kit', '.github', 'copilot-instructions.md')
+  ];
+  for (const src of copilotSrcCandidates) {
+    if (fs.existsSync(src)) {
+      copyFileSafe(src, path.join(PROJECT_ROOT, '.github', 'copilot-instructions.md'));
+      break;
+    }
+  }
 
   const cursorSrc = path.join(templatesDir, '.cursorrules');
   copyFileSafe(cursorSrc, path.join(PROJECT_ROOT, '.cursorrules'));
@@ -89,7 +117,7 @@ function main() {
   copyDirRecursive(skillsDir, projectSkillsDest);
   console.log('  [ok] Copilot / Cursor / VSCode -> .github/copilot-instructions.md, .cursorrules, .github/skills/');
 
-  console.log('  [ok] All AI knowledge bases and skills deployed successfully.\n');
+  console.log('  [ok] All AI knowledge bases, rules, and maps deployed successfully.\n');
 }
 
 main();

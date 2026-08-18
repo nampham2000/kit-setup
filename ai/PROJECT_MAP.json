@@ -1,0 +1,254 @@
+{
+  "_meta": {
+    "generatedAt": "2026-08-18T09:05:54.785Z",
+    "description": "Compact project manifest for AI Agents. Use this instead of scanning file trees.",
+    "project": {
+      "projectName": "cc_playable_framework",
+      "cocosVersion": "3.8.8",
+      "orientation": "portrait",
+      "designResolution": "720x1280",
+      "configPath": "assets/resources/playable-config.json"
+    }
+  },
+  "architecture": {
+    "coreLibraries": [
+      "playable-core (GameManager, SoundManager, ObjectPool, PlayableConfigManager)",
+      "playable-sdk (Analytics, SuperHtmlPlayable store redirection)"
+    ],
+    "configMechanism": "Single Scriptable JSON (assets/resources/playable-config.json) via PlayableConfigManager.instance",
+    "performanceRule": "Zero GC in update(dt) loops - Reuse temp Vec3/Quat/Color static objects"
+  },
+  "scenes": [
+    {
+      "name": "Boilerplate",
+      "path": "assets/Boilerplate.scene",
+      "sizeKb": 64.3
+    },
+    {
+      "name": "Gameplay",
+      "path": "assets/Gameplay.scene",
+      "sizeKb": 87.7
+    }
+  ],
+  "prefabs": [],
+  "scripts": [
+    {
+      "name": "CameraController",
+      "path": "assets/script/shared/core/components/CameraController.ts"
+    },
+    {
+      "name": "index",
+      "path": "assets/script/shared/core/components/index.ts"
+    },
+    {
+      "name": "Interactive3DHero",
+      "path": "assets/script/shared/core/components/Interactive3DHero.ts"
+    },
+    {
+      "name": "PlayableAudioController",
+      "path": "assets/script/shared/core/components/PlayableAudioController.ts"
+    },
+    {
+      "name": "PlayableCTAController",
+      "path": "assets/script/shared/core/components/PlayableCTAController.ts"
+    },
+    {
+      "name": "PlayableEntry",
+      "path": "assets/script/shared/core/components/PlayableEntry.ts"
+    },
+    {
+      "name": "PlayableTrackingController",
+      "path": "assets/script/shared/core/components/PlayableTrackingController.ts"
+    },
+    {
+      "name": "PlayableUIHUD",
+      "path": "assets/script/shared/core/components/PlayableUIHUD.ts"
+    },
+    {
+      "name": "index",
+      "path": "assets/script/shared/core/config/index.ts"
+    },
+    {
+      "name": "PlayableConfig",
+      "path": "assets/script/shared/core/config/PlayableConfig.ts"
+    },
+    {
+      "name": "PlayableConfigManager",
+      "path": "assets/script/shared/core/config/PlayableConfigManager.ts"
+    },
+    {
+      "name": "GameManager",
+      "path": "assets/script/shared/core/GameManager.ts"
+    },
+    {
+      "name": "index",
+      "path": "assets/script/shared/core/index.ts"
+    },
+    {
+      "name": "SoundManager",
+      "path": "assets/script/shared/core/SoundManager.ts"
+    },
+    {
+      "name": "GameUtils",
+      "path": "assets/script/shared/core/utils/GameUtils.ts"
+    },
+    {
+      "name": "NodePoolAdapter",
+      "path": "assets/script/shared/core/utils/pool/NodePoolAdapter.ts"
+    },
+    {
+      "name": "ObjectPool",
+      "path": "assets/script/shared/core/utils/pool/ObjectPool.ts"
+    },
+    {
+      "name": "Poolable",
+      "path": "assets/script/shared/core/utils/pool/Poolable.ts"
+    },
+    {
+      "name": "index",
+      "path": "assets/script/shared/index.ts"
+    },
+    {
+      "name": "GameTrackingService",
+      "path": "assets/script/shared/sdk/analytics/GameTrackingService.ts"
+    },
+    {
+      "name": "index",
+      "path": "assets/script/shared/sdk/index.ts"
+    },
+    {
+      "name": "PlayableAdDownloadEvent",
+      "path": "assets/script/shared/sdk/platform/PlayableAdDownloadEvent.ts"
+    },
+    {
+      "name": "SuperHtmlPlayable",
+      "path": "assets/script/shared/sdk/platform/SuperHtmlPlayable.ts"
+    }
+  ],
+  "assetsSummary": {
+    "audioCount": 4,
+    "audioList": [
+      "assets/resources/sound/bgm_main.mp3",
+      "assets/resources/sound/sfx_click.mp3",
+      "assets/resources/sound/sfx_success.mp3",
+      "assets/resources/sound/sfx_win.mp3"
+    ],
+    "modelCount": 1,
+    "models": [
+      "assets/models/pack_block.fbx"
+    ],
+    "shaderCount": 0,
+    "shaders": []
+  },
+  "configSummary": {
+    "ctaKeys": [
+      "googlePlayUrl",
+      "appStoreUrl",
+      "enableButtonPulse",
+      "autoRedirectDelay",
+      "pulseScaleMultiplier",
+      "pulseDuration"
+    ],
+    "audioKeys": [
+      "autoPlayBgm",
+      "bgmVolume",
+      "sfxVolume",
+      "bgmSoundPath",
+      "clickSoundPath",
+      "successSoundPath",
+      "winSoundPath"
+    ],
+    "gameplayKeys": [
+      "targetTaps",
+      "autoWinTimer",
+      "difficulty"
+    ],
+    "cameraKeys": [
+      "defaultMode",
+      "transitionDuration",
+      "fovPortrait",
+      "fovLandscape",
+      "presets"
+    ],
+    "customKeys": [],
+    "rawPreview": {
+      "cta": {
+        "googlePlayUrl": "https://play.google.com/store/apps/details?id=com.playable.ad",
+        "appStoreUrl": "https://apps.apple.com/app/id123456789",
+        "enableButtonPulse": true,
+        "autoRedirectDelay": 0,
+        "pulseScaleMultiplier": 1.08,
+        "pulseDuration": 0.6
+      },
+      "audio": {
+        "autoPlayBgm": true,
+        "bgmVolume": 0.6,
+        "sfxVolume": 1,
+        "bgmSoundPath": "sound/bgm_main",
+        "clickSoundPath": "sound/sfx_click",
+        "successSoundPath": "sound/sfx_success",
+        "winSoundPath": "sound/sfx_win"
+      },
+      "gameplay": {
+        "targetTaps": 3,
+        "autoWinTimer": 0,
+        "difficulty": "normal"
+      },
+      "camera": {
+        "defaultMode": 0,
+        "transitionDuration": 0.5,
+        "fovPortrait": 55,
+        "fovLandscape": 45,
+        "presets": [
+          {
+            "position": {
+              "x": 0,
+              "y": 5.5,
+              "z": 7.5
+            },
+            "eulerRotation": {
+              "x": -32,
+              "y": 0,
+              "z": 0
+            }
+          },
+          {
+            "position": {
+              "x": 0,
+              "y": 9.5,
+              "z": 1.2
+            },
+            "eulerRotation": {
+              "x": -80,
+              "y": 0,
+              "z": 0
+            }
+          },
+          {
+            "position": {
+              "x": 0,
+              "y": 3.2,
+              "z": 4.2
+            },
+            "eulerRotation": {
+              "x": -18,
+              "y": 0,
+              "z": 0
+            }
+          }
+        ]
+      }
+    }
+  },
+  "cliCheatSheet": {
+    "fastOnboarding": "node playable-shared-kit/tools/project-map-generator.cjs --stdout",
+    "buildPlayable": "npm run build",
+    "deployPreview": "npm run deploy",
+    "portUnityPrefab": "node playable-shared-kit/tools/unity-cocos-port.cjs convert-prefab --source <unity_path> --dest assets/prefabs/",
+    "portUnityShader": "node playable-shared-kit/tools/unity-hlsl-to-cocos-effect.cjs <shader.shader> assets/effects/<name>.effect",
+    "stripFbx": "node playable-shared-kit/tools/strip-fbx-textures.cjs assets/models/",
+    "optimizeAudio": "npm run sound:optimize",
+    "workMemoryQuery": "node playable-shared-kit/tools/work-memory.cjs stats",
+    "syncAiKnowledge": "npm run ai:sync"
+  }
+}
