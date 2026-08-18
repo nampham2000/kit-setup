@@ -1,5 +1,5 @@
 import { _decorator, Component, AudioClip, AudioSource, Node, director } from 'cc';
-import { GameUtils } from './utils/GameUtils.ts';
+import { GameUtils } from './utils/GameUtils';
 const { ccclass } = _decorator;
 
 const DEFAULT_BGM_VOLUME = 0.8;

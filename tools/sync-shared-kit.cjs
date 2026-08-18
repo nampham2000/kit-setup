@@ -99,7 +99,9 @@ function copyDirectoryRecursive(src, dest) {
         const relToShared = path.relative(destDir, TARGET_SHARED_DIR).replace(/\\/g, '/');
         srcContent = srcContent
           .replace(/from\s+['"](?:\.\.\/)*playable-sdk\/(.*?)['"]/g, `from '${relToShared}/sdk/$1'`)
-          .replace(/from\s+['"](?:\.\.\/)*playable-core\/(.*?)['"]/g, `from '${relToShared}/core/$1'`);
+          .replace(/from\s+['"](?:\.\.\/)*playable-core\/(.*?)['"]/g, `from '${relToShared}/core/$1'`)
+          .replace(/(from\s+['"][^'"]*?)\.ts(['"])/g, '$1$2')
+          .replace(/(export\s+[^;]+?from\s+['"][^'"]*?)\.ts(['"])/g, '$1$2');
       }
       let shouldWrite = true;
       if (fs.existsSync(destPath)) {
@@ -208,7 +210,7 @@ function syncPackageJson() {
       modified = true;
     }
     for (const [key, val] of Object.entries(tmpl.scripts)) {
-      if (!pkg.scripts[key]) {
+      if (pkg.scripts[key] !== val) {
         pkg.scripts[key] = val;
         modified = true;
       }

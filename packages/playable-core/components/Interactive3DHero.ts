@@ -1,5 +1,5 @@
 import { _decorator, Component, Node, Vec3, tween, input, Input, EventTouch, Camera, geometry, PhysicsSystem } from 'cc';
-import { PlayableConfigManager } from '../config/index.ts';
+import { PlayableConfigManager } from '../config/index';
 const { ccclass, property } = _decorator;
 
 /**

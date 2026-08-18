@@ -1,8 +1,8 @@
-export { GameManager, GameState, type GameHooks } from "./GameManager.ts";
-export { SoundManager } from "./SoundManager.ts";
-export { GameUtils } from "./utils/GameUtils.ts";
-export { ObjectPool, PoolHandle, type PoolConfig, type PoolKey } from "./utils/pool/ObjectPool.ts";
-export { makeNodePoolConfig } from "./utils/pool/NodePoolAdapter.ts";
-export { Poolable } from "./utils/pool/Poolable.ts";
-export * from "./config/index.ts";
-export * from "./components/index.ts";
+export { GameManager, GameState, type GameHooks } from "./GameManager";
+export { SoundManager } from "./SoundManager";
+export { GameUtils } from "./utils/GameUtils";
+export { ObjectPool, PoolHandle, type PoolConfig, type PoolKey } from "./utils/pool/ObjectPool";
+export { makeNodePoolConfig } from "./utils/pool/NodePoolAdapter";
+export { Poolable } from "./utils/pool/Poolable";
+export * from "./config/index";
+export * from "./components/index";

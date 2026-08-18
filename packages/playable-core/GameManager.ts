@@ -1,7 +1,7 @@
 import { _decorator, Component, director, error, EventTarget, Node, warn } from 'cc';
-import { SoundManager } from './SoundManager.ts';
+import { SoundManager } from './SoundManager';
 import { GameTrackingService } from 'playable-sdk/analytics/GameTrackingService';
-import { GameUtils } from './utils/GameUtils.ts';
+import { GameUtils } from './utils/GameUtils';
 
 const { ccclass, property } = _decorator;
 

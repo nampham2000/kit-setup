@@ -1,5 +1,5 @@
 import { resources, JsonAsset } from 'cc';
-import { IPlayableConfig, IPlayableCTAConfig, IPlayableAudioConfig, IPlayableGameplayConfig, IPlayableCameraConfig, IPlayableHeroConfig, IPlayableTrackingConfig, DEFAULT_PLAYABLE_CONFIG } from './PlayableConfig.ts';
+import { IPlayableConfig, IPlayableCTAConfig, IPlayableAudioConfig, IPlayableGameplayConfig, IPlayableCameraConfig, IPlayableHeroConfig, IPlayableTrackingConfig, DEFAULT_PLAYABLE_CONFIG } from './PlayableConfig';
 
 type ConfigChangeCallback = (config: IPlayableConfig) => void;
 
