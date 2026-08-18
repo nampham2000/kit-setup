@@ -96,6 +96,7 @@ class Reporter {
   }
 
   writeCsv(file, prefabName = '') {
+    if (!file) return '';
     ensureDir(path.dirname(file));
     const prefab = String(prefabName || 'general');
     const existingRows = readExistingReportRows(file).filter((row) => row.prefab !== prefab);

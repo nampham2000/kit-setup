@@ -129,15 +129,22 @@ const {
 const {
   emitRigidbody2D: emitRigidbody2DImpl,
   emitCircleCollider2D: emitCircleCollider2DImpl,
+  emitCapsuleCollider2D: emitCapsuleCollider2DImpl,
+  emitEdgeCollider2D: emitEdgeCollider2DImpl,
   emitBoxCollider2D: emitBoxCollider2DImpl,
   emitBoxCollider: emitBoxColliderImpl,
   emitRigidbody: emitRigidbodyImpl,
+  emitCharacterController: emitCharacterControllerImpl,
   emitSphereCollider: emitSphereColliderImpl,
   emitCapsuleCollider: emitCapsuleColliderImpl,
   emitPolygonCollider2D: emitPolygonCollider2DImpl,
   emitMeshCollider: emitMeshColliderImpl,
+  emitHingeJoint: emitHingeJointImpl,
+  emitFixedJoint: emitFixedJointImpl,
+  emitSpringJoint: emitSpringJointImpl,
 } = createColliderPorter({
   getField,
+  getIndentedBlock,
   parseUnityPolygonColliderPaths,
   boundsForUnityPolygonPaths,
   unityRefGuid,
@@ -228,12 +235,18 @@ const componentDispatcher = createComponentDispatcher({
   emitMonoBehaviour,
   emitRigidbody2D,
   emitCircleCollider2D,
+  emitCapsuleCollider2D,
+  emitEdgeCollider2D,
   emitPolygonCollider2D,
   emitBoxCollider2D,
   emitBoxCollider,
   emitRigidbody,
+  emitCharacterController,
   emitSphereCollider,
   emitCapsuleCollider,
+  emitHingeJoint,
+  emitFixedJoint,
+  emitSpringJoint,
 });
 
 function printHelp() {
@@ -728,6 +741,13 @@ function splitTopLevel(text, delimiter) {
 function parseUnityScalar(raw, keyHint = '') {
   let value = String(raw ?? '').trim();
   if (value === '') return '';
+  if (!value.startsWith('"') && !value.startsWith("'")) {
+    const commentIdx = value.indexOf('#');
+    if (commentIdx >= 0) {
+      value = value.slice(0, commentIdx).trim();
+    }
+  }
+  if (value === '') return '';
   if (keyHint === 'fileID') return value === '0' ? '' : value;
   if (keyHint === 'guid') return value;
   if (value === '[]') return [];
@@ -792,10 +812,33 @@ function hasField(doc, key) {
 }
 
 function getField(doc, key, fallback = undefined) {
-  const pattern = new RegExp(`^\\s*${escapeRegex(key)}\\s*:\\s*(.*)$`);
-  for (const line of doc.lines) {
+  const pattern = new RegExp(`^(\\s*)${escapeRegex(key)}\\s*:\\s*(.*)$`);
+  for (let i = 0; i < doc.lines.length; i++) {
+    const line = doc.lines[i];
     const match = pattern.exec(line);
-    if (match) return parseUnityScalar(match[1]);
+    if (!match) continue;
+    const value = match[2].trim();
+    if (value && value !== '{}' && value !== '[]') {
+      return parseUnityScalar(value, key);
+    }
+    // If value is empty or {}, check for indented key-value sub-block
+    const baseIndent = match[1].length;
+    const nestedObj = {};
+    let hasNested = false;
+    for (let j = i + 1; j < doc.lines.length; j++) {
+      const subLine = doc.lines[j];
+      if (!subLine.trim()) continue;
+      const subIndent = subLine.match(/^\s*/)[0].length;
+      if (subIndent <= baseIndent) break;
+      const subMatch = /^\s*([A-Za-z0-9_]+)\s*:\s*(.*)$/.exec(subLine);
+      if (subMatch) {
+        hasNested = true;
+        nestedObj[subMatch[1]] = parseUnityScalar(subMatch[2], subMatch[1]);
+      }
+    }
+    if (hasNested) return nestedObj;
+    if (value) return parseUnityScalar(value, key);
+    return fallback;
   }
   return fallback;
 }
@@ -4470,13 +4513,83 @@ class CocosPrefabBuilder {
       _useGravity: Boolean(config?.useGravity ?? true),
       _linearFactor: linearFactor,
       _angularFactor: angularFactor,
+      _useCCD: Boolean(config?.useCCD ?? false),
+    }, unityComponentId, fileId);
+  }
+
+  addCharacterController(nodeId, unityComponentId, config, fileId) {
+    return this.addComponent(nodeId, 'cc.CapsuleCharacterController', {
+      _enabled: Boolean(config?.enabled ?? true),
+      _center: vec3(
+        Number(config?.center?.x || 0),
+        Number(config?.center?.y || 0),
+        Number(config?.center?.z || 0),
+      ),
+      _radius: Math.max(0.01, Number(config?.radius ?? 0.5)),
+      _height: Math.max(0.01, Number(config?.height ?? 2.0)),
+      _stepOffset: Math.max(0, Number(config?.stepOffset ?? 0.3)),
+      _slopeLimit: Number(config?.slopeLimit ?? 45.0),
+      _skinWidth: Math.max(0.001, Number(config?.skinWidth ?? 0.08)),
+      _minMoveDistance: Math.max(0, Number(config?.minMoveDistance ?? 0.001)),
+    }, unityComponentId, fileId);
+  }
+
+  addHingeConstraint(nodeId, unityComponentId, config, fileId) {
+    return this.addComponent(nodeId, 'cc.HingeConstraint', {
+      _enabled: Boolean(config?.enabled ?? true),
+      _connectedBody: config?.connectedBodyNodeId != null ? cocosRef(config.connectedBodyNodeId) : null,
+      _axis: vec3(
+        Number(config?.axis?.x ?? 0),
+        Number(config?.axis?.y ?? 1),
+        Number(config?.axis?.z ?? 0),
+      ),
+      _pivotA: vec3(
+        Number(config?.pivotA?.x || 0),
+        Number(config?.pivotA?.y || 0),
+        Number(config?.pivotA?.z || 0),
+      ),
+      _pivotB: vec3(
+        Number(config?.pivotB?.x || 0),
+        Number(config?.pivotB?.y || 0),
+        Number(config?.pivotB?.z || 0),
+      ),
+      _enableLimit: Boolean(config?.enableLimit ?? false),
+      _lowerLimit: Number(config?.lowerLimit ?? 0),
+      _upperLimit: Number(config?.upperLimit ?? 0),
+      _enableMotor: Boolean(config?.enableMotor ?? false),
+      _motorSpeed: Number(config?.motorSpeed ?? 0),
+      _maxMotorForce: Number(config?.maxMotorForce ?? 0),
+    }, unityComponentId, fileId);
+  }
+
+  addFixedConstraint(nodeId, unityComponentId, config, fileId) {
+    return this.addComponent(nodeId, 'cc.FixedConstraint', {
+      _enabled: Boolean(config?.enabled ?? true),
+      _connectedBody: config?.connectedBodyNodeId != null ? cocosRef(config.connectedBodyNodeId) : null,
+    }, unityComponentId, fileId);
+  }
+
+  addPointToPointConstraint(nodeId, unityComponentId, config, fileId) {
+    return this.addComponent(nodeId, 'cc.PointToPointConstraint', {
+      _enabled: Boolean(config?.enabled ?? true),
+      _connectedBody: config?.connectedBodyNodeId != null ? cocosRef(config.connectedBodyNodeId) : null,
+      _pivotA: vec3(
+        Number(config?.pivotA?.x || 0),
+        Number(config?.pivotA?.y || 0),
+        Number(config?.pivotA?.z || 0),
+      ),
+      _pivotB: vec3(
+        Number(config?.pivotB?.x || 0),
+        Number(config?.pivotB?.y || 0),
+        Number(config?.pivotB?.z || 0),
+      ),
     }, unityComponentId, fileId);
   }
 
   addCapsuleCollider(nodeId, unityComponentId, config, fileId) {
     return this.addComponent(nodeId, 'cc.CapsuleCollider', {
       _enabled: Boolean(config?.enabled ?? true),
-      _material: null,
+      _material: config?.materialUuid ? cocosUuid(config.materialUuid, 'cc.PhysicsMaterial') : null,
       _isTrigger: Boolean(config?.isTrigger ?? false),
       _center: vec3(
         Number(config?.center?.x || 0),
@@ -4492,7 +4605,7 @@ class CocosPrefabBuilder {
   addSphereCollider(nodeId, unityComponentId, config, fileId) {
     return this.addComponent(nodeId, 'cc.SphereCollider', {
       _enabled: Boolean(config?.enabled ?? true),
-      _material: null,
+      _material: config?.materialUuid ? cocosUuid(config.materialUuid, 'cc.PhysicsMaterial') : null,
       _isTrigger: Boolean(config?.isTrigger ?? false),
       _center: vec3(
         Number(config?.center?.x || 0),
@@ -4506,7 +4619,7 @@ class CocosPrefabBuilder {
   addBoxCollider(nodeId, unityComponentId, config, fileId) {
     return this.addComponent(nodeId, 'cc.BoxCollider', {
       _enabled: Boolean(config?.enabled ?? true),
-      _material: null,
+      _material: config?.materialUuid ? cocosUuid(config.materialUuid, 'cc.PhysicsMaterial') : null,
       _isTrigger: Boolean(config?.isTrigger ?? false),
       _center: vec3(
         Number(config?.center?.x || 0),
@@ -4533,6 +4646,24 @@ class CocosPrefabBuilder {
       ),
       _mesh: config?.meshUuid ? cocosUuid(config.meshUuid, 'cc.Mesh') : null,
       _convex: Boolean(config?.convex ?? false),
+    }, unityComponentId, fileId);
+  }
+
+  addCircleCollider2D(nodeId, unityComponentId, config, fileId) {
+    return this.addComponent(nodeId, 'cc.CircleCollider2D', {
+      _enabled: Boolean(config?.enabled ?? true),
+      editing: false,
+      tag: Number(config?.tag ?? 0),
+      _group: Number(config?.group ?? 1),
+      _density: Number(config?.density ?? 1),
+      _sensor: Boolean(config?.sensor ?? false),
+      _friction: Number(config?.friction ?? 0.2),
+      _restitution: Number(config?.restitution ?? 0),
+      _offset: vec2(
+        Number(config?.offset?.x || 0),
+        Number(config?.offset?.y || 0),
+      ),
+      _radius: Math.max(0.01, Number(config?.radius ?? 0.5)),
     }, unityComponentId, fileId);
   }
 
@@ -5358,6 +5489,7 @@ function portPrefab(options, reporter) {
   if (fs.existsSync(options.out) && !options.overwrite && !options.dryRun) {
     fail(`Output already exists. Use --overwrite to replace it: ${options.out}`);
   }
+  if (!reporter) reporter = new Reporter();
   if (!options._addedCocosCustomLayers) options._addedCocosCustomLayers = new Map();
 
   const unityDb = new UnityAssetDatabase(options.unityRoot, unityPackageAssetRoots(options.unityRoot));
@@ -5381,10 +5513,12 @@ function portPrefab(options, reporter) {
   patchParticleRendererMeshLibraryAssets(options.out, reporter, options);
 
   emitCreatorReopenNotice(options, reporter);
-  const actualReport = reporter.writeCsv(options.report, rootName);
+  const actualReport = options.report ? reporter.writeCsv(options.report, rootName) : '';
   const counts = reporter.summary();
   log(`${options.dryRun ? 'Dry-run built' : 'Wrote'} ${toPosix(path.relative(options.cocosRoot, options.out))}`);
-  log(`Report: ${toPosix(path.relative(options.cocosRoot, actualReport))} (high=${counts.high}, medium=${counts.medium}, low=${counts.low})`);
+  if (actualReport) {
+    log(`Report: ${toPosix(path.relative(options.cocosRoot, actualReport))} (high=${counts.high}, medium=${counts.medium}, low=${counts.low})`);
+  }
   return { actualReport, counts, rootName, outputFile: options.out };
 }
 
@@ -6003,39 +6137,52 @@ function emitCircleCollider2D(nodeId, componentId, doc, gameObject, model, build
   return emitCircleCollider2DImpl(nodeId, componentId, doc, gameObject, model, builder, reporter);
 }
 
+function emitCapsuleCollider2D(nodeId, componentId, doc, gameObject, model, builder, reporter) {
+  return emitCapsuleCollider2DImpl(nodeId, componentId, doc, gameObject, model, builder, reporter);
+}
+
+function emitEdgeCollider2D(nodeId, componentId, doc, gameObject, model, builder, reporter) {
+  return emitEdgeCollider2DImpl(nodeId, componentId, doc, gameObject, model, builder, reporter);
+}
+
 function emitBoxCollider2D(nodeId, componentId, doc, gameObject, model, builder, reporter) {
   return emitBoxCollider2DImpl(nodeId, componentId, doc, gameObject, model, builder, reporter);
 }
 
-function emitBoxCollider(nodeId, componentId, doc, builder) {
-  return emitBoxColliderImpl(nodeId, componentId, doc, builder);
+function emitBoxCollider(nodeId, componentId, doc, gameObject, model, builder, reporter, options, unityDb) {
+  return emitBoxColliderImpl(nodeId, componentId, doc, gameObject, model, builder, reporter, options, unityDb);
 }
 
 function emitRigidbody(nodeId, componentId, doc, builder) {
   return emitRigidbodyImpl(nodeId, componentId, doc, builder);
 }
 
-function emitSphereCollider(nodeId, componentId, doc, builder) {
-  return emitSphereColliderImpl(nodeId, componentId, doc, builder);
+function emitCharacterController(nodeId, componentId, doc, gameObject, model, builder) {
+  return emitCharacterControllerImpl(nodeId, componentId, doc, gameObject, model, builder);
 }
 
-function emitCapsuleCollider(nodeId, componentId, doc, builder) {
-  return emitCapsuleColliderImpl(nodeId, componentId, doc, builder);
+function emitSphereCollider(nodeId, componentId, doc, gameObject, model, builder, reporter, options, unityDb) {
+  return emitSphereColliderImpl(nodeId, componentId, doc, gameObject, model, builder, reporter, options, unityDb);
 }
 
-function polygonPathArea(points) {
-  if (!Array.isArray(points) || points.length < 3) return 0;
-  let area = 0;
-  for (let index = 0; index < points.length; index += 1) {
-    const current = points[index];
-    const next = points[(index + 1) % points.length];
-    area += (Number(current?.x || 0) * Number(next?.y || 0)) - (Number(next?.x || 0) * Number(current?.y || 0));
-  }
-  return Math.abs(area * 0.5);
+function emitCapsuleCollider(nodeId, componentId, doc, gameObject, model, builder, reporter, options, unityDb) {
+  return emitCapsuleColliderImpl(nodeId, componentId, doc, gameObject, model, builder, reporter, options, unityDb);
 }
 
 function emitPolygonCollider2D(nodeId, componentId, doc, gameObject, model, builder, reporter) {
   return emitPolygonCollider2DImpl(nodeId, componentId, doc, gameObject, model, builder, reporter);
+}
+
+function emitHingeJoint(nodeId, componentId, doc, gameObject, model, builder) {
+  return emitHingeJointImpl(nodeId, componentId, doc, gameObject, model, builder);
+}
+
+function emitFixedJoint(nodeId, componentId, doc, gameObject, model, builder) {
+  return emitFixedJointImpl(nodeId, componentId, doc, gameObject, model, builder);
+}
+
+function emitSpringJoint(nodeId, componentId, doc, gameObject, model, builder) {
+  return emitSpringJointImpl(nodeId, componentId, doc, gameObject, model, builder);
 }
 
 function unityNumber(value, fallback = 0) {
@@ -6769,10 +6916,23 @@ function main() {
   portPrefabBatch(options);
 }
 
-try {
-  main();
-} catch (error) {
-  const message = error?.message || String(error);
-  console.error(`[unity-cocos-port] ERROR: ${message}`);
-  process.exit(1);
+if (require.main === module) {
+  try {
+    main();
+  } catch (error) {
+    const message = error?.message || String(error);
+    console.error(`[unity-cocos-port] ERROR: ${message}`);
+    process.exit(1);
+  }
 }
+
+module.exports = {
+  portPrefab,
+  portPrefabBatch,
+  runScriptScaffold,
+  runSmartPort,
+  convertUnityPhysicsMaterialToCocos,
+  resolveUnityPhysicsMaterialUuid,
+  parseArgs,
+  main,
+};

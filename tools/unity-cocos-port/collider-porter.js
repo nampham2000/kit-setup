@@ -106,6 +106,7 @@ module.exports = function createColliderPorter(deps) {
   function emitRigidbody(nodeId, componentId, doc, builder) {
     const isKinematic = Number(getField(doc, 'm_IsKinematic', 0) || 0) !== 0;
     const constraints = Number(getField(doc, 'm_Constraints', 0) || 0);
+    const collisionDetection = Number(getField(doc, 'm_CollisionDetection', 0) || 0);
 
     // Freeze Position: X=2, Y=4, Z=8
     const freezePosX = (constraints & 2) !== 0;
@@ -135,14 +136,45 @@ module.exports = function createColliderPorter(deps) {
       useGravity: Number(getField(doc, 'm_UseGravity', 1) || 0) !== 0,
       linearFactor,
       angularFactor,
-      // Unity has no per-body sleep toggle on Rigidbody; Cocos defaults to allowing it.
+      useCCD: collisionDetection > 0,
       allowSleep: true,
     }, `cmp-rigid-body-${componentId}`);
   }
 
-  // Unity SphereCollider (class 135).
-  function emitSphereCollider(nodeId, componentId, doc, builder) {
+  // Unity CharacterController (class 143)
+  function emitCharacterController(nodeId, componentId, doc, gameObject, model, builder) {
     const center = getField(doc, 'm_Center', { x: 0, y: 0, z: 0 });
+    const radius = Math.abs(finiteNumber(getField(doc, 'm_Radius', 0.5), 0.5));
+    const height = Math.abs(finiteNumber(getField(doc, 'm_Height', 2.0), 2.0));
+    const slopeLimit = finiteNumber(getField(doc, 'm_SlopeLimit', 45.0), 45.0);
+    const stepOffset = Math.abs(finiteNumber(getField(doc, 'm_StepOffset', 0.3), 0.3));
+    const skinWidth = Math.abs(finiteNumber(getField(doc, 'm_SkinWidth', 0.08), 0.08));
+    const minMoveDistance = Math.abs(finiteNumber(getField(doc, 'm_MinMoveDistance', 0.001), 0.001));
+
+    builder.addCharacterController(nodeId, componentId, {
+      enabled: Number(getField(doc, 'm_Enabled', 1) || 0) !== 0,
+      center: {
+        x: finiteNumber(center?.x, 0),
+        y: finiteNumber(center?.y, 0),
+        z: finiteNumber(center?.z, 0),
+      },
+      radius,
+      height,
+      slopeLimit,
+      stepOffset,
+      skinWidth,
+      minMoveDistance,
+    }, `cmp-character-controller-${componentId}`);
+  }
+
+  // Unity SphereCollider (class 135).
+  function emitSphereCollider(nodeId, componentId, doc, gameObject, model, builder, reporter, options, unityDb) {
+    const center = getField(doc, 'm_Center', { x: 0, y: 0, z: 0 });
+    const physicsMaterialAsset = unityDb?.get ? unityDb.get(unityRefGuid(getField(doc, 'm_Material', null))) : null;
+    const physicsMaterialUuid = resolveUnityPhysicsMaterialUuid && physicsMaterialAsset
+      ? resolveUnityPhysicsMaterialUuid(physicsMaterialAsset, options, reporter, gameObject?.name || '')
+      : '';
+
     builder.addSphereCollider(nodeId, componentId, {
       enabled: Number(getField(doc, 'm_Enabled', 1) || 0) !== 0,
       isTrigger: Number(getField(doc, 'm_IsTrigger', 0) || 0) !== 0,
@@ -152,16 +184,21 @@ module.exports = function createColliderPorter(deps) {
         z: finiteNumber(center?.z, 0),
       },
       radius: Math.abs(finiteNumber(getField(doc, 'm_Radius', 0.5), 0.5)),
+      materialUuid: physicsMaterialUuid,
     }, `cmp-sphere-collider-${componentId}`);
   }
 
   // Unity CapsuleCollider (class 136).
-  function emitCapsuleCollider(nodeId, componentId, doc, builder) {
+  function emitCapsuleCollider(nodeId, componentId, doc, gameObject, model, builder, reporter, options, unityDb) {
     const center = getField(doc, 'm_Center', { x: 0, y: 0, z: 0 });
     const radius = Math.abs(finiteNumber(getField(doc, 'm_Radius', 0.5), 0.5));
     const height = Math.abs(finiteNumber(getField(doc, 'm_Height', 2.0), 2.0));
     const direction = Number(getField(doc, 'm_Direction', 1) || 1); // 0: X, 1: Y, 2: Z
     const cylinderHeight = Math.max(0, height - 2 * radius);
+    const physicsMaterialAsset = unityDb?.get ? unityDb.get(unityRefGuid(getField(doc, 'm_Material', null))) : null;
+    const physicsMaterialUuid = resolveUnityPhysicsMaterialUuid && physicsMaterialAsset
+      ? resolveUnityPhysicsMaterialUuid(physicsMaterialAsset, options, reporter, gameObject?.name || '')
+      : '';
 
     builder.addCapsuleCollider(nodeId, componentId, {
       enabled: Number(getField(doc, 'm_Enabled', 1) || 0) !== 0,
@@ -174,12 +211,22 @@ module.exports = function createColliderPorter(deps) {
       radius: radius,
       cylinderHeight: cylinderHeight,
       direction: direction,
+      materialUuid: physicsMaterialUuid,
     }, `cmp-capsule-collider-${componentId}`);
   }
 
   function emitCircleCollider2D(nodeId, componentId, doc, gameObject, model, builder, reporter) {
     if (!model.is3DObject) {
-      reporter.low('COMPONENT_UNSUPPORTED', model.file, gameObject.name, 'Unity CircleCollider2D is skipped because this prefab is not detected as a 3D object');
+      const offset = getField(doc, 'm_Offset', { x: 0, y: 0 });
+      builder.addCircleCollider2D(nodeId, componentId, {
+        enabled: Number(getField(doc, 'm_Enabled', 1) || 0) !== 0,
+        sensor: Number(getField(doc, 'm_IsTrigger', 0) || 0) !== 0,
+        offset: {
+          x: finiteNumber(offset?.x, 0),
+          y: finiteNumber(offset?.y, 0),
+        },
+        radius: Math.abs(finiteNumber(getField(doc, 'm_Radius', 0.5), 0.5)),
+      }, `cmp-circle-collider-2d-${componentId}`);
       return;
     }
 
@@ -194,6 +241,79 @@ module.exports = function createColliderPorter(deps) {
       },
       radius: Math.abs(finiteNumber(getField(doc, 'm_Radius', 0.5), 0.5)),
     }, `cmp-sphere-collider-${componentId}`);
+  }
+
+  function emitCapsuleCollider2D(nodeId, componentId, doc, gameObject, model, builder, reporter) {
+    const offset = getField(doc, 'm_Offset', { x: 0, y: 0 });
+    const size = getField(doc, 'm_Size', { x: 1, y: 2 });
+    const direction = Number(getField(doc, 'm_Direction', 0) || 0); // 0: Vertical, 1: Horizontal
+    const isVertical = direction === 0;
+
+    if (model.is3DObject) {
+      const radius = isVertical ? (size.x * 0.5) : (size.y * 0.5);
+      const height = isVertical ? size.y : size.x;
+      const cylinderHeight = Math.max(0, height - 2 * radius);
+
+      builder.addCapsuleCollider(nodeId, componentId, {
+        enabled: Number(getField(doc, 'm_Enabled', 1) || 0) !== 0,
+        isTrigger: Number(getField(doc, 'm_IsTrigger', 0) || 0) !== 0,
+        center: {
+          x: finiteNumber(offset?.x, 0),
+          y: finiteNumber(offset?.y, 0),
+          z: 0,
+        },
+        radius: Math.max(0.01, radius),
+        cylinderHeight: Math.max(0, cylinderHeight),
+        direction: isVertical ? 1 : 0,
+      }, `cmp-capsule-collider-${componentId}`);
+      return;
+    }
+
+    builder.addBoxCollider2D(nodeId, componentId, {
+      enabled: Number(getField(doc, 'm_Enabled', 1) || 0) !== 0,
+      sensor: Number(getField(doc, 'm_IsTrigger', 0) || 0) !== 0,
+      offset: {
+        x: finiteNumber(offset?.x, 0),
+        y: finiteNumber(offset?.y, 0),
+      },
+      size: {
+        x: Math.abs(finiteNumber(size?.x, 1)),
+        y: Math.abs(finiteNumber(size?.y, 2)),
+      },
+    }, `cmp-box-collider-2d-${componentId}`);
+  }
+
+  function emitEdgeCollider2D(nodeId, componentId, doc, gameObject, model, builder, reporter) {
+    const offset = getField(doc, 'm_Offset', { x: 0, y: 0 });
+    const pointsBlock = deps.getIndentedBlock ? deps.getIndentedBlock(doc, 'm_Points') : [];
+    const points = [];
+    for (const line of pointsBlock) {
+      const match = /x:\s*([-\d.]+),\s*y:\s*([-\d.]+)/.exec(String(line || ''));
+      if (match) points.push({ x: Number(match[1]), y: Number(match[2]) });
+    }
+    if (!points.length) {
+      points.push({ x: -0.5, y: 0 }, { x: 0.5, y: 0 });
+    }
+
+    if (model.is3DObject) {
+      builder.addBoxCollider(nodeId, componentId, {
+        enabled: Number(getField(doc, 'm_Enabled', 1) || 0) !== 0,
+        isTrigger: Number(getField(doc, 'm_IsTrigger', 0) || 0) !== 0,
+        center: { x: finiteNumber(offset?.x, 0), y: finiteNumber(offset?.y, 0), z: 0 },
+        size: { x: 1, y: 0.1, z: UNITY_3D_COLLIDER_DEPTH },
+      }, `cmp-box-collider-${componentId}`);
+      return;
+    }
+
+    builder.addPolygonCollider2D(nodeId, componentId, {
+      enabled: Number(getField(doc, 'm_Enabled', 1) || 0) !== 0,
+      sensor: Number(getField(doc, 'm_IsTrigger', 0) || 0) !== 0,
+      offset: {
+        x: finiteNumber(offset?.x, 0),
+        y: finiteNumber(offset?.y, 0),
+      },
+      points,
+    }, `cmp-polygon-collider-2d-${componentId}`);
   }
 
   function emitBoxCollider2D(nodeId, componentId, doc, gameObject, model, builder, reporter) {
@@ -231,9 +351,14 @@ module.exports = function createColliderPorter(deps) {
     }, `cmp-box-collider-2d-${componentId}`);
   }
 
-  function emitBoxCollider(nodeId, componentId, doc, builder) {
+  function emitBoxCollider(nodeId, componentId, doc, gameObject, model, builder, reporter, options, unityDb) {
     const center = getField(doc, 'm_Center', { x: 0, y: 0, z: 0 });
     const size = getField(doc, 'm_Size', { x: 1, y: 1, z: 1 });
+    const physicsMaterialAsset = unityDb?.get ? unityDb.get(unityRefGuid(getField(doc, 'm_Material', null))) : null;
+    const physicsMaterialUuid = resolveUnityPhysicsMaterialUuid && physicsMaterialAsset
+      ? resolveUnityPhysicsMaterialUuid(physicsMaterialAsset, options, reporter, gameObject?.name || '')
+      : '';
+
     builder.addBoxCollider(nodeId, componentId, {
       enabled: Number(getField(doc, 'm_Enabled', 1) || 0) !== 0,
       isTrigger: Number(getField(doc, 'm_IsTrigger', 0) || 0) !== 0,
@@ -247,6 +372,7 @@ module.exports = function createColliderPorter(deps) {
         y: Math.abs(finiteNumber(size?.y, 1)),
         z: Math.abs(finiteNumber(size?.z, 1)),
       },
+      materialUuid: physicsMaterialUuid,
     }, `cmp-box-collider-${componentId}`);
   }
 
@@ -317,8 +443,8 @@ module.exports = function createColliderPorter(deps) {
   function emitMeshCollider(nodeId, componentId, doc, gameObject, model, builder, reporter, options, unityDb, cocosDb) {
     const meshRef = getField(doc, 'm_Mesh', null);
     const meshUuid = resolveMeshColliderMeshUuid(meshRef, gameObject, model, builder, reporter, options, unityDb, cocosDb);
-    const physicsMaterialAsset = unityDb.get(unityRefGuid(getField(doc, 'm_Material', null)));
-    const physicsMaterialUuid = resolveUnityPhysicsMaterialUuid
+    const physicsMaterialAsset = unityDb?.get ? unityDb.get(unityRefGuid(getField(doc, 'm_Material', null))) : null;
+    const physicsMaterialUuid = resolveUnityPhysicsMaterialUuid && physicsMaterialAsset
       ? resolveUnityPhysicsMaterialUuid(physicsMaterialAsset, options, reporter, gameObject.name)
       : '';
 
@@ -336,17 +462,74 @@ module.exports = function createColliderPorter(deps) {
     }, `cmp-mesh-collider-${componentId}`);
   }
 
+  // Unity HingeJoint (class 59)
+  function emitHingeJoint(nodeId, componentId, doc, gameObject, model, builder) {
+    const anchor = getField(doc, 'm_Anchor', { x: 0, y: 0, z: 0 });
+    const axis = getField(doc, 'm_Axis', { x: 0, y: 1, z: 0 });
+    const connectedBodyRef = getField(doc, 'm_ConnectedBody', null);
+    const connectedBodyNodeId = connectedBodyRef?.fileID ? builder.nodeMapByGameObject.get(connectedBodyRef.fileID) : null;
+    const useLimits = Number(getField(doc, 'm_UseLimits', 0) || 0) !== 0;
+    const limits = getField(doc, 'm_Limits', { min: 0, max: 0 });
+    const useMotor = Number(getField(doc, 'm_UseMotor', 0) || 0) !== 0;
+    const motor = getField(doc, 'm_Motor', { targetVelocity: 0, force: 0 });
+
+    builder.addHingeConstraint(nodeId, componentId, {
+      enabled: Number(getField(doc, 'm_Enabled', 1) || 0) !== 0,
+      connectedBodyNodeId,
+      axis: { x: finiteNumber(axis?.x, 0), y: finiteNumber(axis?.y, 1), z: finiteNumber(axis?.z, 0) },
+      pivotA: { x: finiteNumber(anchor?.x, 0), y: finiteNumber(anchor?.y, 0), z: finiteNumber(anchor?.z, 0) },
+      enableLimit: useLimits,
+      lowerLimit: finiteNumber(limits?.min, 0),
+      upperLimit: finiteNumber(limits?.max, 0),
+      enableMotor: useMotor,
+      motorSpeed: finiteNumber(motor?.targetVelocity, 0),
+      maxMotorForce: finiteNumber(motor?.force, 0),
+    }, `cmp-hinge-constraint-${componentId}`);
+  }
+
+  // Unity FixedJoint (class 88)
+  function emitFixedJoint(nodeId, componentId, doc, gameObject, model, builder) {
+    const connectedBodyRef = getField(doc, 'm_ConnectedBody', null);
+    const connectedBodyNodeId = connectedBodyRef?.fileID ? builder.nodeMapByGameObject.get(connectedBodyRef.fileID) : null;
+
+    builder.addFixedConstraint(nodeId, componentId, {
+      enabled: Number(getField(doc, 'm_Enabled', 1) || 0) !== 0,
+      connectedBodyNodeId,
+    }, `cmp-fixed-constraint-${componentId}`);
+  }
+
+  // Unity SpringJoint (class 57)
+  function emitSpringJoint(nodeId, componentId, doc, gameObject, model, builder) {
+    const anchor = getField(doc, 'm_Anchor', { x: 0, y: 0, z: 0 });
+    const connectedAnchor = getField(doc, 'm_ConnectedAnchor', { x: 0, y: 0, z: 0 });
+    const connectedBodyRef = getField(doc, 'm_ConnectedBody', null);
+    const connectedBodyNodeId = connectedBodyRef?.fileID ? builder.nodeMapByGameObject.get(connectedBodyRef.fileID) : null;
+
+    builder.addPointToPointConstraint(nodeId, componentId, {
+      enabled: Number(getField(doc, 'm_Enabled', 1) || 0) !== 0,
+      connectedBodyNodeId,
+      pivotA: { x: finiteNumber(anchor?.x, 0), y: finiteNumber(anchor?.y, 0), z: finiteNumber(anchor?.z, 0) },
+      pivotB: { x: finiteNumber(connectedAnchor?.x, 0), y: finiteNumber(connectedAnchor?.y, 0), z: finiteNumber(connectedAnchor?.z, 0) },
+    }, `cmp-p2p-constraint-${componentId}`);
+  }
+
   return {
     unityRigidBody2DTypeToCocosType,
     emitRigidbody2D,
     emitCircleCollider2D,
+    emitCapsuleCollider2D,
+    emitEdgeCollider2D,
     emitBoxCollider2D,
     emitBoxCollider,
     emitRigidbody,
+    emitCharacterController,
     emitSphereCollider,
     emitCapsuleCollider,
     polygonPathArea,
     emitPolygonCollider2D,
     emitMeshCollider,
+    emitHingeJoint,
+    emitFixedJoint,
+    emitSpringJoint,
   };
 };

@@ -440,6 +440,55 @@ module.exports = function createMaterialPorter(deps) {
     });
   }
 
+  function ensureCustomPortedShaderEffect(shaderAsset, options, reporter) {
+    if (!shaderAsset?.path || !fs.existsSync(shaderAsset.path)) return '';
+    const ext = path.extname(shaderAsset.path).toLowerCase();
+    if (ext !== '.shader' && ext !== '.hlsl' && ext !== '.shadergraph') return '';
+
+    const effectStem = shaderAsset.stem || path.basename(shaderAsset.path, ext);
+    const effectRelPath = path.join('assets', 'effects', `${effectStem}.effect`);
+    const effectFile = path.join(options.cocosRoot, effectRelPath);
+    const relativePosix = toPosix(path.relative(options.cocosRoot, effectFile));
+
+    if (options.dryRun) return stableUuid(`effect:${relativePosix}`);
+    if (options[`_customEffectUuid_${effectStem}`]) return options[`_customEffectUuid_${effectStem}`];
+
+    ensureDir(path.dirname(effectFile));
+    ensureDirectoryMetas(path.dirname(effectFile), path.join(options.cocosRoot, 'assets'));
+
+    try {
+      const { convertUnityHlslToCocosEffect } = require('../unity-hlsl-to-cocos-effect.cjs');
+      convertUnityHlslToCocosEffect({
+        src: shaderAsset.path,
+        out: effectFile,
+        cocosRoot: options.cocosRoot,
+        shaderName: effectStem,
+        overwrite: true,
+      }, reporter);
+
+      const meta = readJsonIfExists(`${effectFile}.meta`);
+      const effectUuid = meta?.uuid || stableUuid(`effect:${relativePosix}`);
+      options[`_customEffectUuid_${effectStem}`] = effectUuid;
+
+      reporter.low(
+        'CUSTOM_SHADER_AUTO_PORTED',
+        shaderAsset.relativePath,
+        relativePosix,
+        `Auto-transpiled custom Unity shader "${shaderAsset.stem}" to Cocos Creator effect`,
+        effectUuid,
+      );
+      return effectUuid;
+    } catch (err) {
+      reporter.high(
+        'CUSTOM_SHADER_PORT_FAILED',
+        shaderAsset.relativePath,
+        relativePosix,
+        `Failed to transpile custom shader "${shaderAsset.stem}": ${err.message}`,
+      );
+      return '';
+    }
+  }
+
   function convertUnityMaterialToCocos(materialAsset, options, unityDb, reporter) {
     if (!materialAsset?.path || !fs.existsSync(materialAsset.path)) return '';
 
@@ -455,8 +504,9 @@ module.exports = function createMaterialPorter(deps) {
     const shaderRef = getField(materialDoc, 'm_Shader', null);
     const shaderGuid = unityRefGuid(shaderRef);
     let shaderName = '';
+    let shaderAsset = null;
     if (shaderGuid && shaderGuid !== UNITY_BUILTIN_SHADER_GUID) {
-      const shaderAsset = unityDb?.get(shaderGuid);
+      shaderAsset = unityDb?.get(shaderGuid);
       shaderName = readUnityShaderName(shaderAsset) || shaderAsset?.relativePath || shaderGuid;
     }
     const invisibleShadowReceiver = /Invisible Shadow Receiver/i.test(shaderName);
@@ -472,9 +522,12 @@ module.exports = function createMaterialPorter(deps) {
       || /Universal Render Pipeline\/Unlit/i.test(shaderName);
     const urpLitEffectUuid = urpLit ? ensureUrpLitEffect(options, reporter) : '';
     const urpUnlitEffectUuid = urpUnlit ? ensureUrpUnlitEffect(options, reporter) : '';
+    const customShaderEffectUuid = (!invisibleShadowReceiver && !tcp2EffectUuid && !urpLitEffectUuid && !urpUnlitEffectUuid && shaderAsset)
+      ? ensureCustomPortedShaderEffect(shaderAsset, options, reporter)
+      : '';
     if (shaderName) {
       const supportedCustomShader = invisibleShadowReceiver
-        || Boolean(tcp2EffectUuid || urpLitEffectUuid || urpUnlitEffectUuid);
+        || Boolean(tcp2EffectUuid || urpLitEffectUuid || urpUnlitEffectUuid || customShaderEffectUuid);
       reporter[supportedCustomShader ? 'low' : 'high'](
         invisibleShadowReceiver
           ? 'INVISIBLE_SHADOW_RECEIVER_APPROXIMATED'
@@ -484,7 +537,9 @@ module.exports = function createMaterialPorter(deps) {
               ? 'URP_LIT_SHADER_PORTED'
               : urpUnlitEffectUuid
                 ? 'URP_UNLIT_SHADER_PORTED'
-                : 'CUSTOM_SHADER_NOT_PORTED',
+                : customShaderEffectUuid
+                  ? 'CUSTOM_SHADER_PORTED'
+                  : 'CUSTOM_SHADER_NOT_PORTED',
         materialAsset.relativePath,
         String(getField(materialDoc, 'm_Name', materialAsset.stem) || materialAsset.stem),
         invisibleShadowReceiver
@@ -495,7 +550,9 @@ module.exports = function createMaterialPorter(deps) {
               ? `Unity shader "${shaderName}" was mapped to the Cocos URP Lit effect`
               : urpUnlitEffectUuid
                 ? `Unity shader "${shaderName}" was mapped to the Cocos URP Unlit effect`
-                : `Custom shader "${shaderName}" has not been ported; material approximated with builtin-standard`,
+                : customShaderEffectUuid
+                  ? `Custom shader "${shaderName}" was auto-transpiled and mapped to its Cocos effect`
+                  : `Custom shader "${shaderName}" has not been ported; material approximated with builtin-standard`,
       );
     }
 
@@ -599,6 +656,10 @@ module.exports = function createMaterialPorter(deps) {
       states.push(state);
     }
 
+    const resolvedEffectUuid = invisibleShadowReceiver
+      ? ensureInvisibleShadowReceiverEffect(options, reporter)
+      : tcp2EffectUuid || urpLitEffectUuid || urpUnlitEffectUuid || customShaderEffectUuid || BUILTIN_STANDARD_EFFECT_UUID;
+
     const materialData = {
       __type__: 'cc.Material',
       _name: String(getField(materialDoc, 'm_Name', materialAsset.stem) || materialAsset.stem),
@@ -606,19 +667,17 @@ module.exports = function createMaterialPorter(deps) {
       __editorExtras__: {},
       _native: '',
       _effectAsset: cocosUuid(
-        invisibleShadowReceiver
-          ? ensureInvisibleShadowReceiverEffect(options, reporter)
-          : tcp2EffectUuid || urpLitEffectUuid || urpUnlitEffectUuid || BUILTIN_STANDARD_EFFECT_UUID,
+        resolvedEffectUuid,
         'cc.EffectAsset',
       ),
-      _techIdx: invisibleShadowReceiver || tcp2EffectUuid
+      _techIdx: (invisibleShadowReceiver || tcp2EffectUuid || customShaderEffectUuid)
         ? 0
         : transparent
           ? BUILTIN_STANDARD_TRANSPARENT_TECHNIQUE_INDEX
           : 0,
       _defines: [invisibleShadowReceiver || tcp2EffectUuid
         ? {}
-        : urpUnlitEffectUuid
+        : urpUnlitEffectUuid || customShaderEffectUuid
           ? alphaClip ? { USE_ALPHA_TEST: true } : {}
           : defines],
       _states: invisibleShadowReceiver ? [] : states,

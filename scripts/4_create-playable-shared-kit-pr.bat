@@ -2,7 +2,7 @@
 setlocal EnableExtensions EnableDelayedExpansion
 
 rem AI AGENT NOTE: bump CREATE_PLAYABLE_SHARED_KIT_PR_VERSION every time this file is updated.
-set "CREATE_PLAYABLE_SHARED_KIT_PR_VERSION=2.1.1"
+set "CREATE_PLAYABLE_SHARED_KIT_PR_VERSION=2.2.0"
 set "SUBMODULE_NAME=playable-shared-kit"
 set "REPO_WEB_URL=https://github.com/minhdptpuzzle/playable-shared-kit"
 set "REPO_API_SLUG=minhdptpuzzle/playable-shared-kit"
