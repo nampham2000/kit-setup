@@ -95,7 +95,10 @@ function main() {
 
   const antigravitySkillsDest = path.join(HOME_DIR, '.gemini', 'antigravity', 'skills');
   copyDirRecursive(skillsDir, antigravitySkillsDest);
-  console.log('  [ok] Gemini / Antigravity -> GEMINI.md, ~/.gemini/antigravity/skills/');
+
+  const workspaceAgentsSkills = path.join(PROJECT_ROOT, '.agents', 'skills');
+  copyDirRecursive(skillsDir, workspaceAgentsSkills);
+  console.log('  [ok] Gemini / Antigravity -> GEMINI.md, ~/.gemini/antigravity/skills/, .agents/skills/');
 
   // 4. GitHub Copilot / Cursor (.github/copilot-instructions.md, .cursorrules, .github/skills/)
   const copilotSrcCandidates = [
