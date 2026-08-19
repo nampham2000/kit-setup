@@ -24,13 +24,15 @@ Chạy `npm run ai:contract:verify` để chứng minh manifest khớp với CLI
 | --- | --- | --- |
 | Bước đầu tiên của mọi task. Thay cho việc quét cây thư mục. | `npm run ai:map` | — |
 | Cần biết cấu trúc scene trước khi sửa node/component. | `npm run ai:scene -- <sceneName>` | Component script hiện UUID thô, chưa giải ra tên class. |
-| Trước khi giải một vấn đề nghe quen; sau khi giải xong thì ghi lại. | `npm run memory:query -- <keyword>` | Embedding tắt khi thiếu `sqlite-vec` — recall theo keyword, có thể trả kết quả lệch chủ đề. |
+| Trước khi giải một vấn đề nghe quen; sau khi giải xong thì ghi lại. | `npm run memory:query -- <keyword>` | Semantic recall cần `sqlite-vec` + `@xenova/transformers` (nặng ~283MB); thiếu thì tự động lùi về keyword. |
 
 ### Port Unity → Cocos
 
 | Khi nào dùng | Lệnh | Giới hạn cần biết |
 | --- | --- | --- |
-| Chuyển prefab Unity thành .prefab của Cocos. | `node playable-shared-kit/tools/unity-cocos-port.cjs port --src <unity_prefab_or_dir> --out <cocos_prefab_or_dir>` | Chậm: đo được ≈140 s/prefab trên project 68k asset meta; chưa có cache, chưa song song. Shader tuỳ biến KHÔNG được port — xem `shader.convert`. Luôn đọc report và xử lý mọi dòng `high` trước khi coi là xong. |
+| BƯỚC ĐẦU TIÊN khi nhận một project Unity mới. Đọc cái này thay vì tự quét cây thư mục. | `npm run ai:port:plan -- --src <UnityAssetsFolder>` | Chỉ đọc — không ghi gì vào project Cocos. Bỏ qua thư mục thư viện bên thứ ba để số liệu phản ánh code game. |
+| Ngay sau khi port. ĐỌC CÁI NÀY thay vì đọc CSV thô (đo được: 103k token -> 0,7k token). | `npm run ai:port:report` | Mặc định ẩn mã mức low; dùng --all để xem hết. |
+| Chuyển prefab Unity thành .prefab của Cocos. Dùng --jobs 4 cho batch lớn. | `node playable-shared-kit/tools/unity-cocos-port.cjs port --src <unity_prefab_or_dir> --out <cocos_prefab_or_dir>` | Shader tuỳ biến KHÔNG được port — xem `shader.convert`. Luôn đọc report và xử lý mọi dòng `high` trước khi coi là xong. Nếu Cocos Creator không mở, UUID sub-asset của sprite/model chưa nối được: report ghi rõ, mở editor rồi chạy lại. Cache theo phạm vi --src: sửa MỘT file trong phạm vi sẽ khiến cả phạm vi port lại (đổi lấy việc không bao giờ trả output cũ sai). |
 | Port hàng loạt. Nên chạy `--dry-run` trước để xem report. | `npm run port:smart -- --src <unity_dir> --out assets/` | Cùng giới hạn tốc độ và shader như `port.prefab`. |
 | Port script/logic C# sang TS: AI Agent LUÔN CHẠY LỆNH NÀY TRƯỚC TIÊN để tạo static first pass, sau đó đọc report và refine/polish gameplay semantics. | `npm run port:compile -- --src <csharp_path> --out assets/script/` | Pass nghĩa là parser/emitter và cú pháp TypeScript hợp lệ; KHÔNG xác nhận gameplay semantic equivalence. Các file có TODO hoặc warning luôn cần AI refine; dùng `--runtime-only` để bỏ Unity Editor code khi port playable runtime. Mặc định giữ cấu trúc thư mục để tránh ghi đè basename; `--flat-output` chỉ dùng khi đã kiểm tra collision. |
 | Cần khung TS + @property từ script Unity. | `npm run port:script -- --src <csharp_path> --out assets/script/` | CHỈ sinh property và method rỗng — 100% logic phải do agent dịch tay từ file .cs gốc. Làm phẳng thư mục theo tên class; trùng tên sẽ ghi đè. Giá trị mặc định C# được chèn nguyên văn, có thể không compile. |
@@ -43,6 +45,8 @@ Chạy `npm run ai:contract:verify` để chứng minh manifest khớp với CLI
 | Khi nào dùng | Lệnh | Giới hạn cần biết |
 | --- | --- | --- |
 | BẮT BUỘC sau mọi lần sửa code hoặc port. Phải sạch trước khi kết thúc lượt. | `npm run ai:verify` | — |
+| Ngay sau khi port prefab. Bắt UUID treo, script thiếu, renderer chưa gán asset, node trùng tên. | `npm run ai:verify:prefab` | Đối chiếu script bằng tiền tố 5 hex của UUID; trùng tiền tố thì chấp nhận (thà bỏ sót hơn báo sai). |
+| Sau khi build. Đây là bước duy nhất chứng minh playable CHẠY được, không chỉ compile được. | `npm run ai:verify:runtime` | Cần Chrome hoặc Edge trên máy (không dùng puppeteer). Bản build riêng cho từng network (applovin/facebook) sẽ báo console.error do thiếu SDK của host — dùng bản `common` để smoke test. Phát hiện khung đơn sắc bằng cách so 3 vùng lấy mẫu, là suy luận theo dấu hiệu chứ không phải phân tích ảnh đầy đủ. |
 | BẮT BUỘC cùng với `verify.all`. | `npm run ai:lint` | — |
 
 ### Tối ưu
@@ -76,11 +80,17 @@ Những tool sau **không làm được việc mà tên gọi gợi ý**. Đọc
 - **`scene.inspect`** (npm run ai:scene -- <sceneName>)
   - Component script hiện UUID thô, chưa giải ra tên class.
 - **`memory.query`** (npm run memory:query -- <keyword>)
-  - Embedding tắt khi thiếu `sqlite-vec` — recall theo keyword, có thể trả kết quả lệch chủ đề.
+  - Semantic recall cần `sqlite-vec` + `@xenova/transformers` (nặng ~283MB); thiếu thì tự động lùi về keyword.
+- **`port.plan`** (npm run ai:port:plan -- --src <UnityAssetsFolder>)
+  - Chỉ đọc — không ghi gì vào project Cocos.
+  - Bỏ qua thư mục thư viện bên thứ ba để số liệu phản ánh code game.
+- **`port.report`** (npm run ai:port:report)
+  - Mặc định ẩn mã mức low; dùng --all để xem hết.
 - **`port.prefab`** (node playable-shared-kit/tools/unity-cocos-port.cjs port --src <unity_prefab_or_dir> --out <cocos_prefab_or_dir>)
-  - Chậm: đo được ≈140 s/prefab trên project 68k asset meta; chưa có cache, chưa song song.
   - Shader tuỳ biến KHÔNG được port — xem `shader.convert`.
   - Luôn đọc report và xử lý mọi dòng `high` trước khi coi là xong.
+  - Nếu Cocos Creator không mở, UUID sub-asset của sprite/model chưa nối được: report ghi rõ, mở editor rồi chạy lại.
+  - Cache theo phạm vi --src: sửa MỘT file trong phạm vi sẽ khiến cả phạm vi port lại (đổi lấy việc không bao giờ trả output cũ sai).
 - **`port.smart`** (npm run port:smart -- --src <unity_dir> --out assets/)
   - Cùng giới hạn tốc độ và shader như `port.prefab`.
 - **`port.compile`** (npm run port:compile -- --src <csharp_path> --out assets/script/)
@@ -99,6 +109,12 @@ Những tool sau **không làm được việc mà tên gọi gợi ý**. Đọc
 - **`fbx.strip`** (npm run fbx:strip -- <file.fbx>)
   - Nhận MỘT file, không nhận thư mục.
   - Bắt buộc phải có `<file>.fbx.meta` bên cạnh — tức là chỉ chạy được SAU khi Cocos đã import.
+- **`verify.prefab`** (npm run ai:verify:prefab)
+  - Đối chiếu script bằng tiền tố 5 hex của UUID; trùng tiền tố thì chấp nhận (thà bỏ sót hơn báo sai).
+- **`verify.runtime`** (npm run ai:verify:runtime)
+  - Cần Chrome hoặc Edge trên máy (không dùng puppeteer).
+  - Bản build riêng cho từng network (applovin/facebook) sẽ báo console.error do thiếu SDK của host — dùng bản `common` để smoke test.
+  - Phát hiện khung đơn sắc bằng cách so 3 vùng lấy mẫu, là suy luận theo dấu hiệu chứ không phải phân tích ảnh đầy đủ.
 - **`audio.optimize`** (npm run sound:optimize)
   - Mặc định là dry-run; phải thêm `--write` mới ghi đè.
 - **`assets.cleanup`** (npm run cleanup:unused)

@@ -158,8 +158,19 @@ function verifyCapability(cap, scripts, helpCache) {
     if (full && fs.existsSync(full)) {
       const source = fs.readFileSync(full, 'utf8');
       for (const flag of documentedFlags) {
-        if (!source.includes(flag)) {
-          errors.push(`Flag "${flag}" không tìm thấy trong source ${file}.`);
+        // Một tool có thể đọc flag theo nhiều dạng: so trực tiếp chuỗi `--limit`,
+        // hoặc qua bộ parse chung rồi truy cập `options.limit` / `options['limit']`.
+        // Chỉ tìm chuỗi `--limit` sẽ báo sai cho nhóm thứ hai.
+        const bare = flag.replace(/^--?/, '');
+        const camel = bare.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+        const forms = [
+          flag,
+          `options.${bare}`, `options['${bare}']`, `options["${bare}"]`,
+          `options.${camel}`, `options['${camel}']`,
+          `'${bare}'`, `"${bare}"`,
+        ];
+        if (!forms.some((form) => source.includes(form))) {
+          errors.push(`Flag "${flag}" không tìm thấy trong source ${file} (đã thử cả dạng options.${bare}).`);
         }
       }
       for (const token of expectTokens) {

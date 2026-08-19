@@ -1,13 +1,16 @@
 #!/usr/bin/env node
 'use strict';
 
+
+// Bỏ escape ANSI khi output bị pipe (tiết kiệm token cho AI agent).
+require('./lib/auto-strip-ansi.cjs');
 /**
  * Project Map Generator for AI Agents
  *
  * Scans the Cocos Creator 3.8.x Playable project and produces a high-density,
  * low-token JSON summary (ai/PROJECT_MAP.json). This allows AI agents (Codex,
  * Claude, Gemini, Copilot) to instantly understand project architecture, assets,
- * config schemas, and available CLI tools in a single step (<500 tokens).
+ * config schemas, and available CLI tools in a single step (~3k tokens, do duoc).
  */
 
 const fs = require('fs');
@@ -135,31 +138,96 @@ function scanPrefabs() {
   });
 }
 
+/**
+ * Gom script theo thu muc: dang cu lap lai tien to duong dan cho tung file
+ * (44 script = 3.704 ky tu, gan mot nua ban do). Dang gom giu du thong tin
+ * agent can nhung nho hon nhieu.
+ */
 function scanScripts() {
   const scriptFiles = walkDir(ASSETS_DIR, (name) => name.endsWith('.ts') && !name.endsWith('.d.ts'));
-  return scriptFiles.map((fullPath) => {
+  const byDir = {};
+  for (const fullPath of scriptFiles) {
     const relPath = path.relative(ROOT_DIR, fullPath).replace(/\\/g, '/');
-    const name = path.basename(fullPath, '.ts');
-    return {
-      name,
-      path: relPath
-    };
-  });
+    const dir = path.dirname(relPath);
+    if (!byDir[dir]) byDir[dir] = [];
+    byDir[dir].push(path.basename(fullPath, '.ts'));
+  }
+  // Tra ve OBJECT, khong phai array: JSON.stringify bo moi thuoc tinh khong phai
+  // index cua array, nen `count` gan vao array se mat khi ghi ra file.
+  return {
+    count: scriptFiles.length,
+    byDir: Object.entries(byDir).map(([dir, names]) => ({ dir, names: names.sort() })),
+  };
+}
+
+/**
+ * MAP-01: ban do cu chi co audio/model/shader nen agent muon biet da co
+ * material/effect/texture nao thi phai tu quet lai cay thu muc - dung thu ma ban
+ * do sinh ra de tranh. Danh sach dai duoc rut gon (dem + vai mau) de khong phinh token.
+ */
+const MAX_LIST = 6;
+
+function summarizeGroup(files) {
+  const rel = files.map((f) => path.relative(ROOT_DIR, f).replace(/\\/g, '/'));
+  const totalKb = files.reduce((sum, f) => sum + getFileSizeKb(f), 0);
+  return {
+    count: rel.length,
+    totalKb: Math.round(totalKb * 10) / 10,
+    sample: rel.slice(0, MAX_LIST),
+    truncated: rel.length > MAX_LIST ? rel.length - MAX_LIST : 0,
+  };
 }
 
 function scanAssets() {
   const audioFiles = walkDir(ASSETS_DIR, (name) => /\.(mp3|ogg|wav|m4a)$/i.test(name));
   const modelFiles = walkDir(ASSETS_DIR, (name) => /\.(fbx|gltf|glb|obj)$/i.test(name));
   const shaderFiles = walkDir(ASSETS_DIR, (name) => /\.(effect|chunk)$/i.test(name));
+  const materialFiles = walkDir(ASSETS_DIR, (name) => /\.mtl$/i.test(name));
+  const textureFiles = walkDir(ASSETS_DIR, (name) => /\.(png|jpg|jpeg|webp|tga)$/i.test(name));
+  const animFiles = walkDir(ASSETS_DIR, (name) => /\.anim$/i.test(name));
+  const prefabFiles = walkDir(ASSETS_DIR, (name) => /\.prefab$/i.test(name));
+
+  // Noi dung da port tu Unity - truoc day hoan toan vang mat trong ban do.
+  const importedRoot = path.join(ASSETS_DIR, 'unity_imported');
+  const importedFiles = fs.existsSync(importedRoot)
+    ? walkDir(importedRoot, (name) => !name.endsWith('.meta'))
+    : [];
 
   return {
     audioCount: audioFiles.length,
-    audioList: audioFiles.map((p) => path.relative(ROOT_DIR, p).replace(/\\/g, '/')),
+    audio: summarizeGroup(audioFiles),
     modelCount: modelFiles.length,
-    models: modelFiles.map((p) => path.relative(ROOT_DIR, p).replace(/\\/g, '/')),
+    models: summarizeGroup(modelFiles),
     shaderCount: shaderFiles.length,
-    shaders: shaderFiles.map((p) => path.relative(ROOT_DIR, p).replace(/\\/g, '/'))
+    shaders: summarizeGroup(shaderFiles),
+    materials: summarizeGroup(materialFiles),
+    textures: summarizeGroup(textureFiles),
+    animations: summarizeGroup(animFiles),
+    prefabsInAssets: summarizeGroup(prefabFiles),
+    unityImported: {
+      exists: importedFiles.length > 0,
+      root: 'assets/unity_imported',
+      ...summarizeGroup(importedFiles),
+    },
   };
+}
+
+/**
+ * Bay da biet, lay tu work-memory. Giup agent khong lap lai loi cu ma khong
+ * phai chay them mot lenh query rieng.
+ */
+function scanKnownIssues() {
+  const dbFile = path.join(ROOT_DIR, 'playable-shared-kit', 'ai', 'knowledge', 'work-memory-records.json');
+  try {
+    const raw = JSON.parse(fs.readFileSync(dbFile, 'utf8'));
+    const records = Array.isArray(raw) ? raw : (raw.records || []);
+    return records
+      .filter((r) => /trap|bug|pitfall|issue|porting-note|tip/i.test(String(r.category || '')))
+      .slice(0, 10)
+      .map((r) => ({ title: r.title, tags: r.tags || [] }));
+  } catch (_) {
+    return [];
+  }
 }
 
 function scanConfigSummary() {
@@ -214,6 +282,7 @@ function generateProjectMap() {
     scripts,
     assetsSummary: assets,
     configSummary: config,
+    knownIssues: scanKnownIssues(),
     // Sinh từ playable-shared-kit/ai/capabilities.def.cjs — không chép tay.
     // `npm run ai:contract:verify` đối chiếu từng lệnh với CLI thật.
     cliCheatSheet: buildCliCheatSheet()
@@ -264,7 +333,7 @@ function main() {
     }
   } else {
     console.log(`[project-map] Generated project map at:\n  - ${path.relative(ROOT_DIR, OUTPUT_MAP_FILE)}\n  - ${path.relative(ROOT_DIR, path.join(ROOT_DIR, 'PROJECT_MAP.json'))}`);
-    console.log(`[project-map] Summary: ${map.scenes.length} scene(s), ${map.prefabs.length} prefab(s), ${map.scripts.length} script(s), ${map.assetsSummary.audioCount} audio, ${map.assetsSummary.modelCount} model(s).`);
+    console.log(`[project-map] Summary: ${map.scenes.length} scene(s), ${map.prefabs.length} prefab(s), ${map.scripts.count} script(s), ${map.assetsSummary.audioCount} audio, ${map.assetsSummary.modelCount} model(s).`);
   }
 }
 

@@ -952,7 +952,16 @@ async function commandImportSources(options) {
 }
 
 function buildQueryOptions(options, paths) {
-  const text = options.text || options.q || '';
+  // Dạng positional `query <keyword>` PHẢI đi vào text.
+  //
+  // Trước đây positional chỉ nằm trong `options._` và không ai đọc, nên
+  // `npm run memory:query -- <keyword>` — đúng dạng mà CLAUDE.md dạy mọi agent —
+  // bỏ qua hoàn toàn từ khoá và trả về một danh sách xếp hạng TĨNH.
+  // Kiểm chứng: `query "node bi tat..."` cho điểm 1.478/1.388 (không phụ thuộc
+  // câu hỏi) trong khi `query --text "node bi tat..."` cho 2.880/2.800 và xếp
+  // đúng bug-trap tương ứng lên đầu.
+  const positional = Array.isArray(options._) ? options._.filter(Boolean).join(' ').trim() : '';
+  const text = options.text || options.q || positional || '';
   const scope = options.scope ? normalizeScope(options.scope) : 'hybrid';
   return {
     text,

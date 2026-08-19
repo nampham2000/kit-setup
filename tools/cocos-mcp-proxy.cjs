@@ -21,6 +21,44 @@ const { URL } = require('url');
 const COCOS_MCP_URL = process.env.COCOS_MCP_URL || 'http://127.0.0.1:3000/mcp';
 const SCHEMA_CACHE_FILE = path.join(__dirname, 'cocos-mcp-schema.json');
 
+/**
+ * PHÂN TẦNG TOOL THEO PROFILE — cắt token cố định của mỗi request.
+ * ================================================================
+ * Đo được: cocos-mcp công bố 100 tool = 65.954 ký tự ≈ 18.3k token, và khoản
+ * này bị nạp lại ở MỌI request của AI agent, kể cả khi task chỉ cần đọc scene.
+ *
+ * Đặt COCOS_MCP_PROFILE để chỉ công bố nhóm cần dùng. Lọc ở proxy nên không
+ * phải sửa extension, và `tools/call` vẫn chuyển tiếp đầy đủ — profile chỉ ảnh
+ * hưởng danh sách công bố, KHÔNG chặn việc gọi tool ngoài profile.
+ *
+ *   full  (mặc định) : tất cả, giữ nguyên hành vi cũ
+ *   port             : đọc/ghi scene + node + component + prefab + asset
+ *   scene            : chỉ đọc/sửa scene và node
+ *   build            : build, preview, asset
+ *   debug            : log, performance, validate
+ */
+const TOOL_PROFILES = {
+  port: ['scene_', 'node_', 'component_', 'prefab_', 'project_get', 'project_query', 'project_find', 'project_import', 'project_refresh', 'project_create_asset', 'project_save', 'debug_get_console', 'debug_validate'],
+  scene: ['scene_', 'node_', 'component_', 'debug_get_node_tree'],
+  build: ['project_build', 'project_check_builder', 'project_get_build', 'project_open_build', 'project_run', 'project_start_preview', 'project_stop_preview', 'project_get_project', 'debug_get_console'],
+  debug: ['debug_', 'broadcast_', 'server_', 'scene_get_current_scene'],
+};
+
+function applyToolProfile(tools) {
+  const profile = String(process.env.COCOS_MCP_PROFILE || 'full').trim().toLowerCase();
+  if (!profile || profile === 'full' || !Array.isArray(tools)) return tools;
+  const prefixes = TOOL_PROFILES[profile];
+  if (!prefixes) {
+    process.stderr.write(`[cocos-mcp-proxy] COCOS_MCP_PROFILE='${profile}' không tồn tại; công bố toàn bộ tool. Hợp lệ: ${Object.keys(TOOL_PROFILES).join(', ')}, full
+`);
+    return tools;
+  }
+  const filtered = tools.filter((t) => prefixes.some((prefix) => String(t && t.name).startsWith(prefix)));
+  process.stderr.write(`[cocos-mcp-proxy] profile='${profile}': công bố ${filtered.length}/${tools.length} tool
+`);
+  return filtered;
+}
+
 let cachedTools = [];
 try {
   if (fs.existsSync(SCHEMA_CACHE_FILE)) {
@@ -111,10 +149,12 @@ async function handleMessage(message) {
     const liveResponse = await forwardHttp(message);
     // If tools/list succeeded, update local cache
     if (method === 'tools/list' && liveResponse && liveResponse.result && Array.isArray(liveResponse.result.tools)) {
+      // Cache LUÔN lưu danh sách đầy đủ; profile chỉ lọc lúc công bố.
       cachedTools = liveResponse.result.tools;
       try {
         fs.writeFileSync(SCHEMA_CACHE_FILE, JSON.stringify(cachedTools, null, 2), 'utf8');
       } catch (_) {}
+      liveResponse.result.tools = applyToolProfile(cachedTools);
     }
     sendJsonRpc(liveResponse);
     return;
@@ -147,7 +187,7 @@ async function handleMessage(message) {
         jsonrpc: '2.0',
         id,
         result: {
-          tools: cachedTools
+          tools: applyToolProfile(cachedTools)
         }
       });
       return;

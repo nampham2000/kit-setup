@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "generatedAt": "2026-08-19T06:47:24.114Z",
+    "generatedAt": "2026-08-19T09:36:45.324Z",
     "description": "Compact project manifest for AI Agents. Use this instead of scanning file trees.",
     "project": {
       "projectName": "cc_playable_framework",
@@ -31,138 +31,199 @@
     }
   ],
   "prefabs": [],
-  "scripts": [
-    {
-      "name": "index",
-      "path": "assets/script/shared/compat/index.ts"
-    },
-    {
-      "name": "UnityCoroutine",
-      "path": "assets/script/shared/compat/UnityCoroutine.ts"
-    },
-    {
-      "name": "UnityMathf",
-      "path": "assets/script/shared/compat/UnityMathf.ts"
-    },
-    {
-      "name": "UnityPhysics",
-      "path": "assets/script/shared/compat/UnityPhysics.ts"
-    },
-    {
-      "name": "UnityRandom",
-      "path": "assets/script/shared/compat/UnityRandom.ts"
-    },
-    {
-      "name": "UnityTime",
-      "path": "assets/script/shared/compat/UnityTime.ts"
-    },
-    {
-      "name": "CameraController",
-      "path": "assets/script/shared/core/components/CameraController.ts"
-    },
-    {
-      "name": "index",
-      "path": "assets/script/shared/core/components/index.ts"
-    },
-    {
-      "name": "Interactive3DHero",
-      "path": "assets/script/shared/core/components/Interactive3DHero.ts"
-    },
-    {
-      "name": "PlayableAudioController",
-      "path": "assets/script/shared/core/components/PlayableAudioController.ts"
-    },
-    {
-      "name": "PlayableCTAController",
-      "path": "assets/script/shared/core/components/PlayableCTAController.ts"
-    },
-    {
-      "name": "PlayableEntry",
-      "path": "assets/script/shared/core/components/PlayableEntry.ts"
-    },
-    {
-      "name": "PlayableTrackingController",
-      "path": "assets/script/shared/core/components/PlayableTrackingController.ts"
-    },
-    {
-      "name": "PlayableUIHUD",
-      "path": "assets/script/shared/core/components/PlayableUIHUD.ts"
-    },
-    {
-      "name": "index",
-      "path": "assets/script/shared/core/config/index.ts"
-    },
-    {
-      "name": "PlayableConfig",
-      "path": "assets/script/shared/core/config/PlayableConfig.ts"
-    },
-    {
-      "name": "PlayableConfigManager",
-      "path": "assets/script/shared/core/config/PlayableConfigManager.ts"
-    },
-    {
-      "name": "GameManager",
-      "path": "assets/script/shared/core/GameManager.ts"
-    },
-    {
-      "name": "index",
-      "path": "assets/script/shared/core/index.ts"
-    },
-    {
-      "name": "SoundManager",
-      "path": "assets/script/shared/core/SoundManager.ts"
-    },
-    {
-      "name": "GameUtils",
-      "path": "assets/script/shared/core/utils/GameUtils.ts"
-    },
-    {
-      "name": "NodePoolAdapter",
-      "path": "assets/script/shared/core/utils/pool/NodePoolAdapter.ts"
-    },
-    {
-      "name": "ObjectPool",
-      "path": "assets/script/shared/core/utils/pool/ObjectPool.ts"
-    },
-    {
-      "name": "Poolable",
-      "path": "assets/script/shared/core/utils/pool/Poolable.ts"
-    },
-    {
-      "name": "index",
-      "path": "assets/script/shared/index.ts"
-    },
-    {
-      "name": "GameTrackingService",
-      "path": "assets/script/shared/sdk/analytics/GameTrackingService.ts"
-    },
-    {
-      "name": "index",
-      "path": "assets/script/shared/sdk/index.ts"
-    },
-    {
-      "name": "PlayableAdDownloadEvent",
-      "path": "assets/script/shared/sdk/platform/PlayableAdDownloadEvent.ts"
-    },
-    {
-      "name": "SuperHtmlPlayable",
-      "path": "assets/script/shared/sdk/platform/SuperHtmlPlayable.ts"
-    }
-  ],
+  "scripts": {
+    "count": 44,
+    "byDir": [
+      {
+        "dir": "assets/script/shared/compat",
+        "names": [
+          "UnityCoroutine",
+          "UnityDebug",
+          "UnityGameObject",
+          "UnityInput",
+          "UnityLayerMask",
+          "UnityMathf",
+          "UnityPhysics",
+          "UnityPlayerPrefs",
+          "UnityQuaternion",
+          "UnityRandom",
+          "UnityResources",
+          "UnitySceneManager",
+          "UnityTime",
+          "UnityTransform",
+          "UnityUI",
+          "UnityVector3",
+          "index"
+        ]
+      },
+      {
+        "dir": "assets/script/shared/core/components",
+        "names": [
+          "CameraController",
+          "Interactive3DHero",
+          "PlayableAudioController",
+          "PlayableCTAController",
+          "PlayableEntry",
+          "PlayableTrackingController",
+          "PlayableUIHUD",
+          "index"
+        ]
+      },
+      {
+        "dir": "assets/script/shared/core/config",
+        "names": [
+          "PlayableConfig",
+          "PlayableConfigManager",
+          "index"
+        ]
+      },
+      {
+        "dir": "assets/script/shared/core",
+        "names": [
+          "GameManager",
+          "SoundManager",
+          "index"
+        ]
+      },
+      {
+        "dir": "assets/script/shared/core/utils",
+        "names": [
+          "GameUtils"
+        ]
+      },
+      {
+        "dir": "assets/script/shared/core/utils/pool",
+        "names": [
+          "NodePoolAdapter",
+          "ObjectPool",
+          "Poolable"
+        ]
+      },
+      {
+        "dir": "assets/script/shared",
+        "names": [
+          "index"
+        ]
+      },
+      {
+        "dir": "assets/script/shared/sdk/analytics",
+        "names": [
+          "GameTrackingService"
+        ]
+      },
+      {
+        "dir": "assets/script/shared/sdk",
+        "names": [
+          "index"
+        ]
+      },
+      {
+        "dir": "assets/script/shared/sdk/platform",
+        "names": [
+          "PlayableAdDownloadEvent",
+          "SuperHtmlPlayable"
+        ]
+      },
+      {
+        "dir": "assets/scripts",
+        "names": [
+          "UnityParticleHierarchyTransformSync",
+          "UnityParticleRateOverDistanceEmitter",
+          "UnityParticleSubEmitterFollower",
+          "UnitySpriteRendererColorAdapter"
+        ]
+      }
+    ]
+  },
   "assetsSummary": {
     "audioCount": 4,
-    "audioList": [
-      "assets/resources/sound/bgm_main.mp3",
-      "assets/resources/sound/sfx_click.mp3",
-      "assets/resources/sound/sfx_success.mp3",
-      "assets/resources/sound/sfx_win.mp3"
-    ],
-    "modelCount": 1,
-    "models": [
-      "assets/models/pack_block.fbx"
-    ],
-    "shaderCount": 0,
-    "shaders": []
+    "audio": {
+      "count": 4,
+      "totalKb": 52.2,
+      "sample": [
+        "assets/resources/sound/bgm_main.mp3",
+        "assets/resources/sound/sfx_click.mp3",
+        "assets/resources/sound/sfx_success.mp3",
+        "assets/resources/sound/sfx_win.mp3"
+      ],
+      "truncated": 0
+    },
+    "modelCount": 2,
+    "models": {
+      "count": 2,
+      "totalKb": 727.7,
+      "sample": [
+        "assets/models/pack_block.fbx",
+        "assets/unity_imported/_GameHome/_Game_HolePuzzle/Prefabs/Events/flower_collection.fbx"
+      ],
+      "truncated": 0
+    },
+    "shaderCount": 3,
+    "shaders": {
+      "count": 3,
+      "totalKb": 23.5,
+      "sample": [
+        "assets/effects/SimpleLit.effect",
+        "assets/effects/UnitySpriteRendererColor.effect",
+        "assets/unity_imported/ui_sprite_alpha_sep/ui-sprite-alpha-sep.effect"
+      ],
+      "truncated": 0
+    },
+    "materials": {
+      "count": 9,
+      "totalKb": 10.1,
+      "sample": [
+        "assets/materials/Blue.mtl",
+        "assets/materials/Board1.mtl",
+        "assets/materials/Orange.mtl",
+        "assets/materials/Pink.mtl",
+        "assets/materials/UnitySpriteRendererColor.mtl",
+        "assets/materials/UnitySpriteRendererColorOpaque.mtl"
+      ],
+      "truncated": 3
+    },
+    "textures": {
+      "count": 75,
+      "totalKb": 11982.8,
+      "sample": [
+        "assets/textures/ui/BlackSquare.png",
+        "assets/textures/ui/GreenBtn.png",
+        "assets/textures/ui/icon_L11-Pic2.png",
+        "assets/unity_imported/_Game/Art2D/2D/Collection/banner_collection_name_top.png",
+        "assets/unity_imported/_Game/Art2D/2D/Collection/boder_collection_puzzle_eol.png",
+        "assets/unity_imported/_Game/Art2D/2D/common/bt_close.png"
+      ],
+      "truncated": 69
+    },
+    "animations": {
+      "count": 1,
+      "totalKb": 94.6,
+      "sample": [
+        "assets/animations/anim_logo/anim_logo.anim"
+      ],
+      "truncated": 0
+    },
+    "prefabsInAssets": {
+      "count": 0,
+      "totalKb": 0,
+      "sample": [],
+      "truncated": 0
+    },
+    "unityImported": {
+      "exists": true,
+      "root": "assets/unity_imported",
+      "count": 96,
+      "totalKb": 14338.3,
+      "sample": [
+        "assets/unity_imported/TextMesh Pro/Examples & Extras/Fonts/Roboto-Bold.ttf",
+        "assets/unity_imported/ui_sprite_alpha_sep/ui-sprite-alpha-sep.effect",
+        "assets/unity_imported/ui_sprite_alpha_sep/ui-sprite-alpha-sep.mtl",
+        "assets/unity_imported/_Game/Art2D/2D/Collection/banner_collection_name_top.png",
+        "assets/unity_imported/_Game/Art2D/2D/Collection/boder_collection_puzzle_eol.png",
+        "assets/unity_imported/_Game/Art2D/2D/common/bt_close.png"
+      ],
+      "truncated": 90
+    }
   },
   "configSummary": {
     "ctaKeys": [
@@ -264,10 +325,66 @@
       }
     }
   },
+  "knownIssues": [
+    {
+      "title": "Cocos 3.8 3D Node Touch Event Crash (cameraPriority)",
+      "tags": [
+        "cocos3.8",
+        "touch-events",
+        "camerapriority",
+        "pointereventdispatcher",
+        "3d-node",
+        "bug-trap"
+      ]
+    },
+    {
+      "title": "Cocos Creator 3.8 Math Type Allocation Rule",
+      "tags": [
+        "cocos3.8",
+        "performance",
+        "memory",
+        "math",
+        "zero-allocation"
+      ]
+    },
+    {
+      "title": "Playable Ad Store Redirection Hook",
+      "tags": [
+        "playable-ad",
+        "super-html",
+        "cta",
+        "store-redirect",
+        "analytics"
+      ]
+    },
+    {
+      "title": "Mobile Web Audio Autoplay Unlock on First Touch",
+      "tags": [
+        "cocos3.8",
+        "audio",
+        "mobile-safari",
+        "autoplay",
+        "playable-ads"
+      ]
+    },
+    {
+      "title": "Cocos 3.8 Responsive Canvas Widget Configuration",
+      "tags": [
+        "cocos3.8",
+        "ui",
+        "canvas",
+        "widget",
+        "responsive",
+        "cocos"
+      ]
+    }
+  ],
   "cliCheatSheet": {
     "map.generate": "npm run ai:map",
     "scene.inspect": "npm run ai:scene -- <sceneName>",
     "memory.query": "npm run memory:query -- <keyword>",
+    "port.plan": "npm run ai:port:plan -- --src <UnityAssetsFolder>",
+    "port.report": "npm run ai:port:report",
     "port.prefab": "node playable-shared-kit/tools/unity-cocos-port.cjs port --src <unity_prefab_or_dir> --out <cocos_prefab_or_dir>",
     "port.smart": "npm run port:smart -- --src <unity_dir> --out assets/",
     "port.compile": "npm run port:compile -- --src <csharp_path> --out assets/script/",
@@ -276,6 +393,8 @@
     "shader.batch": "node playable-shared-kit/tools/unity-hlsl-to-cocos-effect.cjs batch --dir <unity_shader_dir> --out-dir <assets/effects>",
     "fbx.strip": "npm run fbx:strip -- <file.fbx>",
     "verify.all": "npm run ai:verify",
+    "verify.prefab": "npm run ai:verify:prefab",
+    "verify.runtime": "npm run ai:verify:runtime",
     "verify.gc": "npm run ai:lint",
     "audio.optimize": "npm run sound:optimize",
     "assets.cleanup": "npm run cleanup:unused",

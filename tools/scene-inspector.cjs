@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 'use strict';
 
+
+// Bỏ escape ANSI khi output bị pipe (tiết kiệm token cho AI agent).
+require('./lib/auto-strip-ansi.cjs');
 /**
  * Cocos Creator 3.8.x Scene & Prefab ASCII Tree Inspector
  *
