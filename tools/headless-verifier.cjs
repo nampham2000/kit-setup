@@ -270,8 +270,25 @@ function runVerificationSuite() {
   };
 }
 
+const USAGE = `Cocos Creator Playable Ads Headless Verifier
+
+Usage:
+  node playable-shared-kit/tools/headless-verifier.cjs [options]
+
+Options:
+  --json    Emit the full report as JSON (dùng cho AI agent / CI).
+  --help    Show this help and exit without running any check.
+
+Checks: TypeScript compilation, Zero-GC rules, config schema, config asset
+bindings, .meta integrity, playable bundle size.
+Exit code 1 when any check fails.`;
+
 function main() {
   const args = process.argv.slice(2);
+  if (args.includes('--help') || args.includes('-h')) {
+    console.log(USAGE);
+    return;
+  }
   const isJson = args.includes('--json');
 
   const report = runVerificationSuite();

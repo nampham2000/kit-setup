@@ -13,6 +13,21 @@
 const fs = require('fs');
 const path = require('path');
 
+/**
+ * Cheat-sheet lệnh lấy từ capability manifest (single source of truth).
+ * Nếu manifest lỗi thì trả về rỗng chứ KHÔNG fallback sang lệnh chép tay —
+ * lệnh sai còn nguy hiểm hơn không có lệnh.
+ */
+function buildCliCheatSheet() {
+  try {
+    const { buildCheatSheet } = require('./capability-manifest.cjs');
+    return buildCheatSheet();
+  } catch (error) {
+    console.warn(`[project-map] WARN: không đọc được capability manifest (${error.message}); cliCheatSheet để trống.`);
+    return {};
+  }
+}
+
 function findProjectRoot(startDir) {
   let current = path.resolve(startDir);
   while (true) {
@@ -199,17 +214,9 @@ function generateProjectMap() {
     scripts,
     assetsSummary: assets,
     configSummary: config,
-    cliCheatSheet: {
-      "fastOnboarding": "node playable-shared-kit/tools/project-map-generator.cjs --stdout",
-      "buildPlayable": "npm run build",
-      "deployPreview": "npm run deploy",
-      "portUnityPrefab": "node playable-shared-kit/tools/unity-cocos-port.cjs convert-prefab --source <unity_path> --dest assets/prefabs/",
-      "portUnityShader": "node playable-shared-kit/tools/unity-hlsl-to-cocos-effect.cjs <shader.shader> assets/effects/<name>.effect",
-      "stripFbx": "node playable-shared-kit/tools/strip-fbx-textures.cjs assets/models/",
-      "optimizeAudio": "npm run sound:optimize",
-      "workMemoryQuery": "node playable-shared-kit/tools/work-memory.cjs stats",
-      "syncAiKnowledge": "npm run ai:sync"
-    }
+    // Sinh từ playable-shared-kit/ai/capabilities.def.cjs — không chép tay.
+    // `npm run ai:contract:verify` đối chiếu từng lệnh với CLI thật.
+    cliCheatSheet: buildCliCheatSheet()
   };
 
   // Ensure output directory
@@ -226,8 +233,24 @@ function generateProjectMap() {
   return projectMap;
 }
 
+const USAGE = `Playable Project Map Generator
+
+Usage:
+  node playable-shared-kit/tools/project-map-generator.cjs [options]
+
+Options:
+  --stdout    Print the map as JSON instead of writing files.
+  --compact   With --stdout, emit minified JSON (ít token hơn).
+  --help      Show this help and exit WITHOUT writing PROJECT_MAP.json.
+
+Writes PROJECT_MAP.json and playable-shared-kit/ai/PROJECT_MAP.json.`;
+
 function main() {
   const args = process.argv.slice(2);
+  if (args.includes('--help') || args.includes('-h')) {
+    console.log(USAGE);
+    return;
+  }
   const isStdout = args.includes('--stdout');
   const isCompact = args.includes('--compact');
 

@@ -1,9 +1,20 @@
 # Cursor Rules - Cocos Creator Playable Framework
 
-- Role: Lead Playable Ads Engineer (Cocos Creator 3.8.8+ TypeScript).
-- Fast Onboarding: Read `PROJECT_MAP.json` (`npm run ai:map`) and inspect scenes with `npm run ai:scene -- <sceneName>` (<200 tokens).
-- Performance: ZERO GC in `update(dt)` loops. Reuse static `Vec3`, `Quat`, `Color`. Use `ObjectPool` for hypercasual spawning.
-- Architecture: Never hardcode gameplay/CTA parameters. Read everything from `PlayableConfigManager.instance` (backed by `assets/resources/playable-config.json` and typed via `PlayableConfigTypes.d.ts`).
-- Lifecycle: Wire `GameManager.instance.onGameReady()`, `onGameStart()`, `onGameWin()`, `onGameLose()`. Use `SuperHtmlPlayable.download()` for CTA clicks.
-- MANDATORY VERIFICATION GATE: After writing code or porting assets, ALWAYS run `npm run verify` (`npm run ai:verify`) and `npm run lint:gc` (`npm run ai:lint`) to ensure 0 compiler errors and 0 Zero-GC violations.
-- Build & Deploy: Run `npm run build` and `npm run deploy` for mobile QR preview.
+- Role: Lead Playable Ads Engineer (Cocos Creator 3.8.8+ TypeScript, Unity -> Cocos playable ads).
+- Fast Onboarding: đọc `PROJECT_MAP.json` trước; đọc `playable-shared-kit/ai/CAPABILITIES.json` để biết lệnh hợp lệ.
+- Lệnh CLI bên dưới được sinh tự động — không sửa tay, sửa `playable-shared-kit/ai/capabilities.def.cjs` rồi chạy `npm run ai:sync`.
+
+## Nguyên tắc bất biến
+
+<!-- BEGIN:GENERATED:core-rules -->
+<!-- END:GENERATED:core-rules -->
+
+## Lệnh hợp lệ
+
+<!-- BEGIN:GENERATED:commands-list -->
+<!-- END:GENERATED:commands-list -->
+
+## Giới hạn tooling
+
+<!-- BEGIN:GENERATED:limits -->
+<!-- END:GENERATED:limits -->

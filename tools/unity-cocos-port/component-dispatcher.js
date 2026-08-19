@@ -3,6 +3,19 @@
 const IGNORED_UNITY_COMPONENT_CLASS_IDS = new Set([4, 224, 33]);
 const PARTICLE_SYSTEM_RENDERER_CLASS_ID = 199;
 
+/**
+ * Component của Unity KHÔNG mang hành vi cần port sang Cocos.
+ * Bỏ chúng không làm mất gì, nên báo `low` thay vì `high` — nếu không thì
+ * chúng nhấn chìm những component thật sự bị mất trong cùng một report.
+ *
+ * Chỉ thêm vào đây khi chắc chắn class đó là chi tiết cài đặt của Unity.
+ * Khi không chắc, để mặc định `high` — báo thừa còn hơn mất hành vi âm thầm.
+ */
+const BENIGN_UNSUPPORTED_CLASSES = {
+  81: { name: 'AudioListener', reason: 'Cocos AudioSource khong can listener rieng' },
+  222: { name: 'CanvasRenderer', reason: 'chi tiet noi bo cua UGUI; Sprite/Label cua Cocos tu render' },
+};
+
 function findSiblingParticleRendererDoc(gameObject, model) {
   return (gameObject.components || [])
     .map((id) => model.componentDocs.get(id))
@@ -79,7 +92,20 @@ function createComponentDispatcher(handlers) {
       return;
     }
 
-    ctx.reporter.low('COMPONENT_UNSUPPORTED', ctx.model.file, ctx.gameObject.name, `Unsupported Unity component class ${classId}; skipped`);
+    // Bỏ một component = MẤT HÀNH VI -> `high` theo quy ước severity (xem CORE.md).
+    // Trước đây mọi trường hợp đều là `low`, khiến agent lọc theo `high` bỏ qua
+    // hàng chục component đã biến mất khỏi bản port (lỗi RPT-01).
+    //
+    // Ngoại lệ: vài class của Unity thuần tuý là chi tiết cài đặt, không mang
+    // hành vi nào cần port. Nếu vẫn báo `high` thì chúng sẽ nhấn chìm tín hiệu
+    // thật (CanvasRenderer một mình chiếm 51/51 dòng high trên MyCozyHome).
+    const benign = BENIGN_UNSUPPORTED_CLASSES[classId];
+    if (benign) {
+      ctx.reporter.low('COMPONENT_IGNORED_BY_DESIGN', ctx.model.file, ctx.gameObject.name, `Unity ${benign.name} (class ${classId}) khong can port: ${benign.reason}`);
+      return;
+    }
+
+    ctx.reporter.high('COMPONENT_UNSUPPORTED', ctx.model.file, ctx.gameObject.name, `Unsupported Unity component class ${classId}; skipped - hanh vi cua component nay bi mat, agent phai tu cai dat lai neu gameplay can`);
   }
 
   function emitComponents(model, builder, reporter, options, unityDb, cocosDb) {

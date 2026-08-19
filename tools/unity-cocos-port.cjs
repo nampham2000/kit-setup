@@ -5630,7 +5630,8 @@ function buildLayerResolver(options, cocosDb, reporter) {
     const explicitMapping = getConfiguredLayerMapping(options.layerMap, numericLayer);
     const mapped = explicitMapping != null ? explicitMapping : unityLayerNames.get(numericLayer);
     if (mapped == null || String(mapped).trim() === '') {
-      reporter.low('LAYER_UNMAPPED', source, '', `Unity layer ${numericLayer} has no Cocos mapping; using Cocos Default layer`);
+      // Layer sai làm hỏng raycast + culling ở runtime -> `high`, không phải ghi chú.
+      reporter.high('LAYER_UNMAPPED', source, '', `Unity layer ${numericLayer} has no Cocos mapping; using Cocos Default layer - raycast/culling co the sai. Khai bao anh xa bang --layer-map '{"${numericLayer}":"UI_2D"}'`);
       return COCOS_DEFAULT_LAYER_VALUE;
     }
 

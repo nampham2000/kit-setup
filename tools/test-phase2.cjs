@@ -144,7 +144,15 @@ const mockCapsuleDoc = {
   m_Height: 3.0,
   m_Direction: 1, // Y-axis
 };
-colliderPorter.emitCapsuleCollider(1, 2, mockCapsuleDoc, mockBuilder);
+// Chữ ký thật: (nodeId, componentId, doc, gameObject, model, builder, reporter, options, unityDb)
+// Test cũ truyền builder vào vị trí gameObject nên crash với
+// "Cannot read properties of undefined (reading 'addCapsuleCollider')".
+const capsuleGameObject = { name: 'CapsuleOwner' };
+const capsuleModel = { file: 'mock/Capsule.prefab' };
+const capsuleReporter = { high() {}, medium() {}, low() {}, add() {} };
+colliderPorter.emitCapsuleCollider(
+  1, 2, mockCapsuleDoc, capsuleGameObject, capsuleModel, mockBuilder, capsuleReporter, {}, null
+);
 
 const emittedCapsule = mockBuilder.addedComponents.find(c => c.type === 'cc.CapsuleCollider');
 assert(emittedCapsule !== undefined, 'CapsuleCollider emitted');

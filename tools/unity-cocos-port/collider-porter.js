@@ -88,7 +88,7 @@ module.exports = function createColliderPorter(deps) {
 
   function emitRigidbody2D(nodeId, componentId, doc, gameObject, model, builder, reporter) {
     if (!model.is3DObject) {
-      reporter.low('COMPONENT_UNSUPPORTED', model.file, gameObject.name, 'Unity Rigidbody2D is skipped because this prefab is not detected as a 3D object');
+      reporter.medium('COMPONENT_UNSUPPORTED', model.file, gameObject.name, 'Unity Rigidbody2D is skipped because this prefab is not detected as a 3D object - can nguoi quyet dinh: dung RigidBody2D cua Cocos hay bo vat ly');
       return;
     }
 

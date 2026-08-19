@@ -190,8 +190,24 @@ function runLinter(options = {}) {
   };
 }
 
+const USAGE = `Zero-GC & Playable Architecture Linter
+
+Usage:
+  node playable-shared-kit/tools/zero-gc-linter.cjs [options]
+
+Options:
+  --json     Emit violations as JSON (dùng cho AI agent / CI).
+  --strict   Treat warnings as failures too.
+  --help     Show this help and exit without linting.
+
+Exit code 1 when an error is found (or a warning under --strict).`;
+
 function main() {
   const args = process.argv.slice(2);
+  if (args.includes('--help') || args.includes('-h')) {
+    console.log(USAGE);
+    return;
+  }
   const isJson = args.includes('--json');
   const isStrict = args.includes('--strict');
 

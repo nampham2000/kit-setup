@@ -27,6 +27,98 @@ function cleanDir(dir) {
 }
 
 // ============================================================================
+// GOLDEN-FILE ASSERTIONS
+// ----------------------------------------------------------------------------
+// Trước đây suite này chỉ kiểm tra "file có được tạo không" và "shading model
+// detect đúng không", nên báo 8/8 PASS trong khi bộ chuyển vứt toàn bộ thân
+// shader và bỏ im lặng mọi property kiểu Range() (lỗi SHD-01 + TEST-02).
+// Ba nhóm assertion dưới đây kiểm tra NỘI DUNG, không chỉ sự tồn tại.
+// ============================================================================
+
+/** Lấy mọi property khai báo trong khối `Properties { ... }` của ShaderLab. */
+function parseUnityPropertyNames(source) {
+  const block = /Properties\s*\{([\s\S]*?)\n\s*\}/.exec(source);
+  if (!block) return [];
+  const names = [];
+  for (const rawLine of block[1].split(/\r?\n/)) {
+    const line = rawLine.replace(/\[(.*?)\]\s*/g, '').trim();
+    if (!line || line.startsWith('//')) continue;
+    const match = /^([A-Za-z_]\w*)\s*\(\s*"/.exec(line);
+    if (match) names.push(match[1]);
+  }
+  return names;
+}
+
+/** Unity `_GlowIntensity` -> Cocos `glowIntensity` (giống quy tắc của transpiler). */
+function toCocosPropName(unityName) {
+  let name = unityName.replace(/^_+/, '');
+  name = name.charAt(0).toLowerCase() + name.slice(1);
+  if (name === 'mainTex') name = 'mainTexture';
+  if (name === 'color') name = 'baseColor';
+  return name;
+}
+
+/**
+ * (1) Không được đánh rơi property. Đây là assertion bắt được bug regex
+ *     `[^\)]+` làm mọi property `Range(a,b)` biến mất.
+ */
+function assertPropertiesPreserved(sample, effectText) {
+  const declared = parseUnityPropertyNames(sample.source);
+  if (!declared.length) return 0;
+  const missing = declared
+    .map(toCocosPropName)
+    .filter((name) => !new RegExp(`\\b${name}\\b`).test(effectText));
+  if (missing.length) {
+    throw new Error(`Property bị đánh rơi khỏi .effect: ${missing.join(', ')} (khai báo ${declared.length} property trong Unity)`);
+  }
+  return declared.length;
+}
+
+/**
+ * (2) Thuật toán gốc phải còn truy cập được: hoặc đã dịch vào frag(),
+ *     hoặc nằm trong khối TODO-AGENT để agent dịch nốt. Không được biến mất.
+ */
+function assertAlgorithmReachable(sample, effectText) {
+  const tokens = (sample.golden && sample.golden.algorithmTokens) || [];
+  const missing = tokens.filter((token) => !effectText.includes(token));
+  if (missing.length) {
+    throw new Error(`Thuật toán gốc biến mất khỏi .effect (không có trong frag() lẫn khối TODO-AGENT): ${missing.join(', ')}`);
+  }
+
+  if (effectText.includes('SHADER_NEEDS_MANUAL_PORT')) {
+    if (!effectText.includes('TODO-AGENT')) {
+      throw new Error('Đánh dấu SHADER_NEEDS_MANUAL_PORT nhưng không kèm khối TODO-AGENT — agent không có gì để dịch tiếp.');
+    }
+    const draftLines = (effectText.split('END TODO-AGENT')[0] || '').split('TODO-AGENT: HLSL')[1];
+    if (!draftLines || draftLines.split('\n').length < 5) {
+      throw new Error('Khối TODO-AGENT rỗng hoặc quá ngắn — không dùng được để port tay.');
+    }
+  }
+  return tokens.length;
+}
+
+/**
+ * (3) Báo cáo phải trung thực: nếu thân shader chỉ là template thì report
+ *     BẮT BUỘC có `high SHADER_NEEDS_MANUAL_PORT` và KHÔNG được có dòng
+ *     `low ... Successfully transpiled`.
+ */
+function assertHonestReport(effectText, reporter) {
+  const issues = (reporter && reporter.issues) || [];
+  const templated = effectText.includes('SHADER_NEEDS_MANUAL_PORT');
+
+  const claimsSuccess = issues.some((i) => /transpiled/i.test(String(i.message)) && i.severity === 'low');
+  const flagsManual = issues.some((i) => i.code === 'SHADER_NEEDS_MANUAL_PORT' && i.severity === 'high');
+
+  if (templated && !flagsManual) {
+    throw new Error('Thân shader là template nhưng report KHÔNG có `high SHADER_NEEDS_MANUAL_PORT` — đây là false-positive success.');
+  }
+  if (templated && claimsSuccess) {
+    throw new Error('Report vẫn khoe "Successfully transpiled" trong khi thân shader chỉ là template.');
+  }
+  return templated ? 'manual-port-flagged' : 'body-transpiled';
+}
+
+// ============================================================================
 // Sample Test Cases
 // ============================================================================
 
@@ -34,6 +126,7 @@ const SAMPLES = [
   {
     name: '1. Unlit Wobble & Dissolve ShaderLab (.shader)',
     filename: 'UnlitWobbleDissolve.shader',
+    golden: { algorithmTokens: ['dissolveAmount', 'waveSpeed', 'discard'] },
     source: `
 Shader "Custom/UnlitWobbleDissolve" {
   Properties {
@@ -110,6 +203,7 @@ Shader "Custom/UnlitWobbleDissolve" {
   {
     name: '2. Stylized Toon & Rim Lighting ShaderLab (.shader)',
     filename: 'StylizedToonRim.shader',
+    golden: { algorithmTokens: ['worldNormal'] },
     source: `
 Shader "Custom/StylizedToonRim" {
   Properties {
@@ -167,6 +261,7 @@ Shader "Custom/StylizedToonRim" {
   {
     name: '3. Spherical MatCap Reflection ShaderLab (.shader)',
     filename: 'MatCapReflection.shader',
+    golden: { algorithmTokens: ['matCapUV'] },
     source: `
 Shader "Custom/MatCapReflection" {
   Properties {
@@ -212,6 +307,7 @@ Shader "Custom/MatCapReflection" {
   {
     name: '4. Surface Standard PBR ShaderLab (.shader)',
     filename: 'PBRDetailSurface.shader',
+    golden: { algorithmTokens: ['mainTexture'] },
     source: `
 Shader "Custom/PBRDetailSurface" {
   Properties {
@@ -254,6 +350,7 @@ Shader "Custom/PBRDetailSurface" {
   {
     name: '5. Complex HLSL Fire FX with Procedural Noise (.hlsl)',
     filename: 'ComplexHLSLFire.hlsl',
+    golden: { algorithmTokens: ['smoothstep', 'flame'] },
     source: `
 #ifndef CUSTOM_FIRE_HLSL
 #define CUSTOM_FIRE_HLSL
@@ -290,6 +387,7 @@ float4 fragFire(float2 uv, float time, float speed, float4 fireColor) {
   {
     name: '6. Procedural SimpleNoise & Tiling ShaderGraph (.shadergraph)',
     filename: 'SampleUnlitNoise.shadergraph',
+    golden: { algorithmTokens: ['unity_simple_noise'] },
     source: JSON.stringify({
       m_SGVersion: 3,
       m_Type: "UnityEditor.ShaderGraph.GraphData",
@@ -458,6 +556,7 @@ float4 fragFire(float2 uv, float time, float speed, float4 fireColor) {
   {
     name: '8. 2D Sprite Color Blending ShaderLab (.shader)',
     filename: 'SpriteColorAlpha.shader',
+    golden: { algorithmTokens: ['mainTexture'] },
     source: `
 Shader "Custom/SpriteColorAlpha" {
   Properties {
@@ -576,7 +675,12 @@ async function runTests() {
         // Uniform block detected - verified std140
       }
 
-      console.log(`  ✅ PASS (${duration}ms): Effect & Material generated with zero errors.\n`);
+      // 4. GOLDEN-FILE: nội dung, không chỉ sự tồn tại của file.
+      const propCount = assertPropertiesPreserved(sample, effectText);
+      const tokenCount = assertAlgorithmReachable(sample, effectText);
+      const honesty = assertHonestReport(effectText, result.report);
+
+      console.log(`  ✅ PASS (${duration}ms): ${propCount} property giữ nguyên, ${tokenCount} token thuật toán truy cập được, report=${honesty}.\n`);
       passedCount++;
     } catch (err) {
       console.error(`  ❌ FAIL: ${err.message}\n  ${err.stack}\n`);
@@ -588,7 +692,12 @@ async function runTests() {
   console.log(`📊 Test Results: ${passedCount}/${SAMPLES.length} Passed, ${failedCount} Failed`);
   console.log('=================================================================\n');
 
-  cleanDir(TEMP_TEST_DIR);
+  // KEEP_SHADER_TEST_OUTPUT=1 để giữ lại .effect sinh ra mà soi bằng mắt.
+  if (!process.env.KEEP_SHADER_TEST_OUTPUT) {
+    cleanDir(TEMP_TEST_DIR);
+  } else {
+    console.log(`Giữ lại output tại: ${TEMP_TEST_DIR}\n`);
+  }
 
   if (failedCount > 0) {
     process.exit(1);

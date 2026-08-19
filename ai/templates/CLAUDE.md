@@ -2,10 +2,14 @@
 
 You are the Lead Playable Ads Engineer specialized in porting Unity casual/hypercasual games into lightweight Cocos Creator 3.8.8+ TypeScript playable ads.
 
+> **Lệnh CLI trong file này được SINH TỰ ĐỘNG** từ `playable-shared-kit/ai/capabilities.def.cjs`.
+> Không sửa tay phần giữa các marker `BEGIN/END:GENERATED`. Sửa ở file def rồi chạy `npm run ai:sync`.
+> Nguồn máy đọc: `playable-shared-kit/ai/CAPABILITIES.json`.
+
 ## 1. Fast Project Onboarding (Low-Token Context)
 - Do NOT scan file trees or read raw scene JSON files.
-- Read `PROJECT_MAP.json` or run `npm run ai:map` to get instant project topology (<500 tokens).
-- Use `npm run ai:scene -- <sceneName>` to inspect scene node hierarchy in compact ASCII format (~150 tokens).
+- Read `PROJECT_MAP.json` to get instant project topology (<500 tokens).
+- Read `playable-shared-kit/ai/CAPABILITIES.json` for the authoritative command list.
 
 ## 2. Standard 4-Step Execution Flow
 
@@ -16,28 +20,27 @@ flowchart LR
     C --> D["4. Mandatory Verification & Build"]
 ```
 
-1. **Context & Memory Check**:
-   - Check `PROJECT_MAP.json` for scenes, prefabs, audio, and current `playable-config.json` schema.
-   - Run `npm run memory:query -- <keyword>` to check for known trap patterns.
-2. **Automated Porting First**:
-   - All-in-One Smart Port: `npm run port:smart -- --src <unity_folder> --out assets/`
-   - Prefabs & Meshes: `node playable-shared-kit/tools/unity-cocos-port.cjs port --src <src> --out assets/prefabs/`
-   - C# Scripts Scaffolding: `npm run port:script -- --src <csharp_path> --out assets/script/`
-   - Unity Shaders: `node playable-shared-kit/tools/unity-hlsl-to-cocos-effect.cjs <shader> assets/effects/<name>.effect`
-   - Strip FBX Textures: `node playable-shared-kit/tools/strip-fbx-textures.cjs assets/models/`
-3. **Scriptable JSON & TypeScript Implementation**:
-   - Place all tunable gameplay parameters into `assets/resources/playable-config.json`.
-   - Access via `PlayableConfigManager.instance.get('custom.myParam', defaultValue)`.
-   - Ensure **Zero GC** inside `update(dt)`: Pre-allocate static `Vec3`, `Quat`, `Color`.
-4. **Mandatory Post-Port / Post-Code Verification Gate**:
-   - **Immediately after modifying code or porting**:
-     - Run `npm run ai:verify`: Validates TypeScript compilation (0 errors), config schema, asset bindings, meta integrity, and bundle size.
-     - Run `npm run ai:lint`: Validates Zero-GC compliance.
-   - Fix any errors reported by the verifier before concluding your response.
-   - Build single-file playable: `npm run build`.
-   - Live Mobile QR Preview: `npm run deploy`.
+1. **Context & Memory Check** — đọc `PROJECT_MAP.json`, tra `memory.query` để biết bẫy đã gặp.
+2. **Automated Porting First** — dùng tool ở mục 4 trước khi viết tay.
+3. **Scriptable JSON & TypeScript** — mọi tham số vào `assets/resources/playable-config.json`.
+4. **Mandatory Verification Gate** — chạy `verify.all` + `verify.gc`, sửa hết lỗi rồi mới kết luận.
 
-## 3. Core Rules & Architecture
+## 3. Nguyên tắc bất biến (mọi AI agent dùng chung)
+
+<!-- BEGIN:GENERATED:core-rules -->
+<!-- END:GENERATED:core-rules -->
+
+## 4. Hợp đồng lệnh
+
+<!-- BEGIN:GENERATED:commands -->
+<!-- END:GENERATED:commands -->
+
+## 5. Giới hạn đã biết của tooling
+
+<!-- BEGIN:GENERATED:limits -->
+<!-- END:GENERATED:limits -->
+
+## 6. Core Rules & Architecture
 - **Framework Structure**:
   - `playable-shared-kit/`: Core libraries, porting tools, build system, and work-memory.
   - `assets/`: Game assets and TypeScript source code.
@@ -47,11 +50,11 @@ flowchart LR
   - `blender-mcp`: Inspect 3D models, materials, and run Python scripts in Blender 5.2.
   - `work-memory`: Query and persist project knowledge via SQLite (`queryWorkMemory`, `rememberWorkMemory`).
 
-## 4. TypeScript & Performance Guidelines
+## 7. TypeScript & Performance Guidelines
 - Cocos Creator 3.8.8+ uses decorators: `@ccclass('ClassName')`, `@property(CCFloat)`.
 - Use `ObjectPool` from `playable-core` for hypercasual spawner loops.
 - Use `tween(this.node).to(...)` for UI & node animations.
 - Wire `GameManager.instance` for lifecycle (`onGameReady`, `onGameStart`, `onGameWin`, `onGameLose`) and `SuperHtmlPlayable.download()` for CTA clicks.
 
-## 5. Work Memory Integration
+## 8. Work Memory Integration
 - Append `<!-- WORK_MEMORY: {"scope":"global","category":"tip","title":"...","content":"...","tags":["..."]} -->` to persist solutions.
