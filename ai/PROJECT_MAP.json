@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "generatedAt": "2026-08-19T06:10:10.948Z",
+    "generatedAt": "2026-08-19T06:47:24.114Z",
     "description": "Compact project manifest for AI Agents. Use this instead of scanning file trees.",
     "project": {
       "projectName": "cc_playable_framework",
@@ -22,17 +22,12 @@
     {
       "name": "Boilerplate",
       "path": "assets/Boilerplate.scene",
-      "sizeKb": 60.9
+      "sizeKb": 64.3
     },
     {
       "name": "Gameplay",
       "path": "assets/Gameplay.scene",
-      "sizeKb": 83.3
-    },
-    {
-      "name": "Boilerplate",
-      "path": "assets/Boilerplate.scene",
-      "sizeKb": 60.9
+      "sizeKb": 87.7
     }
   ],
   "prefabs": [],
@@ -67,27 +62,55 @@
     },
     {
       "name": "index",
-      "path": "assets/script/shared/sdk/index.ts"
+      "path": "assets/script/shared/core/components/index.ts"
     },
     {
-      "name": "PlayableAdDownloadEvent",
-      "path": "assets/script/shared/sdk/platform/PlayableAdDownloadEvent.ts"
+      "name": "Interactive3DHero",
+      "path": "assets/script/shared/core/components/Interactive3DHero.ts"
     },
     {
-      "name": "SuperHtmlPlayable",
-      "path": "assets/script/shared/sdk/platform/SuperHtmlPlayable.ts"
+      "name": "PlayableAudioController",
+      "path": "assets/script/shared/core/components/PlayableAudioController.ts"
+    },
+    {
+      "name": "PlayableCTAController",
+      "path": "assets/script/shared/core/components/PlayableCTAController.ts"
+    },
+    {
+      "name": "PlayableEntry",
+      "path": "assets/script/shared/core/components/PlayableEntry.ts"
+    },
+    {
+      "name": "PlayableTrackingController",
+      "path": "assets/script/shared/core/components/PlayableTrackingController.ts"
+    },
+    {
+      "name": "PlayableUIHUD",
+      "path": "assets/script/shared/core/components/PlayableUIHUD.ts"
+    },
+    {
+      "name": "index",
+      "path": "assets/script/shared/core/config/index.ts"
+    },
+    {
+      "name": "PlayableConfig",
+      "path": "assets/script/shared/core/config/PlayableConfig.ts"
+    },
+    {
+      "name": "PlayableConfigManager",
+      "path": "assets/script/shared/core/config/PlayableConfigManager.ts"
     },
     {
       "name": "GameManager",
       "path": "assets/script/shared/core/GameManager.ts"
     },
     {
-      "name": "SoundManager",
-      "path": "assets/script/shared/core/SoundManager.ts"
-    },
-    {
       "name": "index",
       "path": "assets/script/shared/core/index.ts"
+    },
+    {
+      "name": "SoundManager",
+      "path": "assets/script/shared/core/SoundManager.ts"
     },
     {
       "name": "GameUtils",
@@ -106,89 +129,40 @@
       "path": "assets/script/shared/core/utils/pool/Poolable.ts"
     },
     {
-      "name": "PlayableConfig",
-      "path": "assets/script/shared/core/config/PlayableConfig.ts"
+      "name": "index",
+      "path": "assets/script/shared/index.ts"
     },
     {
-      "name": "PlayableConfigManager",
-      "path": "assets/script/shared/core/config/PlayableConfigManager.ts"
+      "name": "GameTrackingService",
+      "path": "assets/script/shared/sdk/analytics/GameTrackingService.ts"
     },
     {
       "name": "index",
-      "path": "assets/script/shared/core/config/index.ts"
+      "path": "assets/script/shared/sdk/index.ts"
     },
     {
-      "name": "CameraController",
-      "path": "assets/script/shared/core/components/CameraController.ts"
-    },
-    {
-      "name": "Interactive3DHero",
-      "path": "assets/script/shared/core/components/Interactive3DHero.ts"
-    },
-    {
-      "name": "PlayableAudioController",
-      "path": "assets/script/shared/core/components/PlayableAudioController.ts"
-    },
-    {
-      "name": "PlayableCTAController",
-      "path": "assets/script/shared/core/components/PlayableCTAController.ts"
-    },
-    {
-      "name": "PlayableTrackingController",
-      "path": "assets/script/shared/core/components/PlayableTrackingController.ts"
-    },
-    {
-      "name": "PlayableUIHUD",
-      "path": "assets/script/shared/core/components/PlayableUIHUD.ts"
-    },
-    {
-      "name": "PlayableEntry",
-      "path": "assets/script/shared/core/components/PlayableEntry.ts"
-    },
-    {
-      "name": "index",
-      "path": "assets/script/shared/core/components/index.ts"
+      "name": "PlayableAdDownloadEvent",
+      "path": "assets/script/shared/sdk/platform/PlayableAdDownloadEvent.ts"
     },
     {
       "name": "SuperHtmlPlayable",
       "path": "assets/script/shared/sdk/platform/SuperHtmlPlayable.ts"
-    },
-    {
-      "name": "UnityParticleHierarchyTransformSync",
-      "path": "assets/scripts/UnityParticleHierarchyTransformSync.ts"
-    },
-    {
-      "name": "UnityParticleRateOverDistanceEmitter",
-      "path": "assets/scripts/UnityParticleRateOverDistanceEmitter.ts"
-    },
-    {
-      "name": "UnityParticleSubEmitterFollower",
-      "path": "assets/scripts/UnityParticleSubEmitterFollower.ts"
-    },
-    {
-      "name": "UnitySpriteRendererColorAdapter",
-      "path": "assets/scripts/UnitySpriteRendererColorAdapter.ts"
     }
   ],
   "assetsSummary": {
     "audioCount": 4,
     "audioList": [
-      "assets/resources/sound/sfx_click.mp3",
       "assets/resources/sound/bgm_main.mp3",
+      "assets/resources/sound/sfx_click.mp3",
       "assets/resources/sound/sfx_success.mp3",
       "assets/resources/sound/sfx_win.mp3"
     ],
-    "modelCount": 2,
+    "modelCount": 1,
     "models": [
-      "assets/models/pack_block.fbx",
-      "assets/unity_imported/_GameHome/_Game_HolePuzzle/Prefabs/Events/flower_collection.fbx"
+      "assets/models/pack_block.fbx"
     ],
-    "shaderCount": 3,
-    "shaders": [
-      "assets/effects/SimpleLit.effect",
-      "assets/effects/UnitySpriteRendererColor.effect",
-      "assets/unity_imported/ui_sprite_alpha_sep/ui-sprite-alpha-sep.effect"
-    ]
+    "shaderCount": 0,
+    "shaders": []
   },
   "configSummary": {
     "ctaKeys": [
