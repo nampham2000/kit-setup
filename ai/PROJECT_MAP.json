@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "generatedAt": "2026-08-19T03:11:34.774Z",
+    "generatedAt": "2026-08-19T06:10:10.948Z",
     "description": "Compact project manifest for AI Agents. Use this instead of scanning file trees.",
     "project": {
       "projectName": "cc_playable_framework",
@@ -22,7 +22,7 @@
     {
       "name": "Boilerplate",
       "path": "assets/Boilerplate.scene",
-      "sizeKb": 60.9
+      "sizeKb": 64.3
     },
     {
       "name": "Gameplay",
@@ -32,6 +32,30 @@
   ],
   "prefabs": [],
   "scripts": [
+    {
+      "name": "index",
+      "path": "assets/script/shared/compat/index.ts"
+    },
+    {
+      "name": "UnityCoroutine",
+      "path": "assets/script/shared/compat/UnityCoroutine.ts"
+    },
+    {
+      "name": "UnityMathf",
+      "path": "assets/script/shared/compat/UnityMathf.ts"
+    },
+    {
+      "name": "UnityPhysics",
+      "path": "assets/script/shared/compat/UnityPhysics.ts"
+    },
+    {
+      "name": "UnityRandom",
+      "path": "assets/script/shared/compat/UnityRandom.ts"
+    },
+    {
+      "name": "UnityTime",
+      "path": "assets/script/shared/compat/UnityTime.ts"
+    },
     {
       "name": "CameraController",
       "path": "assets/script/shared/core/components/CameraController.ts"
@@ -123,22 +147,6 @@
     {
       "name": "SuperHtmlPlayable",
       "path": "assets/script/shared/sdk/platform/SuperHtmlPlayable.ts"
-    },
-    {
-      "name": "UnityParticleHierarchyTransformSync",
-      "path": "assets/scripts/UnityParticleHierarchyTransformSync.ts"
-    },
-    {
-      "name": "UnityParticleRateOverDistanceEmitter",
-      "path": "assets/scripts/UnityParticleRateOverDistanceEmitter.ts"
-    },
-    {
-      "name": "UnityParticleSubEmitterFollower",
-      "path": "assets/scripts/UnityParticleSubEmitterFollower.ts"
-    },
-    {
-      "name": "UnitySpriteRendererColorAdapter",
-      "path": "assets/scripts/UnitySpriteRendererColorAdapter.ts"
     }
   ],
   "assetsSummary": {
@@ -149,17 +157,12 @@
       "assets/resources/sound/sfx_success.mp3",
       "assets/resources/sound/sfx_win.mp3"
     ],
-    "modelCount": 2,
+    "modelCount": 1,
     "models": [
-      "assets/models/pack_block.fbx",
-      "assets/unity_imported/_GameHome/_Game_HolePuzzle/Prefabs/Events/flower_collection.fbx"
+      "assets/models/pack_block.fbx"
     ],
-    "shaderCount": 3,
-    "shaders": [
-      "assets/effects/SimpleLit.effect",
-      "assets/effects/UnitySpriteRendererColor.effect",
-      "assets/unity_imported/ui_sprite_alpha_sep/ui-sprite-alpha-sep.effect"
-    ]
+    "shaderCount": 0,
+    "shaders": []
   },
   "configSummary": {
     "ctaKeys": [
@@ -267,6 +270,7 @@
     "memory.query": "npm run memory:query -- <keyword>",
     "port.prefab": "node playable-shared-kit/tools/unity-cocos-port.cjs port --src <unity_prefab_or_dir> --out <cocos_prefab_or_dir>",
     "port.smart": "npm run port:smart -- --src <unity_dir> --out assets/",
+    "port.compile": "npm run port:compile -- --src <csharp_path> --out assets/script/",
     "port.script": "npm run port:script -- --src <csharp_path> --out assets/script/",
     "shader.convert": "node playable-shared-kit/tools/unity-hlsl-to-cocos-effect.cjs convert --src <unity.shader> --out <assets/effects/X.effect>",
     "shader.batch": "node playable-shared-kit/tools/unity-hlsl-to-cocos-effect.cjs batch --dir <unity_shader_dir> --out-dir <assets/effects>",

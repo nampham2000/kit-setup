@@ -32,6 +32,7 @@ Chạy `npm run ai:contract:verify` để chứng minh manifest khớp với CLI
 | --- | --- | --- |
 | Chuyển prefab Unity thành .prefab của Cocos. | `node playable-shared-kit/tools/unity-cocos-port.cjs port --src <unity_prefab_or_dir> --out <cocos_prefab_or_dir>` | Chậm: đo được ≈140 s/prefab trên project 68k asset meta; chưa có cache, chưa song song. Shader tuỳ biến KHÔNG được port — xem `shader.convert`. Luôn đọc report và xử lý mọi dòng `high` trước khi coi là xong. |
 | Port hàng loạt. Nên chạy `--dry-run` trước để xem report. | `npm run port:smart -- --src <unity_dir> --out assets/` | Cùng giới hạn tốc độ và shader như `port.prefab`. |
+| Port script/logic C# sang TS: AI Agent LUÔN CHẠY LỆNH NÀY TRƯỚC TIÊN để tạo static first pass, sau đó đọc report và refine/polish gameplay semantics. | `npm run port:compile -- --src <csharp_path> --out assets/script/` | Pass nghĩa là parser/emitter và cú pháp TypeScript hợp lệ; KHÔNG xác nhận gameplay semantic equivalence. Các file có TODO hoặc warning luôn cần AI refine; dùng `--runtime-only` để bỏ Unity Editor code khi port playable runtime. Mặc định giữ cấu trúc thư mục để tránh ghi đè basename; `--flat-output` chỉ dùng khi đã kiểm tra collision. |
 | Cần khung TS + @property từ script Unity. | `npm run port:script -- --src <csharp_path> --out assets/script/` | CHỈ sinh property và method rỗng — 100% logic phải do agent dịch tay từ file .cs gốc. Làm phẳng thư mục theo tên class; trùng tên sẽ ghi đè. Giá trị mặc định C# được chèn nguyên văn, có thể không compile. |
 | Cần khung .effect + properties + UBO từ shader Unity. | `node playable-shared-kit/tools/unity-hlsl-to-cocos-effect.cjs convert --src <unity.shader> --out <assets/effects/X.effect>` | KHÔNG dịch thân HLSL. Chỉ sinh khung + properties + UBO, thân shader là template. Report sẽ ghi `high SHADER_NEEDS_MANUAL_PORT` — agent phải tự viết lại phần tính toán. |
 | Chuyển nhiều shader một lượt. | `node playable-shared-kit/tools/unity-hlsl-to-cocos-effect.cjs batch --dir <unity_shader_dir> --out-dir <assets/effects>` | Cùng giới hạn với `shader.convert`. |
@@ -82,6 +83,10 @@ Những tool sau **không làm được việc mà tên gọi gợi ý**. Đọc
   - Luôn đọc report và xử lý mọi dòng `high` trước khi coi là xong.
 - **`port.smart`** (npm run port:smart -- --src <unity_dir> --out assets/)
   - Cùng giới hạn tốc độ và shader như `port.prefab`.
+- **`port.compile`** (npm run port:compile -- --src <csharp_path> --out assets/script/)
+  - Pass nghĩa là parser/emitter và cú pháp TypeScript hợp lệ; KHÔNG xác nhận gameplay semantic equivalence.
+  - Các file có TODO hoặc warning luôn cần AI refine; dùng `--runtime-only` để bỏ Unity Editor code khi port playable runtime.
+  - Mặc định giữ cấu trúc thư mục để tránh ghi đè basename; `--flat-output` chỉ dùng khi đã kiểm tra collision.
 - **`port.script`** (npm run port:script -- --src <csharp_path> --out assets/script/)
   - CHỈ sinh property và method rỗng — 100% logic phải do agent dịch tay từ file .cs gốc.
   - Làm phẳng thư mục theo tên class; trùng tên sẽ ghi đè.
