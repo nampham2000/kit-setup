@@ -4,7 +4,7 @@
     "source": "playable-shared-kit/ai/capabilities.def.cjs",
     "generatedBy": "npm run ai:sync",
     "contractCheck": "npm run ai:contract:verify",
-    "count": 21
+    "count": 25
   },
   "coreRules": [
     {
@@ -78,19 +78,64 @@
         "title": "Tra bộ nhớ công việc để tránh lặp lại bẫy cũ",
         "run": "npm run memory:query -- <keyword>",
         "command": "node playable-shared-kit/tools/work-memory.cjs query <keyword> <keyword>",
-        "optional": [],
+        "optional": [
+          "--semantic <hybrid|off|only>",
+          "--scope <repo|global|hybrid>",
+          "--limit <n>"
+        ],
         "when": "Trước khi giải một vấn đề nghe quen; sau khi giải xong thì ghi lại.",
         "outputs": [
           "stdout"
         ],
         "limits": [
-          "Embedding tắt khi thiếu `sqlite-vec` — recall theo keyword, có thể trả kết quả lệch chủ đề."
+          "Semantic recall cần `sqlite-vec` + `@xenova/transformers` (nặng ~283MB); thiếu thì tự động lùi về keyword."
         ],
         "verify": null,
-        "status": "partial"
+        "status": "ok"
       }
     ],
     "port": [
+      {
+        "id": "port.plan",
+        "title": "Phân tích project Unity và lập kế hoạch port",
+        "run": "npm run ai:port:plan -- --src <UnityAssetsFolder>",
+        "command": "node playable-shared-kit/tools/port-plan.cjs --src <UnityAssetsFolder> --src <UnityAssetsFolder>",
+        "optional": [
+          "--json",
+          "--out <file>",
+          "--top <n>"
+        ],
+        "when": "BƯỚC ĐẦU TIÊN khi nhận một project Unity mới. Đọc cái này thay vì tự quét cây thư mục.",
+        "outputs": [
+          "stdout JSON: tồn kho, blocker, prefab gốc, thứ tự đề xuất, ước lượng thời gian"
+        ],
+        "limits": [
+          "Chỉ đọc — không ghi gì vào project Cocos.",
+          "Bỏ qua thư mục thư viện bên thứ ba để số liệu phản ánh code game."
+        ],
+        "verify": null,
+        "status": "ok"
+      },
+      {
+        "id": "port.report",
+        "title": "Nén port-report.csv thành digest có hành động",
+        "run": "npm run ai:port:report",
+        "command": "node playable-shared-kit/tools/report-digest.cjs --json",
+        "optional": [
+          "--json",
+          "--all",
+          "--limit <n>"
+        ],
+        "when": "Ngay sau khi port. ĐỌC CÁI NÀY thay vì đọc CSV thô (đo được: 103k token -> 0,7k token).",
+        "outputs": [
+          "stdout (JSON khi có --json)"
+        ],
+        "limits": [
+          "Mặc định ẩn mã mức low; dùng --all để xem hết."
+        ],
+        "verify": "npm run ai:verify:prefab",
+        "status": "ok"
+      },
       {
         "id": "port.prefab",
         "title": "Port prefab / mesh / material Unity sang Cocos",
@@ -106,17 +151,22 @@
           "--copy-assets",
           "--convert-fbx-fallback",
           "--script-mode <mode>",
-          "--layer-map <json>"
+          "--layer-map <json>",
+          "--jobs <n>",
+          "--no-cache",
+          "--no-import-wait",
+          "--quiet"
         ],
-        "when": "Chuyển prefab Unity thành .prefab của Cocos.",
+        "when": "Chuyển prefab Unity thành .prefab của Cocos. Dùng --jobs 4 cho batch lớn.",
         "outputs": [
           "<out>/*.prefab",
           ".unity/port-report.csv"
         ],
         "limits": [
-          "Chậm: đo được ≈140 s/prefab trên project 68k asset meta; chưa có cache, chưa song song.",
           "Shader tuỳ biến KHÔNG được port — xem `shader.convert`.",
-          "Luôn đọc report và xử lý mọi dòng `high` trước khi coi là xong."
+          "Luôn đọc report và xử lý mọi dòng `high` trước khi coi là xong.",
+          "Nếu Cocos Creator không mở, UUID sub-asset của sprite/model chưa nối được: report ghi rõ, mở editor rồi chạy lại.",
+          "Cache theo phạm vi --src: sửa MỘT file trong phạm vi sẽ khiến cả phạm vi port lại (đổi lấy việc không bao giờ trả output cũ sai)."
         ],
         "verify": "npm run ai:verify",
         "status": "partial"
@@ -267,6 +317,53 @@
         "limits": [],
         "verify": null,
         "status": "ok"
+      },
+      {
+        "id": "verify.prefab",
+        "title": "Kiểm tra tính toàn vẹn của prefab/scene đã port",
+        "run": "npm run ai:verify:prefab",
+        "command": "node playable-shared-kit/tools/verify-prefab.cjs --json",
+        "optional": [
+          "--json",
+          "--quiet",
+          "--max-renderers <n>"
+        ],
+        "when": "Ngay sau khi port prefab. Bắt UUID treo, script thiếu, renderer chưa gán asset, node trùng tên.",
+        "outputs": [
+          "stdout (JSON khi có --json)"
+        ],
+        "limits": [
+          "Đối chiếu script bằng tiền tố 5 hex của UUID; trùng tiền tố thì chấp nhận (thà bỏ sót hơn báo sai)."
+        ],
+        "verify": null,
+        "status": "partial"
+      },
+      {
+        "id": "verify.runtime",
+        "title": "Smoke test playable đã build bằng Chrome headless",
+        "run": "npm run ai:verify:runtime",
+        "command": "node playable-shared-kit/tools/verify-runtime.cjs --json",
+        "optional": [
+          "--file <html>",
+          "--all",
+          "--seconds <n>",
+          "--min-fps <n>",
+          "--browser <path>",
+          "--json",
+          "--no-screenshot"
+        ],
+        "when": "Sau khi build. Đây là bước duy nhất chứng minh playable CHẠY được, không chỉ compile được.",
+        "outputs": [
+          "stdout (JSON khi có --json)",
+          ".unity/runtime-shots/*.png"
+        ],
+        "limits": [
+          "Cần Chrome hoặc Edge trên máy (không dùng puppeteer).",
+          "Bản build riêng cho từng network (applovin/facebook) sẽ báo console.error do thiếu SDK của host — dùng bản `common` để smoke test.",
+          "Phát hiện khung đơn sắc bằng cách so 3 vùng lấy mẫu, là suy luận theo dấu hiệu chứ không phải phân tích ảnh đầy đủ."
+        ],
+        "verify": null,
+        "status": "partial"
       },
       {
         "id": "verify.gc",

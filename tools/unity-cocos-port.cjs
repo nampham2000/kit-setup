@@ -52,6 +52,7 @@ const createParticlePorter = require('./unity-cocos-port/particle-porter');
 const createLightPorter = require('./unity-cocos-port/light-porter');
 const createAnimationPorter = require('./unity-cocos-port/animation-porter');
 const createScriptPorter = require('./unity-cocos-port/script-porter');
+const { PortCache } = require('./unity-cocos-port/port-cache');
 const createUiSpriteAlphaPorter = require('./unity-cocos-port/ui-sprite-alpha-porter');
 const createComponentDispatcher = require('./unity-cocos-port/component-dispatcher');
 const createRuntimeComponentPorter = require('./unity-cocos-port/runtime-component-porter');
@@ -270,6 +271,10 @@ Options:
   --convert-fbx-fallback    If FBX has no Cocos import, try FBX2glTF/assimp to create a GLB fallback.
   --model-import-wait-ms    Wait for Cocos to populate copied model sub-assets. Default: 10000.
   --script-mode <mode>      skip | wire-if-present | require. Default: wire-if-present.
+  --no-cache                Bỏ qua cache tăng dần (.unity/port-cache.json).
+  --no-import-wait          Không chờ Cocos Creator import asset (= --model-import-wait-ms 0).
+  --jobs <n>                Chạy song song n tiến trình con cho batch prefab.
+  --quiet                   Chỉ in tổng kết (ít token hơn cho AI agent).
   --strip-private-prefix    Map Unity serialized _field to Cocos field when wiring custom scripts. Default.
   --no-strip-private-prefix Preserve leading underscore in custom script fields.
   --layer-map <json>        JSON object overriding Unity layer index to Cocos layer name/value.
@@ -461,6 +466,35 @@ function parseArgs(argv) {
     }
     if (arg === '--dry-run') {
       options.dryRun = true;
+      continue;
+    }
+    if (arg === '--no-cache') {
+      options.noCache = true;
+      continue;
+    }
+    if (arg === '--no-import-wait') {
+      // Tương đương --model-import-wait-ms 0: dùng khi Cocos Creator không mở.
+      options.modelImportWaitMs = 0;
+      continue;
+    }
+    if (arg === '--jobs' || arg.startsWith('--jobs=')) {
+      const raw = arg.startsWith('--jobs=') ? arg.slice('--jobs='.length) : readValue(arg);
+      const jobs = Number(raw);
+      if (!Number.isFinite(jobs) || jobs < 1) fail('--jobs phải là số nguyên >= 1');
+      options.jobs = Math.floor(jobs);
+      continue;
+    }
+    if (arg === '--shard' || arg.startsWith('--shard=')) {
+      // Nội bộ: <index>/<total>. Tiến trình cha dùng để chia việc cho con.
+      const raw = arg.startsWith('--shard=') ? arg.slice('--shard='.length) : readValue(arg);
+      const m = /^(\d+)\/(\d+)$/.exec(String(raw).trim());
+      if (!m) fail('--shard phải có dạng <index>/<total>, ví dụ 0/4');
+      options.shard = { index: Number(m[1]), total: Number(m[2]) };
+      if (options.shard.index >= options.shard.total) fail('--shard index phải nhỏ hơn total');
+      continue;
+    }
+    if (arg === '--quiet') {
+      options.quiet = true;
       continue;
     }
     if (arg === '--recursive') {
@@ -2583,14 +2617,93 @@ function sleepMs(ms) {
   while (Date.now() < end) {}
 }
 
+/**
+ * NGÂN SÁCH CHỜ IMPORT — nguyên nhân thật của PERF-01.
+ * =====================================================
+ * Porter chờ Cocos Creator import asset vừa copy (sprite/model) để lấy UUID của
+ * sub-asset trong `library/`. Mặc định chờ tới 10.000ms MỖI asset.
+ *
+ * Khi Cocos Creator KHÔNG chạy, sẽ không bao giờ có ai import — nên mỗi asset
+ * đốt trọn 10s vô ích. Đo trên MyCozyHome: prefab `BoxHeaderTop` mất 123s,
+ * trong đó 116s là chờ (12 sprite × ~10s), chỉ ~6s là xử lý thật.
+ *
+ * Cơ chế: nếu N lần chờ đầu tiên đều hết hạn mà không có kết quả, kết luận
+ * "không có importer" và BỎ chờ cho mọi asset còn lại trong lần chạy này.
+ * Một asset import thành công sẽ reset lại phán quyết đó.
+ */
+const importWaitBudget = {
+  consecutiveTimeouts: 0,
+  totalWaitedMs: 0,
+  skippedWaits: 0,
+  giveUpAfter: 2,
+  disabled: false,
+
+  sawSuccess: false,
+  probeMs: 1500,
+
+  /** Thời gian tối đa được phép chờ cho asset kế tiếp (0 = không chờ). */
+  budgetFor(options) {
+    const configured = Math.max(0, Number(options?.modelImportWaitMs ?? DEFAULT_MODEL_IMPORT_WAIT_MS) || 0);
+    if (configured === 0) return 0;
+    if (this.disabled) {
+      this.skippedWaits += 1;
+      return 0;
+    }
+    // Chưa từng có asset nào import xong => chỉ PROBE ngắn. Nếu Cocos Creator
+    // đang chạy thì asset đầu tiên xuất hiện rất nhanh; nếu không chạy thì ta
+    // mất 1,5s thay vì 10s cho mỗi lần thăm dò.
+    if (!this.sawSuccess) return Math.min(configured, this.probeMs);
+    return configured;
+  },
+
+  /** Ghi nhận kết quả một lần chờ để quyết định có tiếp tục chờ nữa không. */
+  record(resolved, waitedMs) {
+    this.totalWaitedMs += Math.max(0, waitedMs);
+    if (resolved) {
+      this.consecutiveTimeouts = 0;
+      this.disabled = false;
+      this.sawSuccess = true; // từ giờ mới dùng timeout đầy đủ
+      return;
+    }
+    if (waitedMs <= 0) return; // không thực sự chờ thì không tính
+    this.consecutiveTimeouts += 1;
+    if (!this.disabled && this.consecutiveTimeouts >= this.giveUpAfter) {
+      this.disabled = true;
+      // KHÔNG kết luận "Cocos không chạy": đo được rằng ngay cả khi editor đang
+      // mở, Cocos cũng không import file vừa copy trong vài giây — nó chỉ quét
+      // lại asset khi được refresh. Nên chỉ nói đúng sự thật quan sát được.
+      log(
+        `${this.consecutiveTimeouts} lần chờ import đều hết hạn — asset vừa copy chưa được Cocos import. ` +
+        'Bỏ chờ cho các asset còn lại (prefab vẫn được ghi, chỉ thiếu UUID sub-asset của sprite/mesh).'
+      );
+      log(
+        'Cách nối UUID: refresh asset trong Cocos Creator (menu Assets > Refresh, hoặc MCP ' +
+        '`project_refresh_assets`) rồi chạy lại đúng lệnh này — lần hai sẽ tìm thấy ngay. ' +
+        'Dùng --no-import-wait nếu chủ động không cần nối UUID.'
+      );
+    }
+  },
+
+  summary() {
+    if (!this.totalWaitedMs && !this.skippedWaits) return '';
+    const parts = [`đã chờ import ${(this.totalWaitedMs / 1000).toFixed(1)}s`];
+    if (this.skippedWaits) parts.push(`bỏ chờ ${this.skippedWaits} asset`);
+    return parts.join(', ');
+  },
+};
+
 function waitForImportedModelAsset(assetFile, options, meshNameHint = '') {
-  const timeout = Math.max(0, Number(options.modelImportWaitMs ?? DEFAULT_MODEL_IMPORT_WAIT_MS) || 0);
   let resolved = resolveImportedModelAsset(assetFile, options, meshNameHint);
-  const deadline = Date.now() + timeout;
+  if (resolved && !resolved.pendingImport) return resolved;
+
+  const timeout = importWaitBudget.budgetFor(options);
+  const startedAt = Date.now();
+  const deadline = startedAt + timeout;
   while ((!resolved || resolved.pendingImport) && Date.now() < deadline) {
     sleepMs(Math.min(100, deadline - Date.now()));
     resolved = resolveImportedModelAsset(assetFile, options, meshNameHint);
   }
+  importWaitBudget.record(resolved && !resolved.pendingImport, Date.now() - startedAt);
   return resolved;
 }
 
@@ -2677,13 +2790,17 @@ function resolveCurrentSpriteFrameUuid(assetFile, options) {
 }
 
 function waitForCurrentSpriteFrameUuid(assetFile, options) {
-  const timeout = Math.max(0, Number(options.modelImportWaitMs ?? DEFAULT_MODEL_IMPORT_WAIT_MS) || 0);
   let libraryUuid = resolveLibrarySubAssetUuid(assetFile, options, 'cc.SpriteFrame', { forceReload: true });
-  const deadline = Date.now() + timeout;
+  if (libraryUuid) return libraryUuid;
+
+  const timeout = importWaitBudget.budgetFor(options);
+  const startedAt = Date.now();
+  const deadline = startedAt + timeout;
   while (!libraryUuid && Date.now() < deadline) {
     sleepMs(Math.min(100, deadline - Date.now()));
     libraryUuid = resolveLibrarySubAssetUuid(assetFile, options, 'cc.SpriteFrame', { forceReload: true });
   }
+  importWaitBudget.record(!!libraryUuid, Date.now() - startedAt);
   if (libraryUuid) return libraryUuid;
   return resolveImportedSpriteAsset(assetFile);
 }
@@ -5582,13 +5699,54 @@ function portPrefabBatch(options) {
 
   const totals = { high: 0, medium: 0, low: 0 };
   const sourceRoot = path.resolve(options.src);
-  log(`Found ${plan.length} Unity prefab(s) under ${sourceRoot}`);
+  const quiet = !!options.quiet;
+
+  // --jobs: chia danh sách prefab cho các tiến trình con. Dùng tiến trình chứ
+  // không dùng worker_threads vì porter giữ một UnityAssetDatabase ~500MB trong
+  // bộ nhớ; chia sẻ trong cùng process sẽ không an toàn còn nhân bản thì tốn RAM
+  // như nhau, mà tiến trình riêng thì cách ly lỗi tốt hơn.
+  if (!options.shard && Number(options.jobs) > 1 && plan.length > 1) {
+    // Trả về Promise — `main()` await nó.
+    return runShardedBatch(options, plan);
+  }
+
+  let work = plan;
+  if (options.shard) {
+    work = plan.filter((_, i) => i % options.shard.total === options.shard.index);
+    log(`Shard ${options.shard.index + 1}/${options.shard.total}: ${work.length}/${plan.length} prefab`);
+  } else {
+    log(`Found ${plan.length} Unity prefab(s) under ${sourceRoot}`);
+  }
+
+  // Cache tăng dần: bỏ qua prefab mà cả nguồn, đích và phạm vi --src đều không đổi.
+  const cacheFile = path.join(options.cocosRoot, '.unity', options.shard
+    ? `port-cache.shard${options.shard.index}.json`
+    : 'port-cache.json');
+  const cache = new PortCache(cacheFile, options, !options.noCache && !options.dryRun, sourceRoot);
 
   const results = [];
   let failed = 0;
-  for (let index = 0; index < plan.length; index += 1) {
-    const entry = plan[index];
-    log(`Porting ${index + 1}/${plan.length}: ${entry.relative}`);
+  let skipped = 0;
+  for (let index = 0; index < work.length; index += 1) {
+    const entry = work[index];
+
+    if (cache.canSkip(entry.sourceFile, entry.outputFile)) {
+      skipped += 1;
+      const counts = cache.cachedCounts(entry.sourceFile);
+      totals.high += counts.high;
+      totals.medium += counts.medium;
+      totals.low += counts.low;
+      results.push({
+        counts,
+        rootName: path.basename(entry.sourceFile, path.extname(entry.sourceFile)),
+        outputFile: entry.outputFile,
+        cached: true,
+      });
+      if (!quiet) log(`Cached ${index + 1}/${work.length}: ${entry.relative}`);
+      continue;
+    }
+
+    if (!quiet) log(`Porting ${index + 1}/${work.length}: ${entry.relative}`);
     const reporter = new Reporter();
     let result = null;
     try {
@@ -5613,11 +5771,117 @@ function portPrefabBatch(options) {
     totals.high += result.counts.high;
     totals.medium += result.counts.medium;
     totals.low += result.counts.low;
+    if (!result.failed) cache.record(entry.sourceFile, entry.outputFile, result.counts);
   }
 
-  log(`Batch complete: ${results.length} prefab(s), failed=${failed}, high=${totals.high}, medium=${totals.medium}, low=${totals.low}`);
+  cache.save();
+  const waitNote = importWaitBudget.summary();
+  log(
+    `Batch complete: ${results.length} prefab(s), skipped=${skipped}, failed=${failed}, ` +
+    `high=${totals.high}, medium=${totals.medium}, low=${totals.low} | ${cache.summary()}` +
+    (waitNote ? ` | ${waitNote}` : '')
+  );
   if (failed) process.exitCode = 1;
   return results;
+}
+
+/**
+ * Chạy batch bằng nhiều tiến trình con, mỗi con nhận một shard của danh sách.
+ * Mỗi con ghi report riêng rồi cha gộp lại, nên không có tranh chấp file.
+ */
+async function runShardedBatch(options, plan) {
+  const { spawn } = require('child_process');
+  const jobs = Math.min(Number(options.jobs), plan.length);
+  log(`Chạy song song ${jobs} tiến trình cho ${plan.length} prefab`);
+
+  // Một lượt duy nhất: bỏ `--jobs`, `--report` VÀ giá trị đi kèm của chúng.
+  // (Lọc trước rồi mới quét sẽ làm mất dấu `--jobs` nên giá trị `4` lọt sang
+  // tiến trình con và bị coi là option lạ.)
+  const argv = process.argv.slice(2);
+  const cleanedArgs = [];
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    if (arg === '--jobs' || arg === '--report') { i += 1; continue; }
+    if (/^--(jobs|report)=/.test(arg)) continue;
+    cleanedArgs.push(arg);
+  }
+
+  const reportBase = options.report || path.join(options.cocosRoot, '.unity', 'port-report.csv');
+  const children = [];
+  for (let index = 0; index < jobs; index += 1) {
+    const shardReport = reportBase.replace(/\.csv$/i, `.shard${index}.csv`);
+    const args = [
+      __filename,
+      ...cleanedArgs,
+      '--shard', `${index}/${jobs}`,
+      '--report', shardReport,
+      '--quiet',
+    ];
+    children.push({ index, shardReport, args });
+  }
+
+  // spawnSync sẽ chạy TUẦN TỰ (nó block tới khi con xong) nên phải dùng spawn
+  // bất đồng bộ rồi chờ tất cả. Vì hàm này đồng bộ, dùng Atomics.wait để nhường
+  // CPU trong lúc chờ thay vì quay vòng đốt CPU.
+  const running = children.map((child) => {
+    const proc = spawn(process.execPath, child.args, {
+      cwd: options.cocosRoot,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+    });
+    const state = { done: false, status: null, stdout: '', stderr: '' };
+    proc.stdout.on('data', (d) => { state.stdout += d.toString(); });
+    proc.stderr.on('data', (d) => { state.stderr += d.toString(); });
+    proc.on('close', (code) => { state.done = true; state.status = code; });
+    proc.on('error', (err) => { state.done = true; state.status = 1; state.stderr += String(err.message); });
+    return state;
+  });
+
+  // Bơm event loop cho tới khi mọi shard kết thúc.
+  const waitAll = () => new Promise((resolve) => {
+    const tick = () => {
+      if (running.every((r) => r.done)) return resolve();
+      setTimeout(tick, 200);
+    };
+    tick();
+  });
+  const doneSignal = waitAll();
+
+  await doneSignal;
+
+  const totals = { high: 0, medium: 0, low: 0 };
+  let failedShards = 0;
+  const mergedLines = [];
+  for (let i = 0; i < children.length; i += 1) {
+    const proc = running[i];
+    const out = `${proc.stdout || ''}${proc.stderr || ''}`;
+    const summary = (out.match(/Batch complete: .*/) || [''])[0];
+    if (proc.status !== 0) {
+      failedShards += 1;
+      console.error(`[unity-cocos-port] shard ${i} thoát với mã ${proc.status}`);
+      console.error(out.split(/\r?\n/).slice(-12).join('\n'));
+    }
+    log(`  shard ${i}: ${summary || 'không có tổng kết'}`);
+    const m = /high=(\d+), medium=(\d+), low=(\d+)/.exec(summary || '');
+    if (m) { totals.high += +m[1]; totals.medium += +m[2]; totals.low += +m[3]; }
+
+    // Gộp report của shard vào report chính.
+    try {
+      const text = fs.readFileSync(children[i].shardReport, 'utf8').split(/\r?\n/).filter(Boolean);
+      if (text.length) mergedLines.push(...(mergedLines.length ? text.slice(1) : text));
+      fs.unlinkSync(children[i].shardReport);
+    } catch (_) { /* shard không tạo được report — đã báo ở trên */ }
+  }
+
+  if (mergedLines.length) {
+    ensureDir(path.dirname(reportBase));
+    fs.writeFileSync(reportBase, mergedLines.join('\n') + '\n', 'utf8');
+    log(`Report gộp: ${toPosix(path.relative(options.cocosRoot, reportBase))}`);
+  }
+
+  log(`Batch complete: ${plan.length} prefab(s) qua ${jobs} tiến trình, shard lỗi=${failedShards}, high=${totals.high}, medium=${totals.medium}, low=${totals.low}`);
+  if (failedShards) process.exitCode = 1;
+  return [];
 }
 
 function buildLayerResolver(options, cocosDb, reporter) {
@@ -6896,7 +7160,7 @@ function runSmartPort(options) {
   log(`==> [Smart Port] Automated port pipeline finished.`);
 }
 
-function main() {
+async function main() {
   const options = parseArgs(process.argv.slice(2));
   if (options.command === 'help') {
     printHelp();
@@ -6914,17 +7178,17 @@ function main() {
     runSmartPort(options);
     return;
   }
-  portPrefabBatch(options);
+  await portPrefabBatch(options);
 }
 
 if (require.main === module) {
-  try {
-    main();
-  } catch (error) {
-    const message = error?.message || String(error);
-    console.error(`[unity-cocos-port] ERROR: ${message}`);
-    process.exit(1);
-  }
+  Promise.resolve()
+    .then(main)
+    .catch((error) => {
+      const message = error?.message || String(error);
+      console.error(`[unity-cocos-port] ERROR: ${message}`);
+      process.exit(1);
+    });
 }
 
 module.exports = {

@@ -6,7 +6,7 @@ You are the Lead Playable Ads Engineer for `cc_playable_framework`: porting Unit
 > Không sửa tay giữa các marker. Nguồn máy đọc: `playable-shared-kit/ai/CAPABILITIES.json`.
 
 ## 1. Fast Onboarding
-- Đọc `PROJECT_MAP.json` trước tiên (<500 tokens) thay vì quét file tree.
+- Đọc `PROJECT_MAP.json` trước tiên (~3k tokens, do duoc) thay vì quét file tree.
 - Đọc `playable-shared-kit/ai/CAPABILITIES.json` để biết lệnh hợp lệ + giới hạn từng tool.
 
 ## 2. Nguyên tắc bất biến (mọi AI agent dùng chung)
