@@ -12,7 +12,8 @@ class IRCompilationUnit {
     this.filename = filename;
     this.imports = new Map(); // module -> Set<symbol>
     this.declarations = [];   // IRClass, IREnum, IRInterface, etc.
-    this.scratchVariables = new Set(); // e.g. '_tempVec3', '_tempQuat'
+    this.scratchVariables = new Set(); // e.g. '_tempV3_0', '_tempQuat_0'
+    this.registeredEnums = new Set(); // Enum names that require Enum(Name) registration
     this.confidenceScore = 1.0;
     this.todoNotes = [];
     this.rawComments = [];
@@ -27,6 +28,10 @@ class IRCompilationUnit {
 
   addScratchVar(varName) {
     this.scratchVariables.add(varName);
+  }
+
+  registerEnum(enumName) {
+    this.registeredEnums.add(enumName);
   }
 }
 
@@ -45,6 +50,12 @@ class IRClass {
     this.modifiers = ['public'];
     this.comments = [];
     this.confidence = 1.0;
+    this.referencedEnums = new Set();
+    this.disallowMultiple = false;
+    this.executionOrder = null;
+    this.executeInEditMode = false;
+    this.requireComponents = [];
+    this.isSerializable = false;
   }
 }
 
@@ -59,6 +70,7 @@ class IRField {
     this.modifiers = ['public'];
     this.isStatic = false;
     this.isReadonly = false;
+    this.isEvent = false;         // true for C# Action / event delegates
     this.comments = [];
   }
 }
@@ -101,6 +113,7 @@ class IRMethod {
     this.comments = [];
     this.confidence = 1.0;
     this.todos = [];
+    this.contextMenu = null;
   }
 }
 

@@ -32,6 +32,35 @@ function sanitizeIdentifier(name) {
   return TYPESCRIPT_RESERVED_WORDS.has(value) ? `_${value}` : value;
 }
 
+function parseNumericValue(val) {
+  if (typeof val === 'number') return val;
+  if (typeof val === 'string') {
+    const cleaned = val.replace(/[fFdDmMuUlL]+$/, '');
+    const num = Number(cleaned);
+    return isNaN(num) ? val : num;
+  }
+  return val;
+}
+
+function getLiteralValue(expr) {
+  if (!expr) return null;
+  if (expr.kind === 'StringLiteral' || expr.kind === 'BooleanLiteral') {
+    return expr.value;
+  }
+  if (expr.kind === 'NumericLiteral') {
+    return parseNumericValue(expr.value);
+  }
+  if ((expr.kind === 'PrefixUnaryExpression' || expr.kind === 'UnaryExpression') && expr.operator === '-') {
+    const inner = getLiteralValue(expr.operand || expr.argument);
+    const num = parseNumericValue(inner);
+    return typeof num === 'number' ? -num : num;
+  }
+  if (expr.kind === 'TypeOfExpression' && expr.type) {
+    return expr.type.name || '';
+  }
+  return expr.value !== undefined ? parseNumericValue(expr.value) : null;
+}
+
 function splitInterpolationFormat(value) {
   let depth = 0;
   let hasTernary = false;
@@ -103,8 +132,9 @@ function transformInterpolatedString(value) {
 }
 
 class MigrationRulesEngine {
-  constructor() {
-    this.resolver = new SemanticResolver();
+  constructor(workspaceIndexer = null) {
+    this.indexer = workspaceIndexer;
+    this.resolver = new SemanticResolver(workspaceIndexer);
   }
 
   transform(compilationUnitAst) {
@@ -300,6 +330,8 @@ class MigrationRulesEngine {
 
   transformClass(classAst, irUnit) {
     const irClass = new IRClass(sanitizeIdentifier(classAst.name));
+    this.currentClass = irClass;
+    this.localVariables = new Map();
     irClass.isStatic = classAst.modifiers.includes('static');
 
     // Base class resolution
@@ -311,11 +343,40 @@ class MigrationRulesEngine {
         hasMonoBehaviour = true;
       } else if (firstBase) {
         irClass.baseClass = firstBase;
+        if (this.indexer && this.indexer.isMonoBehaviour(firstBase)) {
+          hasMonoBehaviour = true;
+        }
       }
     } else {
       irClass.baseClass = '';
     }
-    irClass.isCCClass = hasMonoBehaviour;
+    // Process Class Attributes
+    for (const attr of classAst.attributes || []) {
+      const name = attr.name;
+      if (name === 'DisallowMultipleComponent' || name === 'UnityEngine.DisallowMultipleComponent') {
+        irClass.disallowMultiple = true;
+      } else if (name === 'DefaultExecutionOrder' || name === 'UnityEngine.DefaultExecutionOrder') {
+        if (attr.args && attr.args[0]) {
+          const val = getLiteralValue(attr.args[0].expr || attr.args[0]);
+          if (val !== null) irClass.executionOrder = Number(val);
+        }
+      } else if (name === 'ExecuteInEditMode' || name === 'ExecuteAlways' || name === 'UnityEngine.ExecuteInEditMode' || name === 'UnityEngine.ExecuteAlways') {
+        irClass.executeInEditMode = true;
+      } else if (name === 'RequireComponent' || name === 'UnityEngine.RequireComponent') {
+        for (const arg of attr.args || []) {
+          const val = getLiteralValue(arg.expr || arg);
+          if (val) {
+            const resolvedComp = this.resolver.resolveType({ name: String(val) });
+            if (resolvedComp.import) irUnit.addImport('cc', resolvedComp.import);
+            irClass.requireComponents.push(resolvedComp.cocos || resolvedComp.ts || String(val));
+          }
+        }
+      } else if (name === 'Serializable' || name === 'System.Serializable') {
+        irClass.isSerializable = true;
+      }
+    }
+
+    irClass.isCCClass = hasMonoBehaviour || irClass.isSerializable;
     if (irClass.isStatic) {
       irClass.baseClass = '';
       irClass.isCCClass = false;
@@ -350,13 +411,50 @@ class MigrationRulesEngine {
   transformField(fieldAst, irClass, irUnit) {
     const resolvedType = this.resolver.resolveType(fieldAst.type);
     if (resolvedType.import) irUnit.addImport('cc', resolvedType.import);
+    if (resolvedType.modulePath && resolvedType.symbolName) irUnit.addImport(resolvedType.modulePath, resolvedType.symbolName);
 
+    const isEvent = fieldAst.modifiers.includes('event') || (fieldAst.type && (fieldAst.type.name === 'Action' || fieldAst.type.name === 'UnityAction' || fieldAst.type.name?.startsWith('Action<') || fieldAst.type.name?.startsWith('UnityAction<')));
     const isSerialized = fieldAst.attributes.some(a =>
-      a.name === 'SerializeField' || a.name === 'UnityEngine.SerializeField' || a.name === 'Header' || a.name === 'Range' || a.name === 'Tooltip'
+      a.name === 'SerializeField' || a.name === 'UnityEngine.SerializeField' ||
+      a.name === 'Header' || a.name === 'Range' || a.name === 'Tooltip' || a.name === 'Min'
     );
+    const isHideInInspector = fieldAst.attributes.some(a => a.name === 'HideInInspector' || a.name === 'UnityEngine.HideInInspector');
     const isPublic = fieldAst.modifiers.includes('public');
     const isStatic = fieldAst.modifiers.includes('static');
     const isReadonly = fieldAst.modifiers.includes('readonly') || fieldAst.modifiers.includes('const');
+
+    // Extract attributes
+    const tooltipAttr = fieldAst.attributes.find(a => a.name === 'Tooltip' || a.name === 'UnityEngine.Tooltip');
+    const headerAttr = fieldAst.attributes.find(a => a.name === 'Header' || a.name === 'UnityEngine.Header');
+    const rangeAttr = fieldAst.attributes.find(a => a.name === 'Range' || a.name === 'UnityEngine.Range');
+    const minAttr = fieldAst.attributes.find(a => a.name === 'Min' || a.name === 'UnityEngine.Min');
+
+    let tooltipText = '';
+    if (tooltipAttr && tooltipAttr.args && tooltipAttr.args[0]) {
+      const argVal = getLiteralValue(tooltipAttr.args[0].expr || tooltipAttr.args[0]);
+      if (argVal !== null) tooltipText = String(argVal);
+    } else if (headerAttr && headerAttr.args && headerAttr.args[0]) {
+      const argVal = getLiteralValue(headerAttr.args[0].expr || headerAttr.args[0]);
+      if (argVal !== null) tooltipText = String(argVal);
+    }
+
+    let rangeMin = undefined;
+    let rangeMax = undefined;
+    if (rangeAttr && rangeAttr.args && rangeAttr.args.length >= 2) {
+      const r0 = getLiteralValue(rangeAttr.args[0].expr || rangeAttr.args[0]);
+      const r1 = getLiteralValue(rangeAttr.args[1].expr || rangeAttr.args[1]);
+      if (r0 !== null && r1 !== null) {
+        rangeMin = Number(r0);
+        rangeMax = Number(r1);
+      }
+    }
+
+    let minVal = undefined;
+    if (minAttr && minAttr.args && minAttr.args[0]) {
+      const m0 = getLiteralValue(minAttr.args[0].expr || minAttr.args[0]);
+      if (m0 !== null) minVal = Number(m0);
+    }
+
     let fixedBufferInitializer = '';
     if (fieldAst.fixedSize) {
       const size = this.transformExpression(fieldAst.fixedSize, irUnit);
@@ -371,6 +469,17 @@ class MigrationRulesEngine {
     }
 
     for (const decl of fieldAst.declarations) {
+      if (isEvent) {
+        irUnit.addImport('cc', 'EventTarget');
+        const irField = new IRField(sanitizeIdentifier(decl.name), 'EventTarget', null);
+        irField.isEvent = true;
+        irField.isReadonly = true;
+        irField.modifiers = ['public', 'readonly'];
+        irField.initializer = 'new EventTarget()';
+        irClass.fields.push(irField);
+        continue;
+      }
+
       const irField = new IRField(sanitizeIdentifier(decl.name), resolvedType.ts, resolvedType.cocos);
       irField.isStatic = isStatic;
       irField.isReadonly = isReadonly;
@@ -382,9 +491,33 @@ class MigrationRulesEngine {
       }
 
       // Check if should have @property decorator
-      if ((isSerialized || isPublic) && !isStatic && !isReadonly && resolvedType.cocos) {
+      if ((isSerialized || isPublic || isHideInInspector) && !isStatic && !isReadonly && resolvedType.cocos) {
         irField.isProperty = true;
-        irField.propertyOptions = { type: resolvedType.cocos };
+        let propType = resolvedType.cocos;
+        // Check if enum
+        const rawTypeName = fieldAst.type ? fieldAst.type.name : '';
+        const isEnum = irUnit.declarations.some(d => d.constructor.name === 'IREnum' && (d.name === rawTypeName || d.name === resolvedType.ts)) || (this.indexer && (this.indexer.isEnum(rawTypeName) || this.indexer.isEnum(resolvedType.ts)));
+        if (isEnum) {
+          const enumName = rawTypeName || resolvedType.ts;
+          irUnit.registerEnum(enumName);
+          irUnit.addImport('cc', 'Enum');
+          propType = `Enum(${enumName})`;
+        }
+        irField.propertyOptions = { type: propType };
+        if (tooltipText) {
+          irField.propertyOptions.tooltip = tooltipText;
+        }
+        if (rangeMin !== undefined && !isNaN(rangeMin) && rangeMax !== undefined && !isNaN(rangeMax)) {
+          irField.propertyOptions.min = rangeMin;
+          irField.propertyOptions.max = rangeMax;
+          irField.propertyOptions.slide = true;
+        }
+        if (minVal !== undefined && !isNaN(minVal)) {
+          irField.propertyOptions.min = minVal;
+        }
+        if (isHideInInspector) {
+          irField.propertyOptions.visible = false;
+        }
         if (resolvedType.cocos === 'CCFloat' || resolvedType.cocos === 'CCInteger' || resolvedType.cocos === 'CCBoolean' || resolvedType.cocos === 'CCString') {
           irUnit.addImport('cc', resolvedType.cocos);
         }
@@ -405,6 +538,7 @@ class MigrationRulesEngine {
   transformProperty(propAst, irClass, irUnit) {
     const resolvedType = this.resolver.resolveType(propAst.type);
     if (resolvedType.import) irUnit.addImport('cc', resolvedType.import);
+    if (resolvedType.modulePath && resolvedType.symbolName) irUnit.addImport(resolvedType.modulePath, resolvedType.symbolName);
 
     let propertyName = propAst.name;
     if (propertyName.includes('.')) {
@@ -453,6 +587,7 @@ class MigrationRulesEngine {
     irMethod.parameters = (ctorAst.parameters || []).map(p => {
       const pType = this.resolver.resolveType(p.type);
       if (pType.import) irUnit.addImport('cc', pType.import);
+      if (pType.modulePath && pType.symbolName) irUnit.addImport(pType.modulePath, pType.symbolName);
       return { name: sanitizeIdentifier(p.name), type: pType.ts, defaultValue: p.defaultValue ? this.transformExpression(p.defaultValue, irUnit) : null };
     });
 
@@ -487,6 +622,7 @@ class MigrationRulesEngine {
 
     const resolvedRet = this.resolver.resolveType(methodAst.returnType);
     if (resolvedRet.import) irUnit.addImport('cc', resolvedRet.import);
+    if (resolvedRet.modulePath && resolvedRet.symbolName) irUnit.addImport(resolvedRet.modulePath, resolvedRet.symbolName);
 
     const irMethod = new IRMethod(methodName, resolvedRet.ts);
     irMethod.isLifecycle = isLifecycle;
@@ -494,21 +630,38 @@ class MigrationRulesEngine {
     irMethod.isAsync = methodAst.modifiers.includes('async');
     irMethod.modifiers = methodAst.modifiers.includes('public') ? ['public'] : (methodAst.modifiers.includes('protected') ? ['protected'] : ['private']);
 
+    const contextMenuAttr = (methodAst.attributes || []).find(a => a.name === 'ContextMenu' || a.name === 'UnityEngine.ContextMenu');
+    if (contextMenuAttr && contextMenuAttr.args && contextMenuAttr.args[0]) {
+      const val = getLiteralValue(contextMenuAttr.args[0].expr || contextMenuAttr.args[0]);
+      if (val !== null) irMethod.contextMenu = String(val);
+    }
+
     // Check IEnumerator -> Coroutine
     if (methodAst.returnType && (methodAst.returnType.name === 'IEnumerator' || methodAst.returnType.name === 'System.Collections.IEnumerator')) {
       irMethod.isCoroutine = true;
       irMethod.returnType = 'Generator<any, void, any>';
     }
 
+    this.localVariables = new Map();
     irMethod.parameters = (methodAst.parameters || []).map(p => {
       const pType = this.resolver.resolveType(p.type);
       if (pType.import) irUnit.addImport('cc', pType.import);
+      if (pType.modulePath && pType.symbolName) irUnit.addImport(pType.modulePath, pType.symbolName);
+      this.localVariables.set(p.name, pType.ts);
       return {
         name: sanitizeIdentifier(p.name),
         type: pType.ts,
         defaultValue: p.defaultValue ? this.transformExpression(p.defaultValue, irUnit) : null
       };
     });
+
+    if (isLifecycle && (methodName === 'update' || methodName === 'lateUpdate') && irMethod.parameters.length === 0) {
+      irMethod.parameters.push({
+        name: 'dt',
+        type: 'number',
+        defaultValue: null
+      });
+    }
 
     if (methodAst.body) {
       if (methodAst.body.kind === 'ExpressionBody') {
@@ -548,12 +701,13 @@ class MigrationRulesEngine {
 
       case 'LocalDeclarationStatement': {
         const declarationKeyword = (stmt.modifiers || []).includes('const') ? 'const' : 'let';
+        const resType = stmt.type ? this.resolver.resolveType(stmt.type) : { ts: 'any' };
         const decls = stmt.declarations.map(d => {
+          if (this.localVariables) this.localVariables.set(d.name, resType.ts);
           if (d.initializer) {
             const init = this.transformExpression(d.initializer, irUnit, currentMethodName);
             return `${declarationKeyword} ${sanitizeIdentifier(d.name)} = ${init};`;
           }
-          const resType = this.resolver.resolveType(stmt.type);
           return `${declarationKeyword} ${sanitizeIdentifier(d.name)}: ${resType.ts} = ${resType.defaultVal || 'null'};`;
         });
         return decls.join('\n');
@@ -735,10 +889,7 @@ class MigrationRulesEngine {
         const idName = expr.name;
         // Check global Unity Singletons / Math
         if (idName === 'Mathf') return 'Math';
-        if (idName === 'Time') {
-          if (currentMethodName === 'update' || currentMethodName === 'lateUpdate') return 'dt';
-          return 'UnityTime';
-        }
+        if (idName === 'Time') return 'UnityTime';
         if (idName === 'Random') return 'UnityRandom';
         if (idName === 'Vector3') { irUnit.addImport('cc', 'Vec3'); return 'Vec3'; }
         if (idName === 'Vector2') { irUnit.addImport('cc', 'Vec2'); return 'Vec2'; }
@@ -747,6 +898,11 @@ class MigrationRulesEngine {
         if (idName === 'GameObject') { irUnit.addImport('cc', 'Node'); return 'Node'; }
         if (idName === 'transform') return 'this.node';
         if (idName === 'gameObject') return 'this.node';
+        if (currentMethodName && this.currentClass && (this.currentClass.fields || []).some(f => f.name === idName && !f.isStatic)) {
+          if (!this.localVariables || !this.localVariables.has(idName)) {
+            return `this.${sanitizeIdentifier(idName)}`;
+          }
+        }
         return sanitizeIdentifier(idName);
       }
 
@@ -759,10 +915,7 @@ class MigrationRulesEngine {
       }
 
       case 'BinaryExpression': {
-        const op = expr.operator;
-        const left = this.transformExpression(expr.left, irUnit, currentMethodName);
-        const right = this.transformExpression(expr.right, irUnit, currentMethodName);
-        return `${left} ${op} ${right}`;
+        return this.transformBinary(expr, irUnit, currentMethodName);
       }
 
       case 'AssignmentExpression': {
@@ -1018,8 +1171,11 @@ class MigrationRulesEngine {
       if (member === 'zero') return 'Vec3.ZERO';
       if (member === 'one') return 'Vec3.ONE';
       if (member === 'up') return 'Vec3.UP';
+      if (member === 'down') return 'Vec3.DOWN';
       if (member === 'forward') return 'Vec3.FORWARD';
+      if (member === 'back') return 'Vec3.BACK';
       if (member === 'right') return 'Vec3.RIGHT';
+      if (member === 'left') return 'Vec3.LEFT';
     }
 
     if (targetStr === 'Quat' || targetStr === 'Quaternion') {
@@ -1043,6 +1199,7 @@ class MigrationRulesEngine {
       if (member === 'Rad2Deg') return '(180 / Math.PI)';
       if (member === 'PI') return 'Math.PI';
       if (member === 'Infinity') return 'Infinity';
+      if (member === 'Epsilon') return '1e-6';
     }
 
     return `${targetStr}.${member}`;
@@ -1052,6 +1209,17 @@ class MigrationRulesEngine {
     let target = expr.target;
     let targetStr = this.transformExpression(target, irUnit, currentMethodName);
     const args = (expr.arguments || []).map(a => this.transformExpression(a.expr, irUnit, currentMethodName));
+
+    // Event or delegate .Invoke(...) trigger
+    if (targetStr.endsWith('.Invoke')) {
+      const caller = targetStr.replace(/\.Invoke$/, '');
+      if (caller.startsWith('(') || caller.endsWith(')')) {
+        return `${caller}(${args.join(', ')})`;
+      }
+      const eventName = caller.split('.').pop() || 'event';
+      const finalCaller = caller.includes('.') || caller.startsWith('this.') ? caller : `this.${caller}`;
+      return `${finalCaller}.emit('${eventName}'${args.length > 0 ? ', ' + args.join(', ') : ''})`;
+    }
 
     // Mathf methods -> Math or math
     if (targetStr.startsWith('Mathf.') || targetStr.startsWith('Math.')) {
@@ -1069,9 +1237,55 @@ class MigrationRulesEngine {
       if (funcName === 'Floor') return `Math.floor(${args.join(', ')})`;
       if (funcName === 'Ceil') return `Math.ceil(${args.join(', ')})`;
       if (funcName === 'Round') return `Math.round(${args.join(', ')})`;
+      if (funcName === 'MoveTowards') {
+        irUnit.addScratchVar('UnityMathf');
+        return `UnityMathf.moveTowards(${args.join(', ')})`;
+      }
       if (funcName === 'SmoothDamp') {
         irUnit.addScratchVar('UnityMathf');
         return `UnityMathf.smoothDamp(${args.join(', ')}, ${currentMethodName === 'update' ? 'dt' : '0.016'})`;
+      }
+      if (funcName === 'PingPong') {
+        irUnit.addScratchVar('UnityMathf');
+        return `UnityMathf.pingPong(${args.join(', ')})`;
+      }
+      if (funcName === 'Repeat') {
+        irUnit.addScratchVar('UnityMathf');
+        return `UnityMathf.repeat(${args.join(', ')})`;
+      }
+      if (funcName === 'DeltaAngle') {
+        irUnit.addScratchVar('UnityMathf');
+        return `UnityMathf.deltaAngle(${args.join(', ')})`;
+      }
+    }
+
+    // Quaternion methods
+    if (targetStr.startsWith('Quat.') || targetStr.startsWith('Quaternion.')) {
+      irUnit.addImport('cc', 'Quat');
+      const funcName = targetStr.split('.')[1];
+      if (funcName === 'LookRotation') {
+        return `Quat.fromViewUp(_tempQuat_0, ${args[0]}${args[1] ? ', ' + args[1] : ''})`;
+      }
+      if (funcName === 'Euler') {
+        return `Quat.fromEuler(_tempQuat_0, ${args.join(', ')})`;
+      }
+      if (funcName === 'AngleAxis') {
+        return `Quat.fromAxisAngle(_tempQuat_0, ${args[1]}, ${args[0]} * (Math.PI / 180))`;
+      }
+      if (funcName === 'Slerp') {
+        return `Quat.slerp(_tempQuat_0, ${args[0]}, ${args[1]}, ${args[2]})`;
+      }
+      if (funcName === 'Lerp') {
+        return `Quat.lerp(_tempQuat_0, ${args[0]}, ${args[1]}, ${args[2]})`;
+      }
+      if (funcName === 'Inverse') {
+        return `Quat.invert(_tempQuat_0, ${args[0]})`;
+      }
+      if (funcName === 'Dot') {
+        return `Quat.dot(${args[0]}, ${args[1]})`;
+      }
+      if (funcName === 'Angle') {
+        return `Quat.angle(${args[0]}, ${args[1]})`;
       }
     }
 
@@ -1082,6 +1296,10 @@ class MigrationRulesEngine {
       if (funcName === 'Distance') return `Vec3.distance(${args[0]}, ${args[1]})`;
       if (funcName === 'Dot') return `Vec3.dot(${args[0]}, ${args[1]})`;
       if (funcName === 'Angle') return `Vec3.angle(${args[0]}, ${args[1]})`;
+      if (funcName === 'Cross') return `Vec3.cross(_tempV3_0, ${args[0]}, ${args[1]})`;
+      if (funcName === 'Lerp') return `Vec3.lerp(_tempV3_0, ${args[0]}, ${args[1]}, ${args[2]})`;
+      if (funcName === 'Normalize') return `Vec3.normalize(_tempV3_0, ${args[0]})`;
+      if (funcName === 'Scale') return `Vec3.multiply(_tempV3_0, ${args[0]}, ${args[1]})`;
     }
 
     // GetComponent<T>() -> this.getComponent(T)
@@ -1130,9 +1348,25 @@ class MigrationRulesEngine {
 
     // Transform Node position/rotation/scale setters
     if (leftStr === 'this.node.worldPosition') {
+      if (expr.operator === '+=') {
+        irUnit.addImport('cc', 'Vec3');
+        return `Vec3.add(_tempV3_0, this.node.worldPosition, ${rightStr}), this.node.setWorldPosition(_tempV3_0)`;
+      }
+      if (expr.operator === '-=') {
+        irUnit.addImport('cc', 'Vec3');
+        return `Vec3.subtract(_tempV3_0, this.node.worldPosition, ${rightStr}), this.node.setWorldPosition(_tempV3_0)`;
+      }
       return `this.node.setWorldPosition(${rightStr})`;
     }
     if (leftStr === 'this.node.position') {
+      if (expr.operator === '+=') {
+        irUnit.addImport('cc', 'Vec3');
+        return `Vec3.add(_tempV3_0, this.node.position, ${rightStr}), this.node.setPosition(_tempV3_0)`;
+      }
+      if (expr.operator === '-=') {
+        irUnit.addImport('cc', 'Vec3');
+        return `Vec3.subtract(_tempV3_0, this.node.position, ${rightStr}), this.node.setPosition(_tempV3_0)`;
+      }
       return `this.node.setPosition(${rightStr})`;
     }
     if (leftStr === 'this.node.worldRotation') {
@@ -1146,6 +1380,65 @@ class MigrationRulesEngine {
     }
 
     return `${leftStr} ${expr.operator} ${rightStr}`;
+  }
+
+  isVector(str) {
+    if (!str) return false;
+    if (str.includes('Vec3') || str.includes('Vector3') || str.includes('position') || str.includes('Position') || str.includes('forward') || str.includes('right') || str.includes('up') || str.includes('scale') || str.includes('_tempV3')) return true;
+    const clean = str.replace(/^this\./, '');
+    if (this.localVariables && (this.localVariables.get(clean) === 'Vec3' || this.localVariables.get(clean) === 'Vector3')) return true;
+    if (this.currentClass && (this.currentClass.fields || []).some(f => (f.name === clean || f.name === str) && (f.type === 'Vec3' || f.type === 'Vector3'))) return true;
+    return false;
+  }
+
+  isQuat(str) {
+    if (!str) return false;
+    if (str.includes('Quat') || str.includes('Quaternion') || str.includes('rotation') || str.includes('Rotation') || str.includes('_tempQuat')) return true;
+    const clean = str.replace(/^this\./, '');
+    if (this.localVariables && (this.localVariables.get(clean) === 'Quat' || this.localVariables.get(clean) === 'Quaternion')) return true;
+    if (this.currentClass && (this.currentClass.fields || []).some(f => (f.name === clean || f.name === str) && (f.type === 'Quat' || f.type === 'Quaternion'))) return true;
+    return false;
+  }
+
+  transformBinary(expr, irUnit, currentMethodName) {
+    const op = expr.operator;
+    const left = this.transformExpression(expr.left, irUnit, currentMethodName);
+    const right = this.transformExpression(expr.right, irUnit, currentMethodName);
+
+    const isVectorLeft = this.isVector(left);
+    const isVectorRight = this.isVector(right);
+
+    const isQuatLeft = this.isQuat(left);
+    const isQuatRight = this.isQuat(right);
+
+    if (isVectorLeft || isVectorRight) {
+      irUnit.addImport('cc', 'Vec3');
+      const tempTarget = left.includes('_tempV3_0') || right.includes('_tempV3_0')
+        ? (left.includes('_tempV3_1') || right.includes('_tempV3_1') ? '_tempV3_2' : '_tempV3_1')
+        : '_tempV3_0';
+
+      if (op === '+') return `Vec3.add(${tempTarget}, ${left}, ${right})`;
+      if (op === '-') return `Vec3.subtract(${tempTarget}, ${left}, ${right})`;
+      if (op === '*') {
+        if (isVectorLeft && !isVectorRight) return `Vec3.multiplyScalar(${tempTarget}, ${left}, ${right})`;
+        if (!isVectorLeft && isVectorRight) return `Vec3.multiplyScalar(${tempTarget}, ${right}, ${left})`;
+        return `Vec3.multiply(${tempTarget}, ${left}, ${right})`;
+      }
+      if (op === '/') {
+        return `Vec3.multiplyScalar(${tempTarget}, ${left}, 1 / (${right}))`;
+      }
+      if (op === '==' || op === '===') return `Vec3.equals(${left}, ${right})`;
+      if (op === '!=' || op === '!==') return `!Vec3.equals(${left}, ${right})`;
+    }
+
+    if (isQuatLeft || isQuatRight) {
+      irUnit.addImport('cc', 'Quat');
+      if (op === '*') return `Quat.multiply(_tempQuat_0, ${left}, ${right})`;
+      if (op === '==' || op === '===') return `Quat.equals(${left}, ${right})`;
+      if (op === '!=' || op === '!==') return `!Quat.equals(${left}, ${right})`;
+    }
+
+    return `${left} ${op} ${right}`;
   }
 
   transformObjectCreation(expr, irUnit, currentMethodName) {

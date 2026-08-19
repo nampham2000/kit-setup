@@ -15,6 +15,8 @@ const ts = require('typescript');
 const { parseCSharpSource } = require('./csharp-parser.cjs');
 const { MigrationRulesEngine } = require('./migration-rules.cjs');
 const { CocosEmitter } = require('./cocos-emitter.cjs');
+const { WorkspaceIndexer } = require('./workspace-indexer.cjs');
+const { SkeletonGenerator } = require('./skeleton-generator.cjs');
 
 function parseArgs() {
   const args = process.argv.slice(2);
@@ -26,6 +28,8 @@ function parseArgs() {
     verbose: false,
     flatOutput: false,
     runtimeOnly: false,
+    emitSkeleton: '',
+    workspace: true,
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -43,6 +47,10 @@ function parseArgs() {
       options.flatOutput = true;
     } else if (args[i] === '--runtime-only') {
       options.runtimeOnly = true;
+    } else if (args[i] === '--emit-skeleton' && args[i + 1]) {
+      options.emitSkeleton = args[++i];
+    } else if (args[i] === '--no-workspace') {
+      options.workspace = false;
     }
   }
 
@@ -155,7 +163,7 @@ function compileFile(filePath, outDir, dryRun = false, compileOptions = {}) {
 
   try {
     const ast = parseCSharpSource(source, filename);
-    const engine = new MigrationRulesEngine();
+    const engine = new MigrationRulesEngine(options.workspaceIndexer);
     const ir = engine.transform(ast);
     const emitter = new CocosEmitter();
     const tsCode = emitter.emit(ir);
@@ -321,15 +329,27 @@ function main() {
   if (unityProjectRoots.length > 1) {
     console.warn(`[WARN] Detected ${unityProjectRoots.length} Unity project roots. Pass one platform/project root as --src to avoid duplicate migration work.`);
   }
+
+  let workspaceIndexer = null;
+  if (options.workspace && files.length > 1) {
+    if (options.verbose) console.log(`Indexing workspace (${files.length} files)...`);
+    workspaceIndexer = new WorkspaceIndexer();
+    workspaceIndexer.indexFiles(files);
+  }
+
+  const generatedFiles = [];
+
   for (const f of files) {
     const res = compileFile(f, options.out, options.dryRun, {
       preserveStructure: sourceStat.isDirectory() && !options.flatOutput,
       sourceRoot,
       validateSyntax: true,
+      workspaceIndexer,
     });
     results.push(res);
     if (res.success) {
       successCount++;
+      if (res.outFile) generatedFiles.push(res.outFile);
       if (options.verbose) {
         console.log(`[PASS] ${path.relative(sourceRoot, f)} -> ${path.relative(options.out, res.outFile)} (${res.durationMs}ms) [Confidence: ${(res.confidence * 100).toFixed(0)}%]`);
       }
@@ -337,6 +357,15 @@ function main() {
       failCount++;
       console.error(`[FAIL] ${path.basename(f)}: ${res.error}`);
     }
+  }
+
+  if (options.emitSkeleton && generatedFiles.length > 0 && !options.dryRun) {
+    const generator = new SkeletonGenerator();
+    const skeletonContent = generator.generateFromFiles(generatedFiles);
+    const skeletonPath = path.resolve(options.emitSkeleton);
+    fs.mkdirSync(path.dirname(skeletonPath), { recursive: true });
+    fs.writeFileSync(skeletonPath, skeletonContent, 'utf8');
+    console.log(`Skeleton emitted -> ${options.emitSkeleton}`);
   }
 
   console.log(`\n=== Static Migration Summary ===`);
