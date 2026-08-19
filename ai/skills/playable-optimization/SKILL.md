@@ -13,7 +13,7 @@ This skill provides guidelines and checklists to ensure Playable Ads meet strict
 Before building, always run the automated asset optimization tools:
 1. **Strip FBX Textures**:
    ```bash
-   node playable-shared-kit/tools/strip-fbx-textures.cjs assets/models/
+   node playable-shared-kit/tools/strip-fbx-textures.cjs <file.fbx>
    ```
 2. **Clean Unused Assets**:
    ```bash

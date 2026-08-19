@@ -188,8 +188,25 @@ function renderAsciiTree(node, prefix = '', isLast = true) {
   return output;
 }
 
+const USAGE = `Cocos Scene Inspector
+
+Usage:
+  node playable-shared-kit/tools/scene-inspector.cjs <sceneName> [options]
+  npm run ai:scene -- <sceneName>
+
+Arguments:
+  <sceneName>   Scene or prefab name (không cần đuôi .scene), hoặc đường dẫn.
+
+Options:
+  --json    Emit the node graph as JSON instead of the ASCII tree.
+  --help    Show this help and exit without reading any scene.`;
+
 function main() {
   const args = process.argv.slice(2);
+  if (args.includes('--help') || args.includes('-h')) {
+    console.log(USAGE);
+    return;
+  }
   const isJson = args.includes('--json');
   const fileArg = args.find((a) => !a.startsWith('-'));
 

@@ -277,6 +277,14 @@ class ShaderGraphParser {
     this.errors = [];
     this.warnings = [];
 
+    /**
+     * Khác với đường ShaderLab/HLSL (chỉ sinh template), parser này dịch THẬT
+     * đồ thị node sang GLSL: mỗi node được emit thành biểu thức `_sg_*` và
+     * các hàm chuẩn (unity_simple_noise, unity_voronoi, ...) được nhúng kèm.
+     * Vì vậy thân shader là kết quả dịch, không phải template.
+     */
+    this.bodyTranspiled = true;
+
     this._parse();
   }
 

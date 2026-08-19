@@ -320,6 +320,36 @@ function ensureMaterialMeta(mtlFile, cocosRoot) {
 /**
  * Converts Unity ShaderLab / HLSL or ShaderGraph into Cocos Creator .effect
  */
+/**
+ * Chấm severity trung thực cho một lần chuyển shader.
+ *
+ * Bộ chuyển hiện chỉ sinh khung + properties + UBO + render state; thân
+ * frag()/vert() là template theo shading model. Báo `low SUCCESS` cho việc đó
+ * là false-positive nguy hiểm nhất của kit (lỗi SHD-01): agent tin report,
+ * không mở file kiểm tra, và shader sai chỉ lộ ra khi QA nhìn màn hình.
+ *
+ * Quy tắc: chỉ hạ xuống `low` khi `bodyTranspiled === true`.
+ */
+function reportShaderOutcome(reporter, { bodyTranspiled, okCode, srcFile, outFile, shadingModel, kind, notes }) {
+  if (bodyTranspiled) {
+    reporter.low(okCode, srcFile, outFile, `Transpiled ${kind} to Cocos effect, including shader body (Shading Model: ${shadingModel})`);
+    return;
+  }
+
+  const unused = (notes && notes.unusedUniforms) || [];
+  const detail = unused.length
+    ? `Uniform khai bao nhung khong duoc dung trong than template: ${unused.join(', ')}`
+    : '';
+
+  reporter.high(
+    'SHADER_NEEDS_MANUAL_PORT',
+    srcFile,
+    outFile,
+    `Khung/properties/UBO da sinh dung, nhung THAN shader chua duoc dich - frag() hien la template '${shadingModel}', khong phai thuat toan goc. Agent phai viet lai tu khoi TODO-AGENT o cuoi file .effect.`,
+    detail
+  );
+}
+
 function convertUnityHlslToCocosEffect(options, externalReporter) {
   const reporter = externalReporter || new Reporter();
   if (!options.src) fail('--src is required');
@@ -336,6 +366,9 @@ function convertUnityHlslToCocosEffect(options, externalReporter) {
   const source = fs.readFileSync(srcFile, 'utf8');
   const shaderName = options.shaderName || path.basename(outFile, path.extname(outFile));
 
+  // Không được báo "Successfully transpiled" khi thân shader chỉ là template.
+  // Xem SHD-01: report `low` khiến agent tin kết quả và bỏ qua shader hỏng.
+
   let effectText = '';
   let properties = [];
   let isTransparent = false;
@@ -347,7 +380,15 @@ function convertUnityHlslToCocosEffect(options, externalReporter) {
       effectText = parser.generateCocosEffect(shaderName);
       properties = parser.properties;
       isTransparent = parser.isTransparent;
-      reporter.low('SHADERGRAPH_TRANSPILED', srcFile, outFile, `Successfully transpiled ShaderGraph to Cocos effect (Shading Model: ${parser.targetShadingModel})`);
+      reportShaderOutcome(reporter, {
+        bodyTranspiled: parser.bodyTranspiled === true,
+        okCode: 'SHADERGRAPH_TRANSPILED',
+        srcFile,
+        outFile,
+        shadingModel: parser.targetShadingModel,
+        kind: 'ShaderGraph',
+        notes: typeof parser.getManualPortNotes === 'function' ? parser.getManualPortNotes(effectText) : null,
+      });
     } catch (e) {
       reporter.high('SHADERGRAPH_PARSE_ERROR', srcFile, outFile, `ShaderGraph parsing error: ${e.message}`, e.stack);
       throw e;
@@ -359,7 +400,15 @@ function convertUnityHlslToCocosEffect(options, externalReporter) {
       effectText = transpiler.generateCocosEffect(shaderName);
       properties = transpiler.properties;
       isTransparent = transpiler.renderState.transparent;
-      reporter.low('HLSL_TRANSPILED', srcFile, outFile, `Successfully transpiled ShaderLab/HLSL to Cocos effect (Shading Model: ${transpiler.shadingModel})`);
+      reportShaderOutcome(reporter, {
+        bodyTranspiled: transpiler.bodyTranspiled === true,
+        okCode: 'HLSL_TRANSPILED',
+        srcFile,
+        outFile,
+        shadingModel: transpiler.shadingModel,
+        kind: 'ShaderLab/HLSL',
+        notes: transpiler.getManualPortNotes(effectText),
+      });
     } catch (e) {
       reporter.high('HLSL_PARSE_ERROR', srcFile, outFile, `HLSL parsing error: ${e.message}`, e.stack);
       throw e;

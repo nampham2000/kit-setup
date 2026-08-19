@@ -1,12 +1,26 @@
 {
   "servers": {
-    "workMemory": {
+    "cocos-mcp": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "playable-shared-kit/tools/cocos-mcp-proxy.cjs"
+      ],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "COCOS_MCP_URL": "http://127.0.0.1:3000/mcp"
+      }
+    },
+    "work-memory": {
       "type": "stdio",
       "command": "node",
       "args": [
         "playable-shared-kit/tools/work-memory-mcp.cjs"
       ],
       "cwd": "${workspaceFolder}",
+      "env": {
+        "WORK_MEMORY_REPO_ROOT": "${workspaceFolder}"
+      },
       "dev": {
         "watch": [
           "playable-shared-kit/tools/work-memory-mcp.cjs",
@@ -14,10 +28,6 @@
           "playable-shared-kit/tools/work-memory/**/*.js"
         ]
       }
-    },
-    "cocos-mcp": {
-      "type": "http",
-      "url": "http://127.0.0.1:3000/mcp"
     }
   }
 }

@@ -10,27 +10,17 @@ This skill provides step-by-step guidance and architectural rules for converting
 
 ## 1. Automated Tooling First
 
-Before manually rewriting assets or prefabs, use the built-in shared kit tools:
-- **Smart All-in-One Port**:
-  ```bash
-  npm run port:smart -- --src <unity_dir> --out assets/
-  ```
-- **Port Prefabs, Meshes & Materials**:
-  ```bash
-  node playable-shared-kit/tools/unity-cocos-port.cjs port --src <unity_prefab_or_dir> --out assets/prefabs/
-  ```
-- **Scaffold C# Scripts to TypeScript**:
-  ```bash
-  npm run port:script -- --src <csharp_path> --out assets/script/
-  ```
-- **Port Shaders**:
-  ```bash
-  node playable-shared-kit/tools/unity-hlsl-to-cocos-effect.cjs <unity_shader.shader> assets/effects/<shader_name>.effect
-  ```
-- **Strip FBX Texture Links**:
-  ```bash
-  node playable-shared-kit/tools/strip-fbx-textures.cjs assets/models/
-  ```
+Trước khi viết tay bất kỳ prefab / shader / script nào, dùng tool sẵn có.
+Bảng lệnh dưới đây được **sinh tự động** từ `playable-shared-kit/ai/capabilities.def.cjs`
+và được `npm run ai:contract:verify` đối chiếu với CLI thật.
+
+<!-- BEGIN:GENERATED:commands -->
+<!-- END:GENERATED:commands -->
+
+### Giới hạn bắt buộc phải biết
+
+<!-- BEGIN:GENERATED:limits -->
+<!-- END:GENERATED:limits -->
 
 ---
 
@@ -86,9 +76,7 @@ All game managers must inherit or wire into `GameManager` from `playable-core`:
 
 ---
 
-## 5. Mandatory Post-Porting & Post-Code Verification Gate
+## 5. Nguyên tắc bất biến & cổng xác minh
 
-Immediately after porting assets, prefabs, or writing/refactoring TypeScript code, you **MUST** run the verification suite before reporting done:
-1. `npm run ai:verify` (or `npm run verify`): Confirms 0 TypeScript errors, valid configs, intact .meta files, and bundle size budget.
-2. `npm run ai:lint` (or `npm run lint:gc`): Confirms Zero-GC compliance.
-3. `npm run ai:scene -- <sceneName>`: Confirms node hierarchy and component attachments without reading raw JSON.
+<!-- BEGIN:GENERATED:core-rules -->
+<!-- END:GENERATED:core-rules -->

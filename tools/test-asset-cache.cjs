@@ -3,12 +3,34 @@
 const path = require('path');
 const fs = require('fs');
 
-// Require the compiled AssetCacheService from dist
-const { AssetCacheService } = require('../../extensions/cocos-mcp/dist/tools/asset-cache-service');
-
 console.log('\n======================================================');
 console.log('🧪 TESTING ASSET CACHE SERVICE & SUB-ASSET RESOLVER');
 console.log('======================================================\n');
+
+/**
+ * `AssetCacheService` sống trong extension cocos-mcp đã build (`dist/`).
+ * Nếu extension chưa build (hoặc service đã bị gỡ) thì trước đây file này
+ * ném `MODULE_NOT_FOUND` và làm `npm run test:cache` crash.
+ *
+ * Báo SKIPPED một cách rõ ràng — KHÔNG báo PASS, vì không có gì được kiểm chứng.
+ */
+const SERVICE_PATH = path.resolve(__dirname, '..', '..', 'extensions', 'cocos-mcp', 'dist', 'tools', 'asset-cache-service.js');
+
+let AssetCacheService = null;
+try {
+    if (!fs.existsSync(SERVICE_PATH)) {
+        throw new Error(`Not found: ${path.relative(path.resolve(__dirname, '..', '..'), SERVICE_PATH)}`);
+    }
+    ({ AssetCacheService } = require(SERVICE_PATH));
+    if (!AssetCacheService) throw new Error('Module loaded but does not export AssetCacheService');
+} catch (error) {
+    console.log('⏭️  SKIPPED — AssetCacheService không khả dụng.');
+    console.log(`    Lý do: ${error.message}`);
+    console.log('    Cách bật: build extension cocos-mcp (tạo dist/tools/asset-cache-service.js) rồi chạy lại.');
+    console.log('\n    Lưu ý: SKIPPED ≠ PASS. Không có assertion nào được chạy.');
+    console.log('======================================================\n');
+    process.exit(0);
+}
 
 // 1. Test Initial Scan
 console.log('1️⃣ Testing Scan & Indexing...');

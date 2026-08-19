@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "generatedAt": "2026-08-18T13:48:44.649Z",
+    "generatedAt": "2026-08-19T03:11:34.774Z",
     "description": "Compact project manifest for AI Agents. Use this instead of scanning file trees.",
     "project": {
       "projectName": "cc_playable_framework",
@@ -20,45 +20,73 @@
   },
   "scenes": [
     {
-      "name": "Gameplay",
-      "path": "assets/Gameplay.scene",
-      "sizeKb": 83.3
-    },
-    {
       "name": "Boilerplate",
       "path": "assets/Boilerplate.scene",
       "sizeKb": 60.9
+    },
+    {
+      "name": "Gameplay",
+      "path": "assets/Gameplay.scene",
+      "sizeKb": 87.7
     }
   ],
   "prefabs": [],
   "scripts": [
     {
-      "name": "GameTrackingService",
-      "path": "assets/script/shared/sdk/analytics/GameTrackingService.ts"
+      "name": "CameraController",
+      "path": "assets/script/shared/core/components/CameraController.ts"
     },
     {
       "name": "index",
-      "path": "assets/script/shared/sdk/index.ts"
+      "path": "assets/script/shared/core/components/index.ts"
     },
     {
-      "name": "PlayableAdDownloadEvent",
-      "path": "assets/script/shared/sdk/platform/PlayableAdDownloadEvent.ts"
+      "name": "Interactive3DHero",
+      "path": "assets/script/shared/core/components/Interactive3DHero.ts"
     },
     {
-      "name": "SuperHtmlPlayable",
-      "path": "assets/script/shared/sdk/platform/SuperHtmlPlayable.ts"
+      "name": "PlayableAudioController",
+      "path": "assets/script/shared/core/components/PlayableAudioController.ts"
+    },
+    {
+      "name": "PlayableCTAController",
+      "path": "assets/script/shared/core/components/PlayableCTAController.ts"
+    },
+    {
+      "name": "PlayableEntry",
+      "path": "assets/script/shared/core/components/PlayableEntry.ts"
+    },
+    {
+      "name": "PlayableTrackingController",
+      "path": "assets/script/shared/core/components/PlayableTrackingController.ts"
+    },
+    {
+      "name": "PlayableUIHUD",
+      "path": "assets/script/shared/core/components/PlayableUIHUD.ts"
+    },
+    {
+      "name": "index",
+      "path": "assets/script/shared/core/config/index.ts"
+    },
+    {
+      "name": "PlayableConfig",
+      "path": "assets/script/shared/core/config/PlayableConfig.ts"
+    },
+    {
+      "name": "PlayableConfigManager",
+      "path": "assets/script/shared/core/config/PlayableConfigManager.ts"
     },
     {
       "name": "GameManager",
       "path": "assets/script/shared/core/GameManager.ts"
     },
     {
-      "name": "SoundManager",
-      "path": "assets/script/shared/core/SoundManager.ts"
-    },
-    {
       "name": "index",
       "path": "assets/script/shared/core/index.ts"
+    },
+    {
+      "name": "SoundManager",
+      "path": "assets/script/shared/core/SoundManager.ts"
     },
     {
       "name": "GameUtils",
@@ -77,68 +105,61 @@
       "path": "assets/script/shared/core/utils/pool/Poolable.ts"
     },
     {
-      "name": "PlayableConfig",
-      "path": "assets/script/shared/core/config/PlayableConfig.ts"
-    },
-    {
-      "name": "PlayableConfigManager",
-      "path": "assets/script/shared/core/config/PlayableConfigManager.ts"
-    },
-    {
-      "name": "index",
-      "path": "assets/script/shared/core/config/index.ts"
-    },
-    {
-      "name": "CameraController",
-      "path": "assets/script/shared/core/components/CameraController.ts"
-    },
-    {
-      "name": "Interactive3DHero",
-      "path": "assets/script/shared/core/components/Interactive3DHero.ts"
-    },
-    {
-      "name": "PlayableAudioController",
-      "path": "assets/script/shared/core/components/PlayableAudioController.ts"
-    },
-    {
-      "name": "PlayableCTAController",
-      "path": "assets/script/shared/core/components/PlayableCTAController.ts"
-    },
-    {
-      "name": "PlayableTrackingController",
-      "path": "assets/script/shared/core/components/PlayableTrackingController.ts"
-    },
-    {
-      "name": "PlayableUIHUD",
-      "path": "assets/script/shared/core/components/PlayableUIHUD.ts"
-    },
-    {
-      "name": "PlayableEntry",
-      "path": "assets/script/shared/core/components/PlayableEntry.ts"
-    },
-    {
-      "name": "index",
-      "path": "assets/script/shared/core/components/index.ts"
-    },
-    {
       "name": "index",
       "path": "assets/script/shared/index.ts"
+    },
+    {
+      "name": "GameTrackingService",
+      "path": "assets/script/shared/sdk/analytics/GameTrackingService.ts"
+    },
+    {
+      "name": "index",
+      "path": "assets/script/shared/sdk/index.ts"
+    },
+    {
+      "name": "PlayableAdDownloadEvent",
+      "path": "assets/script/shared/sdk/platform/PlayableAdDownloadEvent.ts"
+    },
+    {
+      "name": "SuperHtmlPlayable",
+      "path": "assets/script/shared/sdk/platform/SuperHtmlPlayable.ts"
+    },
+    {
+      "name": "UnityParticleHierarchyTransformSync",
+      "path": "assets/scripts/UnityParticleHierarchyTransformSync.ts"
+    },
+    {
+      "name": "UnityParticleRateOverDistanceEmitter",
+      "path": "assets/scripts/UnityParticleRateOverDistanceEmitter.ts"
+    },
+    {
+      "name": "UnityParticleSubEmitterFollower",
+      "path": "assets/scripts/UnityParticleSubEmitterFollower.ts"
+    },
+    {
+      "name": "UnitySpriteRendererColorAdapter",
+      "path": "assets/scripts/UnitySpriteRendererColorAdapter.ts"
     }
   ],
   "assetsSummary": {
     "audioCount": 4,
     "audioList": [
-      "assets/resources/sound/sfx_click.mp3",
       "assets/resources/sound/bgm_main.mp3",
+      "assets/resources/sound/sfx_click.mp3",
       "assets/resources/sound/sfx_success.mp3",
       "assets/resources/sound/sfx_win.mp3"
     ],
-    "modelCount": 1,
+    "modelCount": 2,
     "models": [
-      "assets/models/pack_block.fbx"
+      "assets/models/pack_block.fbx",
+      "assets/unity_imported/_GameHome/_Game_HolePuzzle/Prefabs/Events/flower_collection.fbx"
     ],
-    "shaderCount": 0,
-    "shaders": []
+    "shaderCount": 3,
+    "shaders": [
+      "assets/effects/SimpleLit.effect",
+      "assets/effects/UnitySpriteRendererColor.effect",
+      "assets/unity_imported/ui_sprite_alpha_sep/ui-sprite-alpha-sep.effect"
+    ]
   },
   "configSummary": {
     "ctaKeys": [
@@ -241,14 +262,25 @@
     }
   },
   "cliCheatSheet": {
-    "fastOnboarding": "node playable-shared-kit/tools/project-map-generator.cjs --stdout",
-    "buildPlayable": "npm run build",
-    "deployPreview": "npm run deploy",
-    "portUnityPrefab": "node playable-shared-kit/tools/unity-cocos-port.cjs convert-prefab --source <unity_path> --dest assets/prefabs/",
-    "portUnityShader": "node playable-shared-kit/tools/unity-hlsl-to-cocos-effect.cjs <shader.shader> assets/effects/<name>.effect",
-    "stripFbx": "node playable-shared-kit/tools/strip-fbx-textures.cjs assets/models/",
-    "optimizeAudio": "npm run sound:optimize",
-    "workMemoryQuery": "node playable-shared-kit/tools/work-memory.cjs stats",
-    "syncAiKnowledge": "npm run ai:sync"
+    "map.generate": "npm run ai:map",
+    "scene.inspect": "npm run ai:scene -- <sceneName>",
+    "memory.query": "npm run memory:query -- <keyword>",
+    "port.prefab": "node playable-shared-kit/tools/unity-cocos-port.cjs port --src <unity_prefab_or_dir> --out <cocos_prefab_or_dir>",
+    "port.smart": "npm run port:smart -- --src <unity_dir> --out assets/",
+    "port.script": "npm run port:script -- --src <csharp_path> --out assets/script/",
+    "shader.convert": "node playable-shared-kit/tools/unity-hlsl-to-cocos-effect.cjs convert --src <unity.shader> --out <assets/effects/X.effect>",
+    "shader.batch": "node playable-shared-kit/tools/unity-hlsl-to-cocos-effect.cjs batch --dir <unity_shader_dir> --out-dir <assets/effects>",
+    "fbx.strip": "npm run fbx:strip -- <file.fbx>",
+    "verify.all": "npm run ai:verify",
+    "verify.gc": "npm run ai:lint",
+    "audio.optimize": "npm run sound:optimize",
+    "assets.cleanup": "npm run cleanup:unused",
+    "stats.resources": "npm run stats",
+    "build.playable": "npm run build",
+    "build.doctor": "npm run doctor",
+    "deploy.preview": "npm run deploy",
+    "ai.sync": "npm run ai:sync",
+    "ai.contract": "npm run ai:contract:verify",
+    "memory.remember": "npm run memory:stats"
   }
 }
