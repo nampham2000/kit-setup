@@ -96,8 +96,13 @@ const LIFECYCLE_MAP = {
 };
 
 class SemanticResolver {
-  constructor() {
+  constructor(workspaceIndexer = null) {
+    this.indexer = workspaceIndexer;
     this.customClasses = new Set();
+  }
+
+  setIndexer(indexer) {
+    this.indexer = indexer;
   }
 
   registerCustomClass(className) {
@@ -112,44 +117,39 @@ class SemanticResolver {
       return { ts: `[${elements.join(', ')}]`, cocos: null, import: null, defaultVal: 'null' };
     }
 
-    // C# namespace-alias qualification (`global::Foo`, `Alias::Foo`) is not
-    // valid TypeScript syntax. Preserve the qualified identity using TS dotted
-    // qualification; strip the special global root.
-    let typeName = (csharpType.name || 'object')
+    let typeName = (typeof csharpType === 'string' ? csharpType : (csharpType.name || 'object'))
       .replace(/^global::/, '')
       .replace(/::/g, '.');
     const simpleTypeName = typeName.split('.').pop();
 
-    // Handle generic types: List<T>, Dictionary<K, V>, HashSet<T>
-    if (typeName === 'List' || typeName === 'System.Collections.Generic.List') {
-      const inner = csharpType.typeArgs && csharpType.typeArgs[0] ? this.resolveType(csharpType.typeArgs[0]) : { ts: 'any', cocos: null };
-      return {
-        ts: `${inner.ts.includes('|') ? `(${inner.ts})` : inner.ts}[]`,
-        cocos: inner.cocos ? `[${inner.cocos}]` : null,
-        import: inner.import,
-        defaultVal: '[]'
-      };
-    }
-
-    if (typeName === 'Dictionary' || typeName === 'System.Collections.Generic.Dictionary') {
-      const keyType = csharpType.typeArgs && csharpType.typeArgs[0] ? this.resolveType(csharpType.typeArgs[0]).ts : 'any';
-      const valType = csharpType.typeArgs && csharpType.typeArgs[1] ? this.resolveType(csharpType.typeArgs[1]).ts : 'any';
-      return {
-        ts: `Map<${keyType}, ${valType}>`,
-        cocos: null,
-        import: null,
-        defaultVal: 'new Map()'
-      };
-    }
-
-    if (typeName === 'HashSet' || typeName === 'System.Collections.Generic.HashSet') {
-      const elemType = csharpType.typeArgs && csharpType.typeArgs[0] ? this.resolveType(csharpType.typeArgs[0]).ts : 'any';
-      return {
-        ts: `Set<${elemType}>`,
-        cocos: null,
-        import: null,
-        defaultVal: 'new Set()'
-      };
+    // Generic type: List<T>, Dictionary<K,V>, HashSet<T>
+    if (csharpType.typeArgs && csharpType.typeArgs.length > 0) {
+      const args = csharpType.typeArgs.map(t => this.resolveType(t));
+      if (typeName === 'List' || typeName === 'System.Collections.Generic.List') {
+        const inner = args[0].ts;
+        return {
+          ts: `${inner.includes('|') ? `(${inner})` : inner}[]`,
+          cocos: null,
+          import: null,
+          defaultVal: '[]'
+        };
+      }
+      if (typeName === 'Dictionary' || typeName === 'System.Collections.Generic.Dictionary') {
+        return {
+          ts: `Map<${args[0].ts}, ${args[1].ts}>`,
+          cocos: null,
+          import: null,
+          defaultVal: 'new Map()'
+        };
+      }
+      if (typeName === 'HashSet' || typeName === 'System.Collections.Generic.HashSet') {
+        return {
+          ts: `Set<${args[0].ts}>`,
+          cocos: null,
+          import: null,
+          defaultVal: 'new Set()'
+        };
+      }
     }
 
     // Array type: T[]
@@ -175,15 +175,27 @@ class SemanticResolver {
       };
     }
 
-    // User-defined / Custom class
+    let modulePath = null;
+    let simpleName = typeName;
+    const isExternAlias = typeof csharpType !== 'string' && csharpType.name && csharpType.name.includes('::') && !csharpType.name.startsWith('global::');
+    if (this.indexer) {
+      if (this.indexer.isKnownClass(typeName) || this.indexer.isEnum(typeName) || this.indexer.isInterface(typeName)) {
+        modulePath = this.indexer.getModulePath(typeName);
+        simpleName = typeName.split('.').pop();
+      }
+    } else if (typeName.includes('.') && !isExternAlias) {
+      const parts = typeName.split('.');
+      simpleName = parts.pop();
+      const folder = parts.join('/');
+      modulePath = `./${folder}/${simpleName}`;
+    }
+
     return {
-      ts: `${typeName} | null`,
-      cocos: typeName,
-      // Project types and .NET namespace-qualified types are not exports from
-      // Cocos' `cc` module. A later project-level resolver may add relative
-      // imports; importing them from `cc` creates both false positives and
-      // invalid import clauses (for example `System.Action`).
+      ts: `${simpleName} | null`,
+      cocos: simpleName,
       import: null,
+      modulePath,
+      symbolName: simpleName,
       defaultVal: 'null',
       isCustomClass: true,
     };
