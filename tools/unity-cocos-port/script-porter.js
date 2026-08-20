@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { cocosRef } = require('./core-utils');
+const { SCRIPT_SHAPE_MATCH_THRESHOLD } = require('./constants');
 
 module.exports = function createScriptPorter(deps) {
   const {
@@ -259,6 +260,45 @@ module.exports = function createScriptPorter(deps) {
     }
 
     const fields = getTopLevelSerializedFields(doc, options);
+
+    // A MonoBehaviour is matched to a Cocos class by NAME only. Two unrelated
+    // classes can share a name (measured: Unity's own CameraController bound to
+    // the framework's shared/core/components/CameraController.ts, and all four
+    // Unity fields were silently dropped by the Cocos deserializer while the
+    // report said high=0). Compare the field sets so a wrong bind is reported.
+    const declaredMembers = script.memberNames;
+    if (declaredMembers && declaredMembers.size > 0) {
+      const fieldNames = Object.keys(fields);
+      const unknown = fieldNames.filter((key) => !declaredMembers.has(key));
+      const matched = fieldNames.length - unknown.length;
+      const matchRatio = fieldNames.length > 0 ? matched / fieldNames.length : 1;
+
+      if (fieldNames.length > 0 && matchRatio < SCRIPT_SHAPE_MATCH_THRESHOLD) {
+        reporter.high(
+          'SCRIPT_CLASS_SHAPE_MISMATCH',
+          scriptAsset.relativePath,
+          className,
+          `Cocos class "${className}" (${script.relativePath}) declares none of ${unknown.length}/${fieldNames.length} serialized Unity field(s) — likely a different class with the same name`,
+          unknown.slice(0, 12).join(', '),
+        );
+      } else if (unknown.length > 0) {
+        reporter.medium(
+          'SCRIPT_FIELD_UNKNOWN',
+          scriptAsset.relativePath,
+          className,
+          `${unknown.length} Unity field(s) have no matching member on Cocos class "${className}" and will be dropped on load`,
+          unknown.slice(0, 12).join(', '),
+        );
+      }
+    } else {
+      reporter.low(
+        'SCRIPT_CLASS_SHAPE_UNKNOWN',
+        scriptAsset.relativePath,
+        className,
+        `Could not read any member names from ${script.relativePath}; field-set validation was skipped`,
+      );
+    }
+
     const translated = {};
     for (const [key, value] of Object.entries(fields)) {
       if (className === 'MilosMeoController' && key === 'clips' && Array.isArray(value)) {

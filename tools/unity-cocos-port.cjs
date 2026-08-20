@@ -287,6 +287,12 @@ Examples:
 }
 
 const CLI_PATH_VALUE_OPTIONS = new Set(['--src', '--out', '--unity-root', '--cocos-root', '--report']);
+/** Words the member-name scan can match that are not class members. */
+const TS_NON_MEMBER_KEYWORDS = new Set([
+  'if', 'for', 'while', 'switch', 'catch', 'return', 'class', 'const', 'let', 'var',
+  'function', 'import', 'export', 'new', 'typeof', 'else', 'do', 'try', 'throw',
+  'case', 'default', 'break', 'continue', 'constructor', 'super', 'this', 'await',
+]);
 const COCOS_CAMERA_PROJECTION_ORTHO = 0;
 const COCOS_CAMERA_PROJECTION_PERSPECTIVE = 1;
 
@@ -1318,6 +1324,19 @@ class CocosAssetDatabase {
     for (const match of source.matchAll(
       /(?:^|[\n;{])[ \t]*(?:public |private |protected |readonly )*([A-Za-z_$][\w$]*)[ \t]*!?\??[ \t]*:[ \t]*(Vec2|Vec3)[ \t]*[;=]/g,
     )) if (!vectorFields.has(match[1])) vectorFields.set(match[1], `cc.${match[2]}`);
+    // Every member name the class actually declares. A MonoBehaviour is bound to
+    // a Cocos class by NAME alone, so without this the porter cannot tell a real
+    // match from two unrelated classes that happen to share a name - it would
+    // write Unity's fields into a class that has none of them and report success.
+    const memberNames = new Set();
+    for (const match of source.matchAll(
+      /(?:^|\n)[ \t]*(?:@property[^\n]*\n[ \t]*)?(?:public |private |protected |readonly |static |declare |abstract )*([A-Za-z_$][\w$]*)[ \t]*[!?]?[ \t]*[:=(]/g,
+    )) memberNames.add(match[1]);
+    for (const match of source.matchAll(/(?:^|\n)[ \t]*(?:public |private |protected |static )*(?:get|set)[ \t]+([A-Za-z_$][\w$]*)/g)) {
+      memberNames.add(match[1]);
+    }
+    for (const keyword of TS_NON_MEMBER_KEYWORDS) memberNames.delete(keyword);
+
     for (const className of classes) {
       this.scriptsByClass.set(className, {
         className,
@@ -1327,6 +1346,7 @@ class CocosAssetDatabase {
         relativePath: record.relativePath,
         booleanFields,
         vectorFields,
+        memberNames,
       });
     }
   }

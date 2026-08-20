@@ -2587,12 +2587,46 @@ class Parser {
   }
 }
 
+/** Platforms with no playable-ads target; their branches are never the live one. */
+const OBSCURE_PLATFORM_SYMBOLS = [
+  'WINDOWS_PHONE', 'WINDOWS_STOREAPP', 'NOT_UNITY3D', 'NETFX_CORE',
+  'UNITY_WP8', 'UNITY_METRO', 'UNITY_WINRT',
+];
+
+/**
+ * Symbols that are only defined inside the Unity Editor. A playable ad is a
+ * built runtime, so the editor branch is the WRONG one to keep - taking it
+ * silently inverted behaviour (measured: CameraPanDragStrategy.Tick() kept the
+ * mouse-drag editor path and dropped the touch path the build actually runs).
+ */
+const EDITOR_ONLY_SYMBOLS = ['UNITY_EDITOR_WIN', 'UNITY_EDITOR_OSX', 'UNITY_EDITOR_LINUX', 'UNITY_EDITOR'];
+
+/**
+ * Decide whether a `#if` / `#elif` condition is live for a built runtime.
+ * Returns null when the condition says nothing about editor/obscure platforms,
+ * meaning "keep the existing first-branch-wins behaviour".
+ */
+function evaluateRuntimeCondition(cond) {
+  for (const symbol of EDITOR_ONLY_SYMBOLS) {
+    const index = cond.indexOf(symbol);
+    if (index === -1) continue;
+    // `!UNITY_EDITOR` is the runtime branch, so it stays live.
+    const negated = /!\s*$/.test(cond.slice(0, index));
+    return { live: negated, symbol };
+  }
+  for (const symbol of OBSCURE_PLATFORM_SYMBOLS) {
+    if (cond.includes(symbol)) return { live: false, symbol };
+  }
+  return null;
+}
+
 // ── Public API ──────────────────────────────────────────────────────────────
 function preprocessCSharp(source) {
   const lines = source.split('\n');
   const out = [];
   const skipStack = [];
-  
+  const notes = [];
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const trimmed = line.trim();
@@ -2603,10 +2637,12 @@ function preprocessCSharp(source) {
         continue;
       }
       const cond = trimmed.replace('#if', '').trim();
-      const isObscure = ['WINDOWS_PHONE', 'WINDOWS_STOREAPP', 'NOT_UNITY3D', 'NETFX_CORE', 'UNITY_WP8', 'UNITY_METRO', 'UNITY_WINRT'].some(p => cond.includes(p));
-      if (isObscure) {
+      const verdict = evaluateRuntimeCondition(cond);
+      if (verdict && !verdict.live) {
         skipStack.push({ skipping: true, hadActive: false });
+        notes.push({ line: i + 1, condition: cond, symbol: verdict.symbol, kept: 'else' });
       } else {
+        if (verdict) notes.push({ line: i + 1, condition: cond, symbol: verdict.symbol, kept: 'if' });
         skipStack.push({ skipping: false, hadActive: true });
       }
       out.push('// ' + line);
@@ -2643,15 +2679,19 @@ function preprocessCSharp(source) {
       }
     }
   }
-  return out.join('\n');
+  return { text: out.join('\n'), notes };
 }
 
 function parseCSharpSource(source, filename = 'source.cs') {
   const preprocessed = preprocessCSharp(source);
-  const lexer = new Lexer(preprocessed, filename);
+  const lexer = new Lexer(preprocessed.text, filename);
   const tokens = lexer.tokenize();
   const parser = new Parser(tokens, filename);
-  return parser.parseCompilationUnit();
+  const ast = parser.parseCompilationUnit();
+  // Which conditional branches were dropped, so the migration can flag them
+  // instead of silently shipping whichever branch it happened to keep.
+  ast.preprocessorNotes = preprocessed.notes;
+  return ast;
 }
 
 module.exports = {
