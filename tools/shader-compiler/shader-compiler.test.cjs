@@ -241,8 +241,22 @@ Shader "Custom/UnlitWobbleDissolve" {
         const outPath = path.join(__dirname, `.temp-test-${basename}.effect`);
         const result = transpileShaderFile(shaderPath, outPath, { dryRun: true, report: false });
 
-        assert.equal(result.validationResult.valid, true, `Shader ${basename} validation failed: ${result.validationResult.errors.join(', ')}`);
-        assert.ok(result.scoreInfo.score >= 80, `Shader ${basename} score should be >= 80, got ${result.scoreInfo.score}`);
+        // Some engine inputs have no Cocos counterpart at all. Additive.shader
+        // fades particles against _CameraDepthTexture, which a playable build
+        // does not render; there is no lowering that makes it link, so the
+        // honest expectation is a diagnostic, not a pass. Anything NOT on this
+        // list must come out compile-clean.
+        const manualOnly = {
+          'Additive.shader': [/_CameraDepthTexture/],
+        };
+        const allowed = manualOnly[basename] || [];
+        const unexpected = result.validationResult.errors
+          .filter(e => !allowed.some(rx => rx.test(e)));
+
+        assert.deepEqual(unexpected, [], `Shader ${basename} produced unexpected errors: ${unexpected.join(', ')}`);
+        if (allowed.length === 0) {
+          assert.ok(result.scoreInfo.score >= 80, `Shader ${basename} score should be >= 80, got ${result.scoreInfo.score}`);
+        }
       });
     }
   });
@@ -303,9 +317,132 @@ Shader "Universal Forward/Lit" {
 
       assert.ok(effectCode.includes('CCProgram surface-vertex %{'), 'Should include surface-vertex program');
       assert.ok(effectCode.includes('CCProgram surface-fragment %{'), 'Should include surface-fragment program');
-      assert.ok(effectCode.includes('SurfacesVertexModifyWorldPos'), 'Should have vertex modify function');
-      assert.ok(effectCode.includes('SurfacesFragmentModifyBaseColorAndAlpha'), 'Should have base color function');
-      assert.ok(effectCode.includes('SurfacesFragmentModifyPBRParams'), 'Should have PBR params function');
+
+      // Hook names and signatures are fixed by the engine
+      // (chunks/surfaces/default-functions/*.chunk). An invented name such as
+      // SurfacesFragmentModifyBaseColorAndAlpha is simply never called, so the
+      // effect compiles and renders as an untouched default -- assert against
+      // the real API instead.
+      assert.ok(effectCode.includes('SurfacesVertexModifyLocalSharedData'), 'Should define the vertex shared-data hook');
+      assert.ok(effectCode.includes('SurfacesFragmentModifySharedData(inout SurfacesMaterialData surfaceData)'),
+        'Should define the fragment shared-data hook with the engine signature');
+      assert.ok(effectCode.includes('#include <surfaces/data-structures/standard>'),
+        'SurfacesMaterialData must be declared before the hook that takes it');
+
+      // The entry point comes from the engine's shading-entry chunks; without
+      // these includes there is no main() and no lighting.
+      for (const inc of [
+        'surfaces/effect-macros/common-macros',
+        'surfaces/includes/common-vs',
+        'surfaces/includes/standard-vs',
+        'shading-entries/main-functions/render-to-scene/vs',
+        'surfaces/includes/common-fs',
+        'lighting-models/includes/standard',
+        'surfaces/includes/standard-fs',
+        'shading-entries/main-functions/render-to-scene/fs',
+      ]) {
+        assert.ok(effectCode.includes(`<${inc}>`), `Should include <${inc}>`);
+      }
+      assert.ok(/vert:\s*standard-vs/.test(effectCode), 'Pass should reference vert: standard-vs');
+      assert.ok(/frag:\s*standard-fs/.test(effectCode), 'Pass should reference frag: standard-fs');
+    });
+
+    test('maps URP SurfaceData channels onto SurfacesMaterialData', () => {
+      const source = `
+Shader "Custom/UrpLit" {
+  Properties {
+    _BaseMap ("Texture", 2D) = "white" {}
+    _Smoothness ("Smoothness", Range(0, 1)) = 0.25
+    _Metallic ("Metallic", Range(0, 1)) = 0.0
+  }
+  SubShader {
+    Pass {
+      HLSLPROGRAM
+      #pragma vertex vert
+      #pragma fragment frag
+      struct Varyings { float4 positionCS : SV_POSITION; float2 uv : TEXCOORD0; };
+      half4 frag (Varyings i) : SV_Target {
+        half4 c = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, i.uv);
+        SurfaceData surfaceData = (SurfaceData)0;
+        surfaceData.albedo = c.rgb;
+        surfaceData.alpha = c.a;
+        surfaceData.metallic = _Metallic;
+        surfaceData.smoothness = _Smoothness;
+        surfaceData.occlusion = 1;
+        InputData inputData = (InputData)0;
+        return UniversalFragmentPBR(inputData, surfaceData);
+      }
+      ENDHLSL
+    }
+  }
+}
+      `;
+
+      const docIR = parseShaderLab(source, 'UrpLit.shader');
+      const effectCode = emitCocosEffect(docIR, { mode: 'surface-pbr' });
+
+      // Cocos stores roughness, Unity authors smoothness (spec section 29).
+      assert.ok(effectCode.includes('surfaceData.roughness = (1.0 - (smoothness));'),
+        'smoothness must be inverted into roughness');
+      assert.ok(effectCode.includes('surfaceData.metallic = metallic;'), 'metallic should bind to the Cocos uniform name');
+      assert.ok(effectCode.includes('surfaceData.baseColor.rgb = c.rgb;'), 'albedo should feed baseColor.rgb');
+      assert.ok(effectCode.includes('surfaceData.baseColor.a = c.a;'), 'alpha should feed baseColor.a');
+      // GLSL ES 300 has no implicit int->float conversion.
+      assert.ok(effectCode.includes('surfaceData.ao = 1.0;'), 'an integer literal must be emitted as a float');
+      // The preamble that produced those values has to come along.
+      assert.ok(effectCode.includes('texture(mainTexture, FSInput_texcoord)'),
+        'fragment preamble should be ported with Unity names bound to Cocos ones');
+      assert.ok(!/_BaseMap|_Smoothness|_Metallic/.test(effectCode), 'no Unity property names should survive');
+    });
+
+    test('every #include resolves against the installed Cocos 3.8.8 engine chunks', () => {
+      // The surface path is entirely include-driven, so a typo'd chunk name is
+      // invisible in review and fatal at import. Check the emitted includes
+      // against the real engine tree when it is installed. This is the check
+      // that would have caught CC_SURFACES_FRAGMENT_MODIFY_BASECOLOR_AND_ALPHA,
+      // a macro name the engine never defines.
+      const engineRoot = 'C:/ProgramData/cocos/editors/Creator/3.8.8/resources/resources/3d/engine/editor/assets';
+      if (!fs.existsSync(engineRoot)) return; // engine not installed here
+
+      const source = `
+Shader "Custom/UrpLit2" {
+  Properties { _BaseMap ("Texture", 2D) = "white" {} }
+  SubShader { Pass { HLSLPROGRAM
+    #pragma vertex vert
+    #pragma fragment frag
+    struct Varyings { float4 positionCS : SV_POSITION; float2 uv : TEXCOORD0; };
+    half4 frag (Varyings i) : SV_Target {
+      SurfaceData surfaceData = (SurfaceData)0;
+      surfaceData.albedo = half3(1, 1, 1);
+      InputData inputData = (InputData)0;
+      return UniversalFragmentPBR(inputData, surfaceData);
+    }
+  ENDHLSL } }
+}
+      `;
+      const docIR = parseShaderLab(source, 'UrpLit2.shader');
+      const effectCode = emitCocosEffect(docIR, { mode: 'surface-pbr' });
+
+      const localPrograms = new Set(
+        [...effectCode.matchAll(/CCProgram\s+(\S+)\s*%\{/g)].map(m => m[1])
+      );
+      const unresolved = [];
+      for (const m of effectCode.matchAll(/#include\s+<([^>]+)>/g)) {
+        const inc = m[1];
+        if (localPrograms.has(inc)) continue;
+        if (fs.existsSync(path.join(engineRoot, 'chunks', `${inc}.chunk`))) continue;
+        unresolved.push(inc);
+      }
+      assert.deepEqual(unresolved, [], `Unresolved engine includes: ${unresolved.join(', ')}`);
+
+      // Hook signatures are engine contracts; a mismatch means the override is
+      // silently never called.
+      const defaults = fs.readFileSync(
+        path.join(engineRoot, 'chunks/surfaces/default-functions/standard-fs.chunk'), 'utf8');
+      assert.ok(defaults.includes('void SurfacesFragmentModifySharedData(inout SurfacesMaterialData surfaceData)'),
+        'engine still declares the shared-data hook with the signature we emit');
+      assert.ok(effectCode.includes('void SurfacesFragmentModifySharedData(inout SurfacesMaterialData surfaceData)'),
+        'emitted hook must match the engine signature exactly');
     });
   });
 
@@ -688,7 +825,10 @@ Shader "Custom/WithUsePass" {
       assert.ok(lowered.includes('cc_ambientSky.rgb'));
       assert.ok(lowered.includes('(cc_cameraPos.xyz - (pos).xyz)'));
       assert.ok(lowered.includes('vec4(vec2((pos).x, (pos).y) * 0.5'));
-      assert.ok(lowered.includes('UnpackNormalDXT5nm') || lowered.includes('(packedNorm).wy * 2.0 - 1.0'));
+      // Normal unpacking routes through the UnpackNormalMap() helper the effect
+      // generator emits. Inlining it duplicated the argument three times, which
+      // turns one texture fetch into three.
+      assert.ok(lowered.includes('UnpackNormalMap(packedNorm, 1.0)'));
       assert.ok(lowered.includes('normalize(') && lowered.includes('1.5'));
     });
   });

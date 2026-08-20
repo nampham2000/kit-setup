@@ -31,6 +31,101 @@ const GLSL_SIMPLE_LIGHTING_SNIPPET = `
   }
 `;
 
+// URP's GetVertexPositionInputs/GetVertexNormalInputs return library structs.
+// Lowering their *uses* one field at a time cannot work -- the call site binds a
+// local (`VertexPositionInputs posInputs = ...`) and reads fields from it later,
+// so without the struct the local is undeclared and the GLSL will not compile.
+// Providing the struct and the function verbatim lets the original code stand.
+const GLSL_URP_VERTEX_INPUTS_SNIPPET = `
+  struct VertexPositionInputs {
+    vec3 positionWS;
+    vec3 positionVS;
+    vec4 positionCS;
+    vec4 positionNDC;
+  };
+
+  VertexPositionInputs GetVertexPositionInputs(vec3 positionOS) {
+    VertexPositionInputs o;
+    o.positionWS = (cc_matWorld * vec4(positionOS, 1.0)).xyz;
+    o.positionVS = (cc_matView * vec4(o.positionWS, 1.0)).xyz;
+    o.positionCS = cc_matViewProj * vec4(o.positionWS, 1.0);
+    o.positionNDC = vec4(o.positionCS.xy * 0.5 + vec2(o.positionCS.w * 0.5), o.positionCS.zw);
+    return o;
+  }
+
+  struct VertexNormalInputs {
+    vec3 tangentWS;
+    vec3 bitangentWS;
+    vec3 normalWS;
+  };
+
+  VertexNormalInputs GetVertexNormalInputs(vec3 normalOS) {
+    VertexNormalInputs o;
+    o.normalWS = normalize((cc_matWorldIT * vec4(normalOS, 0.0)).xyz);
+    o.tangentWS = vec3(1.0, 0.0, 0.0);
+    o.bitangentWS = cross(o.normalWS, o.tangentWS);
+    return o;
+  }
+
+  VertexNormalInputs GetVertexNormalInputs(vec3 normalOS, vec4 tangentOS) {
+    VertexNormalInputs o;
+    o.normalWS = normalize((cc_matWorldIT * vec4(normalOS, 0.0)).xyz);
+    o.tangentWS = normalize((cc_matWorld * vec4(tangentOS.xyz, 0.0)).xyz);
+    o.bitangentWS = cross(o.normalWS, o.tangentWS) * tangentOS.w;
+    return o;
+  }
+`;
+
+// URP's lighting API also hands back library structs. `GetMainLight()` returns
+// a `Light`, and `InitializeInputData` fills an `InputData`; code then reads
+// `light.shadowAttenuation` or `inputData.normalizedScreenSpaceUV` from the
+// local. Without the struct the local is undeclared and nothing compiles.
+//
+// The values are mapped to their Cocos equivalents where one exists. Real-time
+// shadow attenuation has no cheap equivalent in a playable, so it is 1.0 and the
+// caller is told -- see URP_LIGHTING_NOTES.
+const GLSL_URP_LIGHTING_SNIPPET = `
+  struct Light {
+    vec3 direction;
+    vec3 color;
+    float distanceAttenuation;
+    float shadowAttenuation;
+  };
+
+  Light GetMainLight() {
+    Light l;
+    l.direction = normalize(-cc_mainLitDir.xyz);
+    l.color = cc_mainLitColor.rgb * cc_mainLitColor.w;
+    l.distanceAttenuation = 1.0;
+    // No shadow map is sampled here: fully lit.
+    l.shadowAttenuation = 1.0;
+    return l;
+  }
+
+  Light GetMainLight(vec4 shadowCoord) {
+    return GetMainLight();
+  }
+
+  int GetAdditionalLightsCount() {
+    return 0;
+  }
+`;
+
+const GLSL_URP_INPUT_DATA_SNIPPET = `
+  struct InputData {
+    vec3 positionWS;
+    vec4 positionCS;
+    vec3 normalWS;
+    vec3 viewDirectionWS;
+    vec4 shadowCoord;
+    float fogCoord;
+    vec3 vertexLighting;
+    vec3 bakedGI;
+    vec2 normalizedScreenSpaceUV;
+    vec4 shadowMask;
+  };
+`;
+
 const GLSL_NORMAL_UNPACK_SNIPPET = `
   vec3 UnpackNormalMap(vec4 packedNormal, float scale) {
     #if USE_DXT5NM_NORMAL
@@ -96,6 +191,65 @@ const GLSL_DISSOLVE_SNIPPET = `
 /**
  * Maps property default value to YAML string representation
  */
+// ============================================================================
+// Generic varying pass-through
+// ============================================================================
+
+// Alias tables cover the conventional field names (uv, color, normalWS, ...).
+// Anything else a shader author put in their v2f struct -- `wn`, `uvShadow`,
+// `data0` -- has no alias, so `i.wn` used to survive into the emitted GLSL as
+// an undeclared identifier and the shader simply would not compile. Declare a
+// varying for each such field instead, driven by the parsed struct.
+
+const ALIASED_STRUCT_FIELDS = new Set([
+  'vertex', 'pos', 'positionHCS', 'positionOS', 'positionCS',
+  'uv', 'texcoord', 'color', 'normal', 'normalOS', 'normalWS',
+  'positionWS', 'worldPos', 'viewDirWS', 'screenPos', 'tangent', 'tangentWS',
+]);
+
+const HLSL_TO_GLSL_TYPE = {
+  float: 'float', float2: 'vec2', float3: 'vec3', float4: 'vec4',
+  half: 'float', half2: 'vec2', half3: 'vec3', half4: 'vec4',
+  fixed: 'float', fixed2: 'vec2', fixed3: 'vec3', fixed4: 'vec4',
+  min16float: 'float', min16float2: 'vec2', min16float3: 'vec3', min16float4: 'vec4',
+  int: 'int', int2: 'ivec2', int3: 'ivec3', int4: 'ivec4',
+};
+
+/**
+ * Fields of the vertex-output struct that no alias covers, and that therefore
+ * need their own varying declared in both stages.
+ * @returns {{field: string, varying: string, glslType: string}[]}
+ */
+function collectExtraVaryings(programIR) {
+  const fragFunc = (programIR.functions || []).find(f => f.name === programIR.fragmentEntry);
+  const structName = fragFunc && fragFunc.params && fragFunc.params[0] && fragFunc.params[0].type;
+  const struct = (programIR.structs || []).find(s => s.name === structName);
+  if (!struct) return [];
+
+  const seen = new Set();
+  const extra = [];
+  for (const f of struct.fields) {
+    if (ALIASED_STRUCT_FIELDS.has(f.name)) continue;
+    // SV_POSITION is the clip-space output, not a varying.
+    if (/^SV_POSITION$/i.test(f.semantic || '')) continue;
+    const glslType = HLSL_TO_GLSL_TYPE[f.type];
+    if (!glslType) continue; // unknown/struct type: leave for the diagnostics pass
+    if (seen.has(f.name)) continue;
+    seen.add(f.name);
+    extra.push({ field: f.name, varying: `v_${f.name}`, glslType });
+  }
+  return extra;
+}
+
+/** Rewrite `<param>.<field>` -> `v_<field>` for every unaliased field. */
+function remapExtraVaryings(body, paramName, extras) {
+  let out = body;
+  for (const e of extras) {
+    out = out.replace(new RegExp(`\\b${paramName}\\.${e.field}\\b`, 'g'), e.varying);
+  }
+  return out;
+}
+
 function formatYamlPropertyValue(prop) {
   if (prop.type === 'Color' || prop.type === 'Vector') {
     const val = Array.isArray(prop.defaultValue) ? prop.defaultValue : [1, 1, 1, 1];
@@ -123,8 +277,13 @@ function buildCceffectYaml(docIR, passIR, uboInfo, options = {}) {
     '  techniques:',
     `  - name: ${techniqueName}`,
     '    passes:',
-    `    - vert: ${isSurface ? 'surface-vertex:vert' : 'vs:vert'}`,
-    `      frag: ${isSurface ? 'surface-fragment:frag' : 'fs:frag'}`,
+    // Surface shaders take their entry point from
+    // <shading-entries/main-functions/render-to-scene/{vs,fs}>, which defines
+    // main() -- so the pass names the program with no `:entry` suffix, matching
+    // the engine's own advanced effects. `surface-vertex:vert` named a function
+    // that does not exist in the surface model.
+    `    - vert: ${isSurface ? 'standard-vs' : 'vs:vert'}`,
+    `      frag: ${isSurface ? 'standard-fs' : 'fs:frag'}`,
   ];
 
   // Rasterizer State
@@ -199,6 +358,14 @@ function buildCceffectYaml(docIR, passIR, uboInfo, options = {}) {
       } else {
         lines.push(`        ${pName}: { value: ${valStr} }`);
       }
+
+      // Every sampler gets a tiling/offset uniform in the UBO, but it was never
+      // mirrored here. A uniform absent from the properties block cannot be
+      // authored or written by a material, so it stayed at zero -- collapsing
+      // every UV to (0,0) for any shader that applied TRANSFORM_TEX.
+      if (prop.cocosType === 'sampler2D' || prop.unityType === '2D') {
+        lines.push(`        ${pName}_ST: { value: [1, 1, 0, 0] }`);
+      }
     }
   }
 
@@ -212,62 +379,41 @@ function buildCceffectYaml(docIR, passIR, uboInfo, options = {}) {
 function emitSurfaceShaderEffect(docIR, passIR, options = {}) {
   const uboFields = [];
   const samplers = [];
+  // Unity property name -> Cocos uniform name. Without this the emitted GLSL
+  // still says `_BaseMap` while the UBO declares `mainTexture`, so nothing links.
+  const propertyNameMap = new Map();
 
   for (const prop of docIR.properties) {
     const cName = prop.cocosName || prop.name;
+    propertyNameMap.set(prop.name, cName);
     if (prop.type === '2D' || prop.type === 'Cube' || prop.type === '3D') {
       samplers.push({ name: cName, type: prop.cocosType || 'sampler2D', originalName: prop.name });
       uboFields.push({ name: `${cName}_ST`, type: 'vec4' });
+      propertyNameMap.set(`${prop.name}_ST`, `${cName}_ST`);
     } else {
       uboFields.push({ name: cName, type: prop.cocosType || 'float' });
     }
   }
 
-  const ubo = buildStd140Ubo(uboFields, true, { explicitBindings: true, set: 2, binding: 0 });
+  // Surface programs are `#include`d by the entry programs rather than being
+  // the entry themselves, so their uniforms live in an unnumbered `Constants`
+  // block -- the engine's own layout. Explicit set/binding here would collide
+  // with the descriptor set the shading-entry chunks set up.
+  const ubo = buildStd140Ubo(uboFields, true, { explicitBindings: false, blockName: 'Constants' });
   const yaml = buildCceffectYaml(docIR, passIR, ubo, { mode: 'surface-pbr' });
 
-  let samplerIdx = 1;
-  const samplerDecls = samplers.map(s => `  layout(set = 2, binding = ${samplerIdx++}) uniform ${s.type} ${s.name};`).join('\n');
+  const { buildSurfacePbrEffect } = require('./surface-pbr-emitter.cjs');
+  const built = buildSurfacePbrEffect({ docIR, passIR, yaml, ubo, samplers, propertyNameMap });
 
-  const vsLines = [
-    'CCProgram surface-vertex %{',
-    '  precision highp float;',
-    '  #include <builtin/uniforms/cc-global>',
-    '  #include <builtin/uniforms/cc-local>',
-    '',
-    ubo.glsl ? '  ' + ubo.glsl.split('\n').join('\n  ') : '',
-    '',
-    '  #define CC_SURFACES_VERTEX_MODIFY_WORLD_POS',
-    '  vec3 SurfacesVertexModifyWorldPos(SurfacesVertexData surfaceData) {',
-    '    return surfaceData.worldPos;',
-    '  }',
-    '}%',
-  ];
+  // Surface diagnostics have to reach the caller: the channels this mode cannot
+  // map (tangent-space normals, engine-supplied GI) are the difference between
+  // "ported" and "looks like Unity".
+  if (built.diagnostics.length) {
+    docIR.surfaceDiagnostics = (docIR.surfaceDiagnostics || []).concat(built.diagnostics);
+  }
+  docIR.surfaceIntentStyle = built.intentStyle;
 
-  const fsLines = [
-    'CCProgram surface-fragment %{',
-    '  precision mediump float;',
-    '  #include <builtin/uniforms/cc-global>',
-    '',
-    ubo.glsl ? '  ' + ubo.glsl.split('\n').join('\n  ') : '',
-    '',
-    samplerDecls,
-    '',
-    '  #define CC_SURFACES_FRAGMENT_MODIFY_BASECOLOR_AND_ALPHA',
-    '  void SurfacesFragmentModifyBaseColorAndAlpha(inout vec4 baseColor, inout float alpha) {',
-    samplers.length > 0 ? `    baseColor *= texture(${samplers[0].name}, v_uv);` : '',
-    docIR.properties.some(p => p.type === 'Color') ? '    baseColor *= baseColor;' : '',
-    '  }',
-    '',
-    '  #define CC_SURFACES_FRAGMENT_MODIFY_PBRPARAMS',
-    '  void SurfacesFragmentModifyPBRParams(inout SurfacesPBRData pbrData) {',
-    docIR.properties.some(p => p.name.toLowerCase().includes('smoothness')) ? '    pbrData.roughness = 1.0 - smoothness;' : '    pbrData.roughness = 0.5;',
-    docIR.properties.some(p => p.name.toLowerCase().includes('metallic')) ? '    pbrData.metallic = metallic;' : '    pbrData.metallic = 0.0;',
-    '  }',
-    '}%',
-  ];
-
-  return `${yaml}\n\n${vsLines.join('\n')}\n\n${fsLines.join('\n')}\n`;
+  return built.text;
 }
 
 /**
@@ -340,6 +486,8 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
     attributes.push('in vec4 a_color;');
   }
 
+  const extraVaryings = collectExtraVaryings(programIR);
+
   // 3. Determine Varyings (Stage IO)
   const varyings = [
     'out vec2 v_uv;',
@@ -355,6 +503,10 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
   }
   if (/screenPos|ComputeScreenPos/i.test(rawCode)) {
     varyings.push('out vec4 v_screenPos;');
+  }
+  for (const e of extraVaryings) {
+    const decl = `out ${e.glslType} ${e.varying};`;
+    if (!varyings.includes(decl)) varyings.push(decl);
   }
 
   // Helper to replace Unity identifiers with Cocos names in code body
@@ -403,6 +555,52 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
     vsLines.push('');
   }
 
+  // Samplers the vertex stage itself touches. `_MainTex_TexelSize` lowers to
+  // textureSize(mainTexture, 0), and vertex code that scales by texel size then
+  // references a sampler that was only ever declared in the fragment stage.
+  if (samplers.length > 0) {
+    const vertProbe = (() => {
+      const vf = (programIR.functions || []).find(f => f.name === programIR.vertexEntry);
+      const body = vf && vf.body ? lowerHlslToGlsl(vf.body) : '';
+      // Helper functions are emitted into both stages, so a sampler referenced
+      // only from a helper still needs declaring here.
+      return `${body}\n${helperFunctions.join('\n')}`;
+    })();
+    const vsSamplers = samplers.filter(s => new RegExp(`\\b${s.name}\\b`).test(vertProbe));
+    if (vsSamplers.length > 0) {
+      // Same allocator as the fragment stage: a sampler must carry the same
+      // set/binding in both stages or Cocos rejects the pipeline layout.
+      const vsAlloc = allocateBindings(samplers, options);
+      for (const s of vsSamplers) {
+        const b = vsAlloc.manifest[s.name] || { set: 2, binding: 1 };
+        vsLines.push(`  layout(set = ${b.set}, binding = ${b.binding}) uniform ${s.type} ${s.name};`);
+      }
+      vsLines.push('');
+    }
+  }
+
+  // URP library-struct shims. Which stage needs them depends on where the
+  // shader calls them, so each is emitted per stage rather than assumed to be
+  // vertex-only -- a fragment that calls GetVertexPositionInputs for screen UVs
+  // otherwise gets an undeclared local.
+  const urpShims = [
+    { re: /GetVertexPositionInputs|GetVertexNormalInputs|VertexPositionInputs|VertexNormalInputs/, snippet: GLSL_URP_VERTEX_INPUTS_SNIPPET },
+    { re: /\bGetMainLight\b|\bLight\s+\w+\s*=|GetAdditionalLightsCount/, snippet: GLSL_URP_LIGHTING_SNIPPET },
+    { re: /\bInputData\b/, snippet: GLSL_URP_INPUT_DATA_SNIPPET },
+  ];
+  const vertexSource = (() => {
+    const vf = (programIR.functions || []).find(f => f.name === programIR.vertexEntry);
+    return `${vf && vf.body ? vf.body : ''}\n${helperFunctions.join('\n')}`;
+  })();
+  for (const shim of urpShims) {
+    if (shim.re.test(vertexSource)) vsLines.push(shim.snippet);
+  }
+  if (/\bGetMainLight\b/.test(rawCode)) {
+    docIR.urpLightingNotes = (docIR.urpLightingNotes || []).concat([
+      'GetMainLight() is shimmed onto cc_mainLitDir/cc_mainLitColor. shadowAttenuation is 1.0: no shadow map is sampled, so shadows from the Unity shader are not ported.',
+    ]);
+  }
+
   // Insert helper functions in VS if any
   if (helperFunctions.length > 0) {
     vsLines.push('  ' + helperFunctions.join('\n\n  '));
@@ -448,6 +646,13 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
       vBody = vBody.replace(new RegExp(`\\b${pName}\\.normal\\b`, 'g'), 'a_normal');
       vBody = vBody.replace(new RegExp(`\\b${pName}\\.normalOS\\b`, 'g'), 'a_normal');
       vBody = vBody.replace(new RegExp(`\\b${pName}\\.color\\b`, 'g'), 'a_color');
+      // URP/HDRP and hand-rolled naming for the same object-space inputs.
+      vBody = vBody.replace(new RegExp(`\\b${pName}\\.(?:posOS|positionObj|vertexOS)\\.xyz\\b`, 'g'), 'a_position');
+      vBody = vBody.replace(new RegExp(`\\b${pName}\\.(?:posOS|positionObj|vertexOS)\\b`, 'g'), 'vec4(a_position, 1.0)');
+      vBody = vBody.replace(new RegExp(`\\b${pName}\\.position\\.xyz\\b`, 'g'), 'a_position');
+      vBody = vBody.replace(new RegExp(`\\b${pName}\\.position\\b`, 'g'), 'vec4(a_position, 1.0)');
+      vBody = vBody.replace(new RegExp(`\\b${pName}\\.(?:uv0|texcoord0)\\b`, 'g'), 'a_texCoord');
+      vBody = vBody.replace(new RegExp(`\\b${pName}\\.tangentOS\\b`, 'g'), 'a_tangent');
     }
 
     // Clean any residual vec4(vec4(a_position, 1.0).xyz, 1.0)
@@ -457,18 +662,30 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
       customVertAssignedClipPos = true;
     }
 
-    // Remap output struct assignments
+    // Remap output struct assignments.
+    // Clip-space output goes by many names across URP versions and hand-written
+    // shaders; any spelling we miss here survives as `OUT.<field>` in the
+    // emitted GLSL, reading through a variable that was never declared.
     vBody = vBody.replace(/\b\w+\.vertex\s*=\s*/g, 'pos = ');
-    vBody = vBody.replace(/\b\w+\.positionHCS\s*=\s*/g, 'pos = ');
+    vBody = vBody.replace(/\b\w+\.(?:positionHCS|positionCS|posHCS|posCS|clipPos)\s*=\s*/g, 'pos = ');
     vBody = vBody.replace(/\b\w+\.pos\s*=\s*/g, 'pos = ');
+    vBody = vBody.replace(/\b\w+\.worldPos\s*=\s*/g, 'v_worldPos = ');
+    vBody = vBody.replace(/\b\w+\.(?:uv0|texcoord0)\s*=\s*/g, 'v_uv = ');
     vBody = vBody.replace(/\b\w+\.texcoord\s*=\s*/g, 'v_uv = ');
     vBody = vBody.replace(/\b\w+\.uv\s*=\s*/g, 'v_uv = ');
     vBody = vBody.replace(/\b\w+\.color\s*=\s*/g, 'v_color = ');
     vBody = vBody.replace(/\b\w+\.screenPos\s*=\s*/g, 'v_screenPos = ');
     vBody = vBody.replace(/\b\w+\.normalWS\s*=\s*/g, 'v_worldNormal = ');
+    for (const e of extraVaryings) {
+      vBody = vBody.replace(new RegExp(`\\b\\w+\\.${e.field}\\b`, 'g'), e.varying);
+    }
     vBody = vBody.replace(/\b\w+\.positionWS\s*=\s*/g, 'v_worldPos = ');
     vBody = vBody.replace(/\b\w+\.viewDirWS\s*=\s*[^;]+;?/g, '');
-    vBody = vBody.replace(/\b\w+\.positionHCS\b/g, 'pos');
+    vBody = vBody.replace(/\b\w+\.(?:positionHCS|positionCS|posHCS|posCS|clipPos)\b/g, 'pos');
+    // Reads of the clip-space output, e.g. ComputeScreenPos(o.vertex). The input
+    // struct was already rewritten to attributes above, so any `X.vertex` still
+    // standing here refers to the vertex output.
+    vBody = vBody.replace(/\b\w+\.(?:vertex|pos)\b/g, 'pos');
     vBody = vBody.replace(/\breturn\s+\w+\s*;/g, '');
 
     const trimmedBody = vBody.trim();
@@ -535,8 +752,19 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
     fsLines.push(GLSL_MATCAP_SNIPPET);
   } else if (docIR.family === 'Dissolve') {
     fsLines.push(GLSL_DISSOLVE_SNIPPET);
-  } else if (rawCode.includes('UnpackNormal')) {
+  }
+
+  if (rawCode.includes('UnpackNormal')) {
     fsLines.push(GLSL_NORMAL_UNPACK_SNIPPET);
+  }
+
+  // Same URP struct shims as the vertex stage, gated on the fragment's own code.
+  const fragmentSource = (() => {
+    const ff = (programIR.functions || []).find(f => f.name === programIR.fragmentEntry);
+    return `${ff && ff.body ? ff.body : ''}\n${helperFunctions.join('\n')}`;
+  })();
+  for (const shim of urpShims) {
+    if (shim.re.test(fragmentSource)) fsLines.push(shim.snippet);
   }
 
   // Insert helper functions in FS
@@ -563,6 +791,10 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
       fBody = fBody.replace(new RegExp(`\\b${pName}\\.viewDirWS\\b`, 'g'), 'normalize(cc_cameraPos.xyz - v_worldPos)');
       fBody = fBody.replace(new RegExp(`\\b${pName}\\.screenPos\\b`, 'g'), 'v_screenPos');
       fBody = fBody.replace(new RegExp(`\\b${pName}\\.positionWS\\b`, 'g'), 'v_worldPos');
+      fBody = fBody.replace(new RegExp(`\\b${pName}\\.worldPos\\b`, 'g'), 'v_worldPos');
+      fBody = fBody.replace(new RegExp(`\\b${pName}\\.(?:uv0|texcoord0)\\b`, 'g'), 'v_uv');
+      fBody = fBody.replace(new RegExp(`\\b${pName}\\.(?:positionHCS|positionCS|posHCS|posCS|clipPos)\\b`, 'g'), 'gl_FragCoord');
+      fBody = remapExtraVaryings(fBody, pName, extraVaryings);
     }
 
     // Remap texture names to Cocos names

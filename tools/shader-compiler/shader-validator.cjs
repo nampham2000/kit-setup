@@ -12,6 +12,8 @@
  * - Absence of unlowered Unity symbols in GLSL
  */
 
+const { analyzeEffect } = require('./glsl-static-analyzer.cjs');
+
 function validateCceffectStructure(effectText) {
   const errors = [];
   const warnings = [];
@@ -19,6 +21,11 @@ function validateCceffectStructure(effectText) {
   if (!effectText || typeof effectText !== 'string') {
     return { valid: false, errors: ['Empty or non-string effect content'], warnings };
   }
+
+  // A surface-shader effect has a different, equally valid shape: the entry
+  // programs contain only #includes and the engine supplies main().
+  const isSurfaceEffect = /CCProgram\s+standard-fs\s*%\{/.test(effectText) &&
+    /surfaces\/includes\/(?:common|standard)-fs/.test(effectText);
 
   // 1. Check CCEffect block
   const cceffectMatch = /CCEffect\s*%\{([\s\S]*?)\}%/.exec(effectText);
@@ -32,32 +39,72 @@ function validateCceffectStructure(effectText) {
     if (!/passes:/i.test(yaml)) {
       errors.push('CCEffect frontmatter must declare passes:');
     }
-    if (!/vert:\s*vs:vert/i.test(yaml)) {
-      errors.push('Pass must reference vertex program (vert: vs:vert)');
-    }
-    if (!/frag:\s*fs:frag/i.test(yaml)) {
-      errors.push('Pass must reference fragment program (frag: fs:frag)');
+    // Surface-shader effects (--mode surface-pbr) name a program with no
+    // `:entry` suffix, because main() comes from the included shading-entry
+    // chunk rather than a hand-written vert()/frag(). Demanding vs:vert of them
+    // reports four errors on a perfectly valid effect.
+    if (!isSurfaceEffect) {
+      if (!/vert:\s*vs:vert/i.test(yaml)) {
+        errors.push('Pass must reference vertex program (vert: vs:vert)');
+      }
+      if (!/frag:\s*fs:frag/i.test(yaml)) {
+        errors.push('Pass must reference fragment program (frag: fs:frag)');
+      }
+    } else {
+      if (!/vert:\s*standard-vs/i.test(yaml)) {
+        errors.push('Surface effect pass must reference vert: standard-vs');
+      }
+      if (!/frag:\s*standard-fs/i.test(yaml)) {
+        errors.push('Surface effect pass must reference frag: standard-fs');
+      }
     }
   }
 
-  // 2. Check CCProgram vs & fs
-  const vsMatch = /CCProgram\s+vs\s*%\{([\s\S]*?)\}%/.exec(effectText);
-  if (!vsMatch) {
-    errors.push('Missing CCProgram vs %{ ... }% block');
-  } else {
-    const vsCode = vsMatch[1];
-    if (!/vec4\s+vert\s*\(/i.test(vsCode)) {
-      errors.push('CCProgram vs must contain vec4 vert() entry point');
+  // 2. Check the stage programs. Surface effects carry a different but equally
+  // required set: the surface hooks and the shading-entry includes.
+  let vsMatch = null;
+  let fsMatch = null;
+  if (isSurfaceEffect) {
+    vsMatch = /CCProgram\s+surface-vertex\s*%\{([\s\S]*?)\n\}%/.exec(effectText);
+    fsMatch = /CCProgram\s+surface-fragment\s*%\{([\s\S]*?)\n\}%/.exec(effectText);
+    if (!fsMatch) {
+      errors.push('Missing CCProgram surface-fragment %{ ... }% block');
+    } else if (!/CC_SURFACES_FRAGMENT_MODIFY_/.test(fsMatch[1])) {
+      errors.push('surface-fragment declares no CC_SURFACES_FRAGMENT_MODIFY_* hook, so none of the material channels reach the engine.');
     }
-  }
-
-  const fsMatch = /CCProgram\s+fs\s*%\{([\s\S]*?)\}%/.exec(effectText);
-  if (!fsMatch) {
-    errors.push('Missing CCProgram fs %{ ... }% block');
+    for (const required of [
+      'surfaces/effect-macros/common-macros',
+      'surfaces/includes/common-vs',
+      'surfaces/includes/standard-vs',
+      'shading-entries/main-functions/render-to-scene/vs',
+      'surfaces/includes/common-fs',
+      'lighting-models/includes/standard',
+      'surfaces/includes/standard-fs',
+      'shading-entries/main-functions/render-to-scene/fs',
+    ]) {
+      if (!effectText.includes(`<${required}>`)) {
+        errors.push(`Surface effect is missing #include <${required}>; without it the engine supplies no entry point or lighting.`);
+      }
+    }
   } else {
-    const fsCode = fsMatch[1];
-    if (!/vec4\s+frag\s*\(/i.test(fsCode)) {
-      errors.push('CCProgram fs must contain vec4 frag() entry point');
+    vsMatch = /CCProgram\s+vs\s*%\{([\s\S]*?)\}%/.exec(effectText);
+    if (!vsMatch) {
+      errors.push('Missing CCProgram vs %{ ... }% block');
+    } else {
+      const vsCode = vsMatch[1];
+      if (!/vec4\s+vert\s*\(/i.test(vsCode)) {
+        errors.push('CCProgram vs must contain vec4 vert() entry point');
+      }
+    }
+
+    fsMatch = /CCProgram\s+fs\s*%\{([\s\S]*?)\}%/.exec(effectText);
+    if (!fsMatch) {
+      errors.push('Missing CCProgram fs %{ ... }% block');
+    } else {
+      const fsCode = fsMatch[1];
+      if (!/vec4\s+frag\s*\(/i.test(fsCode)) {
+        errors.push('CCProgram fs must contain vec4 frag() entry point');
+      }
     }
   }
 
@@ -104,10 +151,26 @@ function validateCceffectStructure(effectText) {
     }
   }
 
+  // 5. GLSL static analysis.
+  // Everything above validates the *shape* of the file. Shape is not
+  // correctness: a mis-lowered intrinsic yields a perfectly shaped effect whose
+  // GLSL cannot compile (`clamp(dot(a,b))`) or cannot link (`i.wn`). Without
+  // this pass the gate reported PASS / confidence 100 on exactly those files,
+  // which is worse than no gate -- it tells the caller there is nothing to fix.
+  const analysis = analyzeEffect(effectText);
+  for (const d of analysis.errors) {
+    const where = d.program ? `${d.program}:${d.line}` : 'effect';
+    errors.push(`[${d.code}] ${where} -- ${d.message}`);
+  }
+  for (const d of analysis.warnings) {
+    warnings.push(`[${d.code}] ${d.message}`);
+  }
+
   return {
     valid: errors.length === 0,
     errors,
     warnings,
+    glslAnalysis: analysis,
   };
 }
 

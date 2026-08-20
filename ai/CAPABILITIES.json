@@ -4,7 +4,7 @@
     "source": "playable-shared-kit/ai/capabilities.def.cjs",
     "generatedBy": "npm run ai:sync",
     "contractCheck": "npm run ai:contract:verify",
-    "count": 26
+    "count": 29
   },
   "coreRules": [
     {
@@ -163,7 +163,7 @@
           ".unity/port-report.csv"
         ],
         "limits": [
-          "Shader tuỳ biến KHÔNG được port — xem `shader.convert`.",
+          "Shader tuỳ biến KHÔNG được port bởi lệnh này — dùng `shader.chain` (cho cả prefab) hoặc `shader.convert` (cho một shader).",
           "Luôn đọc report và xử lý mọi dòng `high` trước khi coi là xong.",
           "Nếu Cocos Creator không mở, UUID sub-asset của sprite/model chưa nối được: report ghi rõ, mở editor rồi chạy lại.",
           "Cache theo phạm vi --src: sửa MỘT file trong phạm vi sẽ khiến cả phạm vi port lại (đổi lấy việc không bao giờ trả output cũ sai)."
@@ -268,52 +268,104 @@
         "status": "partial"
       },
       {
-        "id": "shader.convert",
-        "title": "Chuyển Unity .shader / .shadergraph sang Cocos .effect",
-        "run": "node playable-shared-kit/tools/unity-hlsl-to-cocos-effect.cjs convert --src <unity.shader> --out <assets/effects/X.effect>",
-        "command": "node playable-shared-kit/tools/unity-hlsl-to-cocos-effect.cjs convert --src <unity.shader> --out <assets/effects/X.effect>",
+        "id": "shader.chain",
+        "title": "Port 1 prefab kèm material + shader + texture phụ thuộc (ENTRY POINT)",
+        "run": "node playable-shared-kit/tools/shader-compiler/unity-shader-compiler.cjs chain --src <file.prefab> --unity-root <UnityAssetsFolder>",
+        "command": "node playable-shared-kit/tools/shader-compiler/unity-shader-compiler.cjs chain --src <file.prefab> --unity-root <UnityAssetsFolder>",
         "optional": [
-          "-m",
-          "--overwrite",
-          "--dry-run",
-          "--shading-model <model>",
-          "--transparent",
-          "--opaque",
-          "--alpha-clip",
-          "--report <path>"
+          "--out-dir <assets/>",
+          "--json",
+          "--no-cache"
         ],
-        "when": "Cần khung .effect + properties + UBO từ shader Unity.",
+        "when": "DÙNG ĐẦU TIÊN khi cần port một prefab có gắn material + shader. Tự đi hết chuỗi prefab -> material -> shader -> texture, transpile luôn, và chỉ in ra phần cần quyết định. Đừng tự đọc YAML của prefab/.mat.",
         "outputs": [
-          "<out>",
-          "<out>.meta",
-          ".unity/hlsl-port-report.csv"
+          "<out-dir>/effects/*.effect",
+          "<out-dir>/materials/*.mtl",
+          ".ucshader-guid-index.json"
         ],
         "limits": [
-          "KHÔNG dịch thân HLSL. Chỉ sinh khung + properties + UBO, thân shader là template.",
-          "Report sẽ ghi `high SHADER_NEEDS_MANUAL_PORT` — agent phải tự viết lại phần tính toán."
+          "Không ghi gì nếu thiếu --out-dir; mặc định chỉ đọc và liệt kê.",
+          "Texture và mesh CHỈ được liệt kê, không tự import — phải tự đưa vào Cocos rồi mới bind được UUID.",
+          "`_effectAsset` của .mtl để rỗng: UUID chỉ tồn tại sau khi Cocos import .effect. Chạy lại `shader.material` với --effect-uuid để bind.",
+          "Material dùng shader built-in/package của Unity (không có file .shader) chỉ được BÁO TÊN — phải tự viết lại hoặc map sang effect built-in của Cocos.",
+          "Index GUID được cache; thêm/xoá asset trong Unity thì chạy --no-cache.",
+          "Cột `mode` của mỗi shader cho biết backend đã chạy (`unlit` hay `surface-pbr/urp|legacy`). Shader PBR tự chọn surface-pbr — xem thêm giới hạn ở `shader.convert`.",
+          "Exit code 5 khi còn dòng BLOCKING."
         ],
         "verify": "npm run ai:verify",
-        "status": "partial"
+        "status": "broken"
+      },
+      {
+        "id": "shader.convert",
+        "title": "Transpile Unity .shader sang Cocos .effect (HLSL -> GLSL 300 ES)",
+        "run": "node playable-shared-kit/tools/shader-compiler/unity-shader-compiler.cjs convert --src <unity.shader> --out <assets/effects/X.effect>",
+        "command": "node playable-shared-kit/tools/shader-compiler/unity-shader-compiler.cjs convert --src <unity.shader> --out <assets/effects/X.effect>",
+        "optional": [
+          "-m",
+          "--mode auto|unlit|surface-pbr",
+          "--report",
+          "--no-report",
+          "--dry-run"
+        ],
+        "when": "Cần dịch một shader Unity cụ thể sang .effect. Thân HLSL ĐƯỢC dịch sang GLSL, không phải template.",
+        "outputs": [
+          "<out>",
+          "<out>.report.json",
+          "<out>.report.md",
+          "<out>.ucst-ai.json",
+          "<out>.patch.json"
+        ],
+        "limits": [
+          "Grade/score chỉ nói code SINH RA compile được, KHÔNG xác nhận đúng hình ảnh như Unity. Vẫn phải mở effect đối chiếu.",
+          "Shader PBR (URP `SurfaceData` + `UniversalFragmentPBR`, hoặc `#pragma surface` cũ) tự động chuyển sang `--mode surface-pbr`: sinh CCProgram surface-vertex/surface-fragment + include shading-entry của engine. In dòng `Mode:` để biết backend nào đã chạy.",
+          "Ở surface-pbr, normal map tangent-space KHÔNG được sinh tự động (báo `SURFACE_PBR_NORMAL_MAP_MANUAL`); `GetMainLight().shadowAttenuation` luôn = 1.0 nên shadow của Unity KHÔNG được port.",
+          "Struct nội bộ của URP ngoài `SurfaceData`/`InputData`/`Light`/`VertexPositionInputs` (ví dụ `InputDataForwardPlusDummy` của Toony Colors Pro) không có shim — sẽ báo `GLSL_UNDECLARED_BASE`, phải tự viết.",
+          "Không có bản dịch nào cho input engine mà Cocos không cấp: `_CameraDepthTexture` (soft particle) sẽ luôn báo lỗi.",
+          "DXC/SPIRV-Cross không bắt buộc; thiếu thì dùng AST lowerer thuần Node (xem `doctor`)."
+        ],
+        "verify": "npm run ai:verify",
+        "status": "broken"
       },
       {
         "id": "shader.batch",
-        "title": "Chuyển cả thư mục shader",
-        "run": "node playable-shared-kit/tools/unity-hlsl-to-cocos-effect.cjs batch --dir <unity_shader_dir> --out-dir <assets/effects>",
-        "command": "node playable-shared-kit/tools/unity-hlsl-to-cocos-effect.cjs batch --dir <unity_shader_dir> --out-dir <assets/effects>",
+        "title": "Transpile cả thư mục shader Unity",
+        "run": "node playable-shared-kit/tools/shader-compiler/unity-shader-compiler.cjs batch --dir <unity_shader_dir> --out-dir <assets/effects>",
+        "command": "node playable-shared-kit/tools/shader-compiler/unity-shader-compiler.cjs batch --dir <unity_shader_dir> --out-dir <assets/effects>",
         "optional": [
           "-m",
-          "--overwrite"
+          "--mode auto|unlit|surface-pbr"
         ],
-        "when": "Chuyển nhiều shader một lượt.",
+        "when": "Chuyển nhiều shader một lượt (đo được: 110 shader trong 0,75s).",
         "outputs": [
-          "<out-dir>/*.effect",
-          ".unity/hlsl-port-report.csv"
+          "<out-dir>/**/*.effect",
+          "<out-dir>/**/*.report.json"
         ],
         "limits": [
-          "Cùng giới hạn với `shader.convert`."
+          "Cùng giới hạn với `shader.convert`.",
+          "In `[v]` cho mọi file GHI ĐƯỢC — KHÔNG phải mọi file đều compile-clean. Phải chạy `shader.validate` trên từng output."
         ],
         "verify": null,
-        "status": "partial"
+        "status": "broken"
+      },
+      {
+        "id": "shader.material",
+        "title": "Chuyển Unity .mat sang Cocos .mtl",
+        "run": "node playable-shared-kit/tools/shader-compiler/unity-shader-compiler.cjs convert-mat --src <UnityMaterial.mat> --out <assets/materials/X.mtl>",
+        "command": "node playable-shared-kit/tools/shader-compiler/unity-shader-compiler.cjs convert-mat --src <UnityMaterial.mat> --out <assets/materials/X.mtl>",
+        "optional": [
+          "--effect <X.effect>",
+          "--effect-uuid <uuid>"
+        ],
+        "when": "Sau khi effect đã được Cocos import và có UUID. Mang color/float/texture + tiling/offset từ Unity sang.",
+        "outputs": [
+          "<out>"
+        ],
+        "limits": [
+          "Thiếu --effect-uuid thì `_effectAsset` rỗng và material rơi về effect mặc định — trông như port hỏng.",
+          "Thiếu --effect thì GHI HẾT property Unity từng gán (URP Lit có ~50 cái), Cocos sẽ log unknown-property. Luôn truyền --effect để lọc."
+        ],
+        "verify": null,
+        "status": "broken"
       },
       {
         "id": "fbx.strip",
@@ -334,6 +386,21 @@
       }
     ],
     "verify": [
+      {
+        "id": "shader.validate",
+        "title": "Kiểm tra .effect sinh ra có compile được không",
+        "run": "node playable-shared-kit/tools/shader-compiler/unity-shader-compiler.cjs validate <assets/effects/X.effect>",
+        "command": "node playable-shared-kit/tools/shader-compiler/unity-shader-compiler.cjs validate <assets/effects/X.effect>",
+        "optional": [],
+        "when": "BẮT BUỘC sau mọi lần `shader.convert` / `shader.batch`. Bắt sai arity intrinsic, vector constructor sai số thành phần, ký hiệu Unity chưa lower, biến chưa khai báo, sampler thiếu ở stage, swizzle vượt số thành phần của input engine. Hiểu cả effect surface-pbr (chấm điểm theo hook + include của engine, không đòi `vec4 frag()`).",
+        "outputs": [],
+        "limits": [
+          "Phân tích tĩnh, không chạy GLSL compiler thật: chứng minh được là SAI, không chứng minh được là ĐÚNG hình ảnh.",
+          "Exit code 5 khi FAIL."
+        ],
+        "verify": null,
+        "status": "broken"
+      },
       {
         "id": "verify.all",
         "title": "Cổng xác minh bắt buộc: TS, config, asset binding, meta, bundle size",

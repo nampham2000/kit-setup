@@ -226,6 +226,19 @@ function convertUnityMatToCocosMtl(yamlContent, options = {}) {
         __uuid__: val.guid,
       };
     }
+    // Unity keeps tiling/offset on the texture entry; the generated effect
+    // exposes it as `<name>_ST` (xy = scale, zw = offset), matching how
+    // TRANSFORM_TEX was lowered. Dropping it silently loses every material's
+    // tiling, which reads as a UV bug rather than a missing property.
+    const scale = val.scale || [1, 1];
+    const offset = val.offset || [0, 0];
+    const isDefaultST = scale[0] === 1 && scale[1] === 1 && offset[0] === 0 && offset[1] === 0;
+    if (!isDefaultST) {
+      propsObj[`${cName}_ST`] = {
+        __type__: 'cc.Vec4',
+        x: scale[0], y: scale[1], z: offset[0], w: offset[1],
+      };
+    }
   }
 
   const mtlData = {
@@ -270,9 +283,88 @@ function convertMaterialDirectory(unityMatDir, cocosMtlDir, options = {}) {
   return { converted, failed };
 }
 
+/**
+ * Convert one Unity `.mat` file on disk to a Cocos `.mtl`.
+ *
+ * The CLI's convert-mat command referenced this by name but it was never
+ * implemented, so `convert-mat` threw "convertMatFile is not a function" for
+ * every input -- the material half of the pipeline had never run.
+ *
+ * @param {string} srcPath  Unity .mat path
+ * @param {string} outPath  Cocos .mtl path to write
+ * @param {{effectUuid?: string, effectAsset?: string, techIdx?: number}} [options]
+ * @returns {{outPath: string, materialName: string, propertyCount: number,
+ *            effectUuid: string, warnings: string[]}}
+ */
+function convertMatFile(srcPath, outPath, options = {}) {
+  const fs = require('fs');
+  const path = require('path');
+
+  if (!fs.existsSync(srcPath)) {
+    throw new Error(`Unity material not found: ${srcPath}`);
+  }
+
+  const yamlContent = fs.readFileSync(srcPath, 'utf8');
+  const materialName = options.materialName || path.basename(srcPath, path.extname(srcPath));
+  const effectUuid = options.effectUuid || options.effectAsset || '';
+
+  // convertUnityMatToCocosMtl returns serialized JSON, not an object.
+  const mtlJson = convertUnityMatToCocosMtl(yamlContent, { ...options, materialName, effectUuid });
+  const mtl = JSON.parse(mtlJson);
+
+  const warnings = [];
+
+  // A Unity .mat carries every property of its shader *and* every property of
+  // whatever shader it was previously assigned -- URP Lit alone contributes
+  // ~50 (workflowMode, srcBlend, queueControl, ...). Writing them all makes
+  // Cocos log an unknown-property warning per entry at material load. When the
+  // target effect is known, keep only what it actually declares.
+  if (options.effectPath && fs.existsSync(options.effectPath)) {
+    const effectText = fs.readFileSync(options.effectPath, 'utf8');
+    const ccEffect = /CCEffect\s*%\{([\s\S]*?)\n\}%/.exec(effectText);
+    if (ccEffect) {
+      const declared = new Set(
+        [...ccEffect[1].matchAll(/^\s+([A-Za-z_]\w*):\s*\{/gm)].map(x => x[1])
+      );
+      const props = mtl._props[0] || {};
+      const dropped = [];
+      for (const key of Object.keys(props)) {
+        if (!declared.has(key)) { dropped.push(key); delete props[key]; }
+      }
+      if (dropped.length) {
+        warnings.push(`Dropped ${dropped.length} property/properties not declared by the target effect (e.g. ${dropped.slice(0, 4).join(', ')}).`);
+      }
+    }
+  }
+
+  if (!effectUuid) {
+    // Cocos resolves the effect by UUID. Without one the material loads but
+    // renders with the default effect, which looks like the port silently
+    // failed; surface it rather than writing a quietly useless file.
+    warnings.push(
+      `No --effect-uuid given: '${path.basename(outPath)}' has an empty _effectAsset and will fall back to the builtin effect. ` +
+      `Pass the UUID from the generated .effect.meta.`
+    );
+  }
+
+  const outDir = path.dirname(outPath);
+  if (outDir && !fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+  fs.writeFileSync(outPath, JSON.stringify(mtl, null, 2), 'utf8');
+
+  const props = (mtl._props && mtl._props[0]) || {};
+  return {
+    outPath,
+    materialName,
+    propertyCount: Object.keys(props).length,
+    effectUuid,
+    warnings,
+  };
+}
+
 module.exports = {
   parseUnityMatYaml,
   convertUnityMatToCocosMtl,
+  convertMatFile,
   convertMaterialDirectory,
   performTextureAssetDiagnostics,
   generateMaterialAssetManifest,

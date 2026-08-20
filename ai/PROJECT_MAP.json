@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "generatedAt": "2026-08-20T03:44:16.629Z",
+    "generatedAt": "2026-08-20T06:29:23.471Z",
     "description": "Compact project manifest for AI Agents. Use this instead of scanning file trees.",
     "project": {
       "projectName": "cc_playable_framework",
@@ -27,12 +27,12 @@
     {
       "name": "Gameplay",
       "path": "assets/Gameplay.scene",
-      "sizeKb": 82
+      "sizeKb": 87.7
     }
   ],
   "prefabs": [],
   "scripts": {
-    "count": 44,
+    "count": 40,
     "byDir": [
       {
         "dir": "assets/script/shared/compat",
@@ -123,15 +123,6 @@
           "PlayableAdDownloadEvent",
           "SuperHtmlPlayable"
         ]
-      },
-      {
-        "dir": "assets/scripts",
-        "names": [
-          "UnityParticleHierarchyTransformSync",
-          "UnityParticleRateOverDistanceEmitter",
-          "UnityParticleSubEmitterFollower",
-          "UnitySpriteRendererColorAdapter"
-        ]
       }
     ]
   },
@@ -148,68 +139,48 @@
       ],
       "truncated": 0
     },
-    "modelCount": 5,
+    "modelCount": 1,
     "models": {
-      "count": 5,
-      "totalKb": 1460.2,
+      "count": 1,
+      "totalKb": 324.2,
       "sample": [
-        "assets/models/pack_block.fbx",
-        "assets/unity_imported/_Game/3DAssets/_VFX/ModelVFX/booster/booster.fbx",
-        "assets/unity_imported/_Game/Prefabs/Ice_Broken/Mechanic_ice 4.gltf",
-        "assets/unity_imported/_Game/UIAssets/_PictureBlock/3D/Model/obj_zip (1).fbx",
-        "assets/unity_imported/_GameHome/_Game_HolePuzzle/Prefabs/Events/flower_collection.fbx"
+        "assets/models/pack_block.fbx"
       ],
       "truncated": 0
     },
-    "shaderCount": 3,
+    "shaderCount": 0,
     "shaders": {
-      "count": 3,
-      "totalKb": 12.5,
-      "sample": [
-        "assets/effects/UnitySpriteRendererColor.effect",
-        "assets/effects/URPLit.effect",
-        "assets/unity_imported/ui_sprite_alpha_sep/ui-sprite-alpha-sep.effect"
-      ],
+      "count": 0,
+      "totalKb": 0,
+      "sample": [],
       "truncated": 0
     },
     "materials": {
-      "count": 41,
-      "totalKb": 35.5,
+      "count": 4,
+      "totalKb": 6,
       "sample": [
         "assets/materials/Blue.mtl",
         "assets/materials/Board1.mtl",
         "assets/materials/Orange.mtl",
-        "assets/materials/Pink.mtl",
-        "assets/materials/UnitySpriteRendererColor.mtl",
-        "assets/materials/UnitySpriteRendererColorOpaque.mtl"
+        "assets/materials/Pink.mtl"
       ],
-      "truncated": 35
+      "truncated": 0
     },
     "textures": {
-      "count": 150,
-      "totalKb": 20778.6,
+      "count": 3,
+      "totalKb": 193.4,
       "sample": [
         "assets/textures/ui/BlackSquare.png",
         "assets/textures/ui/GreenBtn.png",
-        "assets/textures/ui/icon_L11-Pic2.png",
-        "assets/unity_imported/Project/Texture/Gameplay/Combo/3.png",
-        "assets/unity_imported/Project/Texture/Gameplay/Combo/7.png",
-        "assets/unity_imported/Project/Texture/Gameplay/Combo/fantastic.png"
+        "assets/textures/ui/icon_L11-Pic2.png"
       ],
-      "truncated": 144
+      "truncated": 0
     },
     "animations": {
-      "count": 18,
-      "totalKb": 375.4,
-      "sample": [
-        "assets/animations/anim-7/anim_booster_ufo.anim",
-        "assets/animations/anim_logo/anim_logo.anim",
-        "assets/animations/bg_ice/booster_ice.anim",
-        "assets/animations/clockctrl/RotateAnim.anim",
-        "assets/animations/hand-animator-controller/Hand Tutorial Animation.anim",
-        "assets/animations/hand-zoom-animator-controller/Hand zoom idle.anim"
-      ],
-      "truncated": 12
+      "count": 0,
+      "totalKb": 0,
+      "sample": [],
+      "truncated": 0
     },
     "prefabsInAssets": {
       "count": 0,
@@ -218,19 +189,12 @@
       "truncated": 0
     },
     "unityImported": {
-      "exists": true,
+      "exists": false,
       "root": "assets/unity_imported",
-      "count": 228,
-      "totalKb": 25367.3,
-      "sample": [
-        "assets/unity_imported/Project/Texture/Gameplay/Combo/3.png",
-        "assets/unity_imported/Project/Texture/Gameplay/Combo/7.png",
-        "assets/unity_imported/Project/Texture/Gameplay/Combo/fantastic.png",
-        "assets/unity_imported/Project/Texture/Gameplay/Combo/x.png",
-        "assets/unity_imported/Simple Scroll-Snap/Examples/Example 3 (Slot Machine)/Sprites/Gradient.png",
-        "assets/unity_imported/TextMesh Pro/Examples & Extras/Fonts/Roboto-Bold.ttf"
-      ],
-      "truncated": 222
+      "count": 0,
+      "totalKb": 0,
+      "sample": [],
+      "truncated": 0
     }
   },
   "configSummary": {
@@ -398,8 +362,11 @@
     "port.closure": "npm run port:closure -- --prefab <file.prefab> --unity-root <UnityAssetsFolder>",
     "port.compile": "npm run port:compile -- --src <csharp_path> --out assets/script/",
     "port.script": "npm run port:script -- --src <csharp_path> --out assets/script/",
-    "shader.convert": "node playable-shared-kit/tools/unity-hlsl-to-cocos-effect.cjs convert --src <unity.shader> --out <assets/effects/X.effect>",
-    "shader.batch": "node playable-shared-kit/tools/unity-hlsl-to-cocos-effect.cjs batch --dir <unity_shader_dir> --out-dir <assets/effects>",
+    "shader.chain": "node playable-shared-kit/tools/shader-compiler/unity-shader-compiler.cjs chain --src <file.prefab> --unity-root <UnityAssetsFolder>",
+    "shader.convert": "node playable-shared-kit/tools/shader-compiler/unity-shader-compiler.cjs convert --src <unity.shader> --out <assets/effects/X.effect>",
+    "shader.batch": "node playable-shared-kit/tools/shader-compiler/unity-shader-compiler.cjs batch --dir <unity_shader_dir> --out-dir <assets/effects>",
+    "shader.material": "node playable-shared-kit/tools/shader-compiler/unity-shader-compiler.cjs convert-mat --src <UnityMaterial.mat> --out <assets/materials/X.mtl>",
+    "shader.validate": "node playable-shared-kit/tools/shader-compiler/unity-shader-compiler.cjs validate <assets/effects/X.effect>",
     "fbx.strip": "npm run fbx:strip -- <file.fbx>",
     "verify.all": "npm run ai:verify",
     "verify.prefab": "npm run ai:verify:prefab",

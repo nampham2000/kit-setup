@@ -57,7 +57,10 @@ function extractFlags(list) {
 
 /** Đường dẫn file .cjs đầu tiên xuất hiện trong một chuỗi lệnh. */
 function toolFileFromCommand(cmd) {
-  const match = String(cmd || '').match(/([A-Za-z0-9_./-]*playable-shared-kit\/tools\/[A-Za-z0-9_.-]+\.cjs)/);
+  // Tools live in subdirectories too (tools/shader-compiler/...), so the path
+  // segment between tools/ and the .cjs may contain slashes. Matching only a
+  // flat filename silently failed those capabilities as "tool not identified".
+  const match = String(cmd || '').match(/([A-Za-z0-9_./-]*playable-shared-kit\/tools\/(?:[A-Za-z0-9_.-]+\/)*[A-Za-z0-9_.-]+\.cjs)/);
   return match ? match[1] : null;
 }
 

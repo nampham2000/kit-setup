@@ -81,7 +81,24 @@ function transpileShaderFile(srcPath, outPath, options = {}) {
   }
 
   // 4. Emit Cocos .effect
-  const effectCode = emitCocosEffect(docIR, options);
+  // `--mode auto` picks the backend (spec section 28). A shader that hands a
+  // SurfaceData to UniversalFragmentPBR, or declares `#pragma surface`, is
+  // asking for the engine's PBR pipeline: the unlit path cannot express it and
+  // would emit a fragment body referencing URP library structs that do not
+  // exist in Cocos. Detecting it here means a caller does not have to know
+  // which dialect the shader was written in.
+  const emitOptions = { ...options };
+  if (!emitOptions.mode || emitOptions.mode === 'auto') {
+    const allHlslForMode = docIR.subShaders
+      .map(s => s.passes.map(p => (p.program && p.program.rawHlsl) || '').join('\n'))
+      .join('\n');
+    if (/\bUniversalFragmentPBR\b/.test(allHlslForMode) ||
+        /#pragma\s+surface\b/i.test(allHlslForMode)) {
+      emitOptions.mode = 'surface-pbr';
+      emitOptions.autoSelectedMode = true;
+    }
+  }
+  const effectCode = emitCocosEffect(docIR, emitOptions);
 
   // 5. Validate generated effect
   const validationResult = validateCceffectStructure(effectCode);
@@ -89,6 +106,16 @@ function transpileShaderFile(srcPath, outPath, options = {}) {
   for (const issue of (lintResult.issues || [])) {
     validationResult.warnings.push(`[${issue.severity.toUpperCase()}] ${issue.message}`);
   }
+
+  // Surface-pbr channels the emitter could not map (tangent-space normals,
+  // engine-supplied GI) decide whether the port matches Unity. They must reach
+  // the caller, not just sit in the docIR.
+  for (const d of (docIR.surfaceDiagnostics || [])) {
+    const line = `[${d.code}] ${d.message}`;
+    if (d.severity === 'high') validationResult.errors.push(line);
+    else validationResult.warnings.push(line);
+  }
+  if (validationResult.errors.length > 0) validationResult.valid = false;
 
   // 6. Score Confidence & Variant Manifest
   const scoreInfo = scoreConfidence(docIR, effectCode, validationResult);
@@ -136,6 +163,8 @@ function transpileShaderFile(srcPath, outPath, options = {}) {
     validationResult,
     scoreInfo,
     variantInfo,
+    mode: emitOptions.mode || 'auto',
+    autoSelectedMode: Boolean(emitOptions.autoSelectedMode),
   };
 }
 
@@ -224,6 +253,11 @@ function cmdConvert(options) {
   const result = transpileShaderFile(options.src, options.out, options);
 
   console.log(`\n✅ Converted: ${result.docIR.shaderName} -> ${options.out}`);
+  if (result.docIR.surfaceIntentStyle) {
+    // Say which backend ran and why: surface-pbr and unlit produce completely
+    // different files, and `auto` may have chosen for the caller.
+    console.log(`   Mode:       surface-pbr (${result.docIR.surfaceIntentStyle} PBR intent${result.mode === 'surface-pbr' && result.autoSelectedMode ? ', auto-selected' : ''})`);
+  }
   console.log(`   Confidence: ${result.scoreInfo.score}/100 (Grade ${result.scoreInfo.grade})`);
   console.log(`   Validation: ${result.validationResult.valid ? 'PASS' : 'FAIL'}`);
 
@@ -248,8 +282,10 @@ function cmdConvertMat(options) {
   }
 
   console.log(`Converting Material: ${options.src} -> ${options.out}`);
-  convertMatFile(options.src, options.out, options);
+  const matResult = convertMatFile(options.src, options.out, options);
   console.log(`✅ Converted material to ${options.out}`);
+  console.log(`   Properties: ${matResult.propertyCount}`);
+  for (const w of matResult.warnings) console.log(`   ⚠️  ${w}`);
 }
 
 function cmdBatch(options) {
@@ -291,6 +327,136 @@ function cmdValidate(effectPath) {
     console.log('Warnings:');
     for (const w of res.warnings) console.log(`  - ⚠️ ${w}`);
   }
+  // Exit code 5 = validation failure (spec section 65), so CI and agent verify
+  // gates can branch on the result instead of scraping stdout.
+  if (!res.valid) process.exitCode = 5;
+}
+
+/**
+ * `chain` -- prefab -> materials -> shaders + textures, converted in one pass.
+ *
+ * Output is deliberately terse. The point of this command is that a caller
+ * (human or agent) never has to read the prefab YAML, the .mat YAML, or the
+ * per-shader reports to know what to do next; everything actionable is on
+ * screen and everything else is on disk.
+ */
+function cmdChain(options) {
+  const { resolveChain } = require('./prefab-shader-chain.cjs');
+  const { analyzeEffect } = require('./glsl-static-analyzer.cjs');
+  const { convertMatFile } = require('./unity-material-converter.cjs');
+
+  if (!options.src) {
+    console.error('Error: --src <Prefab.prefab> is required.');
+    process.exit(2);
+  }
+  if (!options.unityRoot) {
+    console.error('Error: --unity-root <UnityProject/Assets> is required (needed to resolve GUIDs).');
+    process.exit(2);
+  }
+
+  const chain = resolveChain(options.src, options.unityRoot, options);
+  const outDir = options.outDir;
+  const blocking = [];
+  const effectByShader = new Map();
+
+  if (outDir) {
+    const effectsDir = path.join(outDir, 'effects');
+    const materialsDir = path.join(outDir, 'materials');
+    for (const sh of chain.shaders) {
+      const dest = path.join(effectsDir, `${sh.name}.effect`);
+      try {
+        const res = transpileShaderFile(sh.path, dest, { ...options, report: true });
+        const analysis = analyzeEffect(fs.readFileSync(dest, 'utf8'));
+        effectByShader.set(sh.path, dest);
+        sh.effect = dest;
+        sh.score = res.scoreInfo.score;
+        sh.grade = res.scoreInfo.grade;
+        sh.clean = analysis.ok;
+        // surface-pbr and unlit produce structurally different effects, and a
+        // PBR shader is routed automatically -- say which one ran.
+        sh.mode = res.mode;
+        sh.intentStyle = res.docIR.surfaceIntentStyle || null;
+        for (const e of analysis.errors) {
+          blocking.push(`${path.basename(dest)} ${e.program || ''}:${e.line || '-'} [${e.code}] ${e.message}`);
+        }
+      } catch (err) {
+        sh.error = err.message;
+        blocking.push(`${sh.name}.shader FAILED TO TRANSPILE: ${err.message}`);
+      }
+    }
+    for (const mat of chain.materials) {
+      if (mat.shaderIsBuiltin) continue;
+      const dest = path.join(materialsDir, `${mat.name}.mtl`);
+      try {
+        const res = convertMatFile(mat.path, dest, {
+          ...options,
+          effectPath: mat.shader ? effectByShader.get(mat.shader) : undefined,
+        });
+        mat.mtl = dest;
+        mat.propertyCount = res.propertyCount;
+      } catch (err) {
+        mat.error = err.message;
+        blocking.push(`${mat.name}.mat FAILED: ${err.message}`);
+      }
+    }
+  }
+
+  if (options.json) {
+    console.log(JSON.stringify({ ...chain, blocking }, null, 2));
+    if (blocking.length) process.exitCode = 5;
+    return;
+  }
+
+  const rel = (p) => path.relative(options.unityRoot, p).replace(/\\/g, '/');
+  console.log(`\n=== Shader chain: ${path.basename(chain.prefab)} ===`);
+  console.log(`guid index      ${chain.indexSize} assets${chain.fromCache ? ' (cached)' : ''}`);
+  console.log(`materials       ${chain.materials.length}${chain.materials.length ? '  ' + chain.materials.map(m => m.name).join(', ') : ''}`);
+
+  for (const sh of chain.shaders) {
+    const mode = sh.mode === 'surface-pbr'
+      ? `surface-pbr/${sh.intentStyle || 'pbr'}`
+      : 'unlit';
+    const status = sh.effect
+      ? `${mode}, ${sh.clean ? 'compile-clean' : 'NEEDS WORK'}, score ${sh.score} (${sh.grade})`
+      : 'not converted (no --out-dir)';
+    console.log(`shader          ${sh.name}  [used by ${sh.usedByMaterials} material(s)]  ${status}`);
+  }
+  const builtinMats = chain.materials.filter(m => m.shaderIsBuiltin);
+  if (builtinMats.length) {
+    console.log(`builtin shaders ${builtinMats.length} material(s) use a Unity built-in/package shader with no .shader on disk:`);
+    console.log(`                ${builtinMats.map(m => m.name).join(', ')}  -> rewrite by hand or map to a Cocos builtin effect`);
+  }
+
+  console.log(`textures        ${chain.textures.length}${chain.textures.length ? '  (import these into Cocos)' : ''}`);
+  for (const t of chain.textures) console.log(`                ${rel(t)}`);
+  if (chain.meshes.length) {
+    console.log(`meshes          ${chain.meshes.length}`);
+    for (const m of chain.meshes) console.log(`                ${rel(m)}`);
+  }
+  if (chain.unresolved.length) {
+    console.log(`unresolved      ${chain.unresolved.length} GUID(s) not found under --unity-root (built-in assets or a missing package)`);
+  }
+
+  if (outDir) {
+    const wroteEffects = chain.shaders.filter(s => s.effect).length;
+    const wroteMtl = chain.materials.filter(m => m.mtl).length;
+    console.log(`\nwrote           ${wroteEffects} .effect, ${wroteMtl} .mtl -> ${outDir}`);
+  }
+
+  if (blocking.length) {
+    console.log(`\nBLOCKING (${blocking.length}) -- these will not compile or link as emitted:`);
+    for (const b of blocking) console.log(`  ❌ ${b}`);
+    process.exitCode = 5;
+  } else if (outDir) {
+    console.log('\n✅ every generated effect is compile-clean.');
+  }
+
+  if (outDir && chain.materials.some(m => m.mtl)) {
+    // _effectAsset needs the UUID Cocos assigns on import, which does not exist
+    // until the editor has seen the .effect. Saying so beats a silent fallback.
+    console.log('\nnext: import the effects in Cocos Creator, then re-run convert-mat with');
+    console.log('      --effect-uuid <uuid from the generated .effect.meta> to bind each material.');
+  }
 }
 
 function main() {
@@ -320,6 +486,15 @@ function main() {
     else if (arg === '--no-report') options.report = false;
     else if (arg === '--generate-material' || arg === '-m') options.generateMaterial = true;
     else if (arg === '--dry-run') options.dryRun = true;
+    // convert-mat: bind the material to its effect. --effect-uuid fills
+    // _effectAsset; --effect additionally filters out properties the effect
+    // does not declare.
+    else if (arg === '--effect-uuid' && args[i + 1]) options.effectUuid = args[++i];
+    else if (arg === '--effect' && args[i + 1]) options.effectPath = args[++i];
+    // chain: GUID resolution needs the Unity Assets root.
+    else if (arg === '--unity-root' && args[i + 1]) options.unityRoot = args[++i];
+    else if (arg === '--json') options.json = true;
+    else if (arg === '--no-cache') options.noCache = true;
   }
 
   // Handle positionals
@@ -338,6 +513,9 @@ function main() {
     cmdBatch(options);
   } else if (command === 'validate') {
     cmdValidate(args[1] || options.out);
+  } else if (command === 'chain') {
+    options.src = options.src || args[1];
+    cmdChain(options);
   } else if (command === 'doctor') {
     cmdDoctor();
   } else {
@@ -345,13 +523,18 @@ function main() {
 UCShaderTranspiler - Unity HLSL/ShaderLab -> Cocos Creator 3.8.8 GLSL Effect Transpiler
 
 Usage:
-  node unity-shader-compiler.cjs convert --src <Shader> --out <Effect> [-m] [--mode auto|surface-pbr] [--report]
-  node unity-shader-compiler.cjs convert-mat --src <UnityMat> --out <CocosMtl>
+  node unity-shader-compiler.cjs chain --src <Prefab> --unity-root <Assets> [--out-dir <dir>] [--json] [--no-cache]
+  node unity-shader-compiler.cjs convert --src <Shader> --out <Effect> [-m] [--mode auto|unlit|surface-pbr] [--report|--no-report] [--dry-run]
+  node unity-shader-compiler.cjs convert-mat --src <UnityMat> --out <CocosMtl> [--effect <Effect>] [--effect-uuid <uuid>]
   node unity-shader-compiler.cjs scan <UnityDir>
   node unity-shader-compiler.cjs inspect <Shader>
   node unity-shader-compiler.cjs batch --dir <ShadersDir> --out-dir <EffectsDir> [-m]
   node unity-shader-compiler.cjs validate <Effect>
   node unity-shader-compiler.cjs doctor
+
+'chain' is the entry point for "port this prefab and whatever it renders with":
+it walks prefab -> materials -> shader + textures, converts each, and prints
+only what still needs a decision.
     `);
   }
 }

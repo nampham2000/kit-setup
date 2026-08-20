@@ -39,7 +39,20 @@ function parseStructs(hlslCode) {
 
   while ((match = structRegex.exec(clean)) !== null) {
     const structName = match[1];
-    const body = match[2];
+    // Unity structs interleave declarations with preprocessor guards and
+    // semicolon-less field macros:
+    //     UNITY_FOG_COORDS(1)
+    //     #ifdef SOFTPARTICLES_ON
+    //     float4 projPos : TEXCOORD2;
+    //     #endif
+    // Splitting the raw body on ';' glues those lines onto the following
+    // declaration, so the strict field pattern below rejects it and the field
+    // vanishes -- and a dropped field becomes an undeclared identifier in the
+    // emitted GLSL. Drop the guards and macros first; the playable target
+    // compiles a single variant, so taking every branch is the right read.
+    const body = match[2]
+      .replace(/^[ \t]*#[^\n]*$/gm, '')
+      .replace(/\bUNITY_(?:FOG_COORDS|POSITION|VERTEX_INPUT_INSTANCE_ID|VERTEX_OUTPUT_STEREO)\b(?:\s*\([^)]*\))?/g, '');
     const fields = [];
 
     // Split fields by semicolon
@@ -86,6 +99,23 @@ function parseStructs(hlslCode) {
 /**
  * Parses global uniforms and textures declared in HLSL
  */
+/**
+ * Replace every character nested inside braces with a space, preserving
+ * offsets and newlines so line numbers still line up. What survives is
+ * exactly the file-scope text.
+ */
+function maskBracedRegions(code) {
+  const out = code.split('');
+  let depth = 0;
+  for (let i = 0; i < out.length; i++) {
+    const ch = out[i];
+    if (ch === '{') { depth++; out[i] = ' '; continue; }
+    if (ch === '}') { depth = Math.max(0, depth - 1); out[i] = ' '; continue; }
+    if (depth > 0 && ch !== '\n') out[i] = ' ';
+  }
+  return out.join('');
+}
+
 function parseUniformsAndSamplers(hlslCode) {
   const uniforms = [];
   const samplers = [];
@@ -133,15 +163,31 @@ function parseUniformsAndSamplers(hlslCode) {
   }
 
   // 3. Scalar and vector uniforms: float _Speed; float4 _Color; half3 _Tint; float4x4 _CustomMat;
+  // Only file scope counts. Scanning the whole text also matches declarations
+  // inside function bodies and structs, which put shader locals into the
+  // material UBO -- `float2 uv;` in a fragment body became a material property.
+  // Blank out everything nested in braces so only depth-0 text is searched.
+  const fileScope = maskBracedRegions(clean);
   const uniformDeclRegex = /\b(float|half|fixed|int|bool|min16float|float2|float3|float4|half2|half3|half4|fixed2|fixed3|fixed4|float4x4|float3x3|float2x2|matrix)\s+([A-Za-z_]\w*)(?:\s*\[\s*(\d+)\s*\])?\s*;/g;
   let uMatch;
-  while ((uMatch = uniformDeclRegex.exec(clean)) !== null) {
+  while ((uMatch = uniformDeclRegex.exec(fileScope)) !== null) {
     const rawType = uMatch[1];
     const name = uMatch[2];
     const arraySize = uMatch[3] ? parseInt(uMatch[3], 10) : undefined;
 
+    // Uniforms Unity injects automatically. A shader declares them so its HLSL
+    // compiles, but Cocos never writes them, so carrying them into the material
+    // UBO produces a property that is always zero -- worse than absent, because
+    // it looks bound. Their uses are lowered to real expressions instead
+    // (see unity-semantic-lowering.cjs), so the declaration must go.
+    const isUnityAutoUniform = /_TexelSize$|_HDR$/.test(name) ||
+      ['_RendererColor', '_Flip', '_EnableExternalAlpha', '_AlphaTex',
+       '_ScreenParams', '_ProjectionParams', '_ZBufferParams',
+       '_WorldSpaceCameraPos', '_Time', '_SinTime', '_CosTime',
+       '_DeltaTime', '_LightColor0', '_WorldSpaceLightPos0'].includes(name);
+
     // Filter out common local var patterns or builtins
-    if (!name.startsWith('gl_') && !name.startsWith('unity_') && !name.startsWith('UNITY_')) {
+    if (!name.startsWith('gl_') && !name.startsWith('unity_') && !name.startsWith('UNITY_') && !isUnityAutoUniform) {
       uniforms.push({
         name,
         rawType,
