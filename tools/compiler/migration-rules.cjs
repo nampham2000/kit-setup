@@ -832,12 +832,6 @@ class MigrationRulesEngine {
       if (val !== null) irMethod.contextMenu = String(val);
     }
 
-    const contextMenuAttr = (methodAst.attributes || []).find(a => a.name === 'ContextMenu' || a.name === 'UnityEngine.ContextMenu');
-    if (contextMenuAttr && contextMenuAttr.args && contextMenuAttr.args[0]) {
-      const val = getLiteralValue(contextMenuAttr.args[0].expr || contextMenuAttr.args[0]);
-      if (val !== null) irMethod.contextMenu = String(val);
-    }
-
     // Check IEnumerator -> Coroutine
     if (methodAst.returnType && (methodAst.returnType.name === 'IEnumerator' || methodAst.returnType.name === 'System.Collections.IEnumerator')) {
       irMethod.isCoroutine = true;
