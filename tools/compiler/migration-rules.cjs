@@ -27,6 +27,91 @@ const NESTED_TYPE_KINDS = new Set([
   'DelegateDeclaration',
 ]);
 
+// ---------------------------------------------------------------------------
+// Type tables for inferExpressionType(). These drive whether an arithmetic
+// expression is rewritten into a Zero-GC static math call, so every entry has
+// to be a type fact rather than a naming convention - see the comment on
+// MigrationRulesEngine#inferExpressionType.
+// ---------------------------------------------------------------------------
+
+/** Both the Unity and the Cocos spelling map onto the Cocos type we emit. */
+const CANONICAL_MATH_TYPES = {
+  Vector2: 'Vec2', Vec2: 'Vec2',
+  Vector3: 'Vec3', Vec3: 'Vec3',
+  Vector4: 'Vec4', Vec4: 'Vec4',
+  Quaternion: 'Quat', Quat: 'Quat',
+};
+
+const VECTOR_TYPES = new Set(['Vec2', 'Vec3', 'Vec4']);
+
+const SCRATCH_PREFIXES = {
+  Vec2: '_tempV2_',
+  Vec3: '_tempV3_',
+  Vec4: '_tempV4_',
+  Quat: '_tempQuat_',
+};
+
+/** Members of a vector/quaternion that yield a scalar, not another vector. */
+const NUMERIC_MATH_MEMBERS = new Set([
+  'x', 'y', 'z', 'w',
+  'magnitude', 'sqrMagnitude', 'length', 'lengthSqr',
+]);
+
+/** Members of a vector/quaternion that yield the same math type. */
+const VECTOR_VALUED_MATH_MEMBERS = new Set(['normalized', 'clone']);
+
+const NUMERIC_COLLECTION_MEMBERS = new Set(['Count', 'Length', 'count']);
+
+/** Transform/Node accessors, keyed by the value type Unity gives them. */
+const TRANSFORM_VEC3_MEMBERS = new Set([
+  'position', 'localPosition', 'localScale', 'lossyScale',
+  'eulerAngles', 'localEulerAngles',
+]);
+
+const TRANSFORM_QUAT_MEMBERS = new Set(['rotation', 'localRotation']);
+
+/** Return types of the Unity statics that actually appear in gameplay math. */
+const UNITY_STATIC_RETURN_TYPES = {
+  'Vector3.Lerp': 'Vec3', 'Vector3.LerpUnclamped': 'Vec3', 'Vector3.Slerp': 'Vec3',
+  'Vector3.MoveTowards': 'Vec3', 'Vector3.SmoothDamp': 'Vec3', 'Vector3.Cross': 'Vec3',
+  'Vector3.Normalize': 'Vec3', 'Vector3.Scale': 'Vec3', 'Vector3.Project': 'Vec3',
+  'Vector3.Reflect': 'Vec3', 'Vector3.ClampMagnitude': 'Vec3', 'Vector3.Min': 'Vec3',
+  'Vector3.Max': 'Vec3',
+  'Vector3.Dot': 'number', 'Vector3.Distance': 'number', 'Vector3.Angle': 'number',
+  'Vector3.SignedAngle': 'number', 'Vector3.SqrMagnitude': 'number', 'Vector3.Magnitude': 'number',
+  'Vector2.Lerp': 'Vec2', 'Vector2.LerpUnclamped': 'Vec2', 'Vector2.MoveTowards': 'Vec2',
+  'Vector2.Scale': 'Vec2', 'Vector2.Reflect': 'Vec2', 'Vector2.Perpendicular': 'Vec2',
+  'Vector2.ClampMagnitude': 'Vec2', 'Vector2.Min': 'Vec2', 'Vector2.Max': 'Vec2',
+  'Vector2.Dot': 'number', 'Vector2.Distance': 'number', 'Vector2.Angle': 'number',
+  'Vector2.SignedAngle': 'number', 'Vector2.SqrMagnitude': 'number',
+  'Quaternion.Euler': 'Quat', 'Quaternion.Slerp': 'Quat', 'Quaternion.SlerpUnclamped': 'Quat',
+  'Quaternion.Lerp': 'Quat', 'Quaternion.LookRotation': 'Quat', 'Quaternion.AngleAxis': 'Quat',
+  'Quaternion.Inverse': 'Quat', 'Quaternion.Normalize': 'Quat', 'Quaternion.RotateTowards': 'Quat',
+  'Quaternion.FromToRotation': 'Quat',
+  'Quaternion.Angle': 'number', 'Quaternion.Dot': 'number',
+  'Random.Range': 'number', 'Random.value': 'number',
+  'Random.insideUnitSphere': 'Vec3', 'Random.onUnitSphere': 'Vec3',
+  'Random.insideUnitCircle': 'Vec2', 'Random.rotation': 'Quat',
+};
+
+/**
+ * Words that appear in interpolation holes but are never a member of the
+ * enclosing class, so qualifyInterpolationIdentifiers() must leave them alone.
+ */
+const INTERPOLATION_NON_MEMBER_WORDS = new Set([
+  'true', 'false', 'null', 'undefined', 'this', 'new', 'typeof', 'is', 'as',
+  'nameof', 'string', 'int', 'float', 'double', 'bool', 'var', 'void', 'char',
+  'byte', 'short', 'long', 'uint', 'ulong', 'ushort', 'sbyte', 'decimal',
+  'Math', 'Number', 'String', 'Boolean', 'Array', 'Map', 'Set', 'Function',
+  'JSON', 'Object', 'Date', 'Promise',
+]);
+
+const COMPARISON_OPERATORS = new Set(['<', '>', '<=', '>=', 'is', 'as']);
+const LOGICAL_OPERATORS = new Set(['&&', '||']);
+// Kept separate from COMPARISON_OPERATORS: inference must report `a == b` as
+// boolean, but transformBinary still needs to see it to emit Vec3.equals().
+const EQUALITY_OPERATORS = new Set(['==', '!=', '===', '!==']);
+
 function sanitizeIdentifier(name) {
   const value = String(name || '_');
   return TYPESCRIPT_RESERVED_WORDS.has(value) ? `_${value}` : value;
@@ -109,7 +194,43 @@ function normalizeInterpolationExpression(value) {
   return cast ? `Math.trunc(${cast[1]})` : trimmed;
 }
 
-function transformInterpolatedString(value) {
+/**
+ * Qualify bare member references inside one interpolation hole.
+ *
+ * Interpolation holes are handled as raw C# text rather than parsed into an AST
+ * (see normalizeInterpolationExpression), so the AST-based qualification cannot
+ * reach them. The scan below is textual, but the DECISION is not: a name is only
+ * rewritten when `resolve` finds it in the class's real member table, and string
+ * literals inside the hole are skipped so their contents are never touched.
+ */
+function qualifyInterpolationIdentifiers(text, resolve) {
+  if (!resolve || !text) return text;
+
+  // Index ranges covered by string/char literals, which must stay verbatim.
+  const literalRanges = [];
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch !== '"' && ch !== "'") continue;
+    const start = i;
+    for (i++; i < text.length; i++) {
+      if (text[i] === '\\') { i++; continue; }
+      if (text[i] === ch) break;
+    }
+    literalRanges.push([start, Math.min(i, text.length - 1)]);
+  }
+  const inLiteral = index => literalRanges.some(([from, to]) => index >= from && index <= to);
+
+  return text.replace(/[A-Za-z_$][\w$]*/g, (name, offset) => {
+    if (inLiteral(offset)) return name;
+    if (INTERPOLATION_NON_MEMBER_WORDS.has(name)) return name;
+    // Already a member access (`foo.Bar`), so the receiver is explicit.
+    const before = text.slice(0, offset).replace(/\s+$/, '');
+    if (before.endsWith('.')) return name;
+    return resolve(name);
+  });
+}
+
+function transformInterpolatedString(value, resolveIdentifier = null) {
   const openBrace = '\u0000OPEN_BRACE\u0000';
   const closeBrace = '\u0000CLOSE_BRACE\u0000';
   const escaped = value
@@ -118,7 +239,10 @@ function transformInterpolatedString(value) {
     .replace(/\}\}/g, closeBrace);
   const transformed = escaped.replace(/\{([^{}]+)\}/g, (_match, placeholder) => {
     const { expression: rawExpression, format } = splitInterpolationFormat(placeholder);
-    const expression = normalizeInterpolationExpression(rawExpression);
+    const expression = qualifyInterpolationIdentifiers(
+      normalizeInterpolationExpression(rawExpression),
+      resolveIdentifier,
+    );
     if (/^0+$/.test(format)) {
       return `\${String(Math.trunc(Number(${expression}))).padStart(${format.length}, '0')}`;
     }
@@ -135,11 +259,25 @@ class MigrationRulesEngine {
   constructor(workspaceIndexer = null) {
     this.indexer = workspaceIndexer;
     this.resolver = new SemanticResolver(workspaceIndexer);
+    this.localVariables = new Map();
+    this.memberTypes = new Map();
+    this.ownedScratch = new Set();
   }
 
   transform(compilationUnitAst) {
     const irUnit = new IRCompilationUnit(compilationUnitAst.filename);
     irUnit.rawComments = compilationUnitAst.comments || [];
+
+    // A dropped preprocessor branch changes behaviour without leaving a trace in
+    // the emitted code, so it has to be reported rather than assumed correct.
+    for (const note of compilationUnitAst.preprocessorNotes || []) {
+      irUnit.todoNotes.push({
+        kind: 'preprocessor-branch-dropped',
+        severity: 'medium',
+        symbol: note.symbol,
+        reason: `#if ${note.condition} (line ${note.line}): kept the '${note.kept}' branch for a built runtime and dropped the other. Verify the runtime path is the one the playable needs.`,
+      });
+    }
 
     // Always import ccclass, property, Component, _decorator from 'cc'
     irUnit.addImport('cc', '_decorator');
@@ -332,6 +470,7 @@ class MigrationRulesEngine {
     const irClass = new IRClass(sanitizeIdentifier(classAst.name));
     this.currentClass = irClass;
     this.localVariables = new Map();
+    this.ownedScratch = new Set();
     irClass.isStatic = classAst.modifiers.includes('static');
 
     // Base class resolution
@@ -382,6 +521,13 @@ class MigrationRulesEngine {
       irClass.isCCClass = false;
     }
 
+    // Member index, collected BEFORE any body is transformed - see
+    // collectMemberIndex() for why order independence matters.
+    const memberIndex = this.collectMemberIndex(classAst);
+    this.memberTypes = memberIndex.types;
+    this.instanceMembers = memberIndex.instance;
+    this.staticMembers = memberIndex.statics;
+
     // Members (Fields, Properties, Methods)
     for (const member of classAst.members || []) {
       if (member.kind === 'FieldDeclaration') {
@@ -406,6 +552,50 @@ class MigrationRulesEngine {
     }
 
     return irClass;
+  }
+
+  /**
+   * Index every member of the class before any body is transformed, so both
+   * type inference and `this.` qualification are independent of declaration
+   * order (a method may reference a field or method declared further down).
+   *
+   * Returns:
+   *   types    - member name -> resolved TS type (method entries use the return type)
+   *   instance - names that need a `this.` prefix when referenced bare
+   *   statics  - names that need a `ClassName.` prefix when referenced bare
+   */
+  collectMemberIndex(classAst) {
+    const types = new Map();
+    const instance = new Set();
+    const statics = new Set();
+
+    const record = (name, typeNode, modifiers) => {
+      if (!name) return;
+      if (!types.has(name)) {
+        const resolved = this.resolver.resolveType(typeNode);
+        if (resolved && resolved.ts) types.set(name, resolved.ts);
+      }
+      const isStatic = (modifiers || []).includes('static') || (modifiers || []).includes('const');
+      (isStatic ? statics : instance).add(name);
+    };
+
+    for (const member of classAst.members || []) {
+      if (member.kind === 'FieldDeclaration') {
+        for (const declaration of member.declarations || []) record(declaration.name, member.type, member.modifiers);
+        if (member.name) record(member.name, member.type, member.modifiers);
+      } else if (member.kind === 'PropertyDeclaration') {
+        record(member.name, member.type, member.modifiers);
+      } else if (member.kind === 'MethodDeclaration') {
+        record(member.name, member.returnType, member.modifiers);
+      }
+    }
+
+    // A name declared both ways in partial/overloaded code: prefer the instance
+    // reading, since `this.x` also reaches a static through the prototype chain
+    // far less surprisingly than `Class.x` would reach an instance member.
+    for (const name of instance) statics.delete(name);
+
+    return { types, instance, statics };
   }
 
   transformField(fieldAst, irClass, irUnit) {
@@ -554,7 +744,8 @@ class MigrationRulesEngine {
     irProp.modifiers = propAst.modifiers.includes('public') ? ['public'] : ['private'];
 
     if (propAst.isExpressionBodied && propAst.expression) {
-      irProp.expression = this.transformExpression(propAst.expression, irUnit);
+      // Pass a body context so member references inside the getter get qualified.
+      irProp.expression = this.transformExpression(propAst.expression, irUnit, `get_${irProp.name}`);
     } else {
       const accessors = propAst.accessors || [];
       const getter = accessors.find(accessor => accessor.name === 'get');
@@ -568,12 +759,12 @@ class MigrationRulesEngine {
       } else {
         if (getter && getter.body) {
           irProp.getter = getter.body.kind === 'ExpressionBody'
-            ? [`return ${this.transformExpression(getter.body.expr, irUnit)};`]
+            ? [`return ${this.transformExpression(getter.body.expr, irUnit, `get_${irProp.name}`)};`]
             : this.transformStatements(getter.body.statements || [], irUnit, `get_${irProp.name}`);
         }
         if (setter && setter.body) {
           irProp.setter = setter.body.kind === 'ExpressionBody'
-            ? [`${this.transformExpression(setter.body.expr, irUnit)};`]
+            ? [`${this.transformExpression(setter.body.expr, irUnit, `set_${irProp.name}`)};`]
             : this.transformStatements(setter.body.statements || [], irUnit, `set_${irProp.name}`);
         }
       }
@@ -628,7 +819,18 @@ class MigrationRulesEngine {
     irMethod.isLifecycle = isLifecycle;
     irMethod.isStatic = methodAst.modifiers.includes('static');
     irMethod.isAsync = methodAst.modifiers.includes('async');
-    irMethod.modifiers = methodAst.modifiers.includes('public') ? ['public'] : (methodAst.modifiers.includes('protected') ? ['protected'] : ['private']);
+    // Unity lifecycle hooks are conventionally private in C#, but Cocos declares
+    // them public on Component - emitting `private update()` narrows visibility
+    // and is a TypeScript error, so lifecycle overrides stay public.
+    irMethod.modifiers = isLifecycle
+      ? ['public']
+      : (methodAst.modifiers.includes('public') ? ['public'] : (methodAst.modifiers.includes('protected') ? ['protected'] : ['private']));
+
+    const contextMenuAttr = (methodAst.attributes || []).find(a => a.name === 'ContextMenu' || a.name === 'UnityEngine.ContextMenu');
+    if (contextMenuAttr && contextMenuAttr.args && contextMenuAttr.args[0]) {
+      const val = getLiteralValue(contextMenuAttr.args[0].expr || contextMenuAttr.args[0]);
+      if (val !== null) irMethod.contextMenu = String(val);
+    }
 
     const contextMenuAttr = (methodAst.attributes || []).find(a => a.name === 'ContextMenu' || a.name === 'UnityEngine.ContextMenu');
     if (contextMenuAttr && contextMenuAttr.args && contextMenuAttr.args[0]) {
@@ -643,6 +845,9 @@ class MigrationRulesEngine {
     }
 
     this.localVariables = new Map();
+    // Scratch ownership is per method: a slot held by a local in one method
+    // is free again in the next.
+    this.ownedScratch = new Set();
     irMethod.parameters = (methodAst.parameters || []).map(p => {
       const pType = this.resolver.resolveType(p.type);
       if (pType.import) irUnit.addImport('cc', pType.import);
@@ -706,6 +911,9 @@ class MigrationRulesEngine {
           if (this.localVariables) this.localVariables.set(d.name, resType.ts);
           if (d.initializer) {
             const init = this.transformExpression(d.initializer, irUnit, currentMethodName);
+            // This local now holds whatever scratch object the initializer wrote
+            // into, so later statements must not reuse that slot.
+            this.claimScratchForLocal(init);
             return `${declarationKeyword} ${sanitizeIdentifier(d.name)} = ${init};`;
           }
           return `${declarationKeyword} ${sanitizeIdentifier(d.name)}: ${resType.ts} = ${resType.defaultVal || 'null'};`;
@@ -746,6 +954,12 @@ class MigrationRulesEngine {
         let initStr = '';
         if (stmt.initializer) {
           if (stmt.initializer.kind === 'LocalDeclarationStatement') {
+            // Register the loop variable first: it shadows any class member of
+            // the same name, so `for (int i ...)` must not become `this.i`.
+            const loopType = stmt.initializer.type ? this.resolver.resolveType(stmt.initializer.type) : { ts: 'any' };
+            for (const d of stmt.initializer.declarations || []) {
+              if (this.localVariables) this.localVariables.set(d.name, loopType.ts);
+            }
             initStr = 'let ' + stmt.initializer.declarations.map(d => `${sanitizeIdentifier(d.name)} = ${this.transformExpression(d.initializer, irUnit, currentMethodName)}`).join(', ');
           } else {
             initStr = this.transformExpression(stmt.initializer, irUnit, currentMethodName);
@@ -763,6 +977,11 @@ class MigrationRulesEngine {
 
       case 'ForEachStatement': {
         const elemName = sanitizeIdentifier(stmt.identifier);
+        // Same shadowing rule as ForStatement.
+        if (this.localVariables && stmt.identifier) {
+          const elemType = stmt.type ? this.resolver.resolveType(stmt.type) : { ts: 'any' };
+          this.localVariables.set(stmt.identifier, elemType.ts);
+        }
         const iterExpr = this.transformExpression(stmt.expression, irUnit, currentMethodName);
         const bodyStr = this.transformStatement(stmt.body, irUnit, currentMethodName);
         const lines = [`for (const ${elemName} of ${iterExpr}) {`];
@@ -867,7 +1086,10 @@ class MigrationRulesEngine {
 
       case 'StringLiteral': {
         if (expr.isInterpolated) {
-          return transformInterpolatedString(expr.value);
+          return transformInterpolatedString(
+            expr.value,
+            name => this.qualifyMemberReference(name, currentMethodName),
+          );
         }
         return JSON.stringify(expr.value);
       }
@@ -898,12 +1120,7 @@ class MigrationRulesEngine {
         if (idName === 'GameObject') { irUnit.addImport('cc', 'Node'); return 'Node'; }
         if (idName === 'transform') return 'this.node';
         if (idName === 'gameObject') return 'this.node';
-        if (currentMethodName && this.currentClass && (this.currentClass.fields || []).some(f => f.name === idName && !f.isStatic)) {
-          if (!this.localVariables || !this.localVariables.has(idName)) {
-            return `this.${sanitizeIdentifier(idName)}`;
-          }
-        }
-        return sanitizeIdentifier(idName);
+        return this.qualifyMemberReference(idName, currentMethodName);
       }
 
       case 'MemberAccessExpression': {
@@ -1264,22 +1481,40 @@ class MigrationRulesEngine {
       irUnit.addImport('cc', 'Quat');
       const funcName = targetStr.split('.')[1];
       if (funcName === 'LookRotation') {
-        return `Quat.fromViewUp(_tempQuat_0, ${args[0]}${args[1] ? ', ' + args[1] : ''})`;
+        {
+          const slot = this.allocateScratch(irUnit, 'Quat', args[0], args[1]);
+          return `Quat.fromViewUp(${slot}, ${args[0]}${args[1] ? ', ' + args[1] : ''})`;
+        }
       }
       if (funcName === 'Euler') {
-        return `Quat.fromEuler(_tempQuat_0, ${args.join(', ')})`;
+        {
+          const slot = this.allocateScratch(irUnit, 'Quat', args.join(' '));
+          return `Quat.fromEuler(${slot}, ${args.join(', ')})`;
+        }
       }
       if (funcName === 'AngleAxis') {
-        return `Quat.fromAxisAngle(_tempQuat_0, ${args[1]}, ${args[0]} * (Math.PI / 180))`;
+        {
+          const slot = this.allocateScratch(irUnit, 'Quat', args[0], args[1]);
+          return `Quat.fromAxisAngle(${slot}, ${args[1]}, ${args[0]} * (Math.PI / 180))`;
+        }
       }
       if (funcName === 'Slerp') {
-        return `Quat.slerp(_tempQuat_0, ${args[0]}, ${args[1]}, ${args[2]})`;
+        {
+          const slot = this.allocateScratch(irUnit, 'Quat', args[0], args[1], args[2]);
+          return `Quat.slerp(${slot}, ${args[0]}, ${args[1]}, ${args[2]})`;
+        }
       }
       if (funcName === 'Lerp') {
-        return `Quat.lerp(_tempQuat_0, ${args[0]}, ${args[1]}, ${args[2]})`;
+        {
+          const slot = this.allocateScratch(irUnit, 'Quat', args[0], args[1], args[2]);
+          return `Quat.lerp(${slot}, ${args[0]}, ${args[1]}, ${args[2]})`;
+        }
       }
       if (funcName === 'Inverse') {
-        return `Quat.invert(_tempQuat_0, ${args[0]})`;
+        {
+          const slot = this.allocateScratch(irUnit, 'Quat', args[0]);
+          return `Quat.invert(${slot}, ${args[0]})`;
+        }
       }
       if (funcName === 'Dot') {
         return `Quat.dot(${args[0]}, ${args[1]})`;
@@ -1296,10 +1531,22 @@ class MigrationRulesEngine {
       if (funcName === 'Distance') return `Vec3.distance(${args[0]}, ${args[1]})`;
       if (funcName === 'Dot') return `Vec3.dot(${args[0]}, ${args[1]})`;
       if (funcName === 'Angle') return `Vec3.angle(${args[0]}, ${args[1]})`;
-      if (funcName === 'Cross') return `Vec3.cross(_tempV3_0, ${args[0]}, ${args[1]})`;
-      if (funcName === 'Lerp') return `Vec3.lerp(_tempV3_0, ${args[0]}, ${args[1]}, ${args[2]})`;
-      if (funcName === 'Normalize') return `Vec3.normalize(_tempV3_0, ${args[0]})`;
-      if (funcName === 'Scale') return `Vec3.multiply(_tempV3_0, ${args[0]}, ${args[1]})`;
+      if (funcName === 'Cross') {
+        const slot = this.allocateScratch(irUnit, 'Vec3', args[0], args[1]);
+        return `Vec3.cross(${slot}, ${args[0]}, ${args[1]})`;
+      }
+      if (funcName === 'Lerp') {
+        const slot = this.allocateScratch(irUnit, 'Vec3', args[0], args[1], args[2]);
+        return `Vec3.lerp(${slot}, ${args[0]}, ${args[1]}, ${args[2]})`;
+      }
+      if (funcName === 'Normalize') {
+        const slot = this.allocateScratch(irUnit, 'Vec3', args[0]);
+        return `Vec3.normalize(${slot}, ${args[0]})`;
+      }
+      if (funcName === 'Scale') {
+        const slot = this.allocateScratch(irUnit, 'Vec3', args[0], args[1]);
+        return `Vec3.multiply(${slot}, ${args[0]}, ${args[1]})`;
+      }
     }
 
     // GetComponent<T>() -> this.getComponent(T)
@@ -1350,22 +1597,30 @@ class MigrationRulesEngine {
     if (leftStr === 'this.node.worldPosition') {
       if (expr.operator === '+=') {
         irUnit.addImport('cc', 'Vec3');
-        return `Vec3.add(_tempV3_0, this.node.worldPosition, ${rightStr}), this.node.setWorldPosition(_tempV3_0)`;
+        irUnit.addScratchVar('_tempV3_0');
+        const slot = this.allocateScratch(irUnit, 'Vec3', rightStr);
+        return `Vec3.add(${slot}, this.node.worldPosition, ${rightStr}), this.node.setWorldPosition(${slot})`;
       }
       if (expr.operator === '-=') {
         irUnit.addImport('cc', 'Vec3');
-        return `Vec3.subtract(_tempV3_0, this.node.worldPosition, ${rightStr}), this.node.setWorldPosition(_tempV3_0)`;
+        irUnit.addScratchVar('_tempV3_0');
+        const slot = this.allocateScratch(irUnit, 'Vec3', rightStr);
+        return `Vec3.subtract(${slot}, this.node.worldPosition, ${rightStr}), this.node.setWorldPosition(${slot})`;
       }
       return `this.node.setWorldPosition(${rightStr})`;
     }
     if (leftStr === 'this.node.position') {
       if (expr.operator === '+=') {
         irUnit.addImport('cc', 'Vec3');
-        return `Vec3.add(_tempV3_0, this.node.position, ${rightStr}), this.node.setPosition(_tempV3_0)`;
+        irUnit.addScratchVar('_tempV3_0');
+        const slot = this.allocateScratch(irUnit, 'Vec3', rightStr);
+        return `Vec3.add(${slot}, this.node.position, ${rightStr}), this.node.setPosition(${slot})`;
       }
       if (expr.operator === '-=') {
         irUnit.addImport('cc', 'Vec3');
-        return `Vec3.subtract(_tempV3_0, this.node.position, ${rightStr}), this.node.setPosition(_tempV3_0)`;
+        irUnit.addScratchVar('_tempV3_0');
+        const slot = this.allocateScratch(irUnit, 'Vec3', rightStr);
+        return `Vec3.subtract(${slot}, this.node.position, ${rightStr}), this.node.setPosition(${slot})`;
       }
       return `this.node.setPosition(${rightStr})`;
     }
@@ -1382,22 +1637,194 @@ class MigrationRulesEngine {
     return `${leftStr} ${expr.operator} ${rightStr}`;
   }
 
-  isVector(str) {
-    if (!str) return false;
-    if (str.includes('Vec3') || str.includes('Vector3') || str.includes('position') || str.includes('Position') || str.includes('forward') || str.includes('right') || str.includes('up') || str.includes('scale') || str.includes('_tempV3')) return true;
-    const clean = str.replace(/^this\./, '');
-    if (this.localVariables && (this.localVariables.get(clean) === 'Vec3' || this.localVariables.get(clean) === 'Vector3')) return true;
-    if (this.currentClass && (this.currentClass.fields || []).some(f => (f.name === clean || f.name === str) && (f.type === 'Vec3' || f.type === 'Vector3'))) return true;
-    return false;
+  /**
+   * Resolve a declared type name (C# or already-resolved TS) to one of the
+   * canonical math types this pass rewrites, or null when it is something else.
+   */
+  canonicalMathType(typeName) {
+    if (!typeName) return null;
+    // Strip the nullable union resolveType() adds for reference types.
+    const bare = String(typeName).replace(/\s*\|\s*null$/, '').trim();
+    return CANONICAL_MATH_TYPES[bare] || null;
   }
 
-  isQuat(str) {
-    if (!str) return false;
-    if (str.includes('Quat') || str.includes('Quaternion') || str.includes('rotation') || str.includes('Rotation') || str.includes('_tempQuat')) return true;
-    const clean = str.replace(/^this\./, '');
-    if (this.localVariables && (this.localVariables.get(clean) === 'Quat' || this.localVariables.get(clean) === 'Quaternion')) return true;
-    if (this.currentClass && (this.currentClass.fields || []).some(f => (f.name === clean || f.name === str) && (f.type === 'Quat' || f.type === 'Quaternion'))) return true;
-    return false;
+  /**
+   * Best-effort static type of an expression NODE.
+   *
+   * Returns a canonical math type ('Vec2' | 'Vec3' | 'Vec4' | 'Quat'), 'number',
+   * 'string', 'boolean', or null for "unknown".
+   *
+   * This replaces an earlier `isVector(emittedString)` that matched substrings
+   * such as 'up', 'right', 'scale' and 'position' against the already-emitted
+   * TypeScript. That guessed wrong on ordinary scalars whose names merely
+   * contained those fragments - `groupCount + upgradeLevel` (two ints) became
+   * `Vec3.add(...)` because "upgradeLevel" contains "up" - which corrupted
+   * semantics while still parsing, so nothing downstream caught it.
+   *
+   * `null` is deliberately NOT treated as "probably a vector": an unproven
+   * operand emits a plain operator. If that was really vector math the result is
+   * a type error, which the type-check pass reports and the confidence score
+   * reflects - a loud failure instead of a silent miscompile.
+   */
+  inferExpressionType(expr) {
+    if (!expr || typeof expr !== 'object') return null;
+
+    switch (expr.kind) {
+      case 'NumericLiteral': return 'number';
+      case 'StringLiteral': return 'string';
+      case 'BooleanLiteral': return 'boolean';
+      case 'NullLiteral': return null;
+
+      case 'ParenthesizedExpression':
+        return this.inferExpressionType(expr.expression || expr.operand);
+
+      case 'PrefixUnaryExpression':
+      case 'UnaryExpression': {
+        if (expr.operator === '!') return 'boolean';
+        // Unary minus preserves the operand type (-someVector stays a vector).
+        return this.inferExpressionType(expr.operand);
+      }
+
+      case 'CastExpression':
+        return this.canonicalMathType(this.resolver.resolveType(expr.type).ts)
+          || this.primitiveOf(this.resolver.resolveType(expr.type).ts);
+
+      case 'ObjectCreationExpression':
+        return this.canonicalMathType(expr.type && expr.type.name)
+          || this.canonicalMathType(this.resolver.resolveType(expr.type).ts);
+
+      case 'ConditionalExpression': {
+        // Both arms should agree; if they do not, treat it as unknown.
+        const whenTrue = this.inferExpressionType(expr.whenTrue);
+        const whenFalse = this.inferExpressionType(expr.whenFalse);
+        return whenTrue && whenTrue === whenFalse ? whenTrue : null;
+      }
+
+      case 'BinaryExpression': {
+        const op = expr.operator;
+        if (COMPARISON_OPERATORS.has(op) || LOGICAL_OPERATORS.has(op) || EQUALITY_OPERATORS.has(op)) return 'boolean';
+        const left = this.inferExpressionType(expr.left);
+        const right = this.inferExpressionType(expr.right);
+        const leftMath = this.canonicalMathType(left);
+        const rightMath = this.canonicalMathType(right);
+        if (leftMath) return leftMath;
+        if (rightMath) return rightMath;
+        if (left === 'string' || right === 'string') return 'string';
+        if (left === 'number' && right === 'number') return 'number';
+        return null;
+      }
+
+      case 'Identifier': {
+        const name = expr.name;
+        if (name === 'transform' || name === 'gameObject') return null; // a Node, not math
+        const local = this.localVariables && this.localVariables.get(name);
+        if (local) return this.canonicalMathType(local) || this.primitiveOf(local);
+        const member = this.memberTypes && this.memberTypes.get(name);
+        if (member) return this.canonicalMathType(member) || this.primitiveOf(member);
+        return null;
+      }
+
+      case 'MemberAccessExpression': {
+        const member = expr.member;
+        const ownerName = expr.expression && expr.expression.kind === 'Identifier'
+          ? expr.expression.name
+          : null;
+
+        // Static members of the Unity math types: Vector3.one, Quaternion.identity...
+        if (ownerName) {
+          const ownerMath = this.canonicalMathType(ownerName);
+          if (ownerMath) {
+            return NUMERIC_MATH_MEMBERS.has(member) ? 'number' : ownerMath;
+          }
+        }
+
+        // Component accessors read off a Transform / Node.
+        if (TRANSFORM_VEC3_MEMBERS.has(member)) return 'Vec3';
+        if (TRANSFORM_QUAT_MEMBERS.has(member)) return 'Quat';
+
+        const ownerType = this.canonicalMathType(this.inferExpressionType(expr.expression));
+        if (ownerType) {
+          // `pos.x + delta.x` is scalar arithmetic. Getting this wrong was the
+          // single most common corruption in the substring-matching version.
+          if (NUMERIC_MATH_MEMBERS.has(member)) return 'number';
+          if (VECTOR_VALUED_MATH_MEMBERS.has(member)) return ownerType;
+          return null;
+        }
+
+        if (NUMERIC_COLLECTION_MEMBERS.has(member)) return 'number';
+
+        // A member on `this` (explicit or implicit) resolves from the class model.
+        if (!ownerName || ownerName === 'this') {
+          const own = this.memberTypes && this.memberTypes.get(member);
+          if (own) return this.canonicalMathType(own) || this.primitiveOf(own);
+        }
+        return null;
+      }
+
+      case 'InvocationExpression': {
+        // The parser names this `target`; accept `expression` too so hand-built
+        // nodes in tests behave the same as parsed ones.
+        const callee = expr.target || expr.expression;
+        if (!callee) return null;
+        if (callee.kind === 'MemberAccessExpression') {
+          const ownerName = callee.expression && callee.expression.kind === 'Identifier'
+            ? callee.expression.name
+            : null;
+          if (ownerName) {
+            const known = UNITY_STATIC_RETURN_TYPES[`${ownerName}.${callee.member}`];
+            if (known) return known;
+            if (ownerName === 'Mathf') return 'number';
+          }
+          if (NUMERIC_MATH_MEMBERS.has(callee.member)) return 'number';
+        }
+        if (callee.kind === 'Identifier') {
+          const own = this.memberTypes && this.memberTypes.get(callee.name);
+          if (own) return this.canonicalMathType(own) || this.primitiveOf(own);
+        }
+        return null;
+      }
+
+      default:
+        return null;
+    }
+  }
+
+  /**
+   * Qualify a bare C# identifier that refers to a member of the enclosing class.
+   *
+   * C# lets a member be named without a receiver; TypeScript does not. The
+   * earlier version of this only consulted `fields`, so property getters and
+   * calls to the class's own methods were emitted unqualified - `Helper()`,
+   * `TouchCount`, `cam` - which accounted for 304 of the 1492 type errors
+   * measured on BlastShooter's gameplay scripts.
+   *
+   * Locals and parameters shadow members and must stay bare, so this runs only
+   * when the name is not in scope as a local.
+   */
+  qualifyMemberReference(idName, currentMethodName) {
+    const safeName = sanitizeIdentifier(idName);
+
+    // Outside an instance-member body (e.g. a field initializer) there is no
+    // `this` to qualify against, and C# forbids such references anyway.
+    if (!currentMethodName || !this.currentClass) return safeName;
+
+    // A local, parameter or loop variable of the same name wins.
+    if (this.localVariables && this.localVariables.has(idName)) return safeName;
+
+    if (this.instanceMembers && this.instanceMembers.has(idName)) {
+      return `this.${safeName}`;
+    }
+    if (this.staticMembers && this.staticMembers.has(idName) && this.currentClass.name) {
+      return `${this.currentClass.name}.${safeName}`;
+    }
+    return safeName;
+  }
+
+  /** Narrow a resolved TS type to a primitive tag, or null when it is not one. */
+  primitiveOf(tsType) {
+    const bare = String(tsType || '').replace(/\s*\|\s*null$/, '').trim();
+    if (bare === 'number' || bare === 'string' || bare === 'boolean') return bare;
+    return null;
   }
 
   transformBinary(expr, irUnit, currentMethodName) {
@@ -1405,40 +1832,83 @@ class MigrationRulesEngine {
     const left = this.transformExpression(expr.left, irUnit, currentMethodName);
     const right = this.transformExpression(expr.right, irUnit, currentMethodName);
 
-    const isVectorLeft = this.isVector(left);
-    const isVectorRight = this.isVector(right);
+    const leftType = this.canonicalMathType(this.inferExpressionType(expr.left));
+    const rightType = this.canonicalMathType(this.inferExpressionType(expr.right));
+    const vectorType = VECTOR_TYPES.has(leftType) ? leftType : (VECTOR_TYPES.has(rightType) ? rightType : null);
 
-    const isQuatLeft = this.isQuat(left);
-    const isQuatRight = this.isQuat(right);
+    if (vectorType) {
+      irUnit.addImport('cc', vectorType);
+      const isVectorLeft = leftType === vectorType;
+      const isVectorRight = rightType === vectorType;
 
-    if (isVectorLeft || isVectorRight) {
-      irUnit.addImport('cc', 'Vec3');
-      const tempTarget = left.includes('_tempV3_0') || right.includes('_tempV3_0')
-        ? (left.includes('_tempV3_1') || right.includes('_tempV3_1') ? '_tempV3_2' : '_tempV3_1')
-        : '_tempV3_0';
+      // Comparisons return a boolean and need no scratch object. Allocation is
+      // deferred into each branch so an operator we do not rewrite never leaves
+      // an unused module-level object behind.
+      if (op === '==' || op === '===') return `${vectorType}.equals(${left}, ${right})`;
+      if (op === '!=' || op === '!==') return `!${vectorType}.equals(${left}, ${right})`;
 
-      if (op === '+') return `Vec3.add(${tempTarget}, ${left}, ${right})`;
-      if (op === '-') return `Vec3.subtract(${tempTarget}, ${left}, ${right})`;
+      const temp = () => this.allocateScratch(irUnit, vectorType, left, right);
+      if (op === '+') return `${vectorType}.add(${temp()}, ${left}, ${right})`;
+      if (op === '-') return `${vectorType}.subtract(${temp()}, ${left}, ${right})`;
       if (op === '*') {
-        if (isVectorLeft && !isVectorRight) return `Vec3.multiplyScalar(${tempTarget}, ${left}, ${right})`;
-        if (!isVectorLeft && isVectorRight) return `Vec3.multiplyScalar(${tempTarget}, ${right}, ${left})`;
-        return `Vec3.multiply(${tempTarget}, ${left}, ${right})`;
+        if (isVectorLeft && !isVectorRight) return `${vectorType}.multiplyScalar(${temp()}, ${left}, ${right})`;
+        if (!isVectorLeft && isVectorRight) return `${vectorType}.multiplyScalar(${temp()}, ${right}, ${left})`;
+        return `${vectorType}.multiply(${temp()}, ${left}, ${right})`;
       }
       if (op === '/') {
-        return `Vec3.multiplyScalar(${tempTarget}, ${left}, 1 / (${right}))`;
+        return `${vectorType}.multiplyScalar(${temp()}, ${left}, 1 / (${right}))`;
       }
-      if (op === '==' || op === '===') return `Vec3.equals(${left}, ${right})`;
-      if (op === '!=' || op === '!==') return `!Vec3.equals(${left}, ${right})`;
     }
 
-    if (isQuatLeft || isQuatRight) {
+    if (leftType === 'Quat' || rightType === 'Quat') {
       irUnit.addImport('cc', 'Quat');
-      if (op === '*') return `Quat.multiply(_tempQuat_0, ${left}, ${right})`;
       if (op === '==' || op === '===') return `Quat.equals(${left}, ${right})`;
       if (op === '!=' || op === '!==') return `!Quat.equals(${left}, ${right})`;
+      if (op === '*') return `Quat.multiply(${this.allocateScratch(irUnit, 'Quat', left, right)}, ${left}, ${right})`;
     }
 
     return `${left} ${op} ${right}`;
+  }
+
+  /**
+   * Pick a module-level scratch object for one math result.
+   *
+   * Two slots must be avoided:
+   *  - any slot named by the operands, so a nested op does not clobber its own
+   *    input; and
+   *  - any slot still OWNED by a live local, because Cocos math writes in place.
+   *
+   * Without the second rule, consecutive statements all wrote `_tempV3_0`, so
+   *   Vector3 a = p - q;  Vector3 b = p + q;  Vector3 sum = a + b;
+   * emitted three calls into one object and `a`, `b` and `sum` ended up as the
+   * same Vec3. That compiles cleanly and type-checks, so nothing downstream
+   * catches it - the only defence is not emitting it.
+   *
+   * The pool grows on demand rather than being capped: the emitter declares
+   * exactly the slots that were allocated, and module-level objects are created
+   * once at load, so more slots cost no per-frame allocation.
+   */
+  allocateScratch(irUnit, mathType, ...operandStrings) {
+    const prefix = SCRATCH_PREFIXES[mathType];
+    const operands = operandStrings.filter(Boolean).join(' ');
+    for (let slot = 0; ; slot++) {
+      const name = `${prefix}${slot}`;
+      if (operands.includes(name)) continue;
+      if (this.ownedScratch && this.ownedScratch.has(name)) continue;
+      irUnit.addScratchVar(name);
+      return name;
+    }
+  }
+
+  /**
+   * Mark the slot an initializer wrote into as owned by the local it was
+   * assigned to, for the rest of the method. Called after a local declaration
+   * so later statements in the same method pick a different slot.
+   */
+  claimScratchForLocal(initializerCode) {
+    if (!this.ownedScratch || !initializerCode) return;
+    const written = /^(?:Vec[234]|Quat)\.[A-Za-z]+\((_temp(?:V[234]|Quat)_\d+)\s*,/.exec(initializerCode.trim());
+    if (written) this.ownedScratch.add(written[1]);
   }
 
   transformObjectCreation(expr, irUnit, currentMethodName) {

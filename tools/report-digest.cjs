@@ -38,6 +38,13 @@ Options:
 
 Exit 1 khi report còn dòng mức high.`;
 
+/** Gom các mã cùng severity thành danh sách việc cần làm, dạng một dòng mỗi mã. */
+function actionList(entries, severity) {
+  return entries
+    .filter((entry) => entry.severity === severity)
+    .map((entry) => `${entry.code} (${entry.count}x): ${entry.action}`);
+}
+
 /**
  * Việc cần làm cho từng mã. Đây là phần biến report thành hành động —
  * không có bảng này thì agent phải tự đoán ý nghĩa của từng mã.
@@ -50,7 +57,14 @@ const ACTIONS = {
   COMPONENT_UNSUPPORTED: 'Component bị bỏ: tự cài lại hành vi bằng TypeScript nếu gameplay cần.',
   COMPONENT_IGNORED_BY_DESIGN: 'Không cần làm gì — component này không mang hành vi nào cần port.',
   LAYER_UNMAPPED: 'Khai báo ánh xạ layer: --layer-map \'{"<index>":"UI_2D"}\' rồi port lại.',
-  SCRIPT_CLASS_UNRESOLVED: 'Tạo class TS tương ứng (port.script) rồi port lại để nối component.',
+  COCOS_PREFAB_INVALID_REF: 'Prefab sinh ra có graph tham chiếu sai (__id__ trỏ vào node không tồn tại) — KHÔNG mở bằng Cocos, đọc cột detail để biết ref nào hỏng rồi port lại.',
+  PREFAB_NO_ROOT: 'Prefab Unity không có root transform — thường là prefab rỗng hoặc file .prefab hỏng; kiểm tra lại file gốc, thường bỏ qua được.',
+  MESH_UNRESOLVED: 'MeshRenderer không tìm được mesh Cocos tương ứng: mở Cocos Creator để import model (.fbx/.glb) rồi chạy lại port.',
+  NESTED_PREFAB_PLACEHOLDER: 'Prefab lồng chưa resolve được root nên chỉ sinh node rỗng thay thế — port prefab con trước, rồi port lại prefab cha.',
+  SCRIPT_CLASS_UNRESOLVED: 'Chạy port.compile trên file .cs gốc để sinh class TS (port.script chỉ sinh method rỗng — chỉ dùng khi compile thất bại), rồi port lại để nối component.',
+  SCRIPT_CLASS_SHAPE_MISMATCH: 'Class TS trùng tên nhưng KHÁC class Unity — prefab đang bind sai. Port class thật bằng port.compile rồi đổi tên/đặt đúng thư mục, đừng để trùng tên với class có sẵn.',
+  SCRIPT_FIELD_UNKNOWN: 'Field Unity không có member tương ứng trên class Cocos nên sẽ bị drop khi load — bổ sung @property vào class TS rồi port lại.',
+  SCRIPT_CLASS_SHAPE_UNKNOWN: 'Không đọc được member nào từ file TS đích; kiểm tra file có đúng là class Cocos không.',
   SCRIPT_GUID_UNRESOLVED: 'Script C# gốc không nằm trong --unity-root; mở rộng phạm vi hoặc bỏ qua nếu không cần.',
   CANVAS_NOT_PORTED: 'Dựng lại Canvas bằng UITransform + Widget của Cocos; anchor/pivot không map 1:1.',
   MODEL_SUBASSETS_PREPARED: 'Mở Cocos Creator, Assets > Refresh, rồi chạy lại để nối UUID mesh.',
@@ -172,9 +186,15 @@ function main() {
         ...result.counts,
       },
       items: shown.slice(0, options.limit),
-      nextActions: result.counts.high
-        ? shown.filter((e) => e.severity === 'high').map((e) => `${e.code} (${e.count}x): ${e.action}`)
-        : [],
+      // `high` alone is not enough: a prefab whose scripts were never ported
+      // reports only `medium` (SCRIPT_GUID_UNRESOLVED / SCRIPT_CLASS_UNRESOLVED),
+      // and an empty nextActions there reads to an agent as "nothing left to do".
+      // blocking = must fix; followUp = needs a decision but does not block.
+      blocking: actionList(shown, 'high'),
+      followUp: actionList(shown, 'medium'),
+      // Kept for callers that already read nextActions: everything actionable,
+      // blocking first. Empty only when the report genuinely has nothing to act on.
+      nextActions: [...actionList(shown, 'high'), ...actionList(shown, 'medium')],
     }, null, 2));
     if (result.counts.high) process.exit(1);
     return;

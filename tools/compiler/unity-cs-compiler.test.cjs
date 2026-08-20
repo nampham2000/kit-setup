@@ -7,7 +7,15 @@ const ts = require('typescript');
 const { parseCSharpSource } = require('./csharp-parser.cjs');
 const { MigrationRulesEngine } = require('./migration-rules.cjs');
 const { CocosEmitter } = require('./cocos-emitter.cjs');
-const { compactReportResults, detectUnityProjectRoots } = require('./unity-cs-compiler.cjs');
+const {
+  compactReportResults,
+  detectUnityProjectRoots,
+  applyTypeErrorPenalty,
+  resolveCcTypeDeclarations,
+  runTypeCheckPass,
+  BYPASS_CONFIDENCE_THRESHOLD,
+  TYPE_ERROR_CONFIDENCE_CEILING,
+} = require('./unity-cs-compiler.cjs');
 
 function compileSnippet(source, filename = 'Fixture.cs') {
   const ast = parseCSharpSource(source, filename);
@@ -536,9 +544,18 @@ public class ZeroGcHero : MonoBehaviour
 }
 `;
   const { code } = compileSnippet(source, 'ZeroGcHero.cs');
-  assert.match(code, /const _tempV3_0 = new Vec3\(\);/);
-  assert.match(code, /Vec3\.add\(_tempV3_0, this\.node\.worldPosition,/);
-  assert.match(code, /this\.node\.setWorldPosition\(_tempV3_0\)/);
+  // Assert the zero-GC property, not a specific slot number: the allocator
+  // picks whichever slots keep a nested chain from clobbering its own operands,
+  // so hardcoding `_tempV3_0` would break on every allocator change.
+  const write = /Vec3\.add\((_tempV3_\d+), this\.node\.worldPosition,/.exec(code);
+  assert.ok(write, `expected an in-place add into a scratch slot, got:
+${code}`);
+  assert.ok(code.includes(`const ${write[1]} = new Vec3();`), `${write[1]} was not declared`);
+  // The same slot must be read back, otherwise the write is lost.
+  assert.ok(code.includes(`this.node.setWorldPosition(${write[1]})`), 'result slot was not the one read back');
+  // No per-frame allocation inside the method body.
+  const body = code.slice(code.indexOf('update('));
+  assert.doesNotMatch(body, /new Vec3\(/);
 });
 
 test('Strict Cocos 3.8 property decorator with tooltip and enum registration', () => {
@@ -896,12 +913,18 @@ public class VectorMathTester : MonoBehaviour
 }
 `;
   const { code } = compileSnippet(source, 'VectorMathTester.cs');
-  assert.match(code, /Vec3\.add\(_tempV3_0, this\.a, this\.b\)/);
-  assert.match(code, /Vec3\.subtract\(_tempV3_0, this\.a, this\.b\)/);
-  assert.match(code, /Vec3\.multiplyScalar\(_tempV3_0, this\.a, 2\.5\)/);
-  assert.match(code, /Vec3\.multiplyScalar\(_tempV3_0, this\.a, 1 \/ \(2\)\)/);
+  assert.match(code, /Vec3\.add\(_tempV3_\d+, this\.a, this\.b\)/);
+  assert.match(code, /Vec3\.subtract\(_tempV3_\d+, this\.a, this\.b\)/);
+  assert.match(code, /Vec3\.multiplyScalar\(_tempV3_\d+, this\.a, 2\.5\)/);
+  assert.match(code, /Vec3\.multiplyScalar\(_tempV3_\d+, this\.a, 1 \/ \(2\)\)/);
+  // Comparisons produce a boolean and must not consume a scratch slot.
   assert.match(code, /Vec3\.equals\(this\.a, this\.b\)/);
   assert.match(code, /!Vec3\.equals\(this\.a, this\.b\)/);
+  // Each of the four results is held by its own local, so each needs its own
+  // slot - reusing one would make sum/diff/scaled/divided the same object.
+  const slots = [...code.matchAll(/Vec3\.(?:add|subtract|multiplyScalar)\((_tempV3_\d+)/g)].map((m) => m[1]);
+  assert.equal(new Set(slots).size, slots.length, `scratch slots were reused across live locals: ${slots.join(', ')}`);
+  for (const slot of slots) assert.ok(code.includes(`const ${slot} = new Vec3();`), `${slot} was not declared`);
 });
 
 test('Property and field emission handles SerializeField, auto-properties, and Node bindings', () => {
@@ -950,8 +973,13 @@ public class MovementSystem : MonoBehaviour
   assert.match(code, /import \{ Component, Node, Quat, Vec3, _decorator \} from 'cc';/);
   assert.match(code, /@ccclass\('MovementSystem'\)/);
   assert.match(code, /const _tempV3_0 = new Vec3\(\);/);
-  assert.match(code, /const _tempV3_1 = new Vec3\(\);/);
-  assert.match(code, /const _tempQuat_0 = new Quat\(\);/);
+  // Scratch objects are declared per slot actually allocated, so a fixture with
+  // no quaternion math gets no Quat scratch.
+  assert.doesNotMatch(code, /const _tempQuat_0 = new Quat\(\);/);
+  // Every slot the body uses is declared, and nothing unused is declared.
+  const used = new Set([...code.matchAll(/(_temp(?:V[234]|Quat)_\d+)/g)].map((m) => m[1]));
+  const declared = new Set([...code.matchAll(/const (_temp(?:V[234]|Quat)_\d+) =/g)].map((m) => m[1]));
+  assert.deepEqual([...used].sort(), [...declared].sort());
 });
 
 test('Compatibility runtime modules UnitySceneManager, UnityResources, UnityPhysics, and UnityUI', () => {
@@ -1253,3 +1281,537 @@ test('Sample game fixtures Game A, Game B, Game C compile to valid Cocos TypeScr
 
 
 
+
+test('applyTypeErrorPenalty keeps any file with type errors out of the bypass band', () => {
+  // The regression this guards: confidence used to ignore type errors entirely, so
+  // files with dozens of errors scored >= 0.90 and the spec's "bypass AI" rule
+  // told agents to ship them unread.
+  for (const errors of [1, 2, 5, 17, 39, 138]) {
+    for (const constructs of [1, 7, 25, 60]) {
+      const score = applyTypeErrorPenalty(1.0, errors, constructs);
+      assert.ok(
+        score < BYPASS_CONFIDENCE_THRESHOLD,
+        `${errors} error(s) over ${constructs} construct(s) scored ${score}, expected < ${BYPASS_CONFIDENCE_THRESHOLD}`
+      );
+      assert.ok(score >= 0.05);
+    }
+  }
+});
+
+test('applyTypeErrorPenalty is non-increasing in error count and passes through a clean file', () => {
+  assert.equal(applyTypeErrorPenalty(0.94, 0, 10), 0.94);
+  assert.equal(applyTypeErrorPenalty(1.0, 0, 1), 1.0);
+
+  let previous = Infinity;
+  for (let errors = 0; errors <= 150; errors++) {
+    const score = applyTypeErrorPenalty(1.0, errors, 10);
+    assert.ok(score <= previous + 1e-9, `score rose at ${errors} error(s): ${previous} -> ${score}`);
+    previous = score;
+  }
+});
+
+test('applyTypeErrorPenalty treats static confidence as an upper bound', () => {
+  // A file that was already risky must not be rescued by having few type errors.
+  const risky = applyTypeErrorPenalty(0.39, 1, 7);
+  const clean = applyTypeErrorPenalty(1.0, 1, 7);
+  assert.ok(risky < clean);
+  assert.ok(risky <= TYPE_ERROR_CONFIDENCE_CEILING);
+});
+
+test('applyTypeErrorPenalty spreads scores so triage is possible', () => {
+  // Saturating every broken file at the floor would make the score useless for
+  // ordering work, which is the whole point of keeping a numeric confidence.
+  const one = applyTypeErrorPenalty(1.0, 1, 10);
+  const few = applyTypeErrorPenalty(1.0, 6, 10);
+  const many = applyTypeErrorPenalty(1.0, 40, 10);
+  assert.ok(one > few, `1 error (${one}) should outrank 6 (${few})`);
+  assert.ok(few > many, `6 errors (${few}) should outrank 40 (${many})`);
+  assert.ok(one - many > 0.25, 'the usable range collapsed');
+});
+
+test('resolveCcTypeDeclarations reports a missing explicit path instead of claiming success', () => {
+  const missing = resolveCcTypeDeclarations(path.join(__dirname, 'no-such-cc.d.ts'));
+  assert.equal(missing.path, '');
+  assert.equal(missing.source, 'explicit-missing');
+  assert.ok(Array.isArray(missing.attempted) && missing.attempted.length > 0);
+});
+
+test('resolveCcTypeDeclarations returns an existing file with a named source when it resolves', () => {
+  const fs = require('fs');
+  const found = resolveCcTypeDeclarations();
+  assert.ok(['project-declarations', 'cocos-editor-install', 'not-found'].includes(found.source));
+  if (found.path) {
+    assert.ok(fs.existsSync(found.path), `reported ${found.path} but it does not exist`);
+    assert.match(found.path, /cc\.d\.ts$/);
+  } else {
+    assert.equal(found.source, 'not-found');
+    assert.ok(Array.isArray(found.attempted));
+  }
+});
+
+test('runTypeCheckPass skips cleanly when there is nothing on disk to check', () => {
+  const summary = runTypeCheckPass([{ success: false, file: 'X.cs' }], 'irrelevant.d.ts');
+  assert.equal(summary.status, 'skipped-no-output');
+  assert.equal(summary.totalErrors, 0);
+  assert.equal(summary.checkedFiles, 0);
+});
+
+test('runTypeCheckPass counts real type errors and rescores the file', () => {
+  const fs = require('fs');
+  const os = require('os');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'unity-cs-typecheck-'));
+  const cleanFile = path.join(dir, 'CleanFixture.ts');
+  const brokenFile = path.join(dir, 'BrokenFixture.ts');
+  fs.writeFileSync(cleanFile, 'export const answer: number = 42;\n', 'utf8');
+  fs.writeFileSync(brokenFile, 'export const broken: number = missingIdentifier;\n', 'utf8');
+
+  const ccTypes = resolveCcTypeDeclarations();
+  const anchor = ccTypes.path || cleanFile; // pass acceptance even without an editor install
+  const results = [
+    { success: true, outFile: cleanFile, staticConfidence: 0.94, constructCount: 4, confidence: 0.94 },
+    { success: true, outFile: brokenFile, staticConfidence: 0.94, constructCount: 4, confidence: 0.94 },
+  ];
+
+  const summary = runTypeCheckPass(results, anchor);
+  assert.equal(summary.status, 'checked');
+  assert.equal(summary.checkedFiles, 2);
+  assert.equal(results[0].typeErrorCount, 0);
+  assert.ok(results[1].typeErrorCount >= 1);
+
+  // Clean file keeps its emit-quality score; broken file drops out of the bypass band.
+  assert.equal(results[0].confidence, 0.94);
+  assert.ok(results[1].confidence < BYPASS_CONFIDENCE_THRESHOLD);
+  assert.equal(results[1].semanticStatus, 'needs-ai-refinement');
+  assert.ok(results[1].typeErrorCodes && Object.keys(results[1].typeErrorCodes).length > 0);
+
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('scalar arithmetic is never rewritten into vector math, whatever the identifiers are named', () => {
+  // The regression this guards: isVector() used to match substrings, so any name
+  // containing 'up', 'right', 'scale', 'position' or 'forward' was treated as a
+  // Vec3. `groupCount + upgradeLevel` (two ints) became Vec3.add(...), which
+  // still parsed and so passed every check the compiler had.
+  const source = `
+using UnityEngine;
+public class ScalarNaming : MonoBehaviour
+{
+  private int groupCount = 2;
+  private int upgradeLevel = 3;
+  private float brightness = 0.5f;
+  private float scaleFactor = 2f;
+  private float rightEdge = 1f;
+  private float forwardSpeed = 3f;
+  private float positionOffset = 4f;
+
+  void Update()
+  {
+    int total = groupCount + upgradeLevel;
+    float lit = brightness + 0.25f;
+    float sc = scaleFactor * 2f;
+    float edge = rightEdge - 1f;
+    float fwd = forwardSpeed / 2f;
+    float off = positionOffset + 1f;
+    float comp = transform.position.x + 1f;
+    Debug.Log(total + lit + sc + edge + fwd + off + comp);
+  }
+}
+`;
+  const { code } = compileSnippet(source, 'ScalarNaming.cs');
+  assert.doesNotMatch(code, /Vec[234]\.(add|subtract|multiply|multiplyScalar)\(/);
+  assert.match(code, /let total = this\.groupCount \+ this\.upgradeLevel;/);
+  assert.match(code, /let lit = this\.brightness \+ 0\.25;/);
+  assert.match(code, /let sc = this\.scaleFactor \* 2;/);
+  assert.match(code, /let off = this\.positionOffset \+ 1;/);
+  // `.x` on a real vector is still a scalar.
+  assert.match(code, /let comp = this\.node\.worldPosition\.x \+ 1;/);
+});
+
+test('declared Vector2 arithmetic emits Vec2 math with Vec2 scratch, not Vec3', () => {
+  // Vector2 was absent from the old substring list, so Vec2 arithmetic was left
+  // as a plain `+` on two objects - a silent type error rather than a rewrite.
+  const source = `
+using UnityEngine;
+public class Vec2Math : MonoBehaviour
+{
+  public Vector2 a;
+  public Vector2 b;
+
+  void Update()
+  {
+    Vector2 sum = a + b;
+    Vector2 scaled = a * 2f;
+    Debug.Log(sum + scaled);
+  }
+}
+`;
+  const { code } = compileSnippet(source, 'Vec2Math.cs');
+  assert.match(code, /Vec2\.add\(_tempV2_0, this\.a, this\.b\)/);
+  assert.match(code, /Vec2\.multiplyScalar\(_tempV2_[0-9], this\.a, 2\)/);
+  assert.match(code, /const _tempV2_0 = new Vec2\(\);/);
+  assert.doesNotMatch(code, /Vec3\.(add|multiplyScalar)\(/);
+});
+
+test('a nested vector operation does not reuse the scratch slot holding its own operand', () => {
+  const source = `
+using UnityEngine;
+public class NestedVectorMath : MonoBehaviour
+{
+  public Vector3 origin;
+
+  void Update()
+  {
+    Vector3 offset = origin + Vector3.up * 2f;
+    Debug.Log(offset);
+  }
+}
+`;
+  const { code } = compileSnippet(source, 'NestedVectorMath.cs');
+  const nested = /Vec3\.add\((_tempV3_[0-9]), this\.origin, Vec3\.multiplyScalar\((_tempV3_[0-9]), Vec3\.UP, 2\)\)/.exec(code);
+  assert.ok(nested, `expected a nested Vec3 op, got:\n${code}`);
+  assert.notEqual(nested[1], nested[2], 'outer op overwrote the slot holding its own operand');
+  // Both slots the expression uses must actually be declared.
+  assert.ok(code.includes(`const ${nested[1]} = new Vec3();`), `missing declaration for ${nested[1]}`);
+  assert.ok(code.includes(`const ${nested[2]} = new Vec3();`), `missing declaration for ${nested[2]}`);
+});
+
+test('inferExpressionType resolves fields, locals, members and literals without guessing', () => {
+  const { MigrationRulesEngine } = require('./migration-rules.cjs');
+  const engine = new MigrationRulesEngine();
+  engine.memberTypes = new Map([['velocity', 'Vec3'], ['spin', 'Quat'], ['speed', 'number']]);
+  engine.localVariables = new Map([['offset', 'Vec2']]);
+
+  const id = name => ({ kind: 'Identifier', name });
+  assert.equal(engine.inferExpressionType({ kind: 'NumericLiteral', value: 1 }), 'number');
+  assert.equal(engine.inferExpressionType({ kind: 'StringLiteral', value: 'x' }), 'string');
+  assert.equal(engine.inferExpressionType(id('velocity')), 'Vec3');
+  assert.equal(engine.inferExpressionType(id('spin')), 'Quat');
+  assert.equal(engine.inferExpressionType(id('speed')), 'number');
+  assert.equal(engine.inferExpressionType(id('offset')), 'Vec2');
+  // Unknown identifiers stay unknown instead of defaulting to a vector.
+  assert.equal(engine.inferExpressionType(id('upgradeLevel')), null);
+  // A component of a vector is a scalar; the vector's own statics are vectors.
+  assert.equal(engine.inferExpressionType({ kind: 'MemberAccessExpression', expression: id('velocity'), member: 'x' }), 'number');
+  assert.equal(engine.inferExpressionType({ kind: 'MemberAccessExpression', expression: id('velocity'), member: 'magnitude' }), 'number');
+  assert.equal(engine.inferExpressionType({ kind: 'MemberAccessExpression', expression: id('Vector3'), member: 'one' }), 'Vec3');
+  assert.equal(engine.inferExpressionType({ kind: 'MemberAccessExpression', expression: id('transform'), member: 'position' }), 'Vec3');
+  assert.equal(engine.inferExpressionType({ kind: 'MemberAccessExpression', expression: id('transform'), member: 'rotation' }), 'Quat');
+  // Known Unity statics carry their documented return type.
+  assert.equal(engine.inferExpressionType({
+    kind: 'InvocationExpression',
+    expression: { kind: 'MemberAccessExpression', expression: id('Vector3'), member: 'Lerp' },
+  }), 'Vec3');
+  assert.equal(engine.inferExpressionType({
+    kind: 'InvocationExpression',
+    expression: { kind: 'MemberAccessExpression', expression: id('Vector3'), member: 'Distance' },
+  }), 'number');
+  assert.equal(engine.inferExpressionType({
+    kind: 'InvocationExpression',
+    expression: { kind: 'MemberAccessExpression', expression: id('Mathf'), member: 'Clamp' },
+  }), 'number');
+  // Equality is boolean regardless of operand type.
+  assert.equal(engine.inferExpressionType({
+    kind: 'BinaryExpression', operator: '==', left: id('velocity'), right: id('velocity'),
+  }), 'boolean');
+});
+
+test('bare references to own methods and properties are qualified with this.', () => {
+  // The regression this guards: the qualification predicate only consulted
+  // `fields`, so calls to the class's own methods and reads of its own
+  // properties were emitted unqualified - 304 of the 1492 type errors measured
+  // on BlastShooter's gameplay scripts were this one cause.
+  const source = `
+using UnityEngine;
+public class SelfReference : MonoBehaviour
+{
+  private int count = 5;
+  private int Doubled => count * 2;
+  public int Tripled { get { return count * 3; } }
+
+  void Update()
+  {
+    Helper();
+    int a = Doubled + Tripled + Helper2();
+    Debug.Log(a);
+  }
+
+  private void Helper() { }
+  private int Helper2() { return count; }
+}
+`;
+  const { code } = compileSnippet(source, 'SelfReference.cs');
+  assert.match(code, /this\.Helper\(\);/);
+  assert.match(code, /let a = this\.Doubled \+ this\.Tripled \+ this\.Helper2\(\);/);
+  // Property bodies, including expression-bodied ones, are member bodies too.
+  assert.match(code, /get Doubled\(\): number \{\s*return this\.count \* 2;/);
+  assert.match(code, /get Tripled\(\): number \{\s*return this\.count \* 3;/);
+});
+
+test('locals, parameters and loop variables shadow members and stay unqualified', () => {
+  // for/foreach variables were never registered as locals, so a loop variable
+  // sharing a field's name would have been rewritten to `this.<name>`.
+  const source = `
+using UnityEngine;
+public class Shadowing : MonoBehaviour
+{
+  private int count = 5;
+  private int i = 99;
+  private float speed = 1f;
+
+  void Update()
+  {
+    int a = 0;
+    for (int i = 0; i < count; i++) { a += i; }
+    foreach (var speed in new int[] { 1, 2 }) { a += speed; }
+    Debug.Log(a);
+  }
+
+  private void Shadow(int count) { Debug.Log(count); }
+}
+`;
+  const { code } = compileSnippet(source, 'Shadowing.cs');
+  assert.match(code, /for \(let i = 0; i < this\.count; i\+\+\)/);
+  assert.match(code, /a \+= i;/);
+  assert.doesNotMatch(code, /a \+= this\.i;/);
+  assert.match(code, /for \(const speed of \[1, 2\]\)/);
+  assert.doesNotMatch(code, /a \+= this\.speed;/);
+  // A parameter of the same name as a field wins inside that method.
+  assert.match(code, /Shadow\(count: number\): void \{\s*console\.log\(count\);/);
+});
+
+test('static members are qualified with the class name, not this.', () => {
+  const source = `
+using UnityEngine;
+public class StaticRefs : MonoBehaviour
+{
+  private static int Total = 0;
+  private static int Bump() { return Total + 1; }
+
+  void Update()
+  {
+    Total = Bump();
+  }
+}
+`;
+  const { code } = compileSnippet(source, 'StaticRefs.cs');
+  assert.match(code, /StaticRefs\.Total = StaticRefs\.Bump\(\);/);
+  assert.doesNotMatch(code, /this\.Total/);
+  assert.doesNotMatch(code, /this\.Bump/);
+});
+
+test('interpolated strings qualify members but never touch nested literals', () => {
+  // Interpolation holes are rewritten as text, not AST, so they needed their own
+  // qualification path; the text inside a nested string literal must be left be.
+  const source = `
+using UnityEngine;
+public class Interp : MonoBehaviour
+{
+  private int count = 3;
+  private int Value() { return count; }
+
+  void Update()
+  {
+    Debug.Log($"count={count} v={Value()} lit=\\"count\\"");
+  }
+}
+`;
+  const { code } = compileSnippet(source, 'Interp.cs');
+  assert.match(code, /\$\{this\.count\}/);
+  assert.match(code, /\$\{this\.Value\(\)\}/);
+  // The word inside the nested literal is data, not a member reference.
+  assert.match(code, /lit=\\"count\\"/);
+});
+
+test('Unity lifecycle hooks are emitted public so they do not narrow Component', () => {
+  // Unity lifecycle methods are implicitly private in C#, but Cocos declares
+  // them public on Component; `private update()` is a TS2415 error.
+  const source = `
+using UnityEngine;
+public class Lifecycle : MonoBehaviour
+{
+  void Awake() { }
+  void Update() { }
+  private void OnDestroy() { }
+  private void NotALifecycleMethod() { }
+}
+`;
+  const { code } = compileSnippet(source, 'Lifecycle.cs');
+  assert.match(code, /public onLoad\(\): void/);
+  assert.match(code, /public update\(dt: number\): void/);
+  assert.match(code, /public onDestroy\(\): void/);
+  // Ordinary private methods keep their visibility.
+  assert.match(code, /private NotALifecycleMethod\(\): void/);
+});
+
+test('static methods keep their C# visibility instead of being forced public', () => {
+  // `static` composes with the recorded visibility; emitting `public static` for a
+  // C# `private static` helper is legal TypeScript, so the type-check gate cannot
+  // catch it - it silently leaks an internal helper onto the public surface.
+  const source = `
+using UnityEngine;
+public class Visibility : MonoBehaviour
+{
+  public static int Total = 0;
+  private static int Bump() { return Total + 1; }
+  protected static int BumpTwice() { return Total + 2; }
+  public static int BumpPub() { return Total + 3; }
+  private int InstPriv() { return 1; }
+  protected int InstProt() { return 2; }
+  public int InstPub() { return 3; }
+  private void Update() { }
+}
+`;
+  const { code } = compileSnippet(source, 'Visibility.cs');
+  assert.match(code, /private static Bump\(\): number/);
+  assert.match(code, /protected static BumpTwice\(\): number/);
+  assert.match(code, /public static BumpPub\(\): number/);
+  // Instance methods were already correct for private; protected was widened too.
+  assert.match(code, /private InstPriv\(\): number/);
+  assert.match(code, /protected InstProt\(\): number/);
+  assert.match(code, /public InstPub\(\): number/);
+  // The private helper must not reappear on the public surface.
+  assert.doesNotMatch(code, /public static Bump\(/);
+  // The deliberate lifecycle rule still wins over the C# visibility.
+  assert.match(code, /public update\(dt: number\): void/);
+});
+
+test('sequential vector locals each get their own scratch slot', () => {
+  // The regression this guards: scratch slots were picked by inspecting the
+  // operand STRINGS, so consecutive statements all wrote _tempV3_0 and `a`, `b`
+  // and `sum` ended up as one Vec3. Cocos math writes in place, so that is a
+  // wrong-result bug that still compiles and type-checks.
+  const source = `
+using UnityEngine;
+public class LiveRanges : MonoBehaviour
+{
+  void Update()
+  {
+    Vector3 a = transform.position - Vector3.one;
+    Vector3 b = transform.position + Vector3.one;
+    Vector3 sum = a + b;
+    Debug.Log(sum);
+  }
+}
+`;
+  const { code } = compileSnippet(source, 'LiveRanges.cs');
+  const slots = [...code.matchAll(/Vec3\.(?:add|subtract)\((_tempV3_\d+)/g)].map((m) => m[1]);
+  assert.equal(slots.length, 3, `expected three vector ops, got ${slots.length}`);
+  assert.equal(new Set(slots).size, 3, `slots aliased across live locals: ${slots.join(', ')}`);
+  for (const slot of slots) {
+    assert.ok(code.includes(`const ${slot} = new Vec3();`), `${slot} was used but never declared`);
+  }
+});
+
+test('a scratch slot is reusable once its owning local is out of scope', () => {
+  // Ownership is per method, so the pool must not grow across methods.
+  const source = `
+using UnityEngine;
+public class ScopedScratch : MonoBehaviour
+{
+  void First() { Vector3 a = transform.position + Vector3.one; Debug.Log(a); }
+  void Second() { Vector3 b = transform.position + Vector3.one; Debug.Log(b); }
+}
+`;
+  const { code } = compileSnippet(source, 'ScopedScratch.cs');
+  const declared = [...code.matchAll(/const (_tempV3_\d+) =/g)].map((m) => m[1]);
+  assert.equal(declared.length, 1, `expected one slot reused across methods, got ${declared.join(', ')}`);
+});
+
+test('editor-only preprocessor branches are dropped in favour of the runtime path', () => {
+  // A playable ad is a built runtime. Keeping the UNITY_EDITOR branch silently
+  // inverted behaviour (mouse-drag kept, touch path dropped) with no TODO.
+  const source = `
+using UnityEngine;
+public class BranchPick : MonoBehaviour
+{
+  void Tick()
+  {
+#if UNITY_EDITOR
+    EditorPath();
+#else
+    RuntimePath();
+#endif
+  }
+  private void EditorPath() { }
+  private void RuntimePath() { }
+}
+`;
+  const { ast, code } = compileSnippet(source, 'BranchPick.cs');
+  assert.match(code, /this\.RuntimePath\(\);/);
+  assert.doesNotMatch(code, /this\.EditorPath\(\);/);
+  // Dropping a branch changes behaviour, so it must be reported.
+  assert.ok((ast.preprocessorNotes || []).some((n) => n.symbol === 'UNITY_EDITOR' && n.kept === 'else'));
+});
+
+test('a negated editor guard keeps its body, since that IS the runtime path', () => {
+  const source = `
+using UnityEngine;
+public class NegatedGuard : MonoBehaviour
+{
+  void Tick()
+  {
+#if !UNITY_EDITOR
+    RuntimeOnly();
+#endif
+  }
+  private void RuntimeOnly() { }
+}
+`;
+  const { code } = compileSnippet(source, 'NegatedGuard.cs');
+  assert.match(code, /this\.RuntimeOnly\(\);/);
+});
+
+test('emitter regression fixtures type-check against the real cc.d.ts with zero errors', () => {
+  // End-to-end contract, not a per-behaviour assertion: these two fixtures
+  // reproduce every defect found validating against BlastShooter-Android. Before
+  // the fixes the compiler called them "1/1 TS syntax valid" at confidence 0.94
+  // while the output carried 10 real type errors, so the only assertion that
+  // would have caught it is the one that actually type-checks.
+  const fs = require('fs');
+  const os = require('os');
+  const { compileFile } = require('./unity-cs-compiler.cjs');
+
+  const ccTypes = resolveCcTypeDeclarations();
+  if (!ccTypes.path) {
+    // Without engine declarations a "clean" result would be meaningless - every
+    // `from 'cc'` import would silently become `any`. Fail loudly instead.
+    assert.fail('Cocos cc.d.ts not found; cannot assert type-clean output. Open the project in Cocos Creator once, or set COCOS_CREATOR_PATH.');
+  }
+
+  const fixturesDir = path.resolve(__dirname, '../../fixtures/regression_emitter');
+  const sources = fs.readdirSync(fixturesDir).filter(name => name.endsWith('.cs'));
+  assert.ok(sources.length >= 2, 'expected the regression fixtures to be present');
+
+  const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'unity-cs-regression-'));
+  try {
+    const results = sources.map(name => compileFile(path.join(fixturesDir, name), outDir, false, {
+      preserveStructure: false,
+      sourceRoot: fixturesDir,
+      validateSyntax: true,
+    }));
+    for (const result of results) {
+      assert.ok(result.success, `${path.basename(result.file)} failed to emit: ${result.error}`);
+    }
+
+    const summary = runTypeCheckPass(results, ccTypes.path);
+    assert.equal(summary.status, 'checked');
+    const offenders = results
+      .filter(result => (result.typeErrorCount || 0) > 0)
+      .map(result => `${path.basename(result.file)}: ${result.typeErrorCount} (${Object.keys(result.typeErrorCodes || {}).join(', ')})`);
+    assert.deepEqual(offenders, [], `fixtures no longer type-check:\n  ${offenders.join('\n  ')}`);
+
+    // A type-clean file must keep its emit-quality score untouched. (It can
+    // still be below the bypass band for other reasons - an empty method body
+    // legitimately costs confidence - so the assertion is "no type penalty was
+    // applied", not "the number is high".)
+    for (const result of results) {
+      assert.equal(
+        result.confidence,
+        result.staticConfidence,
+        `${path.basename(result.file)} type-checks clean but was penalised: ${result.staticConfidence} -> ${result.confidence}`
+      );
+    }
+  } finally {
+    fs.rmSync(outDir, { recursive: true, force: true });
+  }
+});

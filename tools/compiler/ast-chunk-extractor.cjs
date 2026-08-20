@@ -13,7 +13,18 @@ const path = require('path');
 const ts = require('typescript');
 
 class AstChunkExtractor {
-  extractChunks(tsCode, csharpSource = '', filename = '') {
+  /**
+   * @param {string} tsCode        emitted TypeScript
+   * @param {string} csharpSource  original C#, for the paired context block
+   * @param {string} filename
+   * @param {{errorLines?: Set<number>}} [options]
+   *   errorLines: 1-based lines carrying a resolved type error. Passing these
+   *   makes the extractor scope members that FAIL TO COMPILE, not only ones the
+   *   emitter marked with a TODO — a file can be entirely TODO-free and still
+   *   not type-check, which is the common case.
+   */
+  extractChunks(tsCode, csharpSource = '', filename = '', options = {}) {
+    const errorLines = options.errorLines instanceof Set ? options.errorLines : new Set();
     const sourceFile = ts.createSourceFile(
       filename || 'temp.ts',
       tsCode,
@@ -36,11 +47,15 @@ class AstChunkExtractor {
         const nodeText = node.getText(sourceFile);
         const hasTodo = nodeText.includes('@MIGRATION_TODO') || nodeText.includes('// @MIGRATION_TODO');
         const isUnsupported = nodeText.includes('Unsupported Statement') || nodeText.includes('pointer');
+        const start = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
+        const end = sourceFile.getLineAndCharacterOfPosition(node.getEnd());
+        const memberErrorLines = [];
+        for (const line of errorLines) {
+          if (line >= start.line + 1 && line <= end.line + 1) memberErrorLines.push(line);
+        }
 
-        if (hasTodo || isUnsupported) {
-          const start = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
-          const end = sourceFile.getLineAndCharacterOfPosition(node.getEnd());
-          
+        if (hasTodo || isUnsupported || memberErrorLines.length > 0) {
+
           let memberName = 'anonymous';
           if (node.name) {
             memberName = node.name.getText(sourceFile);
@@ -49,7 +64,9 @@ class AstChunkExtractor {
           }
 
           // Extract reason
-          let reason = 'Construct requires semantic refinement';
+          let reason = memberErrorLines.length > 0
+            ? `${memberErrorLines.length} TypeScript type error(s) inside this member`
+            : 'Construct requires semantic refinement';
           const todoMatch = nodeText.match(/@MIGRATION_TODO(?::|\s+\[)?([^\]\n*]+)/);
           if (todoMatch) {
             reason = todoMatch[1].trim();
@@ -91,6 +108,8 @@ class AstChunkExtractor {
             emittedCode: nodeText,
             csharpContext: csContext,
             reason,
+            trigger: hasTodo ? 'migration-todo' : (isUnsupported ? 'unsupported-construct' : 'type-error'),
+            errorLines: memberErrorLines,
           });
         }
       }

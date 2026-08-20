@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "generatedAt": "2026-08-19T09:36:45.324Z",
+    "generatedAt": "2026-08-20T03:44:16.629Z",
     "description": "Compact project manifest for AI Agents. Use this instead of scanning file trees.",
     "project": {
       "projectName": "cc_playable_framework",
@@ -27,7 +27,7 @@
     {
       "name": "Gameplay",
       "path": "assets/Gameplay.scene",
-      "sizeKb": 87.7
+      "sizeKb": 82
     }
   ],
   "prefabs": [],
@@ -148,12 +148,15 @@
       ],
       "truncated": 0
     },
-    "modelCount": 2,
+    "modelCount": 5,
     "models": {
-      "count": 2,
-      "totalKb": 727.7,
+      "count": 5,
+      "totalKb": 1460.2,
       "sample": [
         "assets/models/pack_block.fbx",
+        "assets/unity_imported/_Game/3DAssets/_VFX/ModelVFX/booster/booster.fbx",
+        "assets/unity_imported/_Game/Prefabs/Ice_Broken/Mechanic_ice 4.gltf",
+        "assets/unity_imported/_Game/UIAssets/_PictureBlock/3D/Model/obj_zip (1).fbx",
         "assets/unity_imported/_GameHome/_Game_HolePuzzle/Prefabs/Events/flower_collection.fbx"
       ],
       "truncated": 0
@@ -161,17 +164,17 @@
     "shaderCount": 3,
     "shaders": {
       "count": 3,
-      "totalKb": 23.5,
+      "totalKb": 12.5,
       "sample": [
-        "assets/effects/SimpleLit.effect",
         "assets/effects/UnitySpriteRendererColor.effect",
+        "assets/effects/URPLit.effect",
         "assets/unity_imported/ui_sprite_alpha_sep/ui-sprite-alpha-sep.effect"
       ],
       "truncated": 0
     },
     "materials": {
-      "count": 9,
-      "totalKb": 10.1,
+      "count": 41,
+      "totalKb": 35.5,
       "sample": [
         "assets/materials/Blue.mtl",
         "assets/materials/Board1.mtl",
@@ -180,28 +183,33 @@
         "assets/materials/UnitySpriteRendererColor.mtl",
         "assets/materials/UnitySpriteRendererColorOpaque.mtl"
       ],
-      "truncated": 3
+      "truncated": 35
     },
     "textures": {
-      "count": 75,
-      "totalKb": 11982.8,
+      "count": 150,
+      "totalKb": 20778.6,
       "sample": [
         "assets/textures/ui/BlackSquare.png",
         "assets/textures/ui/GreenBtn.png",
         "assets/textures/ui/icon_L11-Pic2.png",
-        "assets/unity_imported/_Game/Art2D/2D/Collection/banner_collection_name_top.png",
-        "assets/unity_imported/_Game/Art2D/2D/Collection/boder_collection_puzzle_eol.png",
-        "assets/unity_imported/_Game/Art2D/2D/common/bt_close.png"
+        "assets/unity_imported/Project/Texture/Gameplay/Combo/3.png",
+        "assets/unity_imported/Project/Texture/Gameplay/Combo/7.png",
+        "assets/unity_imported/Project/Texture/Gameplay/Combo/fantastic.png"
       ],
-      "truncated": 69
+      "truncated": 144
     },
     "animations": {
-      "count": 1,
-      "totalKb": 94.6,
+      "count": 18,
+      "totalKb": 375.4,
       "sample": [
-        "assets/animations/anim_logo/anim_logo.anim"
+        "assets/animations/anim-7/anim_booster_ufo.anim",
+        "assets/animations/anim_logo/anim_logo.anim",
+        "assets/animations/bg_ice/booster_ice.anim",
+        "assets/animations/clockctrl/RotateAnim.anim",
+        "assets/animations/hand-animator-controller/Hand Tutorial Animation.anim",
+        "assets/animations/hand-zoom-animator-controller/Hand zoom idle.anim"
       ],
-      "truncated": 0
+      "truncated": 12
     },
     "prefabsInAssets": {
       "count": 0,
@@ -212,17 +220,17 @@
     "unityImported": {
       "exists": true,
       "root": "assets/unity_imported",
-      "count": 96,
-      "totalKb": 14338.3,
+      "count": 228,
+      "totalKb": 25367.3,
       "sample": [
-        "assets/unity_imported/TextMesh Pro/Examples & Extras/Fonts/Roboto-Bold.ttf",
-        "assets/unity_imported/ui_sprite_alpha_sep/ui-sprite-alpha-sep.effect",
-        "assets/unity_imported/ui_sprite_alpha_sep/ui-sprite-alpha-sep.mtl",
-        "assets/unity_imported/_Game/Art2D/2D/Collection/banner_collection_name_top.png",
-        "assets/unity_imported/_Game/Art2D/2D/Collection/boder_collection_puzzle_eol.png",
-        "assets/unity_imported/_Game/Art2D/2D/common/bt_close.png"
+        "assets/unity_imported/Project/Texture/Gameplay/Combo/3.png",
+        "assets/unity_imported/Project/Texture/Gameplay/Combo/7.png",
+        "assets/unity_imported/Project/Texture/Gameplay/Combo/fantastic.png",
+        "assets/unity_imported/Project/Texture/Gameplay/Combo/x.png",
+        "assets/unity_imported/Simple Scroll-Snap/Examples/Example 3 (Slot Machine)/Sprites/Gradient.png",
+        "assets/unity_imported/TextMesh Pro/Examples & Extras/Fonts/Roboto-Bold.ttf"
       ],
-      "truncated": 90
+      "truncated": 222
     }
   },
   "configSummary": {
@@ -387,6 +395,7 @@
     "port.report": "npm run ai:port:report",
     "port.prefab": "node playable-shared-kit/tools/unity-cocos-port.cjs port --src <unity_prefab_or_dir> --out <cocos_prefab_or_dir>",
     "port.smart": "npm run port:smart -- --src <unity_dir> --out assets/",
+    "port.closure": "npm run port:closure -- --prefab <file.prefab> --unity-root <UnityAssetsFolder>",
     "port.compile": "npm run port:compile -- --src <csharp_path> --out assets/script/",
     "port.script": "npm run port:script -- --src <csharp_path> --out assets/script/",
     "shader.convert": "node playable-shared-kit/tools/unity-hlsl-to-cocos-effect.cjs convert --src <unity.shader> --out <assets/effects/X.effect>",

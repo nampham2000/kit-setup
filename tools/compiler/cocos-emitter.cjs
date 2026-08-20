@@ -7,6 +7,14 @@
  * from the Migration Intermediate Representation (IR).
  */
 
+/** Scratch-variable prefix -> the Cocos constructor to instantiate. */
+const SCRATCH_CONSTRUCTORS = {
+  _tempV2: 'Vec2',
+  _tempV3: 'Vec3',
+  _tempV4: 'Vec4',
+  _tempQuat: 'Quat',
+};
+
 class CocosEmitter {
   emit(irUnit) {
     const lines = [];
@@ -76,17 +84,19 @@ class CocosEmitter {
     lines.push(`const { ${sortedDecorators.join(', ')} } = _decorator;`);
     lines.push('');
 
-    // Module-level Scratch Variables (Zero-GC Rule)
-    if (ccImports.has('Vec3')) {
+    // Module-level Scratch Variables (Zero-GC Rule).
+    // Emitted from the slots the rules engine actually allocated, so a file that
+    // does Vec2 or Vec4 math gets the matching scratch objects and a file that
+    // does none gets no unused declarations.
+    const scratchDeclarations = [];
+    for (const name of Array.from(irUnit.scratchVariables || []).sort()) {
+      const ctor = SCRATCH_CONSTRUCTORS[name.replace(/_\d+$/, '')];
+      if (!ctor) continue;
+      scratchDeclarations.push(`const ${name} = new ${ctor}();`);
+    }
+    if (scratchDeclarations.length > 0) {
       lines.push('// Auto-generated module-level scratch variables to prevent GC allocations');
-      lines.push('const _tempV3_0 = new Vec3();');
-      lines.push('const _tempV3_1 = new Vec3();');
-      lines.push('const _tempV3_2 = new Vec3();');
-    }
-    if (ccImports.has('Quat')) {
-      lines.push('const _tempQuat_0 = new Quat();');
-    }
-    if (ccImports.has('Vec3') || ccImports.has('Quat')) {
+      lines.push(...scratchDeclarations);
       lines.push('');
     }
 
@@ -249,7 +259,14 @@ class CocosEmitter {
       }
       const isGenerator = method.isCoroutine ? '*' : '';
       const isAsync = method.isAsync ? 'async ' : '';
-      const mods = method.isStatic ? 'public static ' : (method.modifiers.includes('private') ? 'private ' : 'public ');
+      // `static` composes with the recorded visibility instead of replacing it, so a
+      // C# `private static` helper does not leak onto the ported class's public surface.
+      // Lifecycle hooks are already forced to 'public' by migration-rules.cjs because
+      // Cocos declares them public on Component, so this never narrows an override.
+      const visibility = method.modifiers.includes('private')
+        ? 'private'
+        : (method.modifiers.includes('protected') ? 'protected' : 'public');
+      const mods = `${visibility}${method.isStatic ? ' static' : ''} `;
       const params = method.parameters.map(p => `${p.name}: ${p.type}${p.defaultValue ? ' = ' + p.defaultValue : ''}`).join(', ');
       
       lines.push(`  ${mods}${isAsync}${isGenerator}${method.name}(${params}): ${method.returnType} {`);

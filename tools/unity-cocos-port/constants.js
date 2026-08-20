@@ -55,6 +55,13 @@ const UNITY_MATERIAL_BASE_TEXTURE_KEYS = ['_BaseMap', '_MainTex'];
 const UNITY_MATERIAL_NORMAL_TEXTURE_KEYS = ['_BumpMap', '_NormalMap'];
 const UNITY_MATERIAL_OCCLUSION_TEXTURE_KEYS = ['_OcclusionMap'];
 const UNITY_MATERIAL_EMISSIVE_TEXTURE_KEYS = ['_EmissionMap', '_EmissiveMap'];
+/**
+ * Below this share of Unity fields matching the target class's members, a
+ * name-based binding is treated as two unrelated classes sharing a name rather
+ * than a real match.
+ */
+const SCRIPT_SHAPE_MATCH_THRESHOLD = 0.5;
+
 const COCOS_DEFAULT_LAYER_VALUE = 1 << 30;
 const COCOS_CUSTOM_LAYER_MAX_BIT = 19;
 const COCOS_BUILTIN_LAYER_ALIASES = [
@@ -117,6 +124,7 @@ module.exports = {
   UNITY_MATERIAL_OCCLUSION_TEXTURE_KEYS,
   UNITY_MATERIAL_EMISSIVE_TEXTURE_KEYS,
   COCOS_DEFAULT_LAYER_VALUE,
+  SCRIPT_SHAPE_MATCH_THRESHOLD,
   COCOS_CUSTOM_LAYER_MAX_BIT,
   COCOS_BUILTIN_LAYER_ALIASES,
   UNITY_3D_PREFAB_COMPONENT_HINTS,

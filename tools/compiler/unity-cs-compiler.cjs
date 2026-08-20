@@ -7,6 +7,14 @@
  *
  * Usage:
  *   node playable-shared-kit/tools/compiler/unity-cs-compiler.cjs --src <cs_file_or_dir> --out <out_dir> [--dry-run] [--report <path>] [--runtime-only]
+ *
+ * The emitted files are type-checked against the Cocos engine's own cc.d.ts before
+ * confidence is scored, so a high score means "compiles", not merely "parses".
+ * Opt out with --no-typecheck; point at a specific declaration file with
+ * --cc-types <path>; dump every diagnostic with --diagnostics <path>. Pass
+ * --digest to drop the per-file table from the report and keep only the
+ * actionable head, and --chunks <path> to emit per-member refinement payloads
+ * instead of whole files.
  */
 
 const fs = require('fs');
@@ -17,6 +25,17 @@ const { MigrationRulesEngine } = require('./migration-rules.cjs');
 const { CocosEmitter } = require('./cocos-emitter.cjs');
 const { WorkspaceIndexer } = require('./workspace-indexer.cjs');
 const { SkeletonGenerator } = require('./skeleton-generator.cjs');
+const { TscDiagnosticLoop } = require('./tsc-diagnostic-loop.cjs');
+const { AstChunkExtractor } = require('./ast-chunk-extractor.cjs');
+
+/**
+ * Confidence >= this value is what the migration spec calls the "bypass AI" band.
+ * A file that does not type-check must never reach it, however clean its emit looked.
+ */
+const BYPASS_CONFIDENCE_THRESHOLD = 0.9;
+
+/** Hard ceiling applied to any file with at least one resolved type error. */
+const TYPE_ERROR_CONFIDENCE_CEILING = 0.85;
 
 function parseArgs() {
   const args = process.argv.slice(2);
@@ -30,6 +49,11 @@ function parseArgs() {
     runtimeOnly: false,
     emitSkeleton: '',
     workspace: true,
+    typecheck: true,
+    ccTypes: '',
+    diagnostics: '',
+    digest: false,
+    chunks: '',
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -51,10 +75,160 @@ function parseArgs() {
       options.emitSkeleton = args[++i];
     } else if (args[i] === '--no-workspace') {
       options.workspace = false;
+    } else if (args[i] === '--no-typecheck') {
+      options.typecheck = false;
+    } else if (args[i] === '--cc-types' && args[i + 1]) {
+      options.ccTypes = args[++i];
+    } else if (args[i] === '--diagnostics' && args[i + 1]) {
+      options.diagnostics = args[++i];
+    } else if (args[i] === '--digest') {
+      options.digest = true;
+    } else if (args[i] === '--chunks' && args[i + 1]) {
+      options.chunks = args[++i];
     }
   }
 
   return options;
+}
+
+/**
+ * Locate the Cocos engine `cc.d.ts`. Without it every `import { ... } from 'cc'`
+ * resolves to `any`, which SUPPRESSES downstream errors (measured: 1425 reported
+ * without it vs 1492 with it) — so a type-check run without these declarations
+ * understates the problem and must not be reported as a clean pass.
+ */
+function resolveCcTypeDeclarations(explicitPath) {
+  if (explicitPath) {
+    const resolved = path.resolve(explicitPath);
+    return fs.existsSync(resolved)
+      ? { path: resolved, source: 'explicit' }
+      : { path: '', source: 'explicit-missing', attempted: [resolved] };
+  }
+
+  const attempted = [];
+
+  // A Cocos project carries temp/declarations/cc.d.ts, a thin wrapper whose
+  // /// <reference> points at the engine build actually used by this project.
+  const wrapper = path.resolve(process.cwd(), 'temp/declarations/cc.d.ts');
+  attempted.push(wrapper);
+  if (fs.existsSync(wrapper)) {
+    const referenced = /\/\/\/\s*<reference\s+path=["']([^"']+)["']/.exec(fs.readFileSync(wrapper, 'utf8'));
+    if (referenced && fs.existsSync(referenced[1])) {
+      return { path: path.resolve(referenced[1]), source: 'project-declarations' };
+    }
+  }
+
+  const engineSuffix = path.join('resources', 'resources', '3d', 'engine', 'bin', '.declarations', 'cc.d.ts');
+  const editorRoots = [
+    process.env.COCOS_CREATOR_PATH,
+    'C:/ProgramData/cocos/editors/Creator',
+    '/Applications/Cocos/Creator',
+  ].filter(Boolean);
+
+  const candidates = [];
+  for (const root of editorRoots) {
+    if (!fs.existsSync(root)) continue;
+    // COCOS_CREATOR_PATH may point straight at one editor install.
+    const direct = path.join(root, engineSuffix);
+    if (fs.existsSync(direct)) candidates.push({ version: '', file: direct });
+    for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const file = path.join(root, entry.name, engineSuffix);
+      // macOS nests the engine inside the .app bundle.
+      const macFile = path.join(root, entry.name, 'Cocos Creator.app', 'Contents', engineSuffix);
+      if (fs.existsSync(file)) candidates.push({ version: entry.name, file });
+      else if (fs.existsSync(macFile)) candidates.push({ version: entry.name, file: macFile });
+    }
+  }
+  attempted.push(...editorRoots.map(root => path.join(root, '<version>', engineSuffix)));
+
+  if (candidates.length > 0) {
+    // Newest editor version wins.
+    candidates.sort((a, b) => b.version.localeCompare(a.version, undefined, { numeric: true }));
+    return { path: path.resolve(candidates[0].file), source: 'cocos-editor-install' };
+  }
+
+  return { path: '', source: 'not-found', attempted };
+}
+
+/**
+ * Static-only confidence describes how cleanly the emitter ran, not whether the
+ * result compiles. Fold in the resolved type errors so the score answers the
+ * question an agent actually asks: can I ship this without reading it?
+ *
+ * Absolute error count is the dominant term because it tracks how much work a
+ * fix is; it is log-scaled so the useful resolution sits at the top of the range
+ * (1 error vs 5 matters more than 60 vs 80). Density only nudges, since
+ * `constructCount` counts declarations and members - values run small (median 7
+ * across BlastShooter's gameplay scripts), so a linear density term would push
+ * even a single-error file down into the rewrite band.
+ *
+ * Guarantees: any file with >= 1 error scores below BYPASS_CONFIDENCE_THRESHOLD,
+ * the result is non-increasing in `typeErrorCount`, and `staticConfidence`
+ * remains an upper bound.
+ */
+function applyTypeErrorPenalty(staticConfidence, typeErrorCount, constructCount) {
+  if (!typeErrorCount) return staticConfidence;
+  const density = typeErrorCount / Math.max(1, constructCount);
+  const penalty = Math.min(
+    0.8,
+    0.085 * (Math.log(1 + typeErrorCount) / Math.LN2) + 0.08 * Math.min(1, density),
+  );
+  return Math.max(0.05, Math.min(staticConfidence, TYPE_ERROR_CONFIDENCE_CEILING) - penalty);
+}
+
+/**
+ * Type-check the emitted files as one program so cross-file imports resolve,
+ * then fold the result back into each file's confidence score.
+ */
+function runTypeCheckPass(results, ccTypesPath) {
+  const checkable = results.filter(result => result.success && result.outFile && fs.existsSync(result.outFile));
+  if (checkable.length === 0) {
+    return { status: 'skipped-no-output', totalErrors: 0, cleanFiles: 0, checkedFiles: 0, byCode: {}, errors: [] };
+  }
+
+  const startedAt = Date.now();
+  const loop = new TscDiagnosticLoop();
+  const rootFiles = [ccTypesPath, ...checkable.map(result => path.resolve(result.outFile))];
+  const errors = loop.checkFiles(rootFiles, { types: [] });
+
+  const byFile = new Map();
+  const byCode = {};
+  for (const error of errors) {
+    const key = path.resolve(error.file);
+    if (!byFile.has(key)) byFile.set(key, []);
+    byFile.get(key).push(error);
+    byCode[error.code] = (byCode[error.code] || 0) + 1;
+  }
+
+  let cleanFiles = 0;
+  for (const result of checkable) {
+    const fileErrors = byFile.get(path.resolve(result.outFile)) || [];
+    result.typeErrorCount = fileErrors.length;
+    if (fileErrors.length === 0) {
+      cleanFiles++;
+    } else {
+      const codeCounts = {};
+      for (const error of fileErrors) codeCounts[error.code] = (codeCounts[error.code] || 0) + 1;
+      result.typeErrorCodes = codeCounts;
+      result.semanticStatus = 'needs-ai-refinement';
+    }
+    result.confidence = applyTypeErrorPenalty(
+      result.staticConfidence ?? result.confidence,
+      fileErrors.length,
+      result.constructCount || 1,
+    );
+  }
+
+  return {
+    status: 'checked',
+    totalErrors: errors.length,
+    cleanFiles,
+    checkedFiles: checkable.length,
+    byCode,
+    errors,
+    durationMs: Date.now() - startedAt,
+  };
 }
 
 function getTypeScriptSyntaxErrors(code, filename) {
@@ -177,7 +351,10 @@ function compileFile(filePath, outDir, dryRun = false, compileOptions = {}) {
     const mediumRiskCount = warnings.filter(warning => warning.severity === 'medium').length;
     const lowRiskCount = warnings.filter(warning => warning.severity === 'low').length;
     const riskPenalty = highRiskCount * 0.2 + mediumRiskCount * 0.06 + lowRiskCount * 0.01;
-    const confidence = Math.max(0.1, Math.min(ir.confidenceScore, 1 - Math.min(0.8, todoCount / (constructCount * 2)) - Math.min(0.5, riskPenalty)));
+    // Emit-quality score only. runTypeCheckPass() folds resolved type errors into
+    // `confidence` afterwards; until then the two are deliberately identical.
+    const staticConfidence = Math.max(0.1, Math.min(ir.confidenceScore, 1 - Math.min(0.8, todoCount / (constructCount * 2)) - Math.min(0.5, riskPenalty)));
+    const confidence = staticConfidence;
 
     if (syntaxErrors.length > 0) {
       return {
@@ -190,6 +367,8 @@ function compileFile(filePath, outDir, dryRun = false, compileOptions = {}) {
         todoCount,
         warnings,
         confidence,
+        staticConfidence,
+        constructCount,
         code: tsCode,
         durationMs: Date.now() - startTime,
       };
@@ -216,6 +395,8 @@ function compileFile(filePath, outDir, dryRun = false, compileOptions = {}) {
       warnings,
       semanticStatus: warnings.length === 0 ? 'static-pass' : 'needs-ai-refinement',
       confidence,
+      staticConfidence,
+      constructCount,
       code: tsCode,
     };
   } catch (err) {
@@ -276,12 +457,147 @@ function detectUnityProjectRoots(files) {
   return Array.from(roots).sort((left, right) => left.localeCompare(right));
 }
 
-function compactReportResults(results) {
+/**
+ * Squeeze one result entry for the report.
+ *
+ * The report is read by an AI agent, so bytes are the budget. Two things
+ * dominated it: absolute source/output paths repeated on every entry (~45% of
+ * each), and full-precision confidence floats. Roots are hoisted into `source`
+ * once and paths stored relative to them; fields that carry no information when
+ * they hold their default are omitted rather than serialised.
+ */
+/**
+ * Emit one refinement payload per BROKEN MEMBER rather than per file.
+ *
+ * Reading a whole emitted file plus its C# source to fix a handful of members is
+ * the dominant token cost of finishing a port (measured on BlastShooter's 82
+ * gameplay scripts: ~43k tokens of C# + ~40k of TypeScript). A chunk carries
+ * only the member's emitted code, the matching C# lines, and the exact errors
+ * inside it.
+ */
+function writeRefinementChunks(results, typeCheck, chunksPath, maxChunks = 200) {
+  const errorLinesByFile = new Map();
+  for (const error of typeCheck.errors || []) {
+    const key = path.resolve(error.file);
+    if (!errorLinesByFile.has(key)) errorLinesByFile.set(key, new Map());
+    const lines = errorLinesByFile.get(key);
+    if (!lines.has(error.line)) lines.set(error.line, []);
+    lines.get(error.line).push(`${error.code}: ${error.message}`);
+  }
+
+  const extractor = new AstChunkExtractor();
+  const chunks = [];
+  for (const result of results) {
+    if (!result.success || !result.outFile || !fs.existsSync(result.outFile)) continue;
+    const lineMap = errorLinesByFile.get(path.resolve(result.outFile)) || new Map();
+    if (lineMap.size === 0 && !result.todoCount) continue;
+
+    let tsCode = '';
+    let csharpSource = '';
+    try {
+      tsCode = fs.readFileSync(result.outFile, 'utf8');
+      csharpSource = fs.readFileSync(result.file, 'utf8');
+    } catch {
+      continue;
+    }
+
+    for (const chunk of extractor.extractChunks(tsCode, csharpSource, result.outFile, { errorLines: new Set(lineMap.keys()) })) {
+      chunks.push({
+        id: chunk.id,
+        member: chunk.memberName,
+        source: result.file,
+        target: result.outFile,
+        lines: [chunk.startLine, chunk.endLine],
+        trigger: chunk.trigger,
+        reason: chunk.reason,
+        errors: (chunk.errorLines || []).flatMap(line => (lineMap.get(line) || []).map(message => `L${line} ${message}`)),
+        emittedTypeScript: chunk.emittedCode,
+        csharpContext: chunk.csharpContext,
+      });
+      if (chunks.length >= maxChunks) break;
+    }
+    if (chunks.length >= maxChunks) break;
+  }
+
+  chunks.sort((a, b) => b.errors.length - a.errors.length);
+  const payload = {
+    tool: 'unity-cs-compiler',
+    mode: 'ast-scoped-refinement-chunks',
+    // Truncation has to be visible: a silently capped list reads as "that is all
+    // of them", which is exactly the failure this whole report layer exists to avoid.
+    truncated: chunks.length >= maxChunks,
+    maxChunks,
+    chunks: chunks.length,
+    instructions: 'Sửa từng chunk độc lập: đọc csharpContext làm nguồn sự thật, sửa emittedTypeScript cho hết errors, rồi ghi lại đúng dải lines trong target. Không cần đọc cả file.',
+    items: chunks,
+  };
+  const resolved = path.resolve(chunksPath);
+  fs.mkdirSync(path.dirname(resolved), { recursive: true });
+  fs.writeFileSync(resolved, `${JSON.stringify(payload, null, 2)}
+`, 'utf8');
+  return payload;
+}
+
+/**
+ * Turn the compile result into concrete next steps. Without this an agent has to
+ * infer what to do from a table of numbers, which is how "82/82 valid" got read
+ * as "done" in the first place.
+ */
+function buildCompilerNextActions(typeCheck, results, options) {
+  const actions = [];
+  if (typeCheck.status !== 'checked') {
+    actions.push(`Type-check KHÔNG chạy (${typeCheck.status}) — confidence chỉ phản ánh chất lượng emit, không phải compile được. Đừng đọc typeErrors như là 0.`);
+  }
+  if (typeCheck.totalErrors > 0) {
+    const top = Object.entries(typeCheck.byCode).sort((a, b) => b[1] - a[1]).slice(0, 3);
+    actions.push(`${typeCheck.totalErrors} lỗi TypeScript trong ${typeCheck.checkedFiles - typeCheck.cleanFiles}/${typeCheck.checkedFiles} file. Mã nhiều nhất: ${top.map(([c, n]) => `${c}x${n}`).join(', ')}. Sửa theo worstFiles từ trên xuống.`);
+    if (!options.diagnostics) {
+      actions.push('Chạy lại với --diagnostics <path> để lấy từng lỗi kèm file:line thay vì đọc cả file TS.');
+    }
+  }
+  const failed = results.filter(result => !result.success).length;
+  if (failed > 0) actions.push(`${failed} file không parse/emit được — xem các entry có failed:true.`);
+  const todos = results.reduce((sum, result) => sum + (result.todoCount || 0), 0);
+  if (todos > 0) actions.push(`${todos} @MIGRATION_TODO cần người dịch tay — grep '@MIGRATION_TODO' trong ${options.out}.`);
+  if (actions.length === 0) actions.push('Không còn gì phải sửa ở tầng static. Bước tiếp: kiểm tra gameplay semantics bằng mắt.');
+  return actions;
+}
+
+function compactOneResult(result, sourceRoot, outRoot) {
+  const { code: _generatedCode, warnings: _warnings, ...rest } = result;
+  const compact = { file: toReportPath(rest.file, sourceRoot) };
+
+  if (rest.outFile) compact.out = toReportPath(rest.outFile, outRoot);
+  if (!rest.success) {
+    compact.failed = true;
+    if (rest.phase) compact.phase = rest.phase;
+    if (rest.error) compact.error = rest.error;
+    if (rest.syntaxErrors && rest.syntaxErrors.length > 0) {
+      compact.syntaxErrors = rest.syntaxErrors.slice(0, 5);
+    }
+  }
+  if (typeof rest.confidence === 'number') compact.confidence = Number(rest.confidence.toFixed(2));
+  if (typeof rest.typeErrorCount === 'number') compact.typeErrors = rest.typeErrorCount;
+  if (rest.typeErrorCodes) compact.typeErrorCodes = rest.typeErrorCodes;
+  if (rest.todoCount) compact.todos = rest.todoCount;
+  if (rest.semanticStatus && rest.semanticStatus !== 'static-pass') compact.status = rest.semanticStatus;
+  if (rest.membersCount) compact.members = rest.membersCount;
+  return compact;
+}
+
+function toReportPath(filePath, root) {
+  if (!filePath) return filePath;
+  const relative = root ? path.relative(root, filePath) : filePath;
+  const value = relative && !relative.startsWith('..') ? relative : filePath;
+  return value.split(path.sep).join('/');
+}
+
+function compactReportResults(results, sourceRoot = '', outRoot = '') {
   const warningCatalog = {};
   const compactResults = results.map(result => {
-    const { code: _generatedCode, warnings = [], ...compactResult } = result;
+    const compactResult = compactOneResult(result, sourceRoot, outRoot);
     const warningCounts = {};
-    for (const warning of warnings) {
+    for (const warning of result.warnings || []) {
       const kind = warning.kind || 'unspecified';
       const severity = warning.severity || 'medium';
       const key = `${severity}:${kind}`;
@@ -292,9 +608,14 @@ function compactReportResults(results) {
         warningCatalog[kind].descriptions.push(warning.reason);
       }
     }
+    // Deliberately not named `warnings`: that is the raw array on the input, and
+    // reusing the name would make a counts map indistinguishable from it.
     if (Object.keys(warningCounts).length > 0) compactResult.warningCounts = warningCounts;
     return compactResult;
   });
+  // Worst first: a reader that stops early still sees the files that matter.
+  compactResults.sort((a, b) =>
+    (b.typeErrors || 0) - (a.typeErrors || 0) || (a.confidence || 0) - (b.confidence || 0));
   return { compactResults, warningCatalog };
 }
 
@@ -368,22 +689,79 @@ function main() {
     console.log(`Skeleton emitted -> ${options.emitSkeleton}`);
   }
 
+  let ccTypes = { path: '', source: 'disabled' };
+  let typeCheck = { status: 'disabled', totalErrors: 0, cleanFiles: 0, checkedFiles: 0, byCode: {}, errors: [] };
+  if (options.typecheck && !options.dryRun) {
+    ccTypes = resolveCcTypeDeclarations(options.ccTypes);
+    if (ccTypes.path) {
+      typeCheck = runTypeCheckPass(results, ccTypes.path);
+    } else {
+      typeCheck = { ...typeCheck, status: 'unavailable-cc-types' };
+      console.warn(`\n[WARN] Cocos 'cc.d.ts' not found - type check SKIPPED, confidence scores are emit-quality only.`);
+      console.warn(`[WARN] Open the project in Cocos Creator once to generate temp/declarations/, or pass --cc-types <path to cc.d.ts>.`);
+    }
+  } else if (options.dryRun && options.typecheck) {
+    typeCheck = { ...typeCheck, status: 'skipped-dry-run' };
+  }
+
   console.log(`\n=== Static Migration Summary ===`);
   console.log(`Total: ${files.length} | TS syntax valid: ${successCount} | Failed: ${failCount}`);
   console.log(`TypeScript syntax valid: ${successCount}/${files.length}`);
+  if (typeCheck.status === 'checked') {
+    console.log(`Type-check vs cc.d.ts: ${typeCheck.cleanFiles}/${typeCheck.checkedFiles} file(s) clean | ${typeCheck.totalErrors} error(s) in ${typeCheck.durationMs}ms`);
+    const topCodes = Object.entries(typeCheck.byCode).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    if (topCodes.length > 0) {
+      console.log(`Top error codes: ${topCodes.map(([code, count]) => `${code}=${count}`).join(' ')}`);
+    }
+  } else {
+    console.log(`Type-check vs cc.d.ts: NOT RUN (${typeCheck.status})`);
+  }
+  const bypassCount = results.filter(result => result.success && result.confidence >= BYPASS_CONFIDENCE_THRESHOLD).length;
+  console.log(`Confidence >= ${BYPASS_CONFIDENCE_THRESHOLD}: ${bypassCount}/${successCount} file(s) (the "review not required" band)`);
   console.log(`Migration TODOs: ${results.reduce((sum, result) => sum + (result.todoCount || 0), 0)}`);
   console.log('Gameplay semantic equivalence: NOT VALIDATED (AI refinement required)');
 
+  if (options.diagnostics && typeCheck.errors.length > 0) {
+    const diagnosticsPath = path.resolve(options.diagnostics);
+    fs.mkdirSync(path.dirname(diagnosticsPath), { recursive: true });
+    fs.writeFileSync(diagnosticsPath, JSON.stringify({
+      ccTypes: ccTypes.path,
+      totalErrors: typeCheck.totalErrors,
+      byCode: typeCheck.byCode,
+      errors: typeCheck.errors.map(error => ({
+        code: error.code,
+        file: path.relative(path.resolve(options.out), error.file).split(path.sep).join('/'),
+        line: error.line,
+        col: error.col,
+        message: error.message,
+      })),
+    }, null, 2), 'utf8');
+    console.log(`Type diagnostics written to ${options.diagnostics}`);
+  }
+
+  if (options.chunks) {
+    const chunkPayload = writeRefinementChunks(results, typeCheck, options.chunks);
+    console.log(`Refinement chunks: ${chunkPayload.chunks} member(s) -> ${options.chunks}${chunkPayload.truncated ? ' (truncated)' : ''}`);
+  }
+
   if (options.report) {
-    const { compactResults: reportResults, warningCatalog } = compactReportResults(results);
+    const outRoot = path.resolve(options.out);
+    const { compactResults: reportResults, warningCatalog } = compactReportResults(results, sourceRoot, outRoot);
     const reportData = {
       timestamp: new Date().toISOString(),
       validationScope: {
         csharpParserAndEmitter: true,
         typescriptSyntax: true,
+        // 'checked' is the only value that makes typeErrorCount meaningful; any
+        // other value means an absent count is UNKNOWN, not zero.
+        typescriptTypes: typeCheck.status,
+        ccTypeDeclarations: ccTypes.path || null,
         gameplaySemanticEquivalence: 'not-validated',
       },
       source: {
+        // Paths in `results` are relative to these two roots.
+        sourceRoot,
+        outRoot,
         requestedPath: path.resolve(options.src),
         unityProjectRoots,
         multipleUnityProjectsDetected: unityProjectRoots.length > 1,
@@ -396,13 +774,32 @@ function main() {
       metrics: {
         parserAndEmitterPassed: results.filter(result => result.phase !== 'csharp-parser-or-emitter').length,
         typescriptSyntaxValid: successCount,
+        typeCheckStatus: typeCheck.status,
+        typeCheckedFiles: typeCheck.checkedFiles,
+        typeCleanFiles: typeCheck.cleanFiles,
+        typeErrorTotal: typeCheck.totalErrors,
+        typeErrorsByCode: typeCheck.byCode,
         migrationTodos: results.reduce((sum, result) => sum + (result.todoCount || 0), 0),
-        highConfidence: results.filter(result => result.success && result.confidence >= 0.9).length,
-        mediumConfidence: results.filter(result => result.success && result.confidence >= 0.7 && result.confidence < 0.9).length,
+        highConfidence: results.filter(result => result.success && result.confidence >= BYPASS_CONFIDENCE_THRESHOLD).length,
+        mediumConfidence: results.filter(result => result.success && result.confidence >= 0.7 && result.confidence < BYPASS_CONFIDENCE_THRESHOLD).length,
         lowConfidence: results.filter(result => result.success && result.confidence < 0.7).length,
       },
+      // Read this first: the shortlist an agent needs to start work without
+      // paging through every per-file entry.
+      worstFiles: reportResults
+        .filter(entry => (entry.typeErrors || 0) > 0 || entry.failed)
+        .slice(0, 10)
+        .map(entry => ({
+          file: entry.file,
+          typeErrors: entry.typeErrors || 0,
+          confidence: entry.confidence,
+          topCodes: Object.entries(entry.typeErrorCodes || {})
+            .sort((a, b) => b[1] - a[1]).slice(0, 3)
+            .map(([code, count]) => `${code}x${count}`),
+        })),
+      nextActions: buildCompilerNextActions(typeCheck, results, options),
       warningCatalog,
-      results: reportResults,
+      ...(options.digest ? {} : { results: reportResults }),
     };
     const reportParent = path.dirname(path.resolve(options.report));
     if (!fs.existsSync(reportParent)) fs.mkdirSync(reportParent, { recursive: true });
@@ -425,4 +822,9 @@ module.exports = {
   compactReportResults,
   detectUnityProjectRoots,
   getTypeScriptSyntaxErrors,
+  resolveCcTypeDeclarations,
+  applyTypeErrorPenalty,
+  runTypeCheckPass,
+  BYPASS_CONFIDENCE_THRESHOLD,
+  TYPE_ERROR_CONFIDENCE_CEILING,
 };
