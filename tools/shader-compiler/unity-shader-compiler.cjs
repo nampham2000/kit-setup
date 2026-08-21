@@ -486,6 +486,7 @@ function main() {
     else if (arg === '--no-report') options.report = false;
     else if (arg === '--generate-material' || arg === '-m') options.generateMaterial = true;
     else if (arg === '--dry-run') options.dryRun = true;
+    else if (arg === '--unity-uv') options.unityUv = true;
     // convert-mat: bind the material to its effect. --effect-uuid fills
     // _effectAsset; --effect additionally filters out properties the effect
     // does not declare.
@@ -524,7 +525,11 @@ UCShaderTranspiler - Unity HLSL/ShaderLab -> Cocos Creator 3.8.8 GLSL Effect Tra
 
 Usage:
   node unity-shader-compiler.cjs chain --src <Prefab> --unity-root <Assets> [--out-dir <dir>] [--json] [--no-cache]
-  node unity-shader-compiler.cjs convert --src <Shader> --out <Effect> [-m] [--mode auto|unlit|surface-pbr] [--report|--no-report] [--dry-run]
+  node unity-shader-compiler.cjs convert --src <Shader> --out <Effect> [-m] [--mode auto|unlit|surface-pbr] [--unity-uv] [--report|--no-report] [--dry-run]
+
+  --unity-uv  Lấy mẫu texture theo quy ước UV của Unity (gốc dưới-trái) bằng texU().
+              Bật khi shader chạy trên hình học mang UV từ Unity. Mặc định TẮT vì
+              bật lên sẽ đổi hình của mọi effect đã sinh trước đó.
   node unity-shader-compiler.cjs convert-mat --src <UnityMat> --out <CocosMtl> [--effect <Effect>] [--effect-uuid <uuid>]
   node unity-shader-compiler.cjs scan <UnityDir>
   node unity-shader-compiler.cjs inspect <Shader>

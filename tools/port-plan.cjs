@@ -34,6 +34,8 @@ Options:
   --json            Xuất JSON (mặc định khi không phải TTY).
   --out <file>      Ghi JSON ra file.
   --top <n>         Số prefab liệt kê trong thứ tự đề xuất. Default: 15.
+  --include-vendor  Không bỏ qua thư mục thư viện (demo/samples/plugins/...).
+                    Cần dùng khi chính package asset store là thứ phải port.
   --help            Hiện trợ giúp và thoát.
 
 Không ghi gì vào project Cocos — chỉ đọc và phân tích.`;
@@ -129,7 +131,15 @@ const BLOCKERS = [
 const MEASURED_SECONDS_PER_PREFAB = 2.9;
 const MEASURED_SECONDS_PER_PREFAB_JOBS4 = 1.1;
 
-function walk(root, onFile) {
+/**
+ * Duyệt cây thư mục, bỏ qua thư viện bên thứ ba để số liệu phản ánh code game.
+ *
+ * `skipped` được ghi lại và LUÔN báo ra ngoài: 'demo' và 'samples' nằm trong
+ * VENDOR_DIRS, nên khi port chính một asset store package (đường dẫn kiểu
+ * `AllIn1SpriteShader/Demo/Demo.unity`) toàn bộ nội dung cần port bị loại và
+ * report ra `scenes: 0` — đọc như "không có scene" chứ không phải "đã bỏ qua".
+ */
+function walk(root, onFile, skipped) {
   const stack = [root];
   while (stack.length) {
     const dir = stack.pop();
@@ -139,7 +149,10 @@ function walk(root, onFile) {
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) {
         if (entry.name.startsWith('.')) continue;
-        if (VENDOR_DIRS.has(entry.name.toLowerCase())) continue;
+        if (!INCLUDE_VENDOR && VENDOR_DIRS.has(entry.name.toLowerCase())) {
+          if (skipped) skipped.add(path.relative(root, full).replace(/\\/g, '/') || entry.name);
+          continue;
+        }
         stack.push(full);
         continue;
       }
@@ -148,8 +161,29 @@ function walk(root, onFile) {
   }
 }
 
+/** Đặt bởi --include-vendor; tắt hoàn toàn việc bỏ qua thư mục thư viện. */
+let INCLUDE_VENDOR = false;
+
 const TEXT_SCAN_EXT = new Set(['.cs', '.prefab', '.unity', '.asset', '.mat', '.shader', '.shadergraph']);
 const MAX_TEXT_BYTES = 400 * 1024;
+
+/**
+ * Đếm GameObject và Material nhúng trong một file YAML của Unity.
+ *
+ * Không dùng chung đường đọc text với bộ dò blocker: file đó bị chặn ở 400KB còn
+ * scene thật thường lớn hơn nhiều (Demo.unity = 1.7MB). Ở đây quét theo byte nên
+ * kích thước không thành vấn đề.
+ */
+function countYamlDocs(file) {
+  const out = { gameObjects: 0, materials: 0 };
+  let buf;
+  try { buf = fs.readFileSync(file); } catch (_) { return out; }
+  const GAME_OBJECT = Buffer.from('\n--- !u!1 ');
+  const MATERIAL = Buffer.from('\n--- !u!21 ');
+  for (let i = buf.indexOf(GAME_OBJECT); i >= 0; i = buf.indexOf(GAME_OBJECT, i + 1)) out.gameObjects += 1;
+  for (let i = buf.indexOf(MATERIAL); i >= 0; i = buf.indexOf(MATERIAL, i + 1)) out.materials += 1;
+  return out;
+}
 
 function analyze(srcRoot, options) {
   const counts = {
@@ -159,7 +193,13 @@ function analyze(srcRoot, options) {
   const prefabs = [];
   const scenes = [];
   const blockerHits = new Map();
+  const skippedVendorDirs = new Set();
   let totalBytes = 0;
+  // Material nhúng thẳng trong scene/prefab (--- !u!21) không phải file .mat nên
+  // cách đếm theo phần mở rộng bỏ sót hoàn toàn. Demo.unity của AllIn1SpriteShader
+  // có 91 material dạng này và 0 file .mat.
+  let inlineMaterials = 0;
+  let sceneObjects = 0;
 
   const noteBlocker = (blocker, file) => {
     if (!blockerHits.has(blocker.id)) {
@@ -179,8 +219,19 @@ function analyze(srcRoot, options) {
     try { size = fs.statSync(full).size; } catch (_) { return; }
     totalBytes += size;
 
-    if (ext === '.unity') { counts.scenes += 1; scenes.push({ path: path.relative(srcRoot, full).replace(/\\/g, '/'), kb: Math.round(size / 1024) }); }
-    else if (ext === '.prefab') { counts.prefabs += 1; prefabs.push({ path: path.relative(srcRoot, full).replace(/\\/g, '/'), kb: Math.round(size / 1024) }); }
+    if (ext === '.unity' || ext === '.prefab') {
+      const inline = countYamlDocs(full);
+      inlineMaterials += inline.materials;
+      sceneObjects += inline.gameObjects;
+      const entry = {
+        path: path.relative(srcRoot, full).replace(/\\/g, '/'),
+        kb: Math.round(size / 1024),
+        gameObjects: inline.gameObjects,
+        inlineMaterials: inline.materials,
+      };
+      if (ext === '.unity') { counts.scenes += 1; scenes.push(entry); }
+      else { counts.prefabs += 1; prefabs.push(entry); }
+    }
     else if (ext === '.cs') counts.scripts += 1;
     else if (ext === '.shader') counts.shaders += 1;
     else if (ext === '.shadergraph') counts.shaderGraphs += 1;
@@ -199,7 +250,7 @@ function analyze(srcRoot, options) {
     for (const blocker of BLOCKERS) {
       try { if (blocker.test(full, text)) noteBlocker(blocker, full); } catch (_) { /* ignore */ }
     }
-  });
+  }, skippedVendorDirs);
 
   // Prefab gốc = không bị prefab nào khác tham chiếu. Xấp xỉ bằng GUID trong .meta.
   const guidToPath = new Map();
@@ -228,6 +279,9 @@ function analyze(srcRoot, options) {
   const roots = prefabs.filter((p) => !referenced.has(path.resolve(srcRoot, p.path)));
   const byWeight = [...prefabs].sort((a, b) => b.kb - a.kb);
 
+  counts.inlineMaterials = inlineMaterials;
+  counts.sceneObjects = sceneObjects;
+
   return {
     counts,
     totalMb: Math.round((totalBytes / 1024 / 1024) * 10) / 10,
@@ -235,6 +289,7 @@ function analyze(srcRoot, options) {
     rootPrefabs: roots.sort((a, b) => b.kb - a.kb).slice(0, options.top),
     heaviestPrefabs: byWeight.slice(0, options.top),
     rootPrefabCount: roots.length,
+    skippedVendorDirs: [...skippedVendorDirs].sort(),
     blockers: [...blockerHits.values()].sort((a, b) => b.count - a.count),
   };
 }
@@ -266,6 +321,9 @@ function buildPlan(srcRoot, analysis, options) {
     blockers: analysis.blockers,
     heaviestPrefabs: analysis.heaviestPrefabs,
     scenes: analysis.scenes,
+    // Không im lặng: một số 0 trong inventory có thể là "đã bỏ qua", không phải
+    // "không tồn tại". Chạy lại với --include-vendor nếu đúng thứ cần port nằm ở đây.
+    skippedVendorDirs: analysis.skippedVendorDirs,
   };
 }
 
@@ -280,8 +338,18 @@ function printHuman(plan) {
   console.log(`Tồn kho: ${inv.prefabs} prefab, ${inv.scenes} scene, ${inv.scripts} script C#, ` +
     `${inv.shaders + inv.shaderGraphs} shader, ${inv.materials} material, ${inv.models} model, ` +
     `${inv.textures} texture, ${inv.controllers} animator, ${inv.audio} audio — ${inv.totalMb} MB`);
+  if (inv.sceneObjects) {
+    console.log(`Trong scene/prefab: ${inv.sceneObjects} GameObject, ${inv.inlineMaterials} material nhúng ` +
+      '(material nhúng KHÔNG phải file .mat, cách đếm theo phần mở rộng bỏ sót hoàn toàn)');
+  }
   console.log(`Ước lượng port: ~${plan.estimate.singleProcessMinutes} phút (1 tiến trình) / ` +
     `~${plan.estimate.jobs4Minutes} phút (--jobs 4)`);
+  if (plan.skippedVendorDirs && plan.skippedVendorDirs.length) {
+    console.log('');
+    console.log(color('yellow', `Đã BỎ QUA ${plan.skippedVendorDirs.length} thư mục thư viện: ${plan.skippedVendorDirs.slice(0, 6).join(', ')}`));
+    console.log('  Số 0 ở trên có thể là "đã bỏ qua", không phải "không có". Chạy lại với --include-vendor');
+    console.log('  nếu chính package đó là thứ cần port (ví dụ asset store có thư mục Demo/ hoặc Samples/).');
+  }
   console.log('');
 
   if (plan.blockers.length) {
@@ -309,7 +377,7 @@ function printHuman(plan) {
 }
 
 function parseArgs(argv) {
-  const o = { top: 15, json: false, help: false };
+  const o = { top: 15, json: false, help: false, includeVendor: false };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     if (a === '--help' || a === '-h') { o.help = true; continue; }
@@ -318,6 +386,7 @@ function parseArgs(argv) {
     if (a.startsWith('--src=')) { o.src = a.slice('--src='.length); continue; }
     if (a === '--out') { o.out = argv[++i]; continue; }
     if (a.startsWith('--out=')) { o.out = a.slice('--out='.length); continue; }
+    if (a === '--include-vendor') { o.includeVendor = true; continue; }
     if (a === '--top') { o.top = Number(argv[++i]) || 15; continue; }
     if (a.startsWith('--top=')) { o.top = Number(a.split('=')[1]) || 15; continue; }
   }
@@ -337,6 +406,7 @@ function main() {
     process.exit(1);
   }
 
+  INCLUDE_VENDOR = !!options.includeVendor;
   const analysis = analyze(srcRoot, options);
   const plan = buildPlan(srcRoot, analysis, options);
 

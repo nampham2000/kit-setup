@@ -11,10 +11,85 @@
  * - Optional Cocos .mtl material generator
  */
 
+const fs = require('fs');
+const path = require('path');
 const { buildStd140Ubo } = require('./ubo-layout-builder.cjs');
 const { lowerHlslToGlsl } = require('./unity-semantic-lowering.cjs');
 const { allocateBindings } = require('./binding-allocator.cjs');
 const { extractSurfaceShaderIntent, detectPackedMaps } = require('./surface-shader-intent-extractor.cjs');
+
+/**
+ * Lớp tương thích HLSL->GLSL, inline vào program nào thực sự dùng tới.
+ *
+ * Chỉ chèn khi có tham chiếu: một effect unlit đơn giản không cần 40 dòng helper,
+ * và chèn thừa sẽ làm lệch mọi golden fixture đang có.
+ */
+const UNITY_COMPAT_GLSL = fs.readFileSync(path.join(__dirname, 'compat', 'unity-compat.glsl'), 'utf8').trimEnd();
+
+/** Tên các helper trong lớp tương thích; dùng để biết có cần chèn hay không. */
+const UNITY_COMPAT_SYMBOLS = /\b(?:texU|hmod|rotRow|rotCol|sat|CLIP)\s*\(/;
+
+/** Trả về khối helper (đã thụt lề) nếu `code` có dùng, ngược lại trả chuỗi rỗng. */
+function unityCompatBlockFor(code) {
+  if (!code || !UNITY_COMPAT_SYMBOLS.test(code)) return '';
+  return '  ' + UNITY_COMPAT_GLSL.split('\n').join('\n  ') + '\n';
+}
+
+/** Các trường mang mã HLSL thô của một hàm trong IR. */
+const IR_BODY_FIELDS = ['raw', 'body'];
+
+const LOCAL_DECL_TYPES = '(?:float|half|fixed|min16float|int|bool)(?:[234](?:x[234])?)?';
+
+/**
+ * Tên property nào bị một biến cục bộ trong thân shader dùng trùng?
+ *
+ * Chỉ quan trọng khi có đóng gói scalar: alias `#define alpha pack0.x` sẽ biến dòng
+ * `float alpha = ...` thành `float pack0.x = ...`. AllIn1SpriteShader có đúng ca này
+ * (`_Alpha` và biến `alpha` trong nhánh HOLOGRAM).
+ */
+function findLocalNameCollisions(programIR, aliasNames) {
+  const probe = (programIR.functions || [])
+    .map((f) => IR_BODY_FIELDS.map((k) => f[k] || '').join('\n'))
+    .join('\n');
+  return aliasNames.filter((name) => new RegExp(`\\b${LOCAL_DECL_TYPES}\\s+${name}\\s*[=;,)]`).test(probe));
+}
+
+/** Đổi tên biến cục bộ trong HLSL thô để nhường tên cho property. */
+function renameLocals(programIR, names) {
+  for (const f of programIR.functions || []) {
+    for (const key of IR_BODY_FIELDS) {
+      if (typeof f[key] !== 'string') continue;
+      for (const name of names) {
+        f[key] = f[key].replace(new RegExp(`\\b${name}\\b`, 'g'), `${name}_local`);
+      }
+    }
+  }
+}
+
+/**
+ * Fragment shader của Unity sửa UV tại chỗ: `i.uv += offset`, `i.uv = twist(i.uv)`.
+ * `i` là bản sao cục bộ của struct nên hợp lệ. Sau khi remap, `i.uv` thành `v_uv`
+ * — mà varying là `in`, CHỈ ĐỌC trong GLSL ES 3.0. Đo trên AllIn1SpriteShader:
+ * 18 lệnh ghi vào `v_uv`, không cái nào compile được.
+ *
+ * Với mỗi varying thực sự bị GHI, khai báo một bản sao cục bộ ở đầu hàm và đổi tên
+ * mọi tham chiếu sang nó. Varying chỉ đọc thì giữ nguyên, không sinh bản sao thừa.
+ */
+function shadowWrittenVaryings(body, varyingDecls) {
+  const prologue = [];
+  for (const decl of varyingDecls) {
+    const m = /^\s*in\s+(?:lowp\s+|mediump\s+|highp\s+)?([A-Za-z0-9_]+)\s+([A-Za-z0-9_]+)\s*;/.exec(decl);
+    if (!m) continue;
+    const [, type, name] = m;
+    // Ghi = có `=` phía sau nhưng không phải `==`, và không phải `<=`/`>=`/`!=`.
+    const writeRe = new RegExp(`\\b${name}(?:\\.[xyzwrgba]+)?\\s*(?:[-+*/]=|=(?!=))`);
+    if (!writeRe.test(body)) continue;
+    const local = `${name}_rw`;
+    body = body.replace(new RegExp(`\\b${name}\\b`, 'g'), local);
+    prologue.push(`${type} ${local} = ${name};`);
+  }
+  return { body, prologue };
+}
 
 // ============================================================================
 // Built-in Shading Model Snippets
@@ -347,6 +422,11 @@ function buildCceffectYaml(docIR, passIR, uboInfo, options = {}) {
       const pName = prop.cocosName || prop.name;
       const valStr = formatYamlPropertyValue(prop);
 
+      // Scalar đã gộp vào lát cắt vec4 phải khai báo `target:`, nếu không Cocos
+      // không biết ghi giá trị vào đâu và property trở thành vô nghĩa.
+      const packTarget = (uboInfo && uboInfo.scalarAliases) ? uboInfo.scalarAliases[pName] : undefined;
+      const targetPart = packTarget ? `, target: ${packTarget}` : '';
+
       if (prop.editor && (prop.editor.type || prop.editor.range || prop.editor.displayName)) {
         const editorParts = [];
         if (prop.editor.type) editorParts.push(`type: ${prop.editor.type}`);
@@ -354,9 +434,9 @@ function buildCceffectYaml(docIR, passIR, uboInfo, options = {}) {
         if (prop.editor.step) editorParts.push(`step: ${prop.editor.step}`);
         if (prop.editor.displayName) editorParts.push(`displayName: "${prop.editor.displayName}"`);
 
-        lines.push(`        ${pName}: { value: ${valStr}, editor: { ${editorParts.join(', ')} } }`);
+        lines.push(`        ${pName}: { value: ${valStr}${targetPart}, editor: { ${editorParts.join(', ')} } }`);
       } else {
-        lines.push(`        ${pName}: { value: ${valStr} }`);
+        lines.push(`        ${pName}: { value: ${valStr}${targetPart} }`);
       }
 
       // Every sampler gets a tiling/offset uniform in the UBO, but it was never
@@ -422,7 +502,7 @@ function emitSurfaceShaderEffect(docIR, passIR, options = {}) {
 function generateCocosPrograms(docIR, passIR, options = {}) {
   const programIR = passIR.program;
   const rawCode = programIR.rawHlsl || '';
-  const loweredCode = lowerHlslToGlsl(rawCode);
+  const loweredCode = lowerHlslToGlsl(rawCode, options);
 
   // 1. Gather all properties and ST vectors for UBO
   const uboFields = [];
@@ -469,7 +549,50 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
     explicitBindings: options.explicitBindings !== undefined ? options.explicitBindings : true,
     set: 2,
     binding: 0,
+    // Trên ngưỡng này, scalar được gộp vào lát cắt vec4 và phơi lại qua `target:`.
+    // Shader nhỏ giữ nguyên bố cục cũ; chỉ uber-shader mới đổi.
+    packScalarsThreshold: options.packScalarsThreshold !== undefined ? options.packScalarsThreshold : 24,
   });
+
+  /*
+   * Thân shader vẫn gọi scalar bằng tên gốc: alias làm phần đóng gói trở nên vô hình.
+   *
+   * Cạm bẫy: nếu shader có BIẾN CỤC BỘ trùng tên property (Unity `_Alpha` hạ thành
+   * `alpha`, mà thân shader cũng có thể khai báo `float alpha`), thì `#define` biến
+   * dòng khai báo đó thành `float pack0.x = ...` — lỗi cú pháp. Token là một, không
+   * phân biệt được đâu là property đâu là biến, nên khi phát hiện đụng độ thì bỏ hẳn
+   * việc đóng gói cho shader này và quay về bố cục scalar rời (hành vi cũ, luôn đúng).
+   */
+  let packAliasLines = Object.entries(ubo.scalarAliases || {})
+    .map(([name, slot]) => `  #define ${name} ${slot}`);
+
+  if (packAliasLines.length) {
+    const collisions = findLocalNameCollisions(programIR, Object.keys(ubo.scalarAliases));
+    if (collisions.length) {
+      // Đổi tên trong HLSL GỐC, nơi property (`_Alpha`) và biến cục bộ (`alpha`) vẫn
+      // là hai token khác nhau. Sau khi hạ mã thì cả hai đều thành `alpha` và không
+      // còn phân biệt được nữa — nên phải làm ở đây, không phải sau.
+      renameLocals(programIR, collisions);
+      const stillColliding = findLocalNameCollisions(programIR, Object.keys(ubo.scalarAliases));
+      if (stillColliding.length) {
+        // Không tách được: quay về scalar rời (hành vi cũ, luôn đúng).
+        const relaxed = buildStd140Ubo(uboFields, true, {
+          explicitBindings: options.explicitBindings !== undefined ? options.explicitBindings : true,
+          set: 2,
+          binding: 0,
+        });
+        ubo.glsl = relaxed.glsl;
+        ubo.fields = relaxed.fields;
+        ubo.totalSize = relaxed.totalSize;
+        ubo.scalarAliases = {};
+        packAliasLines = [];
+        (ubo.diagnostics = ubo.diagnostics || []).push({
+          severity: 'info',
+          message: `Scalar packing disabled: property name(s) ${stillColliding.slice(0, 3).join(', ')} still collide with locals after renaming. Falling back to loose scalars.`,
+        });
+      }
+    }
+  }
 
   // 2. Determine Vertex Attributes needed
   const attributes = [
@@ -524,7 +647,7 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
   const helperFunctions = [];
   for (const func of programIR.functions || []) {
     if (func.name !== programIR.vertexEntry && func.name !== programIR.fragmentEntry) {
-      let funcGlsl = lowerHlslToGlsl(func.raw);
+      let funcGlsl = lowerHlslToGlsl(func.raw, options);
       funcGlsl = remapIdentifiers(funcGlsl);
       helperFunctions.push(funcGlsl);
     }
@@ -552,6 +675,7 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
 
   if (ubo.glsl) {
     vsLines.push('  ' + ubo.glsl.split('\n').join('\n  '));
+    if (packAliasLines.length) vsLines.push(...packAliasLines);
     vsLines.push('');
   }
 
@@ -561,7 +685,7 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
   if (samplers.length > 0) {
     const vertProbe = (() => {
       const vf = (programIR.functions || []).find(f => f.name === programIR.vertexEntry);
-      const body = vf && vf.body ? lowerHlslToGlsl(vf.body) : '';
+      const body = vf && vf.body ? lowerHlslToGlsl(vf.body, options) : '';
       // Helper functions are emitted into both stages, so a sampler referenced
       // only from a helper still needs declaring here.
       return `${body}\n${helperFunctions.join('\n')}`;
@@ -601,6 +725,10 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
     ]);
   }
 
+  // Lớp tương thích HLSL đứng TRƯỚC helper: helper có thể gọi hmod/sat/texU.
+  const vsCompat = unityCompatBlockFor(lowerHlslToGlsl(vertexSource, options));
+  if (vsCompat) vsLines.push(vsCompat);
+
   // Insert helper functions in VS if any
   if (helperFunctions.length > 0) {
     vsLines.push('  ' + helperFunctions.join('\n\n  '));
@@ -626,7 +754,7 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
 
   if (vertFunc && vertFunc.body) {
     // Translate custom vertex body
-    let vBody = lowerHlslToGlsl(vertFunc.body);
+    let vBody = lowerHlslToGlsl(vertFunc.body, options);
     vBody = remapIdentifiers(vBody);
 
     // Strip struct local var declaration like "Varyings o;" or "v2f o;" or "Vertex_Stage_Output output;"
@@ -635,6 +763,15 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
     // Replace param references with attributes
     if (vertFunc.params.length > 0) {
       const pName = vertFunc.params[0].name;
+
+      // GHI vào vị trí đỉnh phải đi trước phần đọc. Trong HLSL `v` là struct cục bộ
+      // nên `v.vertex.xyz += ...` (RECTSIZE, wind, vertex offset) hợp lệ; hạ thẳng
+      // thành `a_position += ...` là GHI VÀO ATTRIBUTE — `in` trong GLSL ES 3.0 chỉ
+      // đọc, shader không compile. Prologue đã có `vec4 pos = vec4(a_position, 1.0);`
+      // và chính `pos` mới là thứ được biến đổi ở cuối, nên đó là đích đúng.
+      vBody = vBody.replace(new RegExp(`\\b${pName}\\.(?:vertex|pos|position|positionOS)\\.xyz\\s*([-+*/]?=)\\s*`, 'g'), 'pos.xyz $1 ');
+      vBody = vBody.replace(new RegExp(`\\b${pName}\\.(?:vertex|pos|position|positionOS)\\s*([-+*/]?=)\\s*`, 'g'), 'pos $1 ');
+
       vBody = vBody.replace(new RegExp(`\\b${pName}\\.vertex\\.xyz\\b`, 'g'), 'a_position');
       vBody = vBody.replace(new RegExp(`\\b${pName}\\.vertex\\b`, 'g'), 'vec4(a_position, 1.0)');
       vBody = vBody.replace(new RegExp(`\\b${pName}\\.pos\\.xyz\\b`, 'g'), 'a_position');
@@ -666,21 +803,31 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
     // Clip-space output goes by many names across URP versions and hand-written
     // shaders; any spelling we miss here survives as `OUT.<field>` in the
     // emitted GLSL, reading through a variable that was never declared.
-    vBody = vBody.replace(/\b\w+\.vertex\s*=\s*/g, 'pos = ');
-    vBody = vBody.replace(/\b\w+\.(?:positionHCS|positionCS|posHCS|posCS|clipPos)\s*=\s*/g, 'pos = ');
-    vBody = vBody.replace(/\b\w+\.pos\s*=\s*/g, 'pos = ');
-    vBody = vBody.replace(/\b\w+\.worldPos\s*=\s*/g, 'v_worldPos = ');
-    vBody = vBody.replace(/\b\w+\.(?:uv0|texcoord0)\s*=\s*/g, 'v_uv = ');
-    vBody = vBody.replace(/\b\w+\.texcoord\s*=\s*/g, 'v_uv = ');
-    vBody = vBody.replace(/\b\w+\.uv\s*=\s*/g, 'v_uv = ');
-    vBody = vBody.replace(/\b\w+\.color\s*=\s*/g, 'v_color = ');
-    vBody = vBody.replace(/\b\w+\.screenPos\s*=\s*/g, 'v_screenPos = ');
-    vBody = vBody.replace(/\b\w+\.normalWS\s*=\s*/g, 'v_worldNormal = ');
+    // `([-+*/]?=)` chứ không phải `=`: HLSL hay tinh chỉnh trường output tại chỗ
+    // (`o.uv += center;` trong ROTATEUV). Chỉ khớp phép gán đơn thì dòng đó sống sót
+    // nguyên văn thành `o.uv += ...`, đọc qua một biến chưa từng khai báo.
+    vBody = vBody.replace(/\b\w+\.vertex\s*([-+*/]?=)\s*/g, 'pos $1 ');
+    vBody = vBody.replace(/\b\w+\.(?:positionHCS|positionCS|posHCS|posCS|clipPos)\s*([-+*/]?=)\s*/g, 'pos $1 ');
+    vBody = vBody.replace(/\b\w+\.pos\s*([-+*/]?=)\s*/g, 'pos $1 ');
+    vBody = vBody.replace(/\b\w+\.worldPos\s*([-+*/]?=)\s*/g, 'v_worldPos $1 ');
+    vBody = vBody.replace(/\b\w+\.(?:uv0|texcoord0)\s*([-+*/]?=)\s*/g, 'v_uv $1 ');
+    vBody = vBody.replace(/\b\w+\.texcoord\s*([-+*/]?=)\s*/g, 'v_uv $1 ');
+    vBody = vBody.replace(/\b\w+\.uv\s*([-+*/]?=)\s*/g, 'v_uv $1 ');
+    vBody = vBody.replace(/\b\w+\.color\s*([-+*/]?=)\s*/g, 'v_color $1 ');
+    vBody = vBody.replace(/\b\w+\.screenPos\s*([-+*/]?=)\s*/g, 'v_screenPos $1 ');
+    vBody = vBody.replace(/\b\w+\.normalWS\s*([-+*/]?=)\s*/g, 'v_worldNormal $1 ');
     for (const e of extraVaryings) {
       vBody = vBody.replace(new RegExp(`\\b\\w+\\.${e.field}\\b`, 'g'), e.varying);
     }
     vBody = vBody.replace(/\b\w+\.positionWS\s*=\s*/g, 'v_worldPos = ');
     vBody = vBody.replace(/\b\w+\.viewDirWS\s*=\s*[^;]+;?/g, '');
+    // ĐỌC trường output, ví dụ `o.uv` xuất hiện lại ở vế phải sau khi đã gán. Phần
+    // đọc của struct đầu vào đã bị thay bằng attribute ở trên, nên `X.<field>` còn
+    // đứng đây chắc chắn là output.
+    vBody = vBody.replace(/\b\w+\.(?:uv0|texcoord0|texcoord|uv)\b/g, 'v_uv');
+    vBody = vBody.replace(/\b\w+\.worldPos\b/g, 'v_worldPos');
+    vBody = vBody.replace(/\b\w+\.screenPos\b/g, 'v_screenPos');
+    vBody = vBody.replace(/\b\w+\.normalWS\b/g, 'v_worldNormal');
     vBody = vBody.replace(/\b\w+\.(?:positionHCS|positionCS|posHCS|posCS|clipPos)\b/g, 'pos');
     // Reads of the clip-space output, e.g. ComputeScreenPos(o.vertex). The input
     // struct was already rewritten to attributes above, so any `X.vertex` still
@@ -728,6 +875,7 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
 
   if (ubo.glsl) {
     fsLines.push('  ' + ubo.glsl.split('\n').join('\n  '));
+    if (packAliasLines.length) fsLines.push(...packAliasLines);
     fsLines.push('');
   }
 
@@ -767,6 +915,9 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
     if (shim.re.test(fragmentSource)) fsLines.push(shim.snippet);
   }
 
+  const fsCompat = unityCompatBlockFor(lowerHlslToGlsl(fragmentSource, options));
+  if (fsCompat) fsLines.push(fsCompat);
+
   // Insert helper functions in FS
   if (helperFunctions.length > 0) {
     fsLines.push('  ' + helperFunctions.join('\n\n  '));
@@ -778,7 +929,7 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
   fsLines.push('  vec4 frag () {');
 
   if (fragFunc && fragFunc.body) {
-    let fBody = lowerHlslToGlsl(fragFunc.body);
+    let fBody = lowerHlslToGlsl(fragFunc.body, options);
     fBody = remapIdentifiers(fBody);
 
     // Replace param references with varyings
@@ -807,6 +958,10 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
     // Wrap returns
     fBody = fBody.replace(/\breturn\s+fixed4\s*\(/g, 'return vec4(');
     fBody = fBody.replace(/\breturn\s+half4\s*\(/g, 'return vec4(');
+
+    const shadowed = shadowWrittenVaryings(fBody, fsVaryings);
+    fBody = shadowed.body;
+    for (const line of shadowed.prologue) fsLines.push('    ' + line);
 
     fsLines.push('    ' + fBody.trim().split('\n').map(l => l.trimEnd()).join('\n    '));
   } else {

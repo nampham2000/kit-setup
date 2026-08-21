@@ -14,12 +14,14 @@ require('./lib/auto-strip-ansi.cjs');
  * 4. Config-to-Asset binding verification (audio, textures)
  * 5. Cocos .meta file integrity
  * 6. Build size budget estimation
+ * 7. Cocos asset import status (the only check that proves the editor accepted an asset)
  */
 
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { runLinter } = require('./zero-gc-linter.cjs');
+const { run: runAssetImportCheck } = require('./verify-assets.cjs');
 
 function findProjectRoot(startDir) {
   let current = path.resolve(startDir);
@@ -192,6 +194,21 @@ function checkMetaIntegrity() {
   return result;
 }
 
+/**
+ * Cocos ghi `"imported": false` vào .meta khi importer từ chối asset. Không có
+ * check nào khác thấy được điều này: tsc/lint/build đều xanh, playable vẫn trắng.
+ */
+function checkAssetImport() {
+  const report = runAssetImportCheck();
+  return {
+    name: 'Asset Import Status',
+    status: report.status,
+    errors: report.errors,
+    warnings: report.warnings,
+    details: report.details,
+  };
+}
+
 function checkBuildSize() {
   const result = { name: 'Playable Bundle Size', status: 'PASS', errors: [], warnings: [], details: '' };
   const buildDir = path.join(ROOT_DIR, 'build');
@@ -256,6 +273,7 @@ function runVerificationSuite() {
     checkConfigIntegrity(),
     checkAssetBindings(),
     checkMetaIntegrity(),
+    checkAssetImport(),
     checkBuildSize()
   ];
 

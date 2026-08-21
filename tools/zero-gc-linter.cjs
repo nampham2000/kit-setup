@@ -166,7 +166,113 @@ function lintFile(filePath) {
     }
   }
 
+  // 3. Cocos chỉ chấp nhận MỘT Component mỗi file .ts
+  violations.push(...lintSingleComponent(relPath, lines));
+
+  // 4. resources.load('x') yêu cầu x nằm dưới assets/resources/
+  violations.push(...lintResourcePaths(relPath, lines));
+
   return violations;
+}
+
+/** Lớp cơ sở mà một class kế thừa thì Cocos coi là Component. */
+const COMPONENT_BASES = new Set([
+  'Component', 'Sprite', 'Label', 'Button', 'Camera', 'MeshRenderer', 'UIRenderer',
+  'Animation', 'Widget', 'Mask', 'Layout', 'ScrollView', 'Toggle', 'EditBox',
+  'ParticleSystem', 'ParticleSystem2D', 'Canvas', 'RenderRoot2D', 'UITransform',
+  'Collider', 'RigidBody', 'EventHandler',
+]);
+
+const CLASS_DECL_RE = /^\s*(?:export\s+)?(?:default\s+)?(?:abstract\s+)?class\s+(\w+)\s+extends\s+(\w+)/;
+
+/**
+ * Một file .ts khai báo nhiều Component làm Cocos báo
+ * "[Scene] Each script can have at most one Component" và KHÔNG chỉ bỏ qua file đó:
+ * cả module graph sập, mọi custom component biến mất khỏi registry. Đo được trên
+ * cc_playable_framework: 6 component trong một file -> 0/14 component đăng ký được.
+ */
+function lintSingleComponent(relPath, lines) {
+  const found = [];
+  for (let i = 0; i < lines.length; i++) {
+    const m = CLASS_DECL_RE.exec(lines[i]);
+    if (!m) continue;
+    if (!COMPONENT_BASES.has(m[2])) continue;
+    // Chỉ tính class thực sự được đăng ký với engine.
+    let decorated = false;
+    for (let back = i - 1; back >= 0 && back >= i - 6; back--) {
+      const prev = lines[back].trim();
+      if (prev === '' || prev.startsWith('//') || prev.startsWith('*') || prev.startsWith('/*')) continue;
+      if (/^@ccclass\b/.test(prev)) { decorated = true; break; }
+      if (!prev.startsWith('@')) break;
+    }
+    if (decorated) found.push({ line: i + 1, name: m[1], base: m[2] });
+  }
+
+  if (found.length < 2) return [];
+  const names = found.map((f) => f.name).join(', ');
+  return found.slice(1).map((f) => ({
+    file: relPath,
+    line: f.line,
+    rule: 'COCOS_MULTIPLE_COMPONENTS',
+    severity: 'error',
+    message: `File khai báo ${found.length} Component (${names}). Cocos chỉ cho phép 1 — vi phạm làm SẬP toàn bộ module graph, mọi component khác cũng biến mất khỏi registry. Tách mỗi Component ra một file.`,
+    snippet: `class ${f.name} extends ${f.base}`,
+  }));
+}
+
+/** Hậu tố sub-asset mà Cocos thêm vào đường dẫn khi load (foo.png -> foo/texture). */
+const SUBASSET_SUFFIXES = new Set(['texture', 'spriteFrame', 'mesh', 'skeleton', 'material', 'animation']);
+
+const RESOURCE_LOAD_RE = /\bresources\s*\.\s*(load|loadDir|preload|preloadDir)\s*(?:<[^>]*>)?\s*\(\s*(['"`])([^'"`$]+)\2/g;
+
+/**
+ * Asset chỉ được nạp bằng chuỗi lúc runtime phải nằm dưới assets/resources/.
+ * Ở nơi khác trong assets/, builder loại nó khỏi bundle vì không scene/prefab nào
+ * tham chiếu — build vẫn exit 0 và playable ra màn hình trắng.
+ */
+function lintResourcePaths(relPath, lines) {
+  const violations = [];
+  const resourcesDir = path.join(ROOT_DIR, 'assets', 'resources');
+  if (!fs.existsSync(resourcesDir)) return violations;
+
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim();
+    if (trimmed.startsWith('//') || trimmed.startsWith('*')) continue;
+    RESOURCE_LOAD_RE.lastIndex = 0;
+    let m;
+    while ((m = RESOURCE_LOAD_RE.exec(lines[i]))) {
+      const assetPath = m[3];
+      if (resolvesUnderResources(resourcesDir, assetPath)) continue;
+      violations.push({
+        file: relPath,
+        line: i + 1,
+        rule: 'RESOURCE_PATH_NOT_FOUND',
+        severity: 'error',
+        message: `resources.${m[1]}('${assetPath}') không khớp file nào dưới assets/resources/. Asset nạp bằng chuỗi phải nằm trong resources/, nếu không builder sẽ loại khỏi bundle (build vẫn thành công, runtime trắng màn hình).`,
+        snippet: trimmed,
+      });
+    }
+  }
+  return violations;
+}
+
+function resolvesUnderResources(resourcesDir, assetPath) {
+  const candidates = [assetPath];
+  const parts = assetPath.split('/');
+  if (parts.length > 1 && SUBASSET_SUFFIXES.has(parts[parts.length - 1])) {
+    candidates.push(parts.slice(0, -1).join('/'));
+  }
+  for (const candidate of candidates) {
+    const full = path.join(resourcesDir, candidate);
+    if (fs.existsSync(full)) return true;              // thư mục, hoặc file đúng tên
+    const dir = path.dirname(full);
+    const base = path.basename(full);
+    let entries;
+    try { entries = fs.readdirSync(dir); } catch (e) { continue; }
+    // Cocos bỏ phần mở rộng trong đường dẫn resources.
+    if (entries.some((n) => n === base || n.startsWith(base + '.'))) return true;
+  }
+  return false;
 }
 
 function runLinter(options = {}) {

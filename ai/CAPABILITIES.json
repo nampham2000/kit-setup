@@ -4,7 +4,7 @@
     "source": "playable-shared-kit/ai/capabilities.def.cjs",
     "generatedBy": "npm run ai:sync",
     "contractCheck": "npm run ai:contract:verify",
-    "count": 29
+    "count": 31
   },
   "coreRules": [
     {
@@ -103,7 +103,8 @@
         "optional": [
           "--json",
           "--out <file>",
-          "--top <n>"
+          "--top <n>",
+          "--include-vendor"
         ],
         "when": "BƯỚC ĐẦU TIÊN khi nhận một project Unity mới. Đọc cái này thay vì tự quét cây thư mục.",
         "outputs": [
@@ -111,7 +112,32 @@
         ],
         "limits": [
           "Chỉ đọc — không ghi gì vào project Cocos.",
-          "Bỏ qua thư mục thư viện bên thứ ba để số liệu phản ánh code game."
+          "Bỏ qua thư mục thư viện bên thứ ba; danh sách đã bỏ qua nằm ở `skippedVendorDirs`. Số 0 trong inventory có thể nghĩa là \"đã bỏ qua\" chứ không phải \"không có\" — `demo` và `samples` nằm trong danh sách, nên khi port chính một package asset store phải thêm --include-vendor."
+        ],
+        "verify": null,
+        "status": "ok"
+      },
+      {
+        "id": "port.scene",
+        "title": "Port scene Unity thành scene placeholder của Cocos + danh sách việc để agent nối data",
+        "run": "npm run port:scene -- --scene <file.unity> --unity-root <UnityAssetsFolder> --out assets/<Name>.scene",
+        "command": "node playable-shared-kit/tools/unity-scene-port.cjs --scene <file.unity> --unity-root <UnityAssetsFolder> --out assets/<Name>.scene --scene <file.unity> --unity-root <UnityAssetsFolder> --out <file.scene>",
+        "optional": [
+          "--manifest <file>",
+          "--template <file.scene>",
+          "--json"
+        ],
+        "when": "Khi nguồn là file .unity chứ không phải .prefab — `port.prefab` KHÔNG xử lý scene. Sinh cây node + transform + component không cần asset, rồi để agent nối asset theo file wiring.",
+        "outputs": [
+          "<Name>.scene (placeholder, import được ngay)",
+          "<Name>.wiring.json (danh sách việc gom theo asset)"
+        ],
+        "limits": [
+          "CHỈ sinh hình học. Mọi tham chiếu asset (sprite, material, font, script, animator, particle) để trống — đó là chủ ý, không phải thiếu sót.",
+          "SpriteRenderer sinh ra `cc.Sprite` + `cc.UITransform` (giả định 2D). Scene 3D dùng sprite trong không gian thế giới cần agent đổi sang MeshRenderer + quad.",
+          "MonoBehaviour KHÔNG được sinh component; chỉ ghi vào wiring kèm toàn bộ field đã serialize để agent port bằng `port.compile` rồi gán lại.",
+          "Toạ độ được lật Z và đảo dấu X/Y của quaternion (Unity thuận tay trái, Cocos thuận tay phải). Script nào tự tính vị trí phải lật theo.",
+          "Render settings mượn từ một scene có sẵn trong assets/; nếu project chưa có scene nào thì `_globals` để trống."
         ],
         "verify": null,
         "status": "ok"
@@ -303,6 +329,7 @@
         "optional": [
           "-m",
           "--mode auto|unlit|surface-pbr",
+          "--unity-uv",
           "--report",
           "--no-report",
           "--dry-run"
@@ -317,6 +344,8 @@
         ],
         "limits": [
           "Grade/score chỉ nói code SINH RA compile được, KHÔNG xác nhận đúng hình ảnh như Unity. Vẫn phải mở effect đối chiếu.",
+          "`--unity-uv` MẶC ĐỊNH TẮT. Gốc texture của Unity ở dưới-trái, của Cocos ở trên-trái; bật cờ này thì texture được lấy mẫu qua texU() theo quy ước Unity. Bật khi shader chạy trên hình học mang UV từ Unity. KHÔNG lật UV của mesh để thay thế: cách đó làm ảnh đúng nhưng lặng lẽ đảo ngược mọi cách dùng uv.y thủ tục (gradient, gió cỏ, sọc hologram, UV clipping).",
+          "Toán tử `%` trên float và fmod() được hạ thành hmod() (HLSL cắt về 0, GLSL mod() làm tròn xuống — lệch nhau khi toán hạng âm). Constructor ma trận được chuyển vị vì HLSL nhận theo hàng còn GLSL theo cột. Các helper này nằm trong lớp tương thích được inline sẵn vào effect.",
           "Shader PBR (URP `SurfaceData` + `UniversalFragmentPBR`, hoặc `#pragma surface` cũ) tự động chuyển sang `--mode surface-pbr`: sinh CCProgram surface-vertex/surface-fragment + include shading-entry của engine. In dòng `Mode:` để biết backend nào đã chạy.",
           "Ở surface-pbr, normal map tangent-space KHÔNG được sinh tự động (báo `SURFACE_PBR_NORMAL_MAP_MANUAL`); `GetMainLight().shadowAttenuation` luôn = 1.0 nên shadow của Unity KHÔNG được port.",
           "Struct nội bộ của URP ngoài `SurfaceData`/`InputData`/`Light`/`VertexPositionInputs` (ví dụ `InputDataForwardPlusDummy` của Toony Colors Pro) không có shim — sẽ báo `GLSL_UNDECLARED_BASE`, phải tự viết.",
@@ -438,6 +467,27 @@
         "status": "partial"
       },
       {
+        "id": "verify.assets",
+        "title": "Kiểm tra Cocos có THỰC SỰ import được asset không",
+        "run": "npm run ai:verify:assets",
+        "command": "node playable-shared-kit/tools/verify-assets.cjs --json",
+        "optional": [
+          "--path <dir>",
+          "--json",
+          "--quiet"
+        ],
+        "when": "Ngay sau khi sinh/sửa asset (.effect, .mtl, .prefab, texture). Đây là check DUY NHẤT chứng minh editor chấp nhận asset — tsc/lint/build đều xanh mà playable vẫn trắng màn hình nếu importer từ chối.",
+        "outputs": [
+          "stdout (JSON khi có --json)"
+        ],
+        "limits": [
+          "Đọc `\"imported\": false` trong .meta, nên chỉ có ý nghĩa khi Cocos Creator đã từng quét thư mục. Asset chưa có .meta thuộc về `verify.all` (check Meta Files Integrity).",
+          "Lý do lỗi lấy từ log của editor; log bị xoay vòng khi khởi động lại nên có thể chỉ báo được \"chưa import\" mà không có message."
+        ],
+        "verify": null,
+        "status": "ok"
+      },
+      {
         "id": "verify.runtime",
         "title": "Smoke test playable đã build bằng Chrome headless",
         "run": "npm run ai:verify:runtime",
@@ -447,6 +497,7 @@
           "--all",
           "--seconds <n>",
           "--min-fps <n>",
+          "--window-size <WxH>",
           "--browser <path>",
           "--json",
           "--no-screenshot"
@@ -458,7 +509,8 @@
         ],
         "limits": [
           "Cần Chrome hoặc Edge trên máy (không dùng puppeteer).",
-          "Bản build riêng cho từng network (applovin/facebook) sẽ báo console.error do thiếu SDK của host — dùng bản `common` để smoke test.",
+          "Mặc định chọn bản `build/common/` vì bản riêng cho từng network (applovin/facebook) luôn console.error do thiếu SDK của host. Dùng --all nếu muốn kiểm tra hết.",
+          "Cửa sổ mặc định 720x1280 (dọc); nguồn landscape cần --window-size 1366x768 để khung hình so sánh được.",
           "Phát hiện khung đơn sắc bằng cách so 3 vùng lấy mẫu, là suy luận theo dấu hiệu chứ không phải phân tích ảnh đầy đủ."
         ],
         "verify": null,

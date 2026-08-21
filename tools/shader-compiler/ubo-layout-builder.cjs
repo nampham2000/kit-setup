@@ -89,7 +89,32 @@ function buildStd140Ubo(fields, optimizeOrder = true, options = {}) {
     };
   }
 
+  /*
+   * Đóng gói scalar vào lát cắt vec4.
+   *
+   * Một uber-shader có thể phơi hơn trăm scalar (AllIn1SpriteShader: 134 float).
+   * Khai báo từng cái rời trong UBO là đánh cược vào quy tắc dồn scalar của std140
+   * — phần dễ sai nhất trong bố cục uniform của Cocos, và sai thì không có lỗi biên
+   * dịch, chỉ ra giá trị rác. Gộp bốn scalar vào một `vec4` rồi phơi lại từng cái
+   * qua cú pháp `target:` của CCEffect thì UBO chỉ còn vec4 mà material vẫn gọi
+   * property bằng tên gốc.
+   *
+   * Chỉ bật khi vượt ngưỡng: shader nhỏ giữ nguyên bố cục cũ, golden fixture không lệch.
+   */
+  const packThreshold = options.packScalarsThreshold;
+  const LANES = ['x', 'y', 'z', 'w'];
+  const isPackable = (f) => {
+    const t = normalizeType(f.type || f.cocosType);
+    return (t === 'float' || t === 'int' || t === 'bool') && !(f.arraySize > 0);
+  };
+  let packedScalars = [];
+  const scalarAliases = {};
+
   let ordered = [...uboCandidates];
+  if (packThreshold && ordered.filter(isPackable).length > packThreshold) {
+    packedScalars = ordered.filter(isPackable);
+    ordered = ordered.filter((f) => !isPackable(f));
+  }
   if (optimizeOrder) {
     // Sort order: mat4, mat3, mat2, vec4, vec3, vec2, float/int/bool
     const typePriority = { mat4: 0, mat3: 1, mat2: 2, vec4: 3, vec3: 4, vec2: 5, float: 6, int: 7, bool: 8 };
@@ -160,6 +185,34 @@ function buildStd140Ubo(fields, optimizeOrder = true, options = {}) {
     currentOffset += size;
   }
 
+  // Các lát vec4 chứa scalar đã gộp, đặt sau cùng để phần còn lại giữ nguyên bố cục.
+  if (packedScalars.length) {
+    const misaligned = currentOffset % 16;
+    if (misaligned !== 0) {
+      const need = 16 - misaligned;
+      if (need === 4) emittedStatements.push(`  float _pad${padCounter++};`);
+      else if (need === 8) emittedStatements.push(`  vec2 _pad${padCounter++};`);
+      else if (need === 12) { emittedStatements.push(`  float _pad${padCounter++};`); emittedStatements.push(`  vec2 _pad${padCounter++};`); }
+      currentOffset += need;
+    }
+    for (let i = 0; i < packedScalars.length; i += 4) {
+      const slot = `pack${i / 4}`;
+      emittedStatements.push(`  vec4 ${slot};`);
+      layoutFields.push({
+        name: slot, type: 'vec4', typeKey: 'vec4',
+        offset: currentOffset, size: 16, alignment: 16,
+        arraySize: 0, packedScalars: [],
+      });
+      for (let lane = 0; lane < 4 && i + lane < packedScalars.length; lane++) {
+        const f = packedScalars[i + lane];
+        const original = f.name || f.cocosName;
+        scalarAliases[original] = `${slot}.${LANES[lane]}`;
+        layoutFields[layoutFields.length - 1].packedScalars.push(original);
+      }
+      currentOffset += 16;
+    }
+  }
+
   // Round up total UBO size to multiple of 16
   const totalRemainder = currentOffset % 16;
   const totalSize = totalRemainder === 0 ? currentOffset : currentOffset + (16 - totalRemainder);
@@ -177,6 +230,9 @@ function buildStd140Ubo(fields, optimizeOrder = true, options = {}) {
     fields: layoutFields,
     totalSize,
     diagnostics,
+    // Tên gốc -> lát cắt vec4. Rỗng khi không đóng gói. Generator dùng để sinh
+    // `#define` cho thân shader và `target:` cho khối properties.
+    scalarAliases,
   };
 }
 

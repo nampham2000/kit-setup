@@ -29,6 +29,167 @@ const DEFAULT_PRECISION_CONFIG = {
   min16float: 'mediump',
 };
 
+/**
+ * Toán tử `%` trên số thực.
+ *
+ * HLSL cho phép `a % b` với float và hiểu là fmod. GLSL thì `%` CHỈ dùng cho số
+ * nguyên — để nguyên là lỗi biên dịch, không phải chỉ khác kết quả. Vì vậy phải
+ * hạ xuống hmod().
+ *
+ * Chỉ nhận dạng vế trái là một nhóm ngoặc — `(...) % X` là hình dạng gần như duy
+ * nhất trong shader Unity thật (`((_Time.y + seed) * speed) % 1`). Biến đếm vòng
+ * lặp được viết `i % 2` chứ không ai viết `(i) % 2`, nên phép so khớp hẹp này
+ * tránh đụng vào modulo nguyên hợp lệ.
+ */
+function lowerFloatModulo(code) {
+    // Mỗi lượt thay ĐÚNG MỘT toán tử rồi quét lại từ đầu trên chuỗi mới.
+    // `%` lồng nhau là chuyện thường trong shader Unity
+    // (`((uv.y + ((t % 1) * speed)) % total)`), và nếu vừa quét vừa nối chuỗi thì
+    // sau lần thay đầu tiên các chỉ số cũ trỏ vào văn bản đã đổi -- kết quả là
+    // đoạn bị nhân đôi và mất ngoặc. Chậm hơn nhưng không có lớp trạng thái nào
+    // để sai.
+    const MAX_PASSES = 512;
+    for (let pass = 0; pass < MAX_PASSES; pass++) {
+        const replaced = replaceFirstFloatModulo(code);
+        if (replaced === null) return code;
+        code = replaced;
+    }
+    return code;
+}
+
+/** Thay toán tử `%` khớp đầu tiên bằng hmod(); trả null nếu không còn cái nào. */
+function replaceFirstFloatModulo(code) {
+    for (let pct = code.indexOf('%'); pct >= 0; pct = code.indexOf('%', pct + 1)) {
+        // Vế trái phải kết thúc bằng ')' — tìm ngoặc mở tương ứng.
+        let j = pct - 1;
+        while (j >= 0 && /\s/.test(code[j])) j--;
+        if (j < 0 || code[j] !== ')') continue;
+
+        let depth = 0;
+        let open = -1;
+        for (let k = j; k >= 0; k--) {
+            if (code[k] === ')') depth++;
+            else if (code[k] === '(') { depth--; if (depth === 0) { open = k; break; } }
+        }
+        if (open < 0) continue;
+        // `foo(...) % x` là lời gọi hàm, không phải nhóm ngoặc: vẫn là modulo float,
+        // nhưng vế trái phải bao gồm cả tên hàm.
+        let lhsStart = open;
+        const nameMatch = /[A-Za-z_]\w*$/.exec(code.slice(0, open));
+        if (nameMatch) lhsStart = open - nameMatch[0].length;
+
+        // Vế phải: số, định danh (kèm swizzle), hoặc một nhóm ngoặc.
+        let r = pct + 1;
+        while (r < code.length && /\s/.test(code[r])) r++;
+        let end = r;
+        if (code[r] === '(') {
+            let d = 0;
+            for (; end < code.length; end++) {
+                if (code[end] === '(') d++;
+                else if (code[end] === ')') { d--; if (d === 0) { end++; break; } }
+            }
+        } else {
+            const m = /^[A-Za-z_0-9.]+/.exec(code.slice(r));
+            if (!m) continue;
+            end = r + m[0].length;
+        }
+
+        const lhs = code.slice(lhsStart, j + 1);
+        const rhs = code.slice(r, end);
+        return code.slice(0, lhsStart) + `hmod(${lhs}, ${rhs})` + code.slice(end);
+    }
+    return null;
+}
+
+/**
+ * Constructor ma trận: HLSL nhận theo HÀNG, GLSL nhận theo CỘT.
+ *
+ * `float2x2(c, -s, s, c)` và `mat2(c, -s, s, c)` là hai ma trận chuyển vị của
+ * nhau, nên mọi mul() phía sau đều ra sai — mà vẫn compile sạch. Chuyển vị ngay
+ * tại constructor thì `mul(M, v)` -> `M * v` và `mul(v, M)` -> `v * M` tự khắc đúng.
+ */
+function transposeMatrixConstructors(code) {
+    for (const [type, n] of [['2x2', 2], ['3x3', 3], ['4x4', 4]]) {
+        const re = new RegExp(`\\b(?:float|half|min16float)${type}\\s*\\(`, 'g');
+        let m;
+        while ((m = re.exec(code)) !== null) {
+            const open = m.index + m[0].length - 1;
+            let depth = 0;
+            let close = -1;
+            for (let k = open; k < code.length; k++) {
+                if (code[k] === '(') depth++;
+                else if (code[k] === ')') { depth--; if (depth === 0) { close = k; break; } }
+            }
+            if (close < 0) continue;
+            const args = splitArgs(code.slice(open + 1, close));
+            let replacement;
+            if (args.length === n * n) {
+                const t = [];
+                for (let col = 0; col < n; col++) {
+                    for (let row = 0; row < n; row++) t.push(args[row * n + col].trim());
+                }
+                replacement = `mat${n}(${t.join(', ')})`;
+            } else if (args.length === n) {
+                // Dạng dựng từ n vector = n HÀNG trong HLSL; không hoán vị được
+                // bằng văn bản nên bọc transpose().
+                replacement = `transpose(mat${n}(${args.map((a) => a.trim()).join(', ')}))`;
+            } else {
+                continue;   // mat(scalar) hoặc dạng lạ: để nguyên
+            }
+            code = code.slice(0, m.index) + replacement + code.slice(close + 1);
+            re.lastIndex = m.index + replacement.length;
+        }
+    }
+    return code;
+}
+
+/**
+ * Cast kiểu C sang ma trận: `(mat3)expr` -> `mat3(expr)`.
+ *
+ * HLSL cho phép `(float3x3)m`; GLSL không có cast kiểu C, chỉ có constructor.
+ * Nhánh xử lý cast trong mul() chỉ khớp `(float3x3)<định danh>`, nên khi toán hạng
+ * là một lời gọi — `mul((half3x3)unity_CameraToWorld, v)` sau khi
+ * `unity_CameraToWorld` đã hạ thành `inverse(cc_matView)` — cast bị giữ nguyên và
+ * GLSL không parse được. Xử lý ở đây thì mọi vị trí cast đều đúng, không riêng mul().
+ */
+function lowerMatrixCasts(code) {
+    const re = /\(\s*(mat[234])\s*\)\s*/g;
+    let m;
+    while ((m = re.exec(code)) !== null) {
+        const type = m[1];
+        let i = m.index + m[0].length;
+        const start = i;
+        // Toán hạng: định danh (có thể kèm lời gọi/chỉ số) hoặc một nhóm ngoặc.
+        if (code[i] === '(') {
+            let d = 0;
+            for (; i < code.length; i++) {
+                if (code[i] === '(') d++;
+                else if (code[i] === ')') { d--; if (d === 0) { i++; break; } }
+            }
+        } else {
+            const id = /^[A-Za-z_]\w*/.exec(code.slice(i));
+            if (!id) continue;
+            i += id[0].length;
+            // Nuốt luôn phần gọi hàm hoặc chỉ số ngay sau tên.
+            while (code[i] === '(' || code[i] === '[') {
+                const openCh = code[i];
+                const closeCh = openCh === '(' ? ')' : ']';
+                let d = 0;
+                for (; i < code.length; i++) {
+                    if (code[i] === openCh) d++;
+                    else if (code[i] === closeCh) { d--; if (d === 0) { i++; break; } }
+                }
+            }
+        }
+        const operand = code.slice(start, i);
+        if (!operand) continue;
+        const replacement = `${type}(${operand})`;
+        code = code.slice(0, m.index) + replacement + code.slice(i);
+        re.lastIndex = m.index + replacement.length;
+    }
+    return code;
+}
+
 function lowerHlslToGlsl(code, options = {}) {
   if (!code) return '';
 
@@ -218,7 +379,20 @@ function lowerHlslToGlsl(code, options = {}) {
     return `textureLod(${a[0]}, (${a[1]}).xy, (${a[1]}).w)`;
   });
   out = replaceCall(out, 'tex2Dproj', (a) => (a.length >= 2 ? `textureProj(${a[0]}, ${a[1]})` : null));
-  out = replaceCall(out, 'tex2D', (a) => (a.length >= 2 ? `texture(${a[0]}, ${a[1]})` : null));
+  /*
+   * Gốc texture của Unity ở dưới-trái, của Cocos ở trên-trái.
+   *
+   * Mặc định TẮT: bật lên sẽ đổi hình của mọi effect đã sinh trước đây, và với
+   * shader toàn màn hình / thuần thủ tục thì không có quy ước UV của mesh để mà
+   * hiệu chỉnh. Bật bằng --unity-uv khi shader chạy trên hình học mang UV từ Unity.
+   *
+   * Vì sao không lật UV của mesh thay thế: cách đó làm ảnh hiện đúng nhưng LẶNG LẼ
+   * đảo ngược mọi cách dùng uv.y mang tính thủ tục (gradient, gió cỏ, sọc hologram,
+   * UV clipping). Lật ở chỗ lấy mẫu giữ nguyên toàn bộ shader trong không gian UV
+   * của Unity.
+   */
+  const sampleFn = options.unityUv ? 'texU' : 'texture';
+  out = replaceCall(out, 'tex2D', (a) => (a.length >= 2 ? `${sampleFn}(${a[0]}, ${a[1]})` : null));
   out = replaceCall(out, 'texCUBElod', (a) => (a.length >= 2 ? `textureLod(${a[0]}, (${a[1]}).xyz, (${a[1]}).w)` : null));
   out = replaceCall(out, 'texCUBE', (a) => (a.length >= 2 ? `texture(${a[0]}, ${a[1]})` : null));
   out = replaceCall(out, 'tex3Dlod', (a) => (a.length >= 2 ? `textureLod(${a[0]}, (${a[1]}).xyz, (${a[1]}).w)` : null));
@@ -232,10 +406,17 @@ function lowerHlslToGlsl(code, options = {}) {
   out = out.replace(/\bddx\s*\(/g, 'dFdx(');
   out = out.replace(/\bddy\s*\(/g, 'dFdy(');
   out = replaceCall(out, 'atan2', (a) => (a.length === 2 ? `atan(${a[0]}, ${a[1]})` : null));
-  out = replaceCall(out, 'fmod', (a) => (a.length === 2 ? `mod(${a[0]}, ${a[1]})` : null));
+
+  // HLSL fmod() cắt về 0; GLSL mod() làm tròn xuống. Hai hàm chỉ trùng nhau khi
+  // cả hai toán hạng dương — mà scroll speed và offset âm là chuyện thường. hmod()
+  // trong compat/unity-compat.glsl giữ đúng ngữ nghĩa của HLSL.
+  out = replaceCall(out, 'fmod', (a) => (a.length === 2 ? `hmod(${a[0]}, ${a[1]})` : null));
+  out = lowerFloatModulo(out);
 
   // clip() intrinsic -- statement form; the expression may carry trailing arithmetic
   out = replaceCallStatement(out, 'clip', (a, expr) => `if ((${expr.trim()}) < 0.0) { discard; }`);
+
+  out = transposeMatrixConstructors(out);
 
   // 7. mul() Overloads
   out = replaceCall(out, 'mul', (a) => {
@@ -275,6 +456,9 @@ function lowerHlslToGlsl(code, options = {}) {
   out = out.replace(/\bbool2\b/g, 'bvec2');
 
   out = out.replace(/\binline\s+/g, '');
+
+  // Sau khi tên kiểu đã đổi sang matN: chuyển cast kiểu C thành constructor.
+  out = lowerMatrixCasts(out);
 
   // 9. URP & ShaderGraph Library Functions Lowering
   out = lowerUrpFunctions(out);

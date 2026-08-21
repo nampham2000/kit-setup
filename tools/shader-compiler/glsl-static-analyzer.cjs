@@ -318,6 +318,15 @@ function checkPropertyBinding(effectText, effectYaml, diags) {
   const declaredProps = new Set(
     [...effectYaml.matchAll(/^\s+([A-Za-z_]\w*):\s*\{/gm)].map(x => x[1])
   );
+  // Cocos lets a property write into a slice of a UBO member:
+  //     alphaThreshold: { value: 0.5, target: colorScaleAndCutoff.w }
+  // The member is then bound through that target, not by sharing its name. Without
+  // reading `target:`, any effect that packs scalars into vec4 slots reports every
+  // slot as unbound -- measured: 34 false warnings on a 171-property uber-shader,
+  // which is enough noise to train people to ignore the gate.
+  for (const t of effectYaml.matchAll(/\btarget:\s*([A-Za-z_]\w*)/g)) {
+    declaredProps.add(t[1]);
+  }
   const members = new Set();
   for (const blk of effectText.matchAll(/uniform\s+\w+\s*\{([\s\S]*?)\}/g)) {
     for (const mm of blk[1].matchAll(/^\s*(?:lowp|mediump|highp\s+)?[A-Za-z_]\w*\s+([A-Za-z_]\w*)\s*(?:\[[^\]]*\])?\s*;/gm)) {

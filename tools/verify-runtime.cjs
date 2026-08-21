@@ -30,10 +30,11 @@ Usage:
   npm run verify:runtime
 
 Options:
-  --file <path>        File HTML cần kiểm tra. Mặc định: build mới nhất trong build/.
+  --file <path>        File HTML cần kiểm tra. Mặc định: bản build/common/ (bản network luôn báo lỗi thiếu SDK).
   --all                Kiểm tra mọi file HTML trong build/.
   --seconds <n>        Thời gian chạy để đo FPS. Default: 6.
   --min-fps <n>        FPS tối thiểu coi là đạt. Default: 20.
+  --window-size <WxH>  Kích thước cửa sổ Chrome. Default: 720x1280 (dọc).
   --browser <path>     Đường dẫn Chrome/Edge. Mặc định: tự tìm.
   --screenshot <dir>   Nơi lưu ảnh chụp. Default: .unity/runtime-shots/
   --no-screenshot      Không chụp ảnh.
@@ -81,8 +82,19 @@ function findBuiltHtml(options) {
   walk(buildRoot);
   if (!found.length) return [];
   if (options.all) return found.sort();
-  // Mặc định lấy file mới nhất — thường là bản vừa build.
-  return [found.sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs)[0]];
+
+  const byNewest = found.sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
+
+  // Bản build cho từng ad network (applovin/facebook/...) LUÔN console.error vì
+  // thiếu SDK của host, nên chọn theo mtime sẽ gần như chắc chắn FAIL oan. Chỉ bản
+  // `common` là chạy độc lập được — ưu tiên nó, và trong đó ưu tiên bản không
+  // minify để stack trace còn đọc được.
+  const common = byNewest.filter((f) => /[\\/]common[\\/]/.test(f));
+  if (common.length) {
+    const readable = common.filter((f) => !/_min\.html?$/i.test(f));
+    return [(readable.length ? readable : common)[0]];
+  }
+  return [byNewest[0]];
 }
 
 // ──────────────────────────────────────────────────────────────── CDP ──
@@ -206,7 +218,7 @@ async function runOne(htmlFile, options) {
     '--disable-extensions',
     '--mute-audio',
     '--allow-file-access-from-files',
-    '--window-size=720,1280',
+    `--window-size=${options.windowSize || '720,1280'}`,
     `--remote-debugging-port=${port}`,
     `--user-data-dir=${userDataDir}`,
     'about:blank',
@@ -335,10 +347,17 @@ async function runOne(htmlFile, options) {
 
 // ────────────────────────────────────────────────────────────── runner ──
 
+/** Chấp nhận '1280x720' hoặc '1280,720'; Chrome cần dấu phẩy. */
+function normaliseWindowSize(value) {
+  const m = /^(\d+)\s*[x,]\s*(\d+)$/i.exec(String(value || '').trim());
+  return m ? m[1] + ',' + m[2] : '720,1280';
+}
+
 function parseArgs(argv) {
   const o = {
     seconds: 6, minFps: 20, all: false, json: false, noScreenshot: false,
     screenshotDir: path.join('.unity', 'runtime-shots'), help: false,
+    windowSize: '720,1280',
   };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
@@ -352,6 +371,8 @@ function parseArgs(argv) {
     if (a.startsWith('--seconds=')) { o.seconds = Number(a.split('=')[1]) || 6; continue; }
     if (a === '--min-fps') { o.minFps = Number(argv[++i]) || 20; continue; }
     if (a.startsWith('--min-fps=')) { o.minFps = Number(a.split('=')[1]) || 20; continue; }
+    if (a === '--window-size') { o.windowSize = normaliseWindowSize(argv[++i]); continue; }
+    if (a.startsWith('--window-size=')) { o.windowSize = normaliseWindowSize(a.split('=')[1]); continue; }
     if (a === '--browser') { o.browser = argv[++i]; continue; }
     if (a.startsWith('--browser=')) { o.browser = a.split('=')[1]; continue; }
     if (a === '--screenshot') { o.screenshotDir = argv[++i]; continue; }
