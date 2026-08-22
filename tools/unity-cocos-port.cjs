@@ -4,6 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const binarySerializedFile = require('./lib/unity-serialized-file.cjs');
 const {
   ROOT_DIR,
   BUILTIN_DEFAULT_SPRITE_RENDERER_MATERIAL_UUID,
@@ -812,8 +813,40 @@ function parseUnityScalar(raw, keyHint = '') {
   return value;
 }
 
+/**
+ * Cache text YAML dựng lại từ asset nhị phân — mỗi file chỉ giải một lần dù
+ * porter đọc lại nhiều lượt (material được tra theo từng renderer).
+ */
+const BINARY_YAML_CACHE = new Map();
+
+/**
+ * Đọc asset Unity dạng text HOẶC nhị phân.
+ *
+ * Package Asset Store thường ship với Asset Serialization = Force Binary. Trước
+ * đây `readFileSync(file, 'utf8')` trả mojibake, không khớp `--- !u!`, nên hàm
+ * trả mảng rỗng và porter lặng lẽ rơi về material mặc định. Giờ file nhị phân
+ * được giải theo type tree rồi dựng lại thành text YAML, để mọi helper regex
+ * bên dưới dùng chung một đường đọc đã được kiểm chứng.
+ */
+function readUnityAssetText(file) {
+  if (!binarySerializedFile.isBinarySerializedFile(file)) {
+    return fs.readFileSync(file, 'utf8');
+  }
+  let stamp = '0';
+  try {
+    const st = fs.statSync(file);
+    stamp = `${st.size}:${st.mtimeMs}`;
+  } catch (e) { /* file biến mất giữa chừng — cứ giải lại */ }
+  const key = `${file}::${stamp}`;
+  if (BINARY_YAML_CACHE.has(key)) return BINARY_YAML_CACHE.get(key);
+  const parsed = binarySerializedFile.parseBinaryUnityFile(file);
+  const text = parsed.ok ? binarySerializedFile.binaryDocsToUnityYaml(parsed.docs) : '';
+  BINARY_YAML_CACHE.set(key, text);
+  return text;
+}
+
 function parseUnityYaml(file) {
-  const text = fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n');
+  const text = readUnityAssetText(file).replace(/\r\n/g, '\n');
   const docs = [];
   let current = null;
   for (const line of text.split('\n')) {

@@ -6,13 +6,40 @@
  * slower and looser than we need here, so this parses exactly that subset.
  */
 
+/**
+ * Gấp dòng của scalar YAML có nháy trải nhiều dòng.
+ * Một xuống dòng -> khoảng trắng; N xuống dòng liên tiếp -> N-1 ký tự '\n'.
+ */
+function foldQuoted (body) {
+    const lines = body.split('\n').map((l, i) => (i === 0 ? l : l.replace(/^[ \t]+/, '')));
+    let out = '';
+    let breaks = 0;
+    for (let i = 0; i < lines.length; i += 1) {
+        if (i > 0) {
+            if (lines[i] === '') { breaks += 1; continue; }
+            out += breaks > 0 ? '\n'.repeat(breaks) : ' ';
+            breaks = 0;
+        }
+        out += lines[i];
+    }
+    // Dòng trống ở cuối: n lần xuống dòng -> n-1 ký tự '\n' (n=1 chỉ là khoảng
+    // trắng cuối, YAML bỏ đi).
+    if (breaks > 1) out += '\n'.repeat(breaks - 1);
+    return out;
+}
+
 function parseScalar (raw) {
     const s = raw.trim();
     if (s === '') return '';
     if (s[0] === '{' || s[0] === '[') return parseFlow(s);
-    if (s[0] === "'") return s.slice(1, -1).replace(/''/g, "'");
+    if (s[0] === "'") {
+        const close = findClosingQuote(s, "'");
+        return foldQuoted(s.slice(1, close < 0 ? s.length : close)).replace(/''/g, "'");
+    }
     if (s[0] === '"') {
-        try { return JSON.parse(s); } catch (e) { return s.slice(1, -1); }
+        const close = findClosingQuote(s, '"');
+        const body = s.slice(1, close < 0 ? s.length : close);
+        try { return JSON.parse(`"${body.replace(/\n/g, '\\n')}"`); } catch (e) { return foldQuoted(body); }
     }
     if (/^-?\d+$/.test(s)) {
         // Unity fileIDs can be 19 digits. Rounding one to a double silently breaks
@@ -22,6 +49,22 @@ function parseScalar (raw) {
     }
     if (/^-?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?$/.test(s)) return parseFloat(s);
     return s;
+}
+
+/**
+ * Vị trí nháy đóng của scalar bắt đầu ở index 0, hoặc -1 nếu chưa đóng.
+ * Với nháy đơn, `''` là ký tự nháy escape chứ không phải kết thúc.
+ */
+function findClosingQuote (s, q) {
+    for (let i = 1; i < s.length; i += 1) {
+        if (s[i] !== q) {
+            if (q === '"' && s[i] === '\\') i += 1;
+            continue;
+        }
+        if (q === "'" && s[i + 1] === "'") { i += 1; continue; }
+        return i;
+    }
+    return -1;
 }
 
 /** Parse a flow mapping/sequence such as `{fileID: 0, guid: ab, type: 3}` or `[]`. */
@@ -129,6 +172,21 @@ function parseMap (lines, from, to, indent) {
         const inlineVal = trimmed.slice(ci + 1);
 
         if (inlineVal.trim() !== '') {
+            // Scalar có nháy CÓ THỂ trải nhiều dòng (`m_Text: 'NEXT` ... `'`).
+            // Cắt ở dòng đầu thì chuỗi bị mất đuôi mà không có lỗi nào báo ra.
+            const head = inlineVal.trim();
+            if ((head[0] === "'" || head[0] === '"') && findClosingQuote(head, head[0]) < 0) {
+                const parts = [head];
+                let j = i + 1;
+                while (j < to) {
+                    parts.push(lines[j]);
+                    if (findClosingQuote(parts.join('\n'), head[0]) >= 0) break;
+                    j++;
+                }
+                out[key] = parseScalar(parts.join('\n'));
+                i = j + 1;
+                continue;
+            }
             out[key] = parseScalar(inlineVal);
             i++;
             continue;

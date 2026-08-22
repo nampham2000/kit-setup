@@ -40,6 +40,9 @@ Options:
   --browser <path>     Đường dẫn Chrome/Edge. Mặc định: tự tìm.
   --screenshot <dir>   Nơi lưu ảnh chụp. Default: .unity/runtime-shots/
   --no-screenshot      Không chụp ảnh.
+  --eval <js>          Chạy biểu thức JS TRONG trang sau khi chạy xong và in kết
+                       quả (evalResult). Dùng để soi cây scene lúc runtime khi
+                       playable boot được nhưng vẽ sai.
   --json               Xuất JSON (dùng cho AI agent / CI).
   --help               Hiện trợ giúp và thoát.
 
@@ -331,6 +334,32 @@ async function runOne(target, options) {
     }
     result.uniformFrame = patches.length >= 2 && patches.every((p) => p === patches[0]);
 
+    // --eval: chạy một biểu thức TRONG trang đang chạy và trả kết quả ra JSON.
+    //
+    // Vì sao cần: khi playable boot được nhưng vẽ sai (node ở nhầm chỗ, material
+    // rỗng, prefab chưa nạp), ảnh chụp chỉ cho biết "sai" chứ không nói "sai ở
+    // đâu". Không có bước này agent phải rải console.log rồi build lại từng
+    // vòng. Đây là đường duy nhất đọc được cây scene lúc chạy mà không cần
+    // trình duyệt hiển thị.
+    if (options.evalExpression) {
+      try {
+        const evaluated = await session.send('Runtime.evaluate', {
+          expression: options.evalExpression,
+          returnByValue: true,
+          awaitPromise: true,
+        }, sessionId);
+        if (evaluated && evaluated.exceptionDetails) {
+          result.evalError = evaluated.exceptionDetails.exception
+            ? (evaluated.exceptionDetails.exception.description || evaluated.exceptionDetails.text)
+            : evaluated.exceptionDetails.text;
+        } else {
+          result.evalResult = evaluated && evaluated.result ? evaluated.result.value : undefined;
+        }
+      } catch (err) {
+        result.evalError = String(err && err.message ? err.message : err);
+      }
+    }
+
     if (!options.noScreenshot) {
       const shot = await session.send('Page.captureScreenshot', { format: 'png' }, sessionId);
       if (shot && shot.data) {
@@ -373,7 +402,7 @@ function normaliseWindowSize(value) {
 function parseArgs(argv) {
   const o = {
     seconds: 6, minFps: 20, all: false, json: false, noScreenshot: false,
-    screenshotDir: path.join('.unity', 'runtime-shots'), help: false,
+    screenshotDir: path.join('.unity', 'runtime-shots'), help: false, evalExpression: '',
     windowSize: '720,1280',
   };
   for (let i = 0; i < argv.length; i += 1) {
@@ -394,6 +423,8 @@ function parseArgs(argv) {
     if (a.startsWith('--window-size=')) { o.windowSize = normaliseWindowSize(a.split('=')[1]); continue; }
     if (a === '--browser') { o.browser = argv[++i]; continue; }
     if (a.startsWith('--browser=')) { o.browser = a.split('=')[1]; continue; }
+    if (a === '--eval') { o.evalExpression = argv[++i]; continue; }
+    if (a.startsWith('--eval=')) { o.evalExpression = a.slice('--eval='.length); continue; }
     if (a === '--screenshot') { o.screenshotDir = argv[++i]; continue; }
     if (a.startsWith('--screenshot=')) { o.screenshotDir = a.split('=')[1]; continue; }
   }

@@ -31,6 +31,15 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { parseUnityFile } = require('./lib/unity-yaml.cjs');
+const { isBinarySerializedFile, parseBinaryUnityFile, binaryDocsToUnityYaml } = require('./lib/unity-serialized-file.cjs');
+
+/** Đọc asset Unity dù là text YAML hay SerializedFile nhị phân. */
+function readUnityDocs (file) {
+    if (!isBinarySerializedFile(file)) return parseUnityFile(fs.readFileSync(file, 'utf8'));
+    const parsed = parseBinaryUnityFile(file);
+    if (!parsed.ok) return [];
+    return parseUnityFile(binaryDocsToUnityYaml(parsed.docs));
+}
 
 const USAGE = `Unity Scene -> Cocos Placeholder Scene
 
@@ -217,9 +226,13 @@ const UI_COMPONENT_GUIDS = {
 };
 
 /**
- * Component uGUI/EventSystem nằm ngoài Assets/ nên không có .cs để lập chỉ mục,
- * và guid của chúng khác nhau giữa các phiên bản package. Nhận diện bằng chữ ký
- * field khi bảng guid không khớp — thà đoán đúng tên còn hơn để `<guid:...>`.
+ * Component uGUI/EventSystem nằm ngoài Assets/ nên không có .cs để lập chỉ mục.
+ *
+ * Từ khi uGUI thành package có asmdef, MỌI component uGUI dùng CHUNG một guid
+ * (`f70555f1…` = UnityEngine.UI.dll) và chỉ khác nhau ở `fileID`. Bảng
+ * UI_COMPONENT_GUIDS theo guid vì thế luôn trượt trên project Unity hiện đại —
+ * Button/Shadow/Outline đều hiện thành `<guid:f70555f1…>`. Nhận diện bằng chữ
+ * ký field là cách duy nhất còn đúng qua các phiên bản.
  */
 function guessComponentType (fields) {
     if ('m_Text' in fields && 'm_FontData' in fields) return 'Text';
@@ -228,9 +241,30 @@ function guessComponentType (fields) {
     if ('m_IgnoreReversedGraphics' in fields) return 'GraphicRaycaster';
     if ('m_FirstSelected' in fields) return 'EventSystem';
     if ('m_HorizontalAxis' in fields) return 'StandaloneInputModule';
+    if ('m_OnClick' in fields && 'm_Navigation' in fields) return 'Button';
+    if ('m_OnValueChanged' in fields && 'm_IsOn' in fields) return 'Toggle';
+    if ('m_OnValueChanged' in fields && 'm_FillRect' in fields) return 'Slider';
+    if ('m_Navigation' in fields && 'm_Transition' in fields) return 'Selectable';
+    // Outline kế thừa Shadow và serialize y hệt — không phân biệt được, báo cả hai.
+    if ('m_EffectColor' in fields && 'm_EffectDistance' in fields) return 'Shadow|Outline';
+    if ('m_Padding' in fields && 'm_ChildAlignment' in fields) return 'LayoutGroup';
+    if ('m_HorizontalFit' in fields || 'm_VerticalFit' in fields) return 'ContentSizeFitter';
     if ('sharedProfile' in fields && 'blendDistance' in fields) return 'PostProcessVolume';
     if ('volumeTrigger' in fields && 'antialiasingMode' in fields) return 'PostProcessLayer';
     return null;
+}
+
+/** Lấy các lời gọi UnityEvent đã lưu (`m_PersistentCalls`) ra dạng phẳng. */
+function readPersistentCalls (unityEvent) {
+    const calls = unityEvent && unityEvent.m_PersistentCalls && unityEvent.m_PersistentCalls.m_Calls;
+    if (!Array.isArray(calls)) return [];
+    return calls
+        .filter((c) => c && c.m_MethodName)
+        .map((c) => ({
+            targetFileID: c.m_Target && c.m_Target.fileID != null ? String(c.m_Target.fileID) : '0',
+            method: String(c.m_MethodName),
+            argument: c.m_Arguments || null,
+        }));
 }
 
 const MB_INTERNAL = new Set([
@@ -245,7 +279,7 @@ function portScene (options) {
         if (file.endsWith('.cs')) scriptNames.set(guid, path.basename(file, '.cs'));
     }
 
-    const docs = parseUnityFile(fs.readFileSync(options.scene, 'utf8'));
+    const docs = readUnityDocs(options.scene);
     const byId = new Map(docs.map((d) => [d.fileID, d]));
     const compsOf = new Map();
     for (const d of docs) {
@@ -285,12 +319,15 @@ function portScene (options) {
         },
         stats: {},
         nodes: [],
-        unresolved: { scripts: [], sprites: [], materials: [], fonts: [], animators: [], particles: [], other: [] },
+        unresolved: {
+            scripts: [], sprites: [], materials: [], fonts: [], animators: [],
+            particles: [], prefabInstances: [], other: [],
+        },
     };
 
     const stats = {
         gameObjects: 0, cameras: 0, labels: 0, sprites: 0, canvases: 0,
-        monoBehaviours: 0, animators: 0, particles: 0,
+        monoBehaviours: 0, animators: 0, particles: 0, prefabInstances: 0,
     };
 
     /** Giải `{fileID, guid}` thành mô tả asset cho wiring. */
@@ -305,8 +342,191 @@ function portScene (options) {
         };
     }
 
+    // ─────────────────────────────────────────── prefab instances ──
+    //
+    // Prefab được instantiate trong scene KHÔNG có GameObject/Transform đầy đủ
+    // trong file .unity. Unity chỉ ghi:
+    //   * một doc `PrefabInstance` (classId 1001) chứa m_SourcePrefab + danh
+    //     sách m_Modifications (chỉ những field khác prefab gốc), và
+    //   * các doc Transform/GameObject "stripped" — RỖNG, chỉ trỏ ngược về
+    //     PrefabInstance — để node khác trong scene tham chiếu tới được.
+    //
+    // Code cũ coi stripped Transform như transform thường (`m_GameObject` là
+    // undefined -> crash), và bỏ qua hoàn toàn 1001. Kết quả: mọi scene có
+    // prefab instance đều không port được. Ở đây ta dựng lại node từ prefab gốc
+    // + modification, rồi ghi vào wiring để agent nối .prefab đã port.
+
+    const prefabInstances = new Map();               // fileID -> doc 1001
+    for (const d of docs) if (d.classId === 1001) prefabInstances.set(String(d.fileID), d);
+
+    const emittedPrefabInstances = new Set();
+    /** PrefabInstance fileID -> path/sceneItemId, để giải PPtr trong script. */
+    const nodePathByStrippedGo = new Map();
+    const sceneIdByStrippedGo = new Map();
+    /** fileID bất kỳ (GameObject/Transform/Component) -> path của node chứa nó. */
+    const objectOwner = new Map();
+
+    /** stripped transform/GameObject fileID -> PrefabInstance fileID */
+    const strippedOwner = new Map();
+    for (const d of docs) {
+        const owner = d.data && d.data.m_PrefabInstance && d.data.m_PrefabInstance.fileID;
+        if (owner && String(owner) !== '0') strippedOwner.set(String(d.fileID), String(owner));
+    }
+
+    /** Cache prefab gốc đã đọc: guid -> { rootGo, rootTr, name } */
+    const prefabRootCache = new Map();
+    function readPrefabRoot (guid) {
+        if (prefabRootCache.has(guid)) return prefabRootCache.get(guid);
+        let info = null;
+        const file = guidIndex.get(guid);
+        if (file && fs.existsSync(file)) {
+            try {
+                const pdocs = readUnityDocs(file);
+                const pById = new Map(pdocs.map((d) => [String(d.fileID), d]));
+                const rootTr = pdocs.find((d) => (d.classId === 4 || d.classId === 224)
+                    && d.data.m_GameObject && (!d.data.m_Father || !d.data.m_Father.fileID));
+                const rootGo = rootTr ? pById.get(String(rootTr.data.m_GameObject.fileID)) : null;
+                if (rootTr) {
+                    info = {
+                        name: rootGo && rootGo.data.m_Name != null ? String(rootGo.data.m_Name) : path.basename(file, '.prefab'),
+                        active: rootGo ? num(rootGo.data.m_IsActive, 1) !== 0 : true,
+                        lpos: vec3(rootTr.data.m_LocalPosition),
+                        lrot: {
+                            x: num(rootTr.data.m_LocalRotation && rootTr.data.m_LocalRotation.x),
+                            y: num(rootTr.data.m_LocalRotation && rootTr.data.m_LocalRotation.y),
+                            z: num(rootTr.data.m_LocalRotation && rootTr.data.m_LocalRotation.z),
+                            w: num(rootTr.data.m_LocalRotation && rootTr.data.m_LocalRotation.w, 1),
+                        },
+                        lscale: vec3(rootTr.data.m_LocalScale, 1),
+                        rootTrId: String(rootTr.fileID),
+                        rootGoId: rootGo ? String(rootGo.fileID) : null,
+                    };
+                }
+            } catch (e) { /* prefab hỏng -> coi như không đọc được */ }
+        }
+        prefabRootCache.set(guid, info);
+        return info;
+    }
+
+    /**
+     * m_Modifications là danh sách phẳng `{target, propertyPath, value,
+     * objectReference}`. Chỉ những field trỏ tới ROOT transform / root
+     * GameObject mới ảnh hưởng node gốc của instance; phần còn lại là override
+     * bên trong prefab, ghi lại nguyên văn cho agent.
+     */
+    function applyModifications (pi, base) {
+        const mods = (pi.data.m_Modification && pi.data.m_Modification.m_Modifications) || [];
+        const out = {
+            name: base ? base.name : null,
+            active: base ? base.active : true,
+            lpos: base ? { ...base.lpos } : { x: 0, y: 0, z: 0 },
+            lrot: base ? { ...base.lrot } : { x: 0, y: 0, z: 0, w: 1 },
+            lscale: base ? { ...base.lscale } : { x: 1, y: 1, z: 1 },
+            rootOrder: 0,
+            inner: [],
+        };
+        const rootTargets = new Set([base && base.rootTrId, base && base.rootGoId].filter(Boolean));
+        for (const m of Array.isArray(mods) ? mods : []) {
+            if (!m || typeof m.propertyPath !== 'string') continue;
+            const target = m.target && m.target.fileID != null ? String(m.target.fileID) : '';
+            const raw = m.value;
+            const n = typeof raw === 'number' ? raw : Number(raw);
+            const isRoot = rootTargets.size === 0 || rootTargets.has(target);
+            switch (isRoot ? m.propertyPath : '') {
+                case 'm_Name': out.name = String(raw); continue;
+                case 'm_IsActive': out.active = n !== 0; continue;
+                case 'm_LocalPosition.x': out.lpos.x = n; continue;
+                case 'm_LocalPosition.y': out.lpos.y = n; continue;
+                case 'm_LocalPosition.z': out.lpos.z = n; continue;
+                case 'm_LocalRotation.x': out.lrot.x = n; continue;
+                case 'm_LocalRotation.y': out.lrot.y = n; continue;
+                case 'm_LocalRotation.z': out.lrot.z = n; continue;
+                case 'm_LocalRotation.w': out.lrot.w = n; continue;
+                case 'm_LocalScale.x': out.lscale.x = n; continue;
+                case 'm_LocalScale.y': out.lscale.y = n; continue;
+                case 'm_LocalScale.z': out.lscale.z = n; continue;
+                case 'm_RootOrder': out.rootOrder = n; continue;
+                default: break;
+            }
+            // Override sâu bên trong prefab: giữ nguyên để agent quyết định.
+            if (!/^m_(LocalPosition|LocalRotation|LocalScale|RootOrder|LocalEulerAnglesHint)\./.test(m.propertyPath)) {
+                out.inner.push({
+                    target,
+                    propertyPath: m.propertyPath,
+                    value: raw,
+                    objectReference: m.objectReference && m.objectReference.fileID
+                        ? describeAsset(m.objectReference) : null,
+                });
+            }
+        }
+        return out;
+    }
+
+    /** Node gốc của một PrefabInstance. Trả về sceneItemId hoặc null. */
+    function emitPrefabInstance (pi, parentSceneId, parentPath) {
+        const srcRef = pi.data.m_SourcePrefab || pi.data.m_ParentPrefab;
+        const guid = srcRef && srcRef.guid;
+        const srcFile = guid ? guidIndex.get(guid) : null;
+        const base = guid ? readPrefabRoot(guid) : null;
+        const mod = applyModifications(pi, base);
+        const name = mod.name
+            || (srcFile ? path.basename(srcFile, path.extname(srcFile)) : `PrefabInstance_${pi.fileID}`);
+        const nodePath = parentPath ? `${parentPath}/${name}` : name;
+
+        const node = {
+            __type__: 'cc.Node',
+            _name: name,
+            _objFlags: 0,
+            __editorExtras__: {},
+            _parent: { __id__: parentSceneId },
+            _children: [],
+            _active: mod.active,
+            _components: [],
+            _prefab: null,                            // <- agent nối cc.PrefabInfo hoặc instantiate runtime
+            _lpos: mirrorPos(mod.lpos),
+            _lrot: mirrorRot(mod.lrot),
+            _lscale: { __type__: 'cc.Vec3', ...mod.lscale },
+            _mobility: 0,
+            _layer: LAYER_DEFAULT,
+            _euler: { __type__: 'cc.Vec3', x: 0, y: 0, z: 0 },
+            _id: crypto.randomUUID(),
+        };
+        const nodeId = writer.push(node);
+        stats.prefabInstances += 1;
+        stats.gameObjects += 1;
+
+        nodePathByStrippedGo.set(String(pi.fileID), nodePath);
+        sceneIdByStrippedGo.set(String(pi.fileID), nodeId);
+
+        wiring.nodes.push({ path: nodePath, sceneItemId: nodeId, components: ['(prefab instance — chưa nối)'] });
+        wiring.unresolved.prefabInstances.push({
+            path: nodePath,
+            sceneItemId: nodeId,
+            active: mod.active,
+            sourcePrefab: guid ? describeAsset(srcRef) : null,
+            unityPath: srcFile ? path.relative(path.resolve(options.unityRoot), srcFile).replace(/\\/g, '/') : null,
+            sourceResolved: !!base,
+            rootOrder: mod.rootOrder,
+            innerOverrides: mod.inner,
+            todo: base
+                ? 'Port prefab nguồn (port.prefab) rồi instantiate vào node này — bằng cc.PrefabInfo trong .scene hoặc instantiate lúc runtime.'
+                : 'Không đọc được prefab nguồn từ --unity-root. Kiểm tra guid có nằm ngoài thư mục Assets đã truyền không.',
+        });
+        return nodeId;
+    }
+
     function emitNode (trDoc, parentSceneId, parentPath) {
         const goRef = trDoc.data.m_GameObject;
+        if (!goRef || !goRef.fileID) {
+            // Transform stripped: node thật thuộc về PrefabInstance sở hữu nó.
+            const owner = strippedOwner.get(String(trDoc.fileID));
+            const pi = owner ? prefabInstances.get(owner) : null;
+            if (pi && !emittedPrefabInstances.has(owner)) {
+                emittedPrefabInstances.add(owner);
+                return emitPrefabInstance(pi, parentSceneId, parentPath);
+            }
+            return;
+        }
         const go = byId.get(String(goRef.fileID));
         if (!go) return;
         stats.gameObjects += 1;
@@ -314,6 +534,9 @@ function portScene (options) {
         const name = String(go.data.m_Name === null || go.data.m_Name === undefined ? 'Node' : go.data.m_Name);
         const nodePath = parentPath ? `${parentPath}/${name}` : name;
         const isRect = trDoc.classId === 224;
+        objectOwner.set(String(go.fileID), nodePath);
+        objectOwner.set(String(trDoc.fileID), nodePath);
+        for (const c of (compsOf.get(String(goRef.fileID)) || [])) objectOwner.set(String(c.fileID), nodePath);
 
         const node = {
             __type__: 'cc.Node',
@@ -492,7 +715,7 @@ function portScene (options) {
                         fields[k] = v;
                     }
                     const type = scriptNames.get(guid) || UI_COMPONENT_GUIDS[guid] || guessComponentType(c.data);
-                    wiring.unresolved.scripts.push({
+                    const record114 = {
                         path: nodePath, sceneItemId: nodeId,
                         type: type || `<guid:${guid}>`,
                         resolved: !!type,
@@ -504,7 +727,16 @@ function portScene (options) {
                         todo: type
                             ? `Port ${type}.cs sang TypeScript (npm run port:compile), gắn component rồi set các field ở trên.`
                             : 'Script nằm ngoài Assets/ (package hoặc DLL) — không có .cs để port, phải viết lại bằng TypeScript.',
-                    });
+                    };
+                    // UnityEvent đã lưu (onClick của Button...) là thứ nối UI vào
+                    // gameplay. Không trích ra thì agent phải tự dò fileID trong .unity.
+                    for (const [fieldName, value] of Object.entries(fields)) {
+                        const calls = readPersistentCalls(value);
+                        if (!calls.length) continue;
+                        record114.events = record114.events || {};
+                        record114.events[fieldName] = calls;
+                    }
+                    wiring.unresolved.scripts.push(record114);
                     break;
                 }
                 default: break;
@@ -533,15 +765,82 @@ function portScene (options) {
         };
     }
 
+    /**
+     * Giải `{fileID: N}` trong field của MonoBehaviour thành đường dẫn node.
+     *
+     * Không có bước này, `Demo.FXList` chỉ là 42 con số vô nghĩa và agent phải
+     * tự dò tay trong .unity. Tham chiếu tới prefab instance đặc biệt khó: nó
+     * trỏ vào GameObject "stripped", phải đi qua m_PrefabInstance mới ra node.
+     */
+    function resolveSceneObjectRefs () {
+        const resolveOne = (v) => {
+            if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+            if (v.guid) return null;                  // tham chiếu asset, không phải node
+            const id = v.fileID != null ? String(v.fileID) : null;
+            if (!id || id === '0') return null;
+            if (objectOwner.has(id)) return objectOwner.get(id);
+            const owner = strippedOwner.get(id);
+            if (owner && nodePathByStrippedGo.has(owner)) return nodePathByStrippedGo.get(owner);
+            return null;
+        };
+        for (const s of wiring.unresolved.scripts) {
+            const refs = {};
+            for (const [key, value] of Object.entries(s.fields || {})) {
+                if (Array.isArray(value)) {
+                    const list = value.map(resolveOne);
+                    if (list.some(Boolean)) refs[key] = list;
+                } else {
+                    const one = resolveOne(value);
+                    if (one) refs[key] = one;
+                }
+            }
+            if (Object.keys(refs).length) s.nodeRefs = refs;
+            for (const calls of Object.values(s.events || {})) {
+                for (const call of calls) {
+                    const target = resolveOne({ fileID: call.targetFileID });
+                    if (target) call.targetPath = target;
+                }
+            }
+        }
+    }
+
     // Gốc = Transform/RectTransform không có cha. Phải tính cả 224, nếu không
-    // toàn bộ cây Canvas biến mất.
+    // toàn bộ cây Canvas biến mất. Stripped transform bị loại ở đây: nó KHÔNG
+    // có m_Father nên trông như root, nhưng node thật do PrefabInstance sở hữu
+    // dựng ra — nếu để lọt thì mọi instance bị nhân đôi ở gốc scene.
     const roots = docs.filter((d) => (d.classId === 4 || d.classId === 224)
+        && d.data.m_GameObject && d.data.m_GameObject.fileID
         && (!d.data.m_Father || !d.data.m_Father.fileID));
     for (const rootTr of roots) {
         const childId = writer.items.length;
         emitNode(rootTr, 1, '');
         if (writer.items[childId]) writer.scene._children.push({ __id__: childId });
     }
+
+    // PrefabInstance đặt thẳng ở gốc scene (m_TransformParent = 0) không được
+    // transform nào tham chiếu, nên phải duyệt riêng.
+    const rootInstances = [...prefabInstances.entries()]
+        .filter(([id, pi]) => {
+            if (emittedPrefabInstances.has(id)) return false;
+            const parent = pi.data.m_Modification && pi.data.m_Modification.m_TransformParent;
+            return !parent || !parent.fileID || String(parent.fileID) === '0';
+        })
+        .sort((a, b) => {
+            const order = (pi) => {
+                const mods = (pi.data.m_Modification && pi.data.m_Modification.m_Modifications) || [];
+                const hit = (Array.isArray(mods) ? mods : []).find((m) => m && m.propertyPath === 'm_RootOrder');
+                return hit ? Number(hit.value) : 0;
+            };
+            return order(a[1]) - order(b[1]);
+        });
+    for (const [id, pi] of rootInstances) {
+        emittedPrefabInstances.add(id);
+        const childId = writer.items.length;
+        const emitted = emitPrefabInstance(pi, 1, '');
+        if (emitted != null && writer.items[childId]) writer.scene._children.push({ __id__: childId });
+    }
+
+    resolveSceneObjectRefs();
 
     wiring.stats = stats;
     wiring.stats.unresolvedTotal = Object.values(wiring.unresolved).reduce((a, x) => a + x.length, 0);
@@ -594,6 +893,11 @@ function summariseWork (unresolved) {
     }
     for (const p of unresolved.particles) {
         add('particle', p.path, 'ParticleSystem', { todo: p.todo }, p.path);
+    }
+    for (const pi of unresolved.prefabInstances) {
+        const key = (pi.sourcePrefab && pi.sourcePrefab.guid) || pi.path;
+        add('prefab', key, (pi.sourcePrefab && pi.sourcePrefab.name) || '(prefab nguon khong doc duoc)',
+            { unityPath: pi.unityPath, todo: pi.todo }, pi.path);
     }
     for (const o of unresolved.other) {
         add('note', o.unityComponent, o.unityComponent, { todo: o.todo }, o.path);
