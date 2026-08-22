@@ -44,6 +44,27 @@ module.exports = function createAssetImportPorter(deps) {
     fs.writeFileSync(metaFile, `${JSON.stringify(meta, null, 2)}\n`, 'utf8');
   }
 
+  /**
+   * Unity's TextureImporter wrap enum -> the Cocos texture userData value.
+   * -1 means "not overridden", and Unity's own default is Repeat; Cocos defaults
+   * the other way (clamp), so a tiled material silently smears its edge pixels
+   * across the surface unless the Unity value is carried over.
+   */
+  const UNITY_WRAP_MODES = {
+    '-1': 'repeat', // not overridden -> Unity default
+    0: 'repeat',
+    1: 'clamp-to-edge',
+    2: 'mirrored-repeat',
+    3: 'clamp-to-edge', // MirrorOnce has no Cocos equivalent
+  };
+
+  function unityWrapMode(text, axisKey) {
+    const axis = text.match(new RegExp(`^\\s*${axisKey}:\\s*(-?\\d+)`, 'm'));
+    const all = text.match(/^\s*m_WrapMode:\s*(-?\d+)/m);
+    const raw = axis ? axis[1] : (all ? all[1] : '-1');
+    return UNITY_WRAP_MODES[raw] || 'repeat';
+  }
+
   function unityTextureImporterConfig(assetFile) {
     const metaFile = `${assetFile}.meta`;
     if (!fs.existsSync(metaFile)) return {};
@@ -52,6 +73,8 @@ module.exports = function createAssetImportPorter(deps) {
     return {
       fixAlphaTransparencyArtifacts: /^\s*alphaIsTransparency:\s*1\s*$/m.test(text),
       spriteTrimType: meshType && Number(meshType[1]) === 0 ? 'none' : 'auto',
+      wrapModeS: unityWrapMode(text, 'wrapU'),
+      wrapModeT: unityWrapMode(text, 'wrapV'),
     };
   }
 

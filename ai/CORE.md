@@ -52,7 +52,7 @@ Chạy `npm run ai:contract:verify` để chứng minh manifest khớp với CLI
 | BẮT BUỘC sau mọi lần sửa code hoặc port. Phải sạch trước khi kết thúc lượt. | `npm run ai:verify` | — |
 | Ngay sau khi port prefab. Bắt UUID treo, script thiếu, renderer chưa gán asset, node trùng tên. | `npm run ai:verify:prefab` | Đối chiếu script bằng tiền tố 5 hex của UUID; trùng tiền tố thì chấp nhận (thà bỏ sót hơn báo sai). |
 | Ngay sau khi sinh/sửa asset (.effect, .mtl, .prefab, texture). Đây là check DUY NHẤT chứng minh editor chấp nhận asset — tsc/lint/build đều xanh mà playable vẫn trắng màn hình nếu importer từ chối. | `npm run ai:verify:assets` | Đọc `"imported": false` trong .meta, nên chỉ có ý nghĩa khi Cocos Creator đã từng quét thư mục. Asset chưa có .meta thuộc về `verify.all` (check Meta Files Integrity). Lý do lỗi lấy từ log của editor; log bị xoay vòng khi khởi động lại nên có thể chỉ báo được "chưa import" mà không có message. |
-| Sau khi build. Đây là bước duy nhất chứng minh playable CHẠY được, không chỉ compile được. | `npm run ai:verify:runtime` | Cần Chrome hoặc Edge trên máy (không dùng puppeteer). Mặc định chọn bản `build/common/` vì bản riêng cho từng network (applovin/facebook) luôn console.error do thiếu SDK của host. Dùng --all nếu muốn kiểm tra hết. Cửa sổ mặc định 720x1280 (dọc); nguồn landscape cần --window-size 1366x768 để khung hình so sánh được. Phát hiện khung đơn sắc bằng cách so 3 vùng lấy mẫu, là suy luận theo dấu hiệu chứ không phải phân tích ảnh đầy đủ. |
+| Sau khi build, hoặc trỏ --url vào preview của editor khi chưa muốn build. Đây là bước duy nhất chứng minh playable CHẠY được, không chỉ compile được. | `npm run ai:verify:runtime` | Cần Chrome hoặc Edge trên máy (không dùng puppeteer). --url smoke-test một địa chỉ đang chạy (vd http://localhost:7456/ của editor preview) nên KHÔNG cần build; đổi lại không đo được kích thước file nên sizeKb = null. Mặc định chọn bản `build/common/` vì bản riêng cho từng network (applovin/facebook) luôn console.error do thiếu SDK của host. Dùng --all nếu muốn kiểm tra hết. Cửa sổ mặc định 720x1280 (dọc); nguồn landscape cần --window-size 1366x768 để khung hình so sánh được. Phát hiện khung đơn sắc bằng cách so 3 vùng lấy mẫu, là suy luận theo dấu hiệu chứ không phải phân tích ảnh đầy đủ. |
 | BẮT BUỘC cùng với `verify.all`. | `npm run ai:lint` | — |
 
 ### Tối ưu
@@ -155,6 +155,7 @@ Những tool sau **không làm được việc mà tên gọi gợi ý**. Đọc
   - Lý do lỗi lấy từ log của editor; log bị xoay vòng khi khởi động lại nên có thể chỉ báo được "chưa import" mà không có message.
 - **`verify.runtime`** (npm run ai:verify:runtime)
   - Cần Chrome hoặc Edge trên máy (không dùng puppeteer).
+  - --url smoke-test một địa chỉ đang chạy (vd http://localhost:7456/ của editor preview) nên KHÔNG cần build; đổi lại không đo được kích thước file nên sizeKb = null.
   - Mặc định chọn bản `build/common/` vì bản riêng cho từng network (applovin/facebook) luôn console.error do thiếu SDK của host. Dùng --all nếu muốn kiểm tra hết.
   - Cửa sổ mặc định 720x1280 (dọc); nguồn landscape cần --window-size 1366x768 để khung hình so sánh được.
   - Phát hiện khung đơn sắc bằng cách so 3 vùng lấy mẫu, là suy luận theo dấu hiệu chứ không phải phân tích ảnh đầy đủ.

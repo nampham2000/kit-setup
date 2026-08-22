@@ -31,6 +31,8 @@ Usage:
 
 Options:
   --file <path>        File HTML cần kiểm tra. Mặc định: bản build/common/ (bản network luôn báo lỗi thiếu SDK).
+  --url <url>          Smoke-test một URL đang chạy, vd preview của editor:
+                       --url http://localhost:7456/. Dùng khi KHÔNG muốn build.
   --all                Kiểm tra mọi file HTML trong build/.
   --seconds <n>        Thời gian chạy để đo FPS. Default: 6.
   --min-fps <n>        FPS tối thiểu coi là đạt. Default: 20.
@@ -205,7 +207,19 @@ const PROBE = `
   })();
 `;
 
-async function runOne(htmlFile, options) {
+/** True when the target is an http(s) URL rather than a built HTML file. */
+function isUrlTarget(target) {
+  return /^https?:\/\//i.test(String(target));
+}
+
+/**
+ * `target` is either a built .html path or an http(s) URL. The URL form is what
+ * lets the editor's live preview be smoke-tested without producing a build -
+ * same checks, same monochrome-frame heuristic.
+ */
+async function runOne(target, options) {
+  const isUrl = isUrlTarget(target);
+  const htmlFile = isUrl ? null : target;
   const browser = findBrowser(options.browser);
   const port = 9400 + Math.floor((Date.now() / 97) % 400);
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'playable-runtime-'));
@@ -225,8 +239,8 @@ async function runOne(htmlFile, options) {
   ], { stdio: 'ignore', windowsHide: true });
 
   const result = {
-    file: path.relative(PROJECT_ROOT, htmlFile).replace(/\\/g, '/'),
-    sizeKb: Math.round(fs.statSync(htmlFile).size / 1024),
+    file: isUrl ? String(target) : path.relative(PROJECT_ROOT, htmlFile).replace(/\\/g, '/'),
+    sizeKb: isUrl ? null : Math.round(fs.statSync(htmlFile).size / 1024),
     exceptions: [],
     consoleErrors: [],
     consoleWarnings: [],
@@ -274,8 +288,8 @@ async function runOne(htmlFile, options) {
     await session.send('Page.enable', {}, sessionId);
     await session.send('Page.addScriptToEvaluateOnNewDocument', { source: FRAME_COUNTER }, sessionId);
 
-    const fileUrl = `file:///${htmlFile.replace(/\\/g, '/')}`;
-    await session.send('Page.navigate', { url: fileUrl }, sessionId);
+    const targetUrl = isUrl ? String(target) : `file:///${htmlFile.replace(/\\/g, '/')}`;
+    await session.send('Page.navigate', { url: targetUrl }, sessionId);
 
     await wait(Math.max(1, options.seconds) * 1000);
 
@@ -322,7 +336,10 @@ async function runOne(htmlFile, options) {
       if (shot && shot.data) {
         const dir = path.resolve(PROJECT_ROOT, options.screenshotDir);
         fs.mkdirSync(dir, { recursive: true });
-        const out = path.join(dir, `${path.basename(htmlFile, path.extname(htmlFile))}.png`);
+        const stem = isUrl
+          ? (String(target).replace(/^https?:\/\//i, '').replace(/[^\w.-]+/g, '_').replace(/_+$/, '') || 'preview')
+          : path.basename(htmlFile, path.extname(htmlFile));
+        const out = path.join(dir, `${stem}.png`);
         const buffer = Buffer.from(shot.data, 'base64');
         fs.writeFileSync(out, buffer);
         result.screenshot = path.relative(PROJECT_ROOT, out).replace(/\\/g, '/');
@@ -365,6 +382,8 @@ function parseArgs(argv) {
     if (a === '--all') { o.all = true; continue; }
     if (a === '--json') { o.json = true; continue; }
     if (a === '--no-screenshot') { o.noScreenshot = true; continue; }
+    if (a === '--url') { o.url = argv[++i]; continue; }
+    if (a.startsWith('--url=')) { o.url = a.split('=').slice(1).join('='); continue; }
     if (a === '--file') { o.file = argv[++i]; continue; }
     if (a.startsWith('--file=')) { o.file = a.split('=')[1]; continue; }
     if (a === '--seconds') { o.seconds = Number(argv[++i]) || 6; continue; }
@@ -385,7 +404,7 @@ async function main() {
   const options = parseArgs(process.argv.slice(2));
   if (options.help) { console.log(USAGE); return; }
 
-  const files = findBuiltHtml(options);
+  const files = options.url ? [options.url] : findBuiltHtml(options);
   if (!files.length) {
     const message = 'Không tìm thấy file HTML nào trong build/. Chạy `npm run build` trước, hoặc truyền --file.';
     if (options.json) console.log(JSON.stringify({ ok: false, tool: 'verify-runtime', summary: { files: 0 }, items: [{ message }], nextActions: ['npm run build'] }, null, 2));

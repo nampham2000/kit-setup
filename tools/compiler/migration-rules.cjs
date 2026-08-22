@@ -62,6 +62,21 @@ const VECTOR_VALUED_MATH_MEMBERS = new Set(['normalized', 'clone']);
 
 const NUMERIC_COLLECTION_MEMBERS = new Set(['Count', 'Length', 'count']);
 
+/**
+ * How a resolved TS type reports its element count. C# spells all of these
+ * `.Length`/`.Count`; TS splits them between `.length` and `.size`, so the
+ * rename is only safe once the owner's type is known.
+ */
+function tsCountAccessor(tsType) {
+  if (!tsType) return null;
+  const bare = String(tsType).replace(/\s*\|\s*(null|undefined)\s*$/g, '').trim();
+  if (/\[\]$/.test(bare) || /^Array<.*>$/.test(bare)) return 'length';
+  if (bare === 'string') return 'length';
+  if (/^(Map|Set|WeakMap|WeakSet)<.*>$/.test(bare)) return 'size';
+  return null;
+}
+
+
 /** Transform/Node accessors, keyed by the value type Unity gives them. */
 const TRANSFORM_VEC3_MEMBERS = new Set([
   'position', 'localPosition', 'localScale', 'lossyScale',
@@ -1344,6 +1359,31 @@ class MigrationRulesEngine {
     }
   }
 
+  /**
+   * The declared TS type of an expression, when the class/local model knows it.
+   * Deliberately narrow: only names it can prove. An unresolved owner leaves
+   * `.Length` in place, where the tsc gate reports it, rather than guessing.
+   */
+  resolveOwnerTsType(expr) {
+    if (!expr) return null;
+    if (expr.kind === 'Identifier') {
+      const name = expr.name;
+      return (this.localVariables && this.localVariables.get(name))
+        || (this.memberTypes && this.memberTypes.get(name))
+        || null;
+    }
+    if (expr.kind === 'MemberAccessExpression') {
+      const ownerName = expr.expression && expr.expression.kind === 'Identifier'
+        ? expr.expression.name
+        : null;
+      if (!ownerName || ownerName === 'this') {
+        return (this.memberTypes && this.memberTypes.get(expr.member)) || null;
+      }
+    }
+    if (expr.kind === 'ThisExpression') return null;
+    return null;
+  }
+
   transformMemberAccess(expr, irUnit, currentMethodName) {
     const member = expr.member;
     let targetStr = this.transformExpression(expr.expression, irUnit, currentMethodName);
@@ -1411,6 +1451,14 @@ class MigrationRulesEngine {
       if (member === 'PI') return 'Math.PI';
       if (member === 'Infinity') return 'Infinity';
       if (member === 'Epsilon') return '1e-6';
+    }
+
+    // C# `.Length` / `.Count` -> the TS accessor for that container. Only fires
+    // when the owner's declared type is known, so a user class with its own
+    // `Count` property is left alone.
+    if (member === 'Length' || member === 'Count') {
+      const accessor = tsCountAccessor(this.resolveOwnerTsType(expr.expression));
+      if (accessor) return `${targetStr}.${accessor}`;
     }
 
     return `${targetStr}.${member}`;

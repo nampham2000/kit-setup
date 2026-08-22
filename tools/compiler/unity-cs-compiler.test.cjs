@@ -1815,3 +1815,58 @@ test('emitter regression fixtures type-check against the real cc.d.ts with zero 
     fs.rmSync(outDir, { recursive: true, force: true });
   }
 });
+
+test('C# .Length / .Count lower to the TS accessor the container actually has', () => {
+  const source = [
+    'using UnityEngine;',
+    'using System.Collections.Generic;',
+    'public class CountShapes : MonoBehaviour',
+    '{',
+    '  public GameObject[] prefabs;',
+    '  public List<int> scores;',
+    '  public Dictionary<string, int> byName;',
+    '  public HashSet<int> unique;',
+    '  public string label;',
+    '  void Start()',
+    '  {',
+    '    int a = prefabs.Length;',
+    '    int b = scores.Count;',
+    '    int c = byName.Count;',
+    '    int d = unique.Count;',
+    '    int e = label.Length;',
+    '    string[] local = new string[2];',
+    '    int f = local.Length;',
+    '  }',
+    '}',
+  ].join('\n');
+
+  const { code } = compileSnippet(source, 'CountShapes.cs');
+  // Arrays, List<T> (emitted as T[]) and string all report `.length`.
+  assert.match(code, /this\.prefabs\.length/);
+  assert.match(code, /this\.scores\.length/);
+  assert.match(code, /this\.label\.length/);
+  assert.match(code, /local\.length/);
+  // Dictionary -> Map and HashSet -> Set report `.size`, not `.length`.
+  assert.match(code, /this\.byName\.size/);
+  assert.match(code, /this\.unique\.size/);
+  // No capitalised leftovers anywhere.
+  assert.doesNotMatch(code, /\.Length\b/);
+  assert.doesNotMatch(code, /\.Count\b/);
+});
+
+test('an unknown owner keeps .Count verbatim rather than guessing an accessor', () => {
+  const source = [
+    'using UnityEngine;',
+    'public class ForeignCount : MonoBehaviour',
+    '{',
+    '  void Start()',
+    '  {',
+    '    int n = SomeVendorSdk.Registry.Count;',
+    '  }',
+    '}',
+  ].join('\n');
+
+  const { code } = compileSnippet(source, 'ForeignCount.cs');
+  // Unresolvable owner: leave it alone so the tsc gate reports it loudly.
+  assert.match(code, /Registry\.Count/);
+});

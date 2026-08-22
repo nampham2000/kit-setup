@@ -2131,6 +2131,28 @@ function prioritizedNames(primary, candidates, fallback) {
   return out;
 }
 
+/**
+ * Unity point/spot intensity -> Cocos luminance (cd/m2).
+ *
+ * Cocos is photometric, Unity's intensity is a bare multiplier, so the constant
+ * is a calibration rather than a conversion. It is anchored to the directional
+ * mapping just above (Unity 1.0 = 65000lx, Cocos' full-sun value): Unity 1.0
+ * here is read as a ~10000lm lamp, which at Cocos' default sphere size 0.15
+ * (luminance = flux / 4*PI^2*size^2, i.e. flux / 0.888) lands near this figure.
+ *
+ * The previous 1000x left ported point lights roughly an order of magnitude
+ * under Unity - visibly present in the inspector, invisible on screen next to a
+ * directional light mapped at 65000.
+ */
+const UNITY_PUNCTUAL_INTENSITY_TO_LUMINANCE = 10000;
+
+const COCOS_TEXTURE_WRAP_MODES = new Set(['repeat', 'clamp-to-edge', 'mirrored-repeat']);
+
+/** Falls back to Unity's default (repeat) rather than Cocos' (clamp). */
+function cocosWrapMode(value, fallback = 'repeat') {
+  return COCOS_TEXTURE_WRAP_MODES.has(value) ? value : fallback;
+}
+
 function ensureImageAssetMeta(assetFile, config = {}) {
   const metaFile = `${assetFile}.meta`;
   const existing = readJsonIfExists(metaFile) || {};
@@ -2143,6 +2165,8 @@ function ensureImageAssetMeta(assetFile, config = {}) {
   const spriteTrimType = ['auto', 'custom', 'none'].includes(config.spriteTrimType)
     ? config.spriteTrimType
     : 'auto';
+  const wrapModeS = cocosWrapMode(config.wrapModeS);
+  const wrapModeT = cocosWrapMode(config.wrapModeT);
   const requestedImageType = String(config.imageType || '').toLowerCase();
   const wantsTextureType = isParticleTexture || requestedImageType === 'texture';
   const wantsSpriteFrameType = requestedImageType === 'sprite-frame' || !wantsTextureType;
@@ -2192,8 +2216,8 @@ function ensureImageAssetMeta(assetFile, config = {}) {
         id,
         name: 'texture',
         userData: {
-          wrapModeS: 'clamp-to-edge',
-          wrapModeT: 'clamp-to-edge',
+          wrapModeS,
+          wrapModeT,
           imageUuidOrDatabaseUri: meta.uuid,
           isUuid: true,
           visible: false,
@@ -2216,8 +2240,8 @@ function ensureImageAssetMeta(assetFile, config = {}) {
   if (wantsTextureType) {
     textureRecord.subMeta.userData = {
       ...(textureRecord.subMeta.userData || {}),
-      wrapModeS: 'repeat',
-      wrapModeT: 'repeat',
+      wrapModeS,
+      wrapModeT,
       imageUuidOrDatabaseUri: meta.uuid,
       isUuid: true,
       visible: false,
@@ -4944,8 +4968,8 @@ class CocosPrefabBuilder {
       _colorTemperature: 6570,
       _staticSettings: cocosRef(staticSettings),
       _visibility: 0xffffffff,
-      _luminanceHDR: intensity * 1000,
-      _luminance: intensity * 1000,
+      _luminanceHDR: intensity * UNITY_PUNCTUAL_INTENSITY_TO_LUMINANCE,
+      _luminance: intensity * UNITY_PUNCTUAL_INTENSITY_TO_LUMINANCE,
       _luminanceLDR: intensity,
       _range: range,
       _size: 0.15,
@@ -4964,8 +4988,8 @@ class CocosPrefabBuilder {
       _colorTemperature: 6570,
       _staticSettings: cocosRef(staticSettings),
       _visibility: 0xffffffff,
-      _luminanceHDR: intensity * 1000,
-      _luminance: intensity * 1000,
+      _luminanceHDR: intensity * UNITY_PUNCTUAL_INTENSITY_TO_LUMINANCE,
+      _luminance: intensity * UNITY_PUNCTUAL_INTENSITY_TO_LUMINANCE,
       _luminanceLDR: intensity,
       _range: range,
       _size: 0.15,

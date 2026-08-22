@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "generatedAt": "2026-08-21T03:27:24.013Z",
+    "generatedAt": "2026-08-22T03:26:18.508Z",
     "description": "Compact project manifest for AI Agents. Use this instead of scanning file trees.",
     "project": {
       "projectName": "cc_playable_framework",
@@ -20,11 +20,6 @@
   },
   "scenes": [
     {
-      "name": "AllIn1Demo",
-      "path": "assets/AllIn1Demo.scene",
-      "sizeKb": 5.2
-    },
-    {
       "name": "Boilerplate",
       "path": "assets/Boilerplate.scene",
       "sizeKb": 64.3
@@ -33,29 +28,113 @@
       "name": "Gameplay",
       "path": "assets/Gameplay.scene",
       "sizeKb": 87.7
+    },
+    {
+      "name": "PortalDemo",
+      "path": "assets/PortalDemo.scene",
+      "sizeKb": 24.3
     }
   ],
-  "prefabs": [],
+  "prefabs": [
+    {
+      "name": "Portal_1",
+      "path": "assets/portal/prefabs/Portal_1.prefab",
+      "sizeKb": 103
+    },
+    {
+      "name": "Portal_10",
+      "path": "assets/portal/prefabs/Portal_10.prefab",
+      "sizeKb": 102.8
+    },
+    {
+      "name": "Portal_11",
+      "path": "assets/portal/prefabs/Portal_11.prefab",
+      "sizeKb": 83.7
+    },
+    {
+      "name": "Portal_12",
+      "path": "assets/portal/prefabs/Portal_12.prefab",
+      "sizeKb": 82.6
+    },
+    {
+      "name": "Portal_13",
+      "path": "assets/portal/prefabs/Portal_13.prefab",
+      "sizeKb": 62.3
+    },
+    {
+      "name": "Portal_14",
+      "path": "assets/portal/prefabs/Portal_14.prefab",
+      "sizeKb": 62.8
+    },
+    {
+      "name": "Portal_15",
+      "path": "assets/portal/prefabs/Portal_15.prefab",
+      "sizeKb": 62.8
+    },
+    {
+      "name": "Portal_16",
+      "path": "assets/portal/prefabs/Portal_16.prefab",
+      "sizeKb": 102.9
+    },
+    {
+      "name": "Portal_17",
+      "path": "assets/portal/prefabs/Portal_17.prefab",
+      "sizeKb": 103.1
+    },
+    {
+      "name": "Portal_18",
+      "path": "assets/portal/prefabs/Portal_18.prefab",
+      "sizeKb": 102.3
+    },
+    {
+      "name": "Portal_2",
+      "path": "assets/portal/prefabs/Portal_2.prefab",
+      "sizeKb": 103
+    },
+    {
+      "name": "Portal_3",
+      "path": "assets/portal/prefabs/Portal_3.prefab",
+      "sizeKb": 102.9
+    },
+    {
+      "name": "Portal_4",
+      "path": "assets/portal/prefabs/Portal_4.prefab",
+      "sizeKb": 103
+    },
+    {
+      "name": "Portal_5",
+      "path": "assets/portal/prefabs/Portal_5.prefab",
+      "sizeKb": 102.6
+    },
+    {
+      "name": "Portal_6",
+      "path": "assets/portal/prefabs/Portal_6.prefab",
+      "sizeKb": 83.4
+    },
+    {
+      "name": "Portal_7",
+      "path": "assets/portal/prefabs/Portal_7.prefab",
+      "sizeKb": 83.3
+    },
+    {
+      "name": "Portal_8",
+      "path": "assets/portal/prefabs/Portal_8.prefab",
+      "sizeKb": 103.6
+    },
+    {
+      "name": "Portal_9",
+      "path": "assets/portal/prefabs/Portal_9.prefab",
+      "sizeKb": 82.9
+    }
+  ],
   "scripts": {
-    "count": 54,
+    "count": 46,
     "byDir": [
       {
-        "dir": "assets/script/allin1",
+        "dir": "assets/script/portal",
         "names": [
-          "AllIn1Assets",
-          "AllIn1CircleExpositor",
-          "AllIn1Clip",
-          "AllIn1Demo",
-          "AllIn1DemoCamera",
-          "AllIn1DemoItem",
-          "AllIn1MaterialFactory",
-          "AllIn1Particles",
-          "AllIn1RandomColorSwap",
-          "AllIn1SceneBuilder",
-          "AllIn1ScrollProperty",
-          "AllIn1TextureOffsetOverTime",
-          "AllIn1Types",
-          "index"
+          "NextPrefab",
+          "UserCamera"
         ]
       },
       {
@@ -147,6 +226,15 @@
           "PlayableAdDownloadEvent",
           "SuperHtmlPlayable"
         ]
+      },
+      {
+        "dir": "assets/scripts",
+        "names": [
+          "UnityParticleHierarchyTransformSync",
+          "UnityParticleRateOverDistanceEmitter",
+          "UnityParticleSubEmitterFollower",
+          "UnitySpriteRendererColorAdapter"
+        ]
       }
     ]
   },
@@ -175,35 +263,37 @@
     "shaderCount": 1,
     "shaders": {
       "count": 1,
-      "totalKb": 60,
+      "totalKb": 2.3,
       "sample": [
-        "assets/resources/allin1/AllIn1SpriteShader.effect"
+        "assets/effects/UnitySpriteRendererColor.effect"
       ],
       "truncated": 0
     },
     "materials": {
-      "count": 4,
-      "totalKb": 6,
+      "count": 46,
+      "totalKb": 43.8,
       "sample": [
         "assets/materials/Blue.mtl",
         "assets/materials/Board1.mtl",
         "assets/materials/Orange.mtl",
-        "assets/materials/Pink.mtl"
+        "assets/materials/Pink.mtl",
+        "assets/materials/UnitySpriteRendererColor.mtl",
+        "assets/materials/UnitySpriteRendererColorOpaque.mtl"
       ],
-      "truncated": 0
+      "truncated": 40
     },
     "textures": {
-      "count": 34,
-      "totalKb": 3338,
+      "count": 42,
+      "totalKb": 7459.9,
       "sample": [
-        "assets/resources/allin1/tex/backMountain.png",
-        "assets/resources/allin1/tex/Circle.png",
-        "assets/resources/allin1/tex/coals.png",
-        "assets/resources/allin1/tex/fire2.png",
-        "assets/resources/allin1/tex/flag.png",
-        "assets/resources/allin1/tex/flameNoise.png"
+        "assets/portal/textures/UW.png",
+        "assets/textures/ui/BlackSquare.png",
+        "assets/textures/ui/GreenBtn.png",
+        "assets/textures/ui/icon_L11-Pic2.png",
+        "assets/unity_imported/Portal Particle/Textures/1.png",
+        "assets/unity_imported/Portal Particle/Textures/10.png"
       ],
-      "truncated": 28
+      "truncated": 36
     },
     "animations": {
       "count": 0,
@@ -212,18 +302,32 @@
       "truncated": 0
     },
     "prefabsInAssets": {
-      "count": 0,
-      "totalKb": 0,
-      "sample": [],
-      "truncated": 0
+      "count": 18,
+      "totalKb": 1633,
+      "sample": [
+        "assets/portal/prefabs/Portal_1.prefab",
+        "assets/portal/prefabs/Portal_10.prefab",
+        "assets/portal/prefabs/Portal_11.prefab",
+        "assets/portal/prefabs/Portal_12.prefab",
+        "assets/portal/prefabs/Portal_13.prefab",
+        "assets/portal/prefabs/Portal_14.prefab"
+      ],
+      "truncated": 12
     },
     "unityImported": {
-      "exists": false,
+      "exists": true,
       "root": "assets/unity_imported",
-      "count": 0,
-      "totalKb": 0,
-      "sample": [],
-      "truncated": 0
+      "count": 76,
+      "totalKb": 7292.6,
+      "sample": [
+        "assets/unity_imported/Portal Particle/Material/1.mtl",
+        "assets/unity_imported/Portal Particle/Material/10.mtl",
+        "assets/unity_imported/Portal Particle/Material/11.mtl",
+        "assets/unity_imported/Portal Particle/Material/12.mtl",
+        "assets/unity_imported/Portal Particle/Material/13.mtl",
+        "assets/unity_imported/Portal Particle/Material/14.mtl"
+      ],
+      "truncated": 70
     }
   },
   "configSummary": {

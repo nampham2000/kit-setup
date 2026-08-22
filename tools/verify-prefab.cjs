@@ -50,6 +50,37 @@ const RENDERER_TYPES = new Set([
 // ────────────────────────────────────────────────────────── asset index ──
 
 /** Chỉ mục UUID -> đường dẫn, đọc từ mọi file .meta trong assets/. */
+/**
+ * Built-in assets (db://internal): primitive meshes, builtin effects and
+ * materials. They live in the editor install, not in the project, so a scene
+ * that uses e.g. the Plane primitive references a uuid this tool would
+ * otherwise call dangling.
+ */
+function findInternalAssetRoots() {
+  const home = process.env.USERPROFILE || process.env.HOME || '';
+  const bases = [
+    process.env.COCOS_CREATOR_PATH || '',
+    'C:/ProgramData/cocos/editors/Creator/3.8.8',
+    'C:/Program Files/Cocos/Creator/3.8.8',
+    'C:/CocosDashboard/resources/.editors/Creator/3.8.8',
+    'D:/CocosDashboard/resources/.editors/Creator/3.8.8',
+    home ? path.join(home, 'AppData/Local/CocosDashboard/resources/.editors/Creator/3.8.8') : '',
+    '/Applications/Cocos/Creator/3.8.8/CocosCreator.app/Contents',
+  ].filter(Boolean);
+
+  const roots = [];
+  for (const base of bases) {
+    for (const tail of [
+      'resources/resources/3d/engine/editor/assets',
+      'resources/resources/3d/engine/editor/static/default-assets',
+    ]) {
+      const dir = path.join(base, tail);
+      try { if (fs.statSync(dir).isDirectory()) roots.push(dir); } catch (_) { /* not this one */ }
+    }
+  }
+  return roots;
+}
+
 function buildAssetIndex(assetsRoot) {
   const byUuid = new Map();
   const scriptClasses = new Map(); // uuid -> tên class trong file .ts
@@ -79,7 +110,17 @@ function buildAssetIndex(assetsRoot) {
     }
   };
   walk(assetsRoot);
-  const index = { byUuid, scriptClasses };
+
+  const internalRoots = findInternalAssetRoots();
+  const projectAssetCount = byUuid.size;
+  for (const root of internalRoots) walk(root);
+
+  const index = {
+    byUuid,
+    scriptClasses,
+    internalIndexed: internalRoots.length > 0,
+    internalAssetCount: byUuid.size - projectAssetCount,
+  };
   index.scriptPrefixes = scriptPrefixSet(index);
   return index;
 }
@@ -143,9 +184,19 @@ function verifyDocument(file, docs, index, options, findings) {
     missing.get(ref.uuid).push(ref.at);
   }
   if (missing.size) {
-    add('high', 'DANGLING_ASSET_UUID',
-      `${missing.size} UUID không tìm thấy asset tương ứng trong project — sẽ thành null lúc runtime.`,
-      [...missing.entries()].slice(0, 3).map(([u, at]) => `${u} @ ${at[0]}`).join(' | '));
+    const detail = [...missing.entries()].slice(0, 3).map(([u, at]) => `${u} @ ${at[0]}`).join(' | ');
+    if (index.internalIndexed) {
+      add('high', 'DANGLING_ASSET_UUID',
+        `${missing.size} UUID không tìm thấy asset tương ứng trong project — sẽ thành null lúc runtime.`,
+        detail);
+    } else {
+      // Without the editor's db://internal assets indexed we cannot tell a real
+      // dangling ref from a builtin one, so this is "unknown", not "broken".
+      add('medium', 'UNRESOLVED_ASSET_UUID',
+        `${missing.size} UUID không đối chiếu được: không tìm thấy asset built-in của editor để lập chỉ mục. `
+        + 'Đặt COCOS_CREATOR_PATH tới thư mục cài Cocos rồi chạy lại để phân biệt UUID treo thật.',
+        detail);
+    }
   }
 
   // (2) component script chưa tồn tại
@@ -357,7 +408,9 @@ function main() {
   console.log('======================================================');
   console.log(' Cocos Prefab / Scene Integrity Verifier ');
   console.log('======================================================');
-  console.log(`Kiểm tra ${targets.length} file, chỉ mục ${index.byUuid.size} asset, ${totalRenderers} renderer.`);
+  console.log(`Kiểm tra ${targets.length} file, chỉ mục ${index.byUuid.size} asset`
+    + (index.internalIndexed ? ` (gồm ${index.internalAssetCount} built-in)` : ' (CHƯA có built-in của editor)')
+    + `, ${totalRenderers} renderer.`);
   console.log('');
 
   if (!findings.length) {

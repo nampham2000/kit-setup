@@ -45,12 +45,6 @@ const TCP2_HYBRID_SHADER_2_GUIDS = new Set([
 const URP_LIT_SHADER_GUIDS = new Set(['933532a4fcc9baf4fa0491de14d08ed7']);
 const URP_UNLIT_SHADER_GUIDS = new Set(['650dd9526735d5b46b79224bc6e94025']);
 const COCOS_PARTICLE_DEFAULT_TINT = 128 / 255;
-const COCOS_PARTICLE_DEFAULT_TINT_COLOR = [
-  COCOS_PARTICLE_DEFAULT_TINT,
-  COCOS_PARTICLE_DEFAULT_TINT,
-  COCOS_PARTICLE_DEFAULT_TINT,
-  COCOS_PARTICLE_DEFAULT_TINT,
-];
 // URP particle shaders sample _BaseMap. _MainTex can remain populated with a
 // legacy compatibility texture, so only use it when _BaseMap is absent.
 const UNITY_PARTICLE_MATERIAL_TEXTURE_KEYS = [
@@ -196,15 +190,6 @@ module.exports = function createMaterialPorter(deps) {
   function hasVisibleUnityColor(value) {
     const colorValue = value || {};
     return Number(colorValue.r || 0) > 0 || Number(colorValue.g || 0) > 0 || Number(colorValue.b || 0) > 0;
-  }
-
-  function isNeutralUnityParticleTintColor(value) {
-    const colorValue = value || {};
-    const epsilon = 1e-6;
-    return Math.abs(Number(colorValue.r ?? 1) - 1) <= epsilon
-      && Math.abs(Number(colorValue.g ?? 1) - 1) <= epsilon
-      && Math.abs(Number(colorValue.b ?? 1) - 1) <= epsilon
-      && Math.abs(Number(colorValue.a ?? 1) - 1) <= epsilon;
   }
 
   function particleTechniqueFromShaderName(shaderName) {
@@ -830,14 +815,17 @@ module.exports = function createMaterialPorter(deps) {
       ];
     }
     if (mainTextureUuid) props.mainTexture = cocosUuid(mainTextureUuid, 'cc.Texture2D');
-    if (!tcp2ParticleMaterial) {
-      const hasExplicitTintColor = hasUnityMaterialColor(colors, ['_TintColor', '_Color', '_BaseColor']);
-      const hasMeaningfulExplicitTintColor = hasExplicitTintColor && !isNeutralUnityParticleTintColor(mainColor);
-      if (techniqueIndex === COCOS_PARTICLE_TECHNIQUE_ADD) {
-        props.tintColor = materialColor(null, COCOS_PARTICLE_DEFAULT_TINT_COLOR);
-      } else if (particleTechniqueUsesTintColor(techniqueIndex) && hasMeaningfulExplicitTintColor) {
+    if (!tcp2ParticleMaterial && particleTechniqueUsesTintColor(techniqueIndex)) {
+      // Unity's Particles/Additive and Cocos' tinted-fs:add are the same formula
+      // (`2.0 * vertexColor * tintColor * tex`) with the same 0.5 default, so an
+      // authored _TintColor carries over verbatim. Forcing the default here used
+      // to flatten every additive material to 0.5 - a material authored at 1.0
+      // came out half as bright as Unity.
+      if (hasUnityMaterialColor(colors, ['_TintColor', '_Color', '_BaseColor'])) {
         props.tintColor = materialColor(mainColor);
       }
+      // No authored tint: Unity's own shader default is 0.5, which is already the
+      // Cocos default, so leaving the property off keeps the two in agreement.
     }
 
     const materialData = {
