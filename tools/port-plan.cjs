@@ -4,366 +4,294 @@
 /**
  * Unity Port Planner
  * ==================
- * Thay cho `unity-cocos-port.cjs doctor` — lệnh đó chỉ in số record của asset DB
- * rồi ghi một CSV chỉ có dòng header, không chẩn đoán gì (DR-01).
- *
- * Tool này trả lời đúng những câu một agent cần TRƯỚC khi port:
- *   - Project Unity này có gì? (scene, prefab, script, shader, model, texture)
- *   - Nó dùng những thứ nào KHÔNG có đường sang Cocos? (TMP, Addressables,
- *     Zenject, URP volume, ShaderGraph, DOTween...)
- *   - Nên bắt đầu từ đâu? (prefab nào là gốc, prefab nào nặng nhất)
- *   - Chi phí ước lượng bao nhiêu? (theo tốc độ port đo được)
- *
- * Output là JSON gọn để agent đọc một lần thay vì tự quét cây thư mục 2GB.
+ * Compact, backwards-compatible view over the canonical UnityProjectSnapshot.
+ * The static index keeps vendor/sample evidence for GUID resolution while the
+ * default porting view filters it out of gameplay recommendations.
  */
 
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 
-require('./lib/auto-strip-ansi.cjs');
 const { color } = require('./lib/term-color.cjs');
+const { CAPABILITIES } = require('../ai/capabilities.def.cjs');
+const { BLOCKER_RULES } = require('./unity-intel/diagnostics.cjs');
+const { buildUnityProjectSnapshot } = require('./unity-intel/project-index.cjs');
+const { scanUnityProject } = require('./unity-intel/service.cjs');
 
 const USAGE = `Unity Port Planner
 
 Usage:
+  node playable-shared-kit/tools/port-plan.cjs --project <UnityProjectRoot> [options]
   node playable-shared-kit/tools/port-plan.cjs --src <UnityAssetsFolder> [options]
-  npm run port:plan -- --src <UnityAssetsFolder>
+  npm run ai:port:plan -- --project <UnityProjectRoot>
 
 Options:
-  --src <path>      Thư mục Unity cần phân tích (thường là .../Assets hoặc một module con).
-  --json            Xuất JSON (mặc định khi không phải TTY).
-  --out <file>      Ghi JSON ra file.
-  --top <n>         Số prefab liệt kê trong thứ tự đề xuất. Default: 15.
-  --include-vendor  Không bỏ qua thư mục thư viện (demo/samples/plugins/...).
-                    Cần dùng khi chính package asset store là thứ phải port.
-  --help            Hiện trợ giúp và thoát.
+  --project <path>   Unity project root. Scanner tự chọn thư mục Assets.
+  --src <path>       Unity Assets hoặc module con. Giữ tương thích CLI cũ.
+  --json             Xuất JSON (mặc định khi không phải TTY).
+  --out <file>       Ghi JSON ra file.
+  --top <n>          Số scene/prefab liệt kê. Default: 15.
+  --include-vendor   Hiện vendor/sample/editor trong porting view.
+  --provider <mode>  auto | static | unity-mcp. Default: auto (read-only fallback).
+  --bootstrap        Tự cài Unity scanner + Unity-MCP, reload rồi scan.
+  --unity <file>     Unity Editor executable; phải đúng version project.
+  --mcp-url <url>    Override HTTP loopback endpoint (token qua UNITY_MCP_TOKEN).
+  --timeout-ms <n>   Timeout live scan/setup.
+  --cache-dir <dir>  Ghi incremental index cache ngoài Unity/Cocos project.
+  --no-cache         Không đọc hoặc ghi persistent cache.
+  --refresh-cache    Bỏ cache cũ, scan lại rồi ghi cache mới.
+  --help             Hiện trợ giúp và thoát.
 
-Không ghi gì vào project Cocos — chỉ đọc và phân tích.`;
+Mặc định không sửa Unity/Cocos project. Chỉ --bootstrap mới ghi package/config Unity.`;
 
-/** Thư viện bên thứ ba: bỏ qua để không làm nhiễu số liệu game. */
-const VENDOR_DIRS = new Set([
-  'plugins', 'zenject', 'textmesh pro', 'samples', 'demo', 'demos',
-  'editor default resources', 'gizmos', 'standard assets',
-  'firebase', 'maxsdk', 'onesignal', 'googleplayplugins', 'externaldependencymanager',
-  'restclient', 'uniwebview', 'bitlabs', 'mcofferwallsdk', 'gameanalytics',
-  'cheatdetected', 'jmo assets', 'recyclable scroll rect', 'simple scroll-snap',
-  'ugui particle', 'uguiparticle', 'vibration', 'internetchecker', 'realtimenet',
-]);
-
-/**
- * Tính năng Unity KHÔNG có đường chuyển thẳng sang Cocos playable.
- * Mỗi entry: cách phát hiện + hệ quả + việc phải làm.
- */
-const BLOCKERS = [
-  {
-    id: 'textmeshpro',
-    label: 'TextMeshPro',
-    test: (f, text) => /TMPro|TextMeshProUGUI|TMP_Text/.test(text),
-    impact: 'Label của Cocos không có outline/gradient/SDF của TMP.',
-    action: 'Quy về cc.Label + bitmap font; dựng lại outline/gradient bằng effect nếu cần.',
-  },
-  {
-    id: 'addressables',
-    label: 'Addressables / AssetBundle',
-    test: (f, text) => /Addressables|AssetReference|AsyncOperationHandle|AssetBundle/.test(text),
-    impact: 'Playable là single-file: mọi load bất đồng bộ phải thành preload đồng bộ.',
-    action: 'Chuyển sang resources.preload hoặc nhúng trực tiếp; bỏ mọi await load runtime.',
-  },
-  {
-    id: 'zenject',
-    label: 'Zenject / DI',
-    test: (f, text) => /\[Inject\]|Zenject|MonoInstaller|DiContainer/.test(text),
-    impact: 'Không có container DI; scaffolder không hiểu [Inject].',
-    action: 'Thay bằng tham chiếu trực tiếp hoặc singleton (GameManager.instance).',
-  },
-  {
-    id: 'dotween',
-    label: 'DOTween',
-    test: (f, text) => /DG\.Tweening|DOTween|\.DOMove|\.DOScale|\.DOFade/.test(text),
-    impact: 'Ease/Sequence của DOTween không map 1:1 sang cc.tween.',
-    action: 'Dùng cc.tween; ánh xạ easing thủ công.',
-  },
-  {
-    id: 'urp-volume',
-    label: 'URP post-processing (Volume)',
-    test: (f) => /VolumeProfile|UniversalRenderPipelineGlobalSettings/.test(path.basename(f)),
-    impact: 'Bloom/vignette/color-grading không có tương đương.',
-    action: 'Làm lại bằng effect riêng, hoặc bỏ để tiết kiệm bundle.',
-  },
-  {
-    id: 'shadergraph',
-    label: 'ShaderGraph',
-    test: (f) => f.toLowerCase().endsWith('.shadergraph'),
-    impact: 'Có bộ dịch node->GLSL, nhưng không phủ hết node.',
-    action: 'Chạy shader.convert rồi kiểm tra từng effect bằng mắt.',
-  },
-  {
-    id: 'shaderlab',
-    label: 'ShaderLab (.shader)',
-    test: (f) => f.toLowerCase().endsWith('.shader'),
-    impact: 'THÂN shader KHÔNG được dịch — chỉ sinh khung + properties + UBO.',
-    action: 'shader.convert rồi tự viết lại frag()/vert() từ khối TODO-AGENT.',
-  },
-  {
-    id: 'animator',
-    label: 'Animator state machine',
-    test: (f) => f.toLowerCase().endsWith('.controller'),
-    impact: 'Transition/blend tree không map hết sang cc.Animation.',
-    action: 'Dựng lại luồng chuyển state bằng code.',
-  },
-  {
-    id: 'particle',
-    label: 'Unity ParticleSystem',
-    test: (f, text) => /ParticleSystem:/.test(text),
-    impact: 'Đa số module được port, nhưng sub-emitter và trail cần kiểm tra.',
-    action: 'Port bằng port.prefab rồi so sánh bằng mắt.',
-  },
-  {
-    id: 'coroutine',
-    label: 'Coroutine',
-    test: (f, text) => /StartCoroutine|IEnumerator|yield return/.test(text),
-    impact: 'Cocos không có coroutine.',
-    action: 'Chuyển sang async/await, scheduleOnce hoặc cc.tween.',
-  },
-];
-
-/** Tốc độ port đo được trên MyCozyHome (sau khi sửa PERF-01). */
 const MEASURED_SECONDS_PER_PREFAB = 2.9;
 const MEASURED_SECONDS_PER_PREFAB_JOBS4 = 1.1;
 
-/**
- * Duyệt cây thư mục, bỏ qua thư viện bên thứ ba để số liệu phản ánh code game.
- *
- * `skipped` được ghi lại và LUÔN báo ra ngoài: 'demo' và 'samples' nằm trong
- * VENDOR_DIRS, nên khi port chính một asset store package (đường dẫn kiểu
- * `AllIn1SpriteShader/Demo/Demo.unity`) toàn bộ nội dung cần port bị loại và
- * report ra `scenes: 0` — đọc như "không có scene" chứ không phải "đã bỏ qua".
- */
-function walk(root, onFile, skipped) {
-  const stack = [root];
-  while (stack.length) {
-    const dir = stack.pop();
-    let entries;
-    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (_) { continue; }
-    for (const entry of entries) {
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        if (entry.name.startsWith('.')) continue;
-        if (!INCLUDE_VENDOR && VENDOR_DIRS.has(entry.name.toLowerCase())) {
-          if (skipped) skipped.add(path.relative(root, full).replace(/\\/g, '/') || entry.name);
-          continue;
-        }
-        stack.push(full);
-        continue;
-      }
-      onFile(full, entry.name);
-    }
-  }
+/** Legacy public export retained for existing consumers. */
+const BLOCKERS = BLOCKER_RULES;
+
+function capabilityInvocation(id) {
+  const capability = CAPABILITIES.find(item => item.id === id);
+  if (!capability) throw new Error(`Capability not found: ${id}`);
+  if (capability.npm) return capability.npm;
+  return [capability.cmd, ...(capability.args || [])].filter(Boolean).join(' ');
 }
 
-/** Đặt bởi --include-vendor; tắt hoàn toàn việc bỏ qua thư mục thư viện. */
-let INCLUDE_VENDOR = false;
-
-const TEXT_SCAN_EXT = new Set(['.cs', '.prefab', '.unity', '.asset', '.mat', '.shader', '.shadergraph']);
-const MAX_TEXT_BYTES = 400 * 1024;
-
-/**
- * Đếm GameObject và Material nhúng trong một file YAML của Unity.
- *
- * Không dùng chung đường đọc text với bộ dò blocker: file đó bị chặn ở 400KB còn
- * scene thật thường lớn hơn nhiều (Demo.unity = 1.7MB). Ở đây quét theo byte nên
- * kích thước không thành vấn đề.
- */
-function countYamlDocs(file) {
-  const out = { gameObjects: 0, materials: 0 };
-  let buf;
-  try { buf = fs.readFileSync(file); } catch (_) { return out; }
-  const GAME_OBJECT = Buffer.from('\n--- !u!1 ');
-  const MATERIAL = Buffer.from('\n--- !u!21 ');
-  for (let i = buf.indexOf(GAME_OBJECT); i >= 0; i = buf.indexOf(GAME_OBJECT, i + 1)) out.gameObjects += 1;
-  for (let i = buf.indexOf(MATERIAL); i >= 0; i = buf.indexOf(MATERIAL, i + 1)) out.materials += 1;
-  return out;
+function compactBlocker(blocker) {
+  return {
+    id: blocker.id,
+    label: blocker.label,
+    impact: blocker.impact,
+    action: blocker.action,
+    count: blocker.count,
+    examples: blocker.examples,
+  };
 }
 
-function analyze(srcRoot, options) {
-  const counts = {
-    scenes: 0, prefabs: 0, scripts: 0, shaders: 0, shaderGraphs: 0,
-    materials: 0, models: 0, textures: 0, animations: 0, controllers: 0, audio: 0,
+function legacyAssetEntry(asset) {
+  return {
+    path: asset.path,
+    kb: asset.kb,
+    gameObjects: asset.gameObjects,
+    inlineMaterials: asset.inlineMaterials,
   };
-  const prefabs = [];
-  const scenes = [];
-  const blockerHits = new Map();
-  const skippedVendorDirs = new Set();
-  let totalBytes = 0;
-  // Material nhúng thẳng trong scene/prefab (--- !u!21) không phải file .mat nên
-  // cách đếm theo phần mở rộng bỏ sót hoàn toàn. Demo.unity của AllIn1SpriteShader
-  // có 91 material dạng này và 0 file .mat.
-  let inlineMaterials = 0;
-  let sceneObjects = 0;
+}
 
-  const noteBlocker = (blocker, file) => {
-    if (!blockerHits.has(blocker.id)) {
-      blockerHits.set(blocker.id, { ...blocker, count: 0, examples: [] });
-      delete blockerHits.get(blocker.id).test;
-    }
-    const entry = blockerHits.get(blocker.id);
-    entry.count += 1;
-    if (entry.examples.length < 3) {
-      entry.examples.push(path.relative(srcRoot, file).replace(/\\/g, '/'));
-    }
-  };
-
-  walk(srcRoot, (full, name) => {
-    const ext = path.extname(name).toLowerCase();
-    let size = 0;
-    try { size = fs.statSync(full).size; } catch (_) { return; }
-    totalBytes += size;
-
-    if (ext === '.unity' || ext === '.prefab') {
-      const inline = countYamlDocs(full);
-      inlineMaterials += inline.materials;
-      sceneObjects += inline.gameObjects;
-      const entry = {
-        path: path.relative(srcRoot, full).replace(/\\/g, '/'),
-        kb: Math.round(size / 1024),
-        gameObjects: inline.gameObjects,
-        inlineMaterials: inline.materials,
-      };
-      if (ext === '.unity') { counts.scenes += 1; scenes.push(entry); }
-      else { counts.prefabs += 1; prefabs.push(entry); }
-    }
-    else if (ext === '.cs') counts.scripts += 1;
-    else if (ext === '.shader') counts.shaders += 1;
-    else if (ext === '.shadergraph') counts.shaderGraphs += 1;
-    else if (ext === '.mat') counts.materials += 1;
-    else if (['.fbx', '.obj', '.gltf', '.glb'].includes(ext)) counts.models += 1;
-    else if (['.png', '.jpg', '.jpeg', '.tga', '.psd', '.exr'].includes(ext)) counts.textures += 1;
-    else if (ext === '.anim') counts.animations += 1;
-    else if (ext === '.controller') counts.controllers += 1;
-    else if (['.mp3', '.wav', '.ogg', '.m4a'].includes(ext)) counts.audio += 1;
-
-    // Phát hiện blocker theo tên file (rẻ) và theo nội dung (chỉ file text nhỏ).
-    let text = '';
-    if (TEXT_SCAN_EXT.has(ext) && size <= MAX_TEXT_BYTES) {
-      try { text = fs.readFileSync(full, 'utf8'); } catch (_) { text = ''; }
-    }
-    for (const blocker of BLOCKERS) {
-      try { if (blocker.test(full, text)) noteBlocker(blocker, full); } catch (_) { /* ignore */ }
-    }
-  }, skippedVendorDirs);
-
-  // Prefab gốc = không bị prefab nào khác tham chiếu. Xấp xỉ bằng GUID trong .meta.
-  const guidToPath = new Map();
-  walk(srcRoot, (full, name) => {
-    if (!name.endsWith('.prefab.meta')) return;
-    try {
-      const meta = fs.readFileSync(full, 'utf8');
-      const m = /guid:\s*([0-9a-f]{32})/.exec(meta);
-      if (m) guidToPath.set(m[1], full.replace(/\.meta$/, ''));
-    } catch (_) { /* ignore */ }
-  });
-  const referenced = new Set();
-  walk(srcRoot, (full, name) => {
-    if (!name.endsWith('.prefab') && !name.endsWith('.unity')) return;
-    let text = '';
-    try {
-      if (fs.statSync(full).size > MAX_TEXT_BYTES) return;
-      text = fs.readFileSync(full, 'utf8');
-    } catch (_) { return; }
-    for (const guid of text.matchAll(/guid:\s*([0-9a-f]{32})/g)) {
-      const target = guidToPath.get(guid[1]);
-      if (target && path.resolve(target) !== path.resolve(full)) referenced.add(path.resolve(target));
-    }
-  });
-
-  const roots = prefabs.filter((p) => !referenced.has(path.resolve(srcRoot, p.path)));
-  const byWeight = [...prefabs].sort((a, b) => b.kb - a.kb);
-
-  counts.inlineMaterials = inlineMaterials;
-  counts.sceneObjects = sceneObjects;
+/**
+ * Backwards-compatible analysis API. Values are now derived from one canonical
+ * index pass; the returned snapshot is additive and is intentionally omitted
+ * from the compact CLI JSON by buildPlan().
+ */
+function analysisFromSnapshot(snapshot, options = {}) {
+  const top = Number.isInteger(options.top) && options.top > 0 ? options.top : 15;
+  const { totalMb, ...counts } = snapshot.inventory;
+  const visible = asset => options.includeVendor || asset.scope === 'runtime';
+  const rankedScenes = snapshot.scenes
+    .filter(visible)
+    .sort((a, b) => Number(b.gameplayCandidate) - Number(a.gameplayCandidate) ||
+      Number(b.enabled) - Number(a.enabled) || b.kb - a.kb || a.path.localeCompare(b.path));
+  const rankedPrefabs = snapshot.prefabs
+    .filter(visible)
+    .sort((a, b) => b.kb - a.kb || a.path.localeCompare(b.path));
+  const entryPrefabs = snapshot.views.entryPrefabs.length
+    ? snapshot.views.entryPrefabs
+    : snapshot.views.rootPrefabs;
 
   return {
     counts,
-    totalMb: Math.round((totalBytes / 1024 / 1024) * 10) / 10,
-    scenes: scenes.sort((a, b) => b.kb - a.kb).slice(0, options.top),
-    rootPrefabs: roots.sort((a, b) => b.kb - a.kb).slice(0, options.top),
-    heaviestPrefabs: byWeight.slice(0, options.top),
-    rootPrefabCount: roots.length,
-    skippedVendorDirs: [...skippedVendorDirs].sort(),
-    blockers: [...blockerHits.values()].sort((a, b) => b.count - a.count),
+    totalMb,
+    scenes: rankedScenes.slice(0, top).map(legacyAssetEntry),
+    rootPrefabs: snapshot.views.rootPrefabs.slice(0, top).map(legacyAssetEntry),
+    entryPrefabs: entryPrefabs.slice(0, top).map(legacyAssetEntry),
+    heaviestPrefabs: rankedPrefabs.slice(0, top).map(legacyAssetEntry),
+    rootPrefabCount: snapshot.views.rootPrefabs.length,
+    entryPrefabCount: snapshot.views.entryPrefabs.length,
+    skippedVendorDirs: snapshot.skippedVendorDirs,
+    blockers: snapshot.features.blockers.map(compactBlocker),
+    snapshot,
   };
 }
 
-function buildPlan(srcRoot, analysis, options) {
-  const p = analysis.counts.prefabs;
+function analyze(srcRoot, options = {}) {
+  const snapshot = buildUnityProjectSnapshot({
+    sourceRoot: path.resolve(srcRoot),
+    projectRoot: options.projectRoot,
+    includeVendor: !!options.includeVendor,
+    cache: options.cache !== false,
+    cacheDir: options.cacheDir,
+    refreshCache: !!options.refreshCache,
+  });
+  return analysisFromSnapshot(snapshot, options);
+}
+
+async function analyzeAsync(srcRoot, options = {}) {
+  const intelligence = await scanUnityProject({
+    project: options.projectRoot,
+    sourceRoot: path.resolve(srcRoot),
+    provider: options.provider || 'auto',
+    bootstrap: !!options.bootstrap,
+    unity: options.unity,
+    mcpUrl: options.mcpUrl,
+    mcpToken: process.env.UNITY_MCP_TOKEN || undefined,
+    timeoutMs: options.timeoutMs,
+    includeVendor: !!options.includeVendor,
+    cache: options.cache !== false,
+    cacheDir: options.cacheDir,
+    refreshCache: !!options.refreshCache,
+  });
+  return {
+    ...analysisFromSnapshot(intelligence.snapshot, options),
+    intelligence: {
+      summary: intelligence.summary,
+      doctor: intelligence.doctor,
+      setup: intelligence.setup,
+    },
+  };
+}
+
+function actionStep(step, what, why, capabilityId, extra = {}) {
+  return {
+    step,
+    what,
+    why,
+    capabilityId,
+    command: capabilityInvocation(capabilityId),
+    ...extra,
+  };
+}
+
+function buildPlan(srcRoot, analysis) {
+  const prefabCount = analysis.counts.prefabs;
+  const snapshot = analysis.snapshot || {
+    schemaVersion: null,
+    provider: 'legacy',
+    project: { name: null, root: null, unityVersion: null, packages: {} },
+    buildScenes: [],
+    dependencies: { edgeCount: 0, unresolvedCount: 0 },
+    diagnostics: [],
+    cache: { enabled: false, mode: 'legacy', hits: 0, misses: 0 },
+    metrics: { durationMs: null },
+  };
+  const entryPrefabs = Array.isArray(analysis.entryPrefabs) && analysis.entryPrefabs.length
+    ? analysis.entryPrefabs
+    : (analysis.rootPrefabs || []);
+  const entryPrefabCount = Number.isInteger(analysis.entryPrefabCount)
+    ? analysis.entryPrefabCount
+    : (analysis.entryPrefabs || []).length;
+  const rootPrefabCount = Number.isInteger(analysis.rootPrefabCount)
+    ? analysis.rootPrefabCount
+    : (analysis.rootPrefabs || []).length;
   return {
     _meta: {
       tool: 'port-plan',
-      source: srcRoot.replace(/\\/g, '/'),
+      source: path.resolve(srcRoot).replace(/\\/g, '/'),
       generatedFor: 'AI agent — đọc file này TRƯỚC khi port, thay cho việc quét cây thư mục',
-      note: 'Chỉ đọc, không ghi gì vào project Cocos.',
+      note: 'Chỉ đọc Unity/Cocos project; incremental cache nằm ngoài hai project.',
+      snapshotSchemaVersion: snapshot.schemaVersion,
+      provider: snapshot.provider,
+      liveStatus: snapshot.live && snapshot.live.status || 'not-requested',
     },
     inventory: { ...analysis.counts, totalMb: analysis.totalMb },
     estimate: {
-      prefabs: p,
+      prefabs: prefabCount,
       secondsPerPrefabMeasured: MEASURED_SECONDS_PER_PREFAB,
-      singleProcessMinutes: Math.round((p * MEASURED_SECONDS_PER_PREFAB) / 60),
-      jobs4Minutes: Math.round((p * MEASURED_SECONDS_PER_PREFAB_JOBS4) / 60),
+      singleProcessMinutes: Math.round((prefabCount * MEASURED_SECONDS_PER_PREFAB) / 60),
+      jobs4Minutes: Math.round((prefabCount * MEASURED_SECONDS_PER_PREFAB_JOBS4) / 60),
       basis: 'Đo trên MyCozyHome sau khi sửa PERF-01; không tính thời gian agent sửa tay.',
     },
     suggestedOrder: [
-      { step: 1, what: 'Port prefab gốc trước', why: 'Prefab gốc kéo theo nested prefab, nên phủ được nhiều nhất với ít lệnh nhất.', items: analysis.rootPrefabs.map((x) => x.path) },
-      { step: 2, what: 'Xử lý mọi dòng `high` trong report', why: 'high = mất hành vi hoặc mất hình ảnh.', command: 'npm run port:report -- --digest' },
-      { step: 3, what: 'Chuyển shader còn thiếu', why: 'Thân shader không tự dịch được.', command: 'node playable-shared-kit/tools/unity-hlsl-to-cocos-effect.cjs batch --dir <shaders> --out-dir assets/effects' },
-      { step: 4, what: 'Kiểm tra prefab đã port', why: 'Bắt UUID treo và script thiếu trước khi build.', command: 'npm run ai:verify:prefab' },
-      { step: 5, what: 'Build rồi smoke test', why: 'Compile được KHÔNG có nghĩa là chạy được.', command: 'npm run build && npm run ai:verify:runtime' },
+      {
+        step: 1,
+        what: entryPrefabCount ? 'Port prefab reachable từ build scene trước' : 'Port prefab gốc trước',
+        why: entryPrefabCount
+          ? 'Dependency graph từ build scene ưu tiên đúng gameplay thay vì demo/plugin nặng.'
+          : 'Chưa resolve được build-scene graph; prefab gốc là static fallback tốt nhất.',
+        items: entryPrefabs.map(item => item.path),
+      },
+      actionStep(2, 'Xử lý mọi dòng `high` trong report', 'high = mất hành vi hoặc mất hình ảnh.', 'port.report'),
+      actionStep(3, 'Chuyển và validate shader còn thiếu', 'Shader compile được chưa chứng minh tương đương hình ảnh.', 'shader.batch', {
+        verifyCapabilityId: 'shader.validate',
+        verify: capabilityInvocation('shader.validate'),
+      }),
+      actionStep(4, 'Kiểm tra prefab đã port', 'Bắt UUID treo và script thiếu trước khi build.', 'verify.prefab'),
+      actionStep(5, 'Build rồi smoke test', 'Compile được không có nghĩa playable chạy đúng.', 'build.playable', {
+        verifyCapabilityId: 'verify.runtime',
+        verify: capabilityInvocation('verify.runtime'),
+      }),
     ],
     blockers: analysis.blockers,
     heaviestPrefabs: analysis.heaviestPrefabs,
     scenes: analysis.scenes,
-    // Không im lặng: một số 0 trong inventory có thể là "đã bỏ qua", không phải
-    // "không tồn tại". Chạy lại với --include-vendor nếu đúng thứ cần port nằm ở đây.
     skippedVendorDirs: analysis.skippedVendorDirs,
+    project: {
+      name: snapshot.project.name,
+      root: snapshot.project.root,
+      unityVersion: snapshot.project.unityVersion,
+      packages: snapshot.project.packages,
+    },
+    buildScenes: snapshot.buildScenes,
+    dependencySummary: {
+      edges: snapshot.dependencies.edgeCount,
+      unresolvedGuids: snapshot.dependencies.unresolvedCount,
+      unresolvedByCategory: snapshot.dependencies.classificationCounts || {},
+      reachableMissing: snapshot.dependencies.classificationCounts?.['reachable-missing'] || 0,
+      reachableAmbiguous: snapshot.dependencies.classificationCounts?.['reachable-ambiguous'] || 0,
+      packageOrDll: snapshot.dependencies.classificationCounts?.['package-or-dll'] || 0,
+      builtinOrNull: snapshot.dependencies.builtinCount || 0,
+      packageGuidCatalogAssets: snapshot.assets?.packageCount || 0,
+      rootPrefabs: rootPrefabCount,
+      entryPrefabs: entryPrefabCount,
+    },
+    diagnostics: snapshot.diagnostics,
+    featureSketch: snapshot.features && snapshot.features.sketch || [],
+    unityEnvironment: analysis.intelligence ? {
+      doctor: analysis.intelligence.doctor,
+      setup: analysis.intelligence.setup,
+    } : null,
+    cache: snapshot.cache,
+    metrics: snapshot.metrics,
   };
 }
 
 function printHuman(plan) {
-  const inv = plan.inventory;
+  const inventory = plan.inventory;
   console.log('');
   console.log('======================================================');
   console.log(' Unity Port Planner ');
   console.log('======================================================');
   console.log(`Nguồn: ${plan._meta.source}`);
+  if (plan.project.unityVersion) console.log(`Unity: ${plan.project.unityVersion}`);
   console.log('');
-  console.log(`Tồn kho: ${inv.prefabs} prefab, ${inv.scenes} scene, ${inv.scripts} script C#, ` +
-    `${inv.shaders + inv.shaderGraphs} shader, ${inv.materials} material, ${inv.models} model, ` +
-    `${inv.textures} texture, ${inv.controllers} animator, ${inv.audio} audio — ${inv.totalMb} MB`);
-  if (inv.sceneObjects) {
-    console.log(`Trong scene/prefab: ${inv.sceneObjects} GameObject, ${inv.inlineMaterials} material nhúng ` +
-      '(material nhúng KHÔNG phải file .mat, cách đếm theo phần mở rộng bỏ sót hoàn toàn)');
+  console.log(`Tồn kho runtime: ${inventory.prefabs} prefab, ${inventory.scenes} scene, ${inventory.scripts} script C#, ` +
+    `${inventory.shaders + inventory.shaderGraphs} shader, ${inventory.materials} material, ${inventory.models} model, ` +
+    `${inventory.textures} texture, ${inventory.controllers} animator, ${inventory.audio} audio — ${inventory.totalMb} MB`);
+  if (inventory.sceneObjects) {
+    console.log(`Trong scene/prefab: ${inventory.sceneObjects} GameObject, ${inventory.inlineMaterials} material nhúng`);
   }
-  console.log(`Ước lượng port: ~${plan.estimate.singleProcessMinutes} phút (1 tiến trình) / ` +
-    `~${plan.estimate.jobs4Minutes} phút (--jobs 4)`);
-  if (plan.skippedVendorDirs && plan.skippedVendorDirs.length) {
+  console.log(`Index: ${plan.cache.mode}, ${plan.cache.hits} cache hit / ${plan.cache.misses} scan — ${plan.metrics.durationMs} ms`);
+  if (plan.buildScenes.length) {
+    const candidates = plan.buildScenes.filter(scene => scene.gameplayCandidate).map(scene => scene.path);
+    console.log(`Build scene gameplay: ${candidates.join(', ') || '(chưa xác định)'}`);
+  }
+  if (plan.skippedVendorDirs.length) {
     console.log('');
-    console.log(color('yellow', `Đã BỎ QUA ${plan.skippedVendorDirs.length} thư mục thư viện: ${plan.skippedVendorDirs.slice(0, 6).join(', ')}`));
-    console.log('  Số 0 ở trên có thể là "đã bỏ qua", không phải "không có". Chạy lại với --include-vendor');
-    console.log('  nếu chính package đó là thứ cần port (ví dụ asset store có thư mục Demo/ hoặc Samples/).');
+    console.log(color('yellow', `Đã lọc ${plan.skippedVendorDirs.length} vendor/sample/editor scope khỏi porting view.`));
+    console.log('  Evidence vẫn nằm trong raw index để resolve GUID; dùng --include-vendor để hiện trong view.');
   }
   console.log('');
 
   if (plan.blockers.length) {
-    console.log(color('yellow', 'Tính năng KHÔNG có đường sang Cocos:'));
-    for (const b of plan.blockers) {
-      console.log(`  • ${b.label} (${b.count} chỗ)`);
-      console.log(`      hệ quả: ${b.impact}`);
-      console.log(`      cần làm: ${b.action}`);
-      if (b.examples.length) console.log(`      ví dụ: ${b.examples.join(', ')}`);
+    console.log(color('yellow', 'Rủi ro cần xử lý khi port:'));
+    for (const blocker of plan.blockers) {
+      console.log(`  • ${blocker.label} (${blocker.count} file)`);
+      console.log(`      hệ quả: ${blocker.impact}`);
+      console.log(`      cần làm: ${blocker.action}`);
+      if (blocker.examples.length) console.log(`      ví dụ: ${blocker.examples.join(', ')}`);
     }
     console.log('');
   }
 
-  console.log(`Prefab gốc (${plan.suggestedOrder[0].items.length}/${plan.estimate.prefabs}) — nên port trước:`);
+  console.log('Prefab ưu tiên:');
   for (const item of plan.suggestedOrder[0].items) console.log(`  ${item}`);
   console.log('');
   console.log('Thứ tự đề xuất:');
@@ -371,54 +299,121 @@ function printHuman(plan) {
     console.log(`  ${step.step}. ${step.what}`);
     console.log(`     ${step.why}`);
     if (step.command) console.log(`     $ ${step.command}`);
+    if (step.verify) console.log(`     verify: $ ${step.verify}`);
   }
   console.log('======================================================');
   console.log('');
 }
 
-function parseArgs(argv) {
-  const o = { top: 15, json: false, help: false, includeVendor: false };
-  for (let i = 0; i < argv.length; i += 1) {
-    const a = argv[i];
-    if (a === '--help' || a === '-h') { o.help = true; continue; }
-    if (a === '--json') { o.json = true; continue; }
-    if (a === '--src') { o.src = argv[++i]; continue; }
-    if (a.startsWith('--src=')) { o.src = a.slice('--src='.length); continue; }
-    if (a === '--out') { o.out = argv[++i]; continue; }
-    if (a.startsWith('--out=')) { o.out = a.slice('--out='.length); continue; }
-    if (a === '--include-vendor') { o.includeVendor = true; continue; }
-    if (a === '--top') { o.top = Number(argv[++i]) || 15; continue; }
-    if (a.startsWith('--top=')) { o.top = Number(a.split('=')[1]) || 15; continue; }
-  }
-  return o;
+function readOptionValue(argv, index, option) {
+  const value = argv[index + 1];
+  if (!value || value.startsWith('--')) throw new Error(`${option} cần một giá trị.`);
+  return value;
 }
 
-function main() {
-  const options = parseArgs(process.argv.slice(2));
+function parseArgs(argv) {
+  const options = { top: 15, json: false, help: false, includeVendor: false, cache: true, provider: 'auto' };
+  for (let index = 0; index < argv.length; index += 1) {
+    const argument = argv[index];
+    if (argument === '--help' || argument === '-h') { options.help = true; continue; }
+    if (argument === '--json') { options.json = true; continue; }
+    if (argument === '--include-vendor') { options.includeVendor = true; continue; }
+    if (argument === '--bootstrap') { options.bootstrap = true; continue; }
+    if (argument === '--no-cache') { options.cache = false; continue; }
+    if (argument === '--refresh-cache') { options.refreshCache = true; continue; }
+    if (argument === '--src') { options.src = readOptionValue(argv, index, '--src'); index += 1; continue; }
+    if (argument.startsWith('--src=')) { options.src = argument.slice('--src='.length); continue; }
+    if (argument === '--project') { options.project = readOptionValue(argv, index, '--project'); index += 1; continue; }
+    if (argument.startsWith('--project=')) { options.project = argument.slice('--project='.length); continue; }
+    if (argument === '--out') { options.out = readOptionValue(argv, index, '--out'); index += 1; continue; }
+    if (argument.startsWith('--out=')) { options.out = argument.slice('--out='.length); continue; }
+    if (argument === '--cache-dir') { options.cacheDir = readOptionValue(argv, index, '--cache-dir'); index += 1; continue; }
+    if (argument.startsWith('--cache-dir=')) { options.cacheDir = argument.slice('--cache-dir='.length); continue; }
+    if (argument === '--provider') { options.provider = readOptionValue(argv, index, '--provider'); index += 1; continue; }
+    if (argument.startsWith('--provider=')) { options.provider = argument.slice('--provider='.length); continue; }
+    if (argument === '--unity') { options.unity = readOptionValue(argv, index, '--unity'); index += 1; continue; }
+    if (argument.startsWith('--unity=')) { options.unity = argument.slice('--unity='.length); continue; }
+    if (argument === '--mcp-url') { options.mcpUrl = readOptionValue(argv, index, '--mcp-url'); index += 1; continue; }
+    if (argument.startsWith('--mcp-url=')) { options.mcpUrl = argument.slice('--mcp-url='.length); continue; }
+    if (argument === '--timeout-ms') { options.timeoutMs = Number(readOptionValue(argv, index, '--timeout-ms')); index += 1; continue; }
+    if (argument.startsWith('--timeout-ms=')) { options.timeoutMs = Number(argument.slice('--timeout-ms='.length)); continue; }
+    if (argument === '--top') { options.top = Number(readOptionValue(argv, index, '--top')); index += 1; continue; }
+    if (argument.startsWith('--top=')) { options.top = Number(argument.slice('--top='.length)); continue; }
+    throw new Error(`Option không hỗ trợ: ${argument}`);
+  }
+  if (!Number.isInteger(options.top) || options.top < 1) throw new Error('--top phải là số nguyên >= 1.');
+  if (!['auto', 'static', 'unity-mcp'].includes(options.provider)) {
+    throw new Error('--provider phải là auto, static hoặc unity-mcp.');
+  }
+  if (options.timeoutMs !== undefined && (!Number.isInteger(options.timeoutMs) || options.timeoutMs < 250)) {
+    throw new Error('--timeout-ms phải là số nguyên >= 250.');
+  }
+  if (options.project && !options.src) options.src = path.join(options.project, 'Assets');
+  return options;
+}
+
+async function main() {
+  require('./lib/auto-strip-ansi.cjs');
+  let options;
+  try {
+    options = parseArgs(process.argv.slice(2));
+  } catch (error) {
+    console.error(`[port-plan] ${error.message}`);
+    process.exitCode = 1;
+    return;
+  }
   if (options.help) { console.log(USAGE); return; }
   if (!options.src) {
-    console.error('[port-plan] Thiếu --src <UnityAssetsFolder>. Xem --help.');
-    process.exit(1);
+    console.error('[port-plan] Thiếu --project <UnityProjectRoot> hoặc --src <UnityAssetsFolder>. Xem --help.');
+    process.exitCode = 1;
+    return;
   }
   const srcRoot = path.resolve(options.src);
-  if (!fs.existsSync(srcRoot)) {
-    console.error(`[port-plan] Không tìm thấy ${srcRoot}`);
-    process.exit(1);
+  let stat;
+  try { stat = fs.statSync(srcRoot); } catch (_) { stat = null; }
+  if (!stat || !stat.isDirectory()) {
+    console.error(`[port-plan] Không tìm thấy thư mục ${srcRoot}`);
+    process.exitCode = 1;
+    return;
   }
 
-  INCLUDE_VENDOR = !!options.includeVendor;
-  const analysis = analyze(srcRoot, options);
-  const plan = buildPlan(srcRoot, analysis, options);
+  let plan;
+  try {
+    const analysis = await analyzeAsync(srcRoot, {
+      ...options,
+      projectRoot: options.project ? path.resolve(options.project) : undefined,
+    });
+    plan = buildPlan(srcRoot, analysis, options);
+  } catch (error) {
+    console.error(`[port-plan] Scan thất bại: ${error.message}`);
+    process.exitCode = 1;
+    return;
+  }
 
   if (options.out) {
     fs.mkdirSync(path.dirname(path.resolve(options.out)), { recursive: true });
     fs.writeFileSync(path.resolve(options.out), `${JSON.stringify(plan, null, 2)}\n`, 'utf8');
-    console.log(`[port-plan] Đã ghi ${options.out}`);
+    const status = `[port-plan] Đã ghi ${options.out}`;
+    if (options.json || !process.stdout.isTTY) console.error(status);
+    else console.log(status);
   }
-  if (options.json || !process.stdout.isTTY) console.log(JSON.stringify(plan, null, 2));
+  if (options.json || !process.stdout.isTTY) console.log(JSON.stringify(plan));
   else printHuman(plan);
 }
 
-if (require.main === module) main();
+if (require.main === module) {
+  main().catch(error => {
+    console.error(`[port-plan] ${error.code || 'SCAN_FAILED'}: ${error.message}`);
+    process.exitCode = 1;
+  });
+}
 
-module.exports = { analyze, buildPlan, BLOCKERS };
+module.exports = {
+  analyze,
+  analyzeAsync,
+  analysisFromSnapshot,
+  buildPlan,
+  BLOCKERS,
+  capabilityInvocation,
+  parseArgs,
+};

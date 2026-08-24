@@ -26,8 +26,9 @@
 const fs = require('fs');
 const path = require('path');
 
-require('./lib/auto-strip-ansi.cjs');
 const { color } = require('./lib/term-color.cjs');
+const { readAssetEvidence } = require('./unity-intel/asset-reader.cjs');
+const { buildUnityProjectSnapshot, findUnityProjectRoot } = require('./unity-intel/project-index.cjs');
 
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
 
@@ -123,50 +124,70 @@ function walkFiles(dir, onFile) {
  * đầy đủ: nó chỉ cần trả lời "type X nằm ở file nào", và quét 2.184 file bằng
  * parser thật sẽ đắt hơn nhiều lần mà không đổi kết quả.
  */
-function buildIndex(unityRoot) {
+function buildIndex(unityRoot, options = {}) {
+  const root = path.resolve(unityRoot);
+  const projectRoot = findUnityProjectRoot(root);
+  const snapshot = buildUnityProjectSnapshot({
+    sourceRoot: root,
+    projectRoot: projectRoot || undefined,
+    packageMode: 'none',
+    cache: options.cache !== false,
+    cacheDir: options.cacheDir,
+  });
+  const toPhysical = assetPath => path.join(root, ...String(assetPath).replace(/^Assets\//, '').split('/'));
+  const excludedSegments = new Set([...SKIP_DIRS].map(value => value.toLowerCase()));
+  const eligible = script => script.scope === 'runtime' && !script.editorOnly &&
+    !script.assetPath.split('/').some(segment => excludedSegments.has(segment.toLowerCase()));
+  const scripts = snapshot.scriptIndex.scripts.filter(eligible);
+  const eligiblePaths = new Set(scripts.map(script => script.assetPath));
   const guidToScript = new Map();
   const typeToFile = new Map();
-  const csFiles = [];
+  const typeToFiles = new Map();
+  const dependenciesByFile = new Map();
 
-  walkFiles(unityRoot, (full, name) => {
-    if (name.endsWith('.cs.meta')) {
-      const text = fs.readFileSync(full, 'utf8');
-      const match = /^guid:\s*([0-9a-fA-F]{32})/m.exec(text);
-      if (match) guidToScript.set(match[1].toLowerCase(), full.slice(0, -5));
-    } else if (name.endsWith('.cs')) {
-      csFiles.push(full);
+  for (const script of scripts) {
+    const physical = toPhysical(script.assetPath);
+    if (script.guid) guidToScript.set(script.guid, physical);
+  }
+  for (const [typeName, declarations] of Object.entries(snapshot.scriptIndex.typeDeclarations)) {
+    const physical = declarations.filter(assetPath => eligiblePaths.has(assetPath)).map(toPhysical);
+    if (!physical.length) continue;
+    typeToFiles.set(typeName, physical);
+    typeToFile.set(typeName, physical[0]);
+  }
+  for (const script of scripts) {
+    const physical = toPhysical(script.assetPath);
+    const dependencies = new Set();
+    for (const typeName of script.referencedProjectTypes) {
+      for (const target of typeToFiles.get(typeName) || []) {
+        if (target !== physical) dependencies.add(target);
+      }
     }
-  });
-
-  for (const file of csFiles) {
-    let source;
-    try {
-      source = stripCommentsAndStrings(fs.readFileSync(file, 'utf8'));
-    } catch {
-      continue;
-    }
-    for (const match of source.matchAll(
-      /\b(?:class|struct|enum|interface|record)\s+([A-Za-z_][\w]*)/g,
-    )) {
-      const typeName = match[1];
-      // Type đầu tiên khai báo thắng: partial class rải nhiều file thì lấy file
-      // đầu, đủ để kéo phần còn lại vào qua tham chiếu chéo.
-      if (!typeToFile.has(typeName)) typeToFile.set(typeName, file);
-    }
+    dependenciesByFile.set(physical, [...dependencies].sort());
   }
 
-  return { guidToScript, typeToFile, scannedFiles: csFiles.length };
+  return {
+    guidToScript,
+    typeToFile,
+    typeToFiles,
+    dependenciesByFile,
+    scannedFiles: scripts.length,
+    scriptIndex: snapshot.scriptIndex,
+    cache: snapshot.cache,
+  };
 }
 
 /** Mọi script GUID mà một Unity YAML asset tham chiếu, kèm số component dùng nó. */
 function readScriptGuids(assetFile) {
   const counts = new Map();
-  let text;
+  let stat;
   try {
-    text = fs.readFileSync(assetFile, 'utf8');
+    stat = fs.statSync(assetFile);
   } catch {
     return counts;
   }
+  const evidence = readAssetEvidence(assetFile, path.extname(assetFile).toLowerCase(), stat.size);
+  const text = evidence.text;
   for (const match of text.matchAll(/m_Script:\s*\{fileID:\s*\d+,\s*guid:\s*([0-9a-fA-F]{32})/g)) {
     const guid = match[1].toLowerCase();
     counts.set(guid, (counts.get(guid) || 0) + 1);
@@ -175,7 +196,11 @@ function readScriptGuids(assetFile) {
 }
 
 /** Type mà một file C# tham chiếu và có khai báo trong project. */
-function referencedProjectTypes(file, typeToFile) {
+function referencedProjectTypes(file, indexOrTypeMap) {
+  if (indexOrTypeMap && indexOrTypeMap.dependenciesByFile instanceof Map) {
+    return indexOrTypeMap.dependenciesByFile.get(path.resolve(file)) || [];
+  }
+  const typeToFile = indexOrTypeMap;
   let source;
   try {
     source = stripCommentsAndStrings(fs.readFileSync(file, 'utf8'));
@@ -221,7 +246,7 @@ function resolveClosure(assetFiles, index, maxDepth, exclude = []) {
   for (let depth = 1; depth <= maxDepth && frontier.length > 0; depth++) {
     const next = [];
     for (const file of frontier) {
-      for (const dependency of referencedProjectTypes(file, index.typeToFile)) {
+      for (const dependency of referencedProjectTypes(file, index)) {
         if (depthOf.has(dependency) || isExcluded(dependency)) continue;
         depthOf.set(dependency, depth);
         next.push(dependency);
@@ -290,6 +315,7 @@ function parseArgs(argv) {
 }
 
 function main() {
+  require('./lib/auto-strip-ansi.cjs');
   const options = parseArgs(process.argv.slice(2));
   if (options.help) { console.log(USAGE); return; }
   if (!options.prefab) {
@@ -382,7 +408,7 @@ function main() {
     nextActions,
     limits: [
       'Dependency được suy ra bằng cách khớp identifier hoa đầu với bảng type khai báo trong project. Thiên về gom THỪA (port thêm vài file) hơn là bỏ SÓT.',
-      'Không đọc .csproj nên không phân biệt assembly definition.',
+      'ScriptIndex hiểu .asmdef và partial class nhưng chưa đọc .csproj hay semantic model Roslyn; type reference vẫn là lexical heuristic.',
     ],
   };
 
