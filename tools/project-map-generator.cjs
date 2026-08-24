@@ -2,8 +2,6 @@
 'use strict';
 
 
-// Bỏ escape ANSI khi output bị pipe (tiết kiệm token cho AI agent).
-require('./lib/auto-strip-ansi.cjs');
 /**
  * Project Map Generator for AI Agents
  *
@@ -315,6 +313,9 @@ Options:
 Writes PROJECT_MAP.json and playable-shared-kit/ai/PROJECT_MAP.json.`;
 
 function main() {
+  // Bỏ escape ANSI khi CLI output bị pipe; không patch stdout khi module được import
+  // bởi node:test hoặc ai-knowledge-sync.
+  require('./lib/auto-strip-ansi.cjs');
   const args = process.argv.slice(2);
   if (args.includes('--help') || args.includes('-h')) {
     console.log(USAGE);

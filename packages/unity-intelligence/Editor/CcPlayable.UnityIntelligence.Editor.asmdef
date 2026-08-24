@@ -1,0 +1,26 @@
+{
+  "name": "CcPlayable.UnityIntelligence.Editor",
+  "rootNamespace": "CcPlayable.UnityIntelligence",
+  "references": [
+    "com.IvanMurzak.Unity.MCP.Runtime"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": true,
+  "precompiledReferences": [
+    "ReflectorNet.dll",
+    "McpPlugin.dll",
+    "McpPlugin.Common.dll",
+    "System.Text.Json.dll"
+  ],
+  "autoReferenced": true,
+  "defineConstraints": [
+    "UNITY_MCP_READY",
+    "UNITY_MCP_DEPS_2"
+  ],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

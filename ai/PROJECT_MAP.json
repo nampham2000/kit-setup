@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "generatedAt": "2026-08-22T04:01:50.164Z",
+    "generatedAt": "2026-08-24T09:30:57.177Z",
     "description": "Compact project manifest for AI Agents. Use this instead of scanning file trees.",
     "project": {
       "projectName": "cc_playable_framework",
@@ -20,121 +20,417 @@
   },
   "scenes": [
     {
-      "name": "Boilerplate",
-      "path": "assets/Boilerplate.scene",
-      "sizeKb": 64.3
-    },
-    {
       "name": "Gameplay",
       "path": "assets/Gameplay.scene",
-      "sizeKb": 87.7
+      "sizeKb": 83.3
+    },
+    {
+      "name": "Boilerplate",
+      "path": "assets/Boilerplate.scene",
+      "sizeKb": 60.9
+    },
+    {
+      "name": "AnimeParticlesDemo",
+      "path": "assets/AnimeParticlesDemo.scene",
+      "sizeKb": 32.3
     },
     {
       "name": "PortalDemo",
       "path": "assets/PortalDemo.scene",
-      "sizeKb": 24.3
+      "sizeKb": 25.5
     }
   ],
   "prefabs": [
     {
+      "name": "Explosion 1 (projectile)",
+      "path": "assets/resources/fx/Demo/Explosion 1 (projectile).prefab",
+      "sizeKb": 110
+    },
+    {
+      "name": "Explosion 2 (projectile)",
+      "path": "assets/resources/fx/Demo/Explosion 2 (projectile).prefab",
+      "sizeKb": 84.2
+    },
+    {
+      "name": "Fireball (projectile)",
+      "path": "assets/resources/fx/Demo/Fireball (projectile).prefab",
+      "sizeKb": 111.2
+    },
+    {
+      "name": "Fireball 2 (projectile)",
+      "path": "assets/resources/fx/Demo/Fireball 2 (projectile).prefab",
+      "sizeKb": 164.5
+    },
+    {
+      "name": "Splash 3 (animated)",
+      "path": "assets/resources/fx/Demo/Splash 3 (animated).prefab",
+      "sizeKb": 28.6
+    },
+    {
+      "name": "Air",
+      "path": "assets/resources/fx/Environment/Air.prefab",
+      "sizeKb": 35.2
+    },
+    {
+      "name": "Butterflies",
+      "path": "assets/resources/fx/Environment/Butterflies.prefab",
+      "sizeKb": 27.9
+    },
+    {
+      "name": "Dust 1",
+      "path": "assets/resources/fx/Environment/Dust 1.prefab",
+      "sizeKb": 22.8
+    },
+    {
+      "name": "Dust 2",
+      "path": "assets/resources/fx/Environment/Dust 2.prefab",
+      "sizeKb": 22.2
+    },
+    {
+      "name": "Fireflies ",
+      "path": "assets/resources/fx/Environment/Fireflies .prefab",
+      "sizeKb": 36.6
+    },
+    {
+      "name": "Grass",
+      "path": "assets/resources/fx/Environment/Grass.prefab",
+      "sizeKb": 40.1
+    },
+    {
+      "name": "Leaf 1",
+      "path": "assets/resources/fx/Environment/Leaf 1.prefab",
+      "sizeKb": 45.4
+    },
+    {
+      "name": "Leaf 2",
+      "path": "assets/resources/fx/Environment/Leaf 2.prefab",
+      "sizeKb": 45.4
+    },
+    {
+      "name": "Light",
+      "path": "assets/resources/fx/Environment/Light.prefab",
+      "sizeKb": 62.3
+    },
+    {
+      "name": "Angry",
+      "path": "assets/resources/fx/Expressions/Angry.prefab",
+      "sizeKb": 33.8
+    },
+    {
+      "name": "Exclamation",
+      "path": "assets/resources/fx/Expressions/Exclamation.prefab",
+      "sizeKb": 37.4
+    },
+    {
+      "name": "Heart",
+      "path": "assets/resources/fx/Expressions/Heart.prefab",
+      "sizeKb": 42.8
+    },
+    {
+      "name": "Lines",
+      "path": "assets/resources/fx/Expressions/Lines.prefab",
+      "sizeKb": 37.1
+    },
+    {
+      "name": "Question",
+      "path": "assets/resources/fx/Expressions/Question.prefab",
+      "sizeKb": 34.1
+    },
+    {
+      "name": "Shock",
+      "path": "assets/resources/fx/Expressions/Shock.prefab",
+      "sizeKb": 30.9
+    },
+    {
+      "name": "Sleep",
+      "path": "assets/resources/fx/Expressions/Sleep.prefab",
+      "sizeKb": 34.1
+    },
+    {
+      "name": "Sweat drop",
+      "path": "assets/resources/fx/Expressions/Sweat drop.prefab",
+      "sizeKb": 29.6
+    },
+    {
+      "name": "Bonfire",
+      "path": "assets/resources/fx/Fire/Bonfire.prefab",
+      "sizeKb": 95.9
+    },
+    {
+      "name": "Explosion 1",
+      "path": "assets/resources/fx/Fire/Explosion 1.prefab",
+      "sizeKb": 96.6
+    },
+    {
+      "name": "Explosion 2",
+      "path": "assets/resources/fx/Fire/Explosion 2.prefab",
+      "sizeKb": 83.3
+    },
+    {
+      "name": "Fireball 2",
+      "path": "assets/resources/fx/Fire/Fireball 2.prefab",
+      "sizeKb": 141.4
+    },
+    {
+      "name": "Fireball",
+      "path": "assets/resources/fx/Fire/Fireball.prefab",
+      "sizeKb": 95.8
+    },
+    {
+      "name": "Flame 2",
+      "path": "assets/resources/fx/Fire/Flame 2.prefab",
+      "sizeKb": 116.2
+    },
+    {
+      "name": "Flame",
+      "path": "assets/resources/fx/Fire/Flame.prefab",
+      "sizeKb": 96.4
+    },
+    {
+      "name": "Lava",
+      "path": "assets/resources/fx/Fire/Lava.prefab",
+      "sizeKb": 71.1
+    },
+    {
+      "name": "Sparks",
+      "path": "assets/resources/fx/Fire/Sparks.prefab",
+      "sizeKb": 48.8
+    },
+    {
+      "name": "Torch 2",
+      "path": "assets/resources/fx/Fire/Torch 2.prefab",
+      "sizeKb": 94.8
+    },
+    {
+      "name": "Torch",
+      "path": "assets/resources/fx/Fire/Torch.prefab",
+      "sizeKb": 93.7
+    },
+    {
+      "name": "Big Thunder",
+      "path": "assets/resources/fx/Storm/Big Thunder.prefab",
+      "sizeKb": 113.6
+    },
+    {
+      "name": "Thunderball Explosion 1",
+      "path": "assets/resources/fx/Storm/Thunderball Explosion 1.prefab",
+      "sizeKb": 131.8
+    },
+    {
+      "name": "Thunderball Explosion 2 ",
+      "path": "assets/resources/fx/Storm/Thunderball Explosion 2 .prefab",
+      "sizeKb": 113.6
+    },
+    {
+      "name": "Thunderball Explosion 3",
+      "path": "assets/resources/fx/Storm/Thunderball Explosion 3.prefab",
+      "sizeKb": 117.4
+    },
+    {
+      "name": "Thunderball",
+      "path": "assets/resources/fx/Storm/Thunderball.prefab",
+      "sizeKb": 111.5
+    },
+    {
+      "name": "Bubbles",
+      "path": "assets/resources/fx/Water/Bubbles.prefab",
+      "sizeKb": 71.3
+    },
+    {
+      "name": "Cascade 1",
+      "path": "assets/resources/fx/Water/Cascade 1.prefab",
+      "sizeKb": 105.9
+    },
+    {
+      "name": "Cascade 2",
+      "path": "assets/resources/fx/Water/Cascade 2.prefab",
+      "sizeKb": 23
+    },
+    {
+      "name": "Rain",
+      "path": "assets/resources/fx/Water/Rain.prefab",
+      "sizeKb": 79.6
+    },
+    {
+      "name": "Splash 1",
+      "path": "assets/resources/fx/Water/Splash 1.prefab",
+      "sizeKb": 83.4
+    },
+    {
+      "name": "Splash 2",
+      "path": "assets/resources/fx/Water/Splash 2.prefab",
+      "sizeKb": 26.6
+    },
+    {
+      "name": "Splash 3",
+      "path": "assets/resources/fx/Water/Splash 3.prefab",
+      "sizeKb": 27.9
+    },
+    {
+      "name": "WaterBall",
+      "path": "assets/resources/fx/Water/WaterBall.prefab",
+      "sizeKb": 80.7
+    },
+    {
       "name": "Portal_1",
       "path": "assets/portal/prefabs/Portal_1.prefab",
-      "sizeKb": 103
+      "sizeKb": 108.5
     },
     {
       "name": "Portal_10",
       "path": "assets/portal/prefabs/Portal_10.prefab",
-      "sizeKb": 102.8
+      "sizeKb": 108.4
     },
     {
       "name": "Portal_11",
       "path": "assets/portal/prefabs/Portal_11.prefab",
-      "sizeKb": 83.7
+      "sizeKb": 88.2
     },
     {
       "name": "Portal_12",
       "path": "assets/portal/prefabs/Portal_12.prefab",
-      "sizeKb": 82.6
+      "sizeKb": 87
     },
     {
       "name": "Portal_13",
       "path": "assets/portal/prefabs/Portal_13.prefab",
-      "sizeKb": 62.3
+      "sizeKb": 65.6
     },
     {
       "name": "Portal_14",
       "path": "assets/portal/prefabs/Portal_14.prefab",
-      "sizeKb": 62.8
+      "sizeKb": 66.2
     },
     {
       "name": "Portal_15",
       "path": "assets/portal/prefabs/Portal_15.prefab",
-      "sizeKb": 62.8
+      "sizeKb": 66.2
     },
     {
       "name": "Portal_16",
       "path": "assets/portal/prefabs/Portal_16.prefab",
-      "sizeKb": 102.9
+      "sizeKb": 108.4
     },
     {
       "name": "Portal_17",
       "path": "assets/portal/prefabs/Portal_17.prefab",
-      "sizeKb": 103.1
+      "sizeKb": 108.6
     },
     {
       "name": "Portal_18",
       "path": "assets/portal/prefabs/Portal_18.prefab",
-      "sizeKb": 102.3
+      "sizeKb": 107.8
     },
     {
       "name": "Portal_2",
       "path": "assets/portal/prefabs/Portal_2.prefab",
-      "sizeKb": 103
+      "sizeKb": 108.5
     },
     {
       "name": "Portal_3",
       "path": "assets/portal/prefabs/Portal_3.prefab",
-      "sizeKb": 102.9
+      "sizeKb": 108.4
     },
     {
       "name": "Portal_4",
       "path": "assets/portal/prefabs/Portal_4.prefab",
-      "sizeKb": 103
+      "sizeKb": 108.6
     },
     {
       "name": "Portal_5",
       "path": "assets/portal/prefabs/Portal_5.prefab",
-      "sizeKb": 102.6
+      "sizeKb": 108.1
     },
     {
       "name": "Portal_6",
       "path": "assets/portal/prefabs/Portal_6.prefab",
-      "sizeKb": 83.4
+      "sizeKb": 87.9
     },
     {
       "name": "Portal_7",
       "path": "assets/portal/prefabs/Portal_7.prefab",
-      "sizeKb": 83.3
+      "sizeKb": 87.7
     },
     {
       "name": "Portal_8",
       "path": "assets/portal/prefabs/Portal_8.prefab",
-      "sizeKb": 103.6
+      "sizeKb": 109.2
     },
     {
       "name": "Portal_9",
       "path": "assets/portal/prefabs/Portal_9.prefab",
-      "sizeKb": 82.9
+      "sizeKb": 87.3
     }
   ],
   "scripts": {
-    "count": 46,
+    "count": 50,
     "byDir": [
       {
-        "dir": "assets/script/portal",
+        "dir": "assets/script/shared/sdk/analytics",
         "names": [
-          "NextPrefab",
-          "UserCamera"
+          "GameTrackingService"
+        ]
+      },
+      {
+        "dir": "assets/script/shared/sdk/platform",
+        "names": [
+          "PlayableAdDownloadEvent",
+          "SuperHtmlPlayable"
+        ]
+      },
+      {
+        "dir": "assets/script/shared/sdk",
+        "names": [
+          "index"
+        ]
+      },
+      {
+        "dir": "assets/script/shared/core/utils",
+        "names": [
+          "GameUtils"
+        ]
+      },
+      {
+        "dir": "assets/script/shared/core/utils/pool",
+        "names": [
+          "NodePoolAdapter",
+          "ObjectPool",
+          "Poolable"
+        ]
+      },
+      {
+        "dir": "assets/script/shared/core/config",
+        "names": [
+          "PlayableConfig",
+          "PlayableConfigManager",
+          "index"
+        ]
+      },
+      {
+        "dir": "assets/script/shared/core/components",
+        "names": [
+          "CameraController",
+          "Interactive3DHero",
+          "PlayableAudioController",
+          "PlayableCTAController",
+          "PlayableEntry",
+          "PlayableTrackingController",
+          "PlayableUIHUD",
+          "index"
+        ]
+      },
+      {
+        "dir": "assets/script/shared/core",
+        "names": [
+          "GameManager",
+          "SoundManager",
+          "index"
+        ]
+      },
+      {
+        "dir": "assets/script/shared",
+        "names": [
+          "index"
         ]
       },
       {
@@ -160,71 +456,19 @@
         ]
       },
       {
-        "dir": "assets/script/shared/core/components",
+        "dir": "assets/script/anime_particles",
         "names": [
-          "CameraController",
-          "Interactive3DHero",
-          "PlayableAudioController",
-          "PlayableCTAController",
-          "PlayableEntry",
-          "PlayableTrackingController",
-          "PlayableUIHUD",
-          "index"
+          "AnimeParticlesGallery",
+          "FxProjectile",
+          "FxProjectileSpawner",
+          "FxSelfDestruct"
         ]
       },
       {
-        "dir": "assets/script/shared/core/config",
+        "dir": "assets/script/portal",
         "names": [
-          "PlayableConfig",
-          "PlayableConfigManager",
-          "index"
-        ]
-      },
-      {
-        "dir": "assets/script/shared/core",
-        "names": [
-          "GameManager",
-          "SoundManager",
-          "index"
-        ]
-      },
-      {
-        "dir": "assets/script/shared/core/utils",
-        "names": [
-          "GameUtils"
-        ]
-      },
-      {
-        "dir": "assets/script/shared/core/utils/pool",
-        "names": [
-          "NodePoolAdapter",
-          "ObjectPool",
-          "Poolable"
-        ]
-      },
-      {
-        "dir": "assets/script/shared",
-        "names": [
-          "index"
-        ]
-      },
-      {
-        "dir": "assets/script/shared/sdk/analytics",
-        "names": [
-          "GameTrackingService"
-        ]
-      },
-      {
-        "dir": "assets/script/shared/sdk",
-        "names": [
-          "index"
-        ]
-      },
-      {
-        "dir": "assets/script/shared/sdk/platform",
-        "names": [
-          "PlayableAdDownloadEvent",
-          "SuperHtmlPlayable"
+          "NextPrefab",
+          "UserCamera"
         ]
       },
       {
@@ -244,8 +488,8 @@
       "count": 4,
       "totalKb": 52.2,
       "sample": [
-        "assets/resources/sound/bgm_main.mp3",
         "assets/resources/sound/sfx_click.mp3",
+        "assets/resources/sound/bgm_main.mp3",
         "assets/resources/sound/sfx_success.mp3",
         "assets/resources/sound/sfx_win.mp3"
       ],
@@ -270,8 +514,8 @@
       "truncated": 0
     },
     "materials": {
-      "count": 46,
-      "totalKb": 43.8,
+      "count": 88,
+      "totalKb": 82.3,
       "sample": [
         "assets/materials/Blue.mtl",
         "assets/materials/Board1.mtl",
@@ -280,54 +524,56 @@
         "assets/materials/UnitySpriteRendererColor.mtl",
         "assets/materials/UnitySpriteRendererColorOpaque.mtl"
       ],
-      "truncated": 40
+      "truncated": 82
     },
     "textures": {
-      "count": 42,
-      "totalKb": 7459.9,
+      "count": 83,
+      "totalKb": 17434.6,
       "sample": [
-        "assets/portal/textures/UW.png",
         "assets/textures/ui/BlackSquare.png",
         "assets/textures/ui/GreenBtn.png",
         "assets/textures/ui/icon_L11-Pic2.png",
-        "assets/unity_imported/Portal Particle/Textures/1.png",
-        "assets/unity_imported/Portal Particle/Textures/10.png"
+        "assets/portal/textures/UW.png",
+        "assets/unity_imported/Anime Particles/Demo/Textures/Arrows.png",
+        "assets/unity_imported/Anime Particles/Demo/Textures/Floor Normal.png"
       ],
-      "truncated": 36
+      "truncated": 77
     },
     "animations": {
-      "count": 0,
-      "totalKb": 0,
-      "sample": [],
+      "count": 1,
+      "totalKb": 5.2,
+      "sample": [
+        "assets/animations/splash-3-animated/Splash Animation.anim"
+      ],
       "truncated": 0
     },
     "prefabsInAssets": {
-      "count": 18,
-      "totalKb": 1633,
+      "count": 64,
+      "totalKb": 4957.1,
       "sample": [
-        "assets/portal/prefabs/Portal_1.prefab",
-        "assets/portal/prefabs/Portal_10.prefab",
-        "assets/portal/prefabs/Portal_11.prefab",
-        "assets/portal/prefabs/Portal_12.prefab",
-        "assets/portal/prefabs/Portal_13.prefab",
-        "assets/portal/prefabs/Portal_14.prefab"
+        "assets/resources/fx/Demo/Explosion 1 (projectile).prefab",
+        "assets/resources/fx/Demo/Explosion 2 (projectile).prefab",
+        "assets/resources/fx/Demo/Fireball (projectile).prefab",
+        "assets/resources/fx/Demo/Fireball 2 (projectile).prefab",
+        "assets/resources/fx/Demo/Splash 3 (animated).prefab",
+        "assets/resources/fx/Environment/Air.prefab"
       ],
-      "truncated": 12
+      "truncated": 58
     },
     "unityImported": {
       "exists": true,
       "root": "assets/unity_imported",
-      "count": 76,
-      "totalKb": 7292.6,
+      "count": 159,
+      "totalKb": 17305.6,
       "sample": [
-        "assets/unity_imported/Portal Particle/Material/1.mtl",
-        "assets/unity_imported/Portal Particle/Material/10.mtl",
-        "assets/unity_imported/Portal Particle/Material/11.mtl",
-        "assets/unity_imported/Portal Particle/Material/12.mtl",
-        "assets/unity_imported/Portal Particle/Material/13.mtl",
-        "assets/unity_imported/Portal Particle/Material/14.mtl"
+        "assets/unity_imported/Anime Particles/Demo/Materials/Floor.mtl",
+        "assets/unity_imported/Anime Particles/Demo/Textures/Arrows.png",
+        "assets/unity_imported/Anime Particles/Demo/Textures/Floor Normal.png",
+        "assets/unity_imported/Anime Particles/Demo/Textures/Floor.png",
+        "assets/unity_imported/Anime Particles/Particles/Materials/Angry.mtl",
+        "assets/unity_imported/Anime Particles/Particles/Materials/Big Thunder.mtl"
       ],
-      "truncated": 70
+      "truncated": 153
     }
   },
   "configSummary": {
@@ -360,7 +606,9 @@
       "fovLandscape",
       "presets"
     ],
-    "customKeys": [],
+    "customKeys": [
+      "animeParticles"
+    ],
     "rawPreview": {
       "cta": {
         "googlePlayUrl": "https://play.google.com/store/apps/details?id=com.playable.ad",
@@ -488,7 +736,11 @@
     "map.generate": "npm run ai:map",
     "scene.inspect": "npm run ai:scene -- <sceneName>",
     "memory.query": "npm run memory:query -- <keyword>",
-    "port.plan": "npm run ai:port:plan -- --src <UnityAssetsFolder>",
+    "unity.intel.doctor": "npm run unity:intel:doctor -- --project <UnityProjectRoot>",
+    "unity.intel.setup": "npm run unity:intel:setup -- --project <UnityProjectRoot>",
+    "unity.intel.scan": "npm run ai:unity:scan -- --project <UnityProjectRoot>",
+    "unity.intel.query": "npm run ai:unity:query -- --project <UnityProjectRoot> --section <name>",
+    "port.plan": "npm run ai:port:plan -- --project <UnityProjectRoot>",
     "port.scene": "npm run port:scene -- --scene <file.unity> --unity-root <UnityAssetsFolder> --out assets/<Name>.scene",
     "port.report": "npm run ai:port:report",
     "port.prefab": "node playable-shared-kit/tools/unity-cocos-port.cjs port --src <unity_prefab_or_dir> --out <cocos_prefab_or_dir>",

@@ -12,6 +12,7 @@
       blender-mcp  stdio bridge to the Blender MCP addon (TCP 9876).
       gimp-mcp     stdio bridge to the GIMP MCP plug-in (TCP 9877).
       work-memory  stdio SQLite + semantic memory store in playable-shared-kit.
+      unity-intel  stdio compact Unity scanner + feature sketch for porting agents.
       node_repl    stdio JS sandbox shipped with the Codex runtime (Codex only).
 
     Only stdio servers are spawned by the clients themselves - a stdio server is not
@@ -19,7 +20,7 @@
     talk to (Blender / GIMP) is running. 1_open-project.bat handles that part.
 
     Scope rule: a server name is written to exactly one scope per client, so no client
-    ever sees the same server twice. cocos-mcp & work-memory stay in the workspace file for VSCode
+    ever sees the same server twice. cocos-mcp, work-memory & unity-intel stay in the workspace file for VSCode
     (they are per-project endpoints); everything else lands in the user config.
 
 .PARAMETER ProjectDir
@@ -206,7 +207,23 @@ function Resolve-McpCatalog {
         [void] $Skipped.Add("work-memory (missing script: $WorkMemoryScript)")
     }
 
-    # --- 3) blender-mcp: stdio bridge, talks to the Blender addon over TCP 9876.
+    # --- 3) unity-intel: narrow stdio surface over static + Unity-MCP live providers.
+    # It intentionally exposes four compact tools instead of forwarding Unity-MCP's full schema catalog.
+    $UnityIntelScript = Join-Path $ProjectDir 'playable-shared-kit\tools\unity-intel-mcp.cjs'
+    if (-not (Test-Path -LiteralPath $UnityIntelScript)) {
+        $UnityIntelScript = Join-Path $ProjectDir 'playable-shared-kit/tools/unity-intel-mcp.cjs'
+    }
+    if (Test-Path -LiteralPath $UnityIntelScript) {
+        $NodeCmd = Get-Command node -ErrorAction SilentlyContinue
+        $NodeBin = if ($NodeCmd) { $NodeCmd.Source } else { 'node' }
+        [void] $Catalog.Add((New-McpServer 'unity-intel' 'stdio' $null $NodeBin @($UnityIntelScript) ([ordered]@{
+            CC_PLAYABLE_REPO_ROOT = $ProjectDir
+        })))
+    } else {
+        [void] $Skipped.Add("unity-intel (missing script: $UnityIntelScript)")
+    }
+
+    # --- 4) blender-mcp: stdio bridge, talks to the Blender addon over TCP 9876.
     $BlenderNodeServer = Join-Path $ProjectDir 'playable-shared-kit\tools\blender-mcp\blender-mcp-server.cjs'
     if (-not (Test-Path -LiteralPath $BlenderNodeServer)) {
         $BlenderNodeServer = Join-Path $ProjectDir 'playable-shared-kit/tools/blender-mcp/blender-mcp-server.cjs'
@@ -238,7 +255,7 @@ function Resolve-McpCatalog {
         }
     }
 
-    # --- 4) gimp-mcp: stdio bridge, talks to the GIMP plug-in over TCP 9877.
+    # --- 5) gimp-mcp: stdio bridge, talks to the GIMP plug-in over TCP 9877.
     $GimpDir = Join-Path $HomeDir '.codex\mcp\gimp-mcp'
     if (-not (Test-Path -LiteralPath $GimpDir)) {
         $GimpDir = Join-Path $HomeDir '.codex/mcp/gimp-mcp'
@@ -525,8 +542,8 @@ if ($VerifyOnly) {
 Write-Step '==> Syncing MCP clients...'
 foreach ($Note in $Resolved.Skipped) { Write-Detail "[skip] $Note" 'Yellow' }
 
-$WorkspaceOnly = @($StandardServers | Where-Object { $_.Name -in @('cocos-mcp', 'work-memory') })
-$UserOnly = @($StandardServers | Where-Object { $_.Name -notin @('cocos-mcp', 'work-memory') })
+$WorkspaceOnly = @($StandardServers | Where-Object { $_.Name -in @('cocos-mcp', 'work-memory', 'unity-intel') })
+$UserOnly = @($StandardServers | Where-Object { $_.Name -notin @('cocos-mcp', 'work-memory', 'unity-intel') })
 
 # 1) Claude Desktop (Anthropic stdio schema, bridges HTTP endpoints)
 $ClaudeDesktopPath = if ($IsMacOS) {
@@ -555,7 +572,7 @@ Sync-ClientConfig -Label 'Antigravity / Gemini' `
     -Path $AntigravityPath `
     -RootKey 'mcpServers' -Servers $StandardServers -Format 'antigravity' -RemoveKeys @('node_repl') | Out-Null
 
-# 3) Copilot in VSCode: cocos-mcp & work-memory belong to the workspace, machine-wide tools go to user scope
+# 3) Copilot in VSCode: project-aware servers belong to the workspace, machine-wide tools go to user scope
 Sync-ClientConfig -Label 'Copilot / VSCode (workspace)' `
     -Path (Join-Path $ProjectDir '.vscode\mcp.json') `
     -RootKey 'servers' -Servers $WorkspaceOnly -Format 'typed' -RemoveKeys @('node_repl') | Out-Null

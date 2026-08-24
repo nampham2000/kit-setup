@@ -55,6 +55,24 @@ function extractFlags(list) {
   return flags;
 }
 
+/**
+ * `cmd` chứa executable + fixed subcommand; operand/flag thuộc về `args`.
+ * Nếu cùng placeholder xuất hiện ở cả hai nơi, CAPABILITIES.json.command sẽ
+ * nhân đôi nó dù help probe vẫn có thể PASS.
+ */
+function findEmbeddedArgumentDuplicates(cap) {
+  const command = String(cap.cmd || '');
+  const duplicates = [];
+  for (const entry of cap.args || []) {
+    const token = String(entry).trim().split(/\s+/, 1)[0];
+    if (!token) continue;
+    const isFlag = token.startsWith('-');
+    const isPlaceholder = /^<[^>]+>$/.test(token);
+    if ((isFlag || isPlaceholder) && command.split(/\s+/).includes(token)) duplicates.push(token);
+  }
+  return duplicates;
+}
+
 /** Đường dẫn file .cjs đầu tiên xuất hiện trong một chuỗi lệnh. */
 function toolFileFromCommand(cmd) {
   // Tools live in subdirectories too (tools/shader-compiler/...), so the path
@@ -113,6 +131,11 @@ function loadPackageScripts() {
 function verifyCapability(cap, scripts, helpCache) {
   const errors = [];
   const warnings = [];
+
+  const embeddedDuplicates = findEmbeddedArgumentDuplicates(cap);
+  if (embeddedDuplicates.length) {
+    errors.push(`cmd lặp operand đã khai báo trong args: ${embeddedDuplicates.join(', ')}.`);
+  }
 
   // (1) file tool tồn tại + parse được
   const toolFile = toolFileFromCommand(cap.cmd) || cap.file;
@@ -277,4 +300,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { extractFlags, toolFileFromCommand, verifyCapability };
+module.exports = { extractFlags, findEmbeddedArgumentDuplicates, toolFileFromCommand, verifyCapability };
