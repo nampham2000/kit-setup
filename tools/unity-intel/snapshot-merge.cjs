@@ -96,9 +96,12 @@ function mergeEdges(staticEdges, liveEdges) {
     String(a.fieldPath || '').localeCompare(String(b.fieldPath || '')));
 }
 
-function mergeUnresolved(staticItems, liveItems) {
+function mergeUnresolved(staticItems, liveItems, resolvedGuids = new Set()) {
   const items = new Map();
-  for (const item of staticItems || []) items.set(unresolvedKey(item), cloneValue(item));
+  for (const item of staticItems || []) {
+    if (resolvedGuids.has(String(item && item.guid || '').toLowerCase())) continue;
+    items.set(unresolvedKey(item), cloneValue(item));
+  }
   for (const item of liveItems || []) {
     const key = unresolvedKey(item);
     const previous = items.get(key);
@@ -275,7 +278,13 @@ function mergeUnityProjectSnapshots(staticSnapshot, livePatch, options = {}) {
   merged.assets = mergeAssets(merged.assets, livePatch.assets);
 
   const edges = mergeEdges(merged.dependencies.edges, livePatch.dependencies.edges);
-  const unresolved = mergeUnresolved(merged.dependencies.unresolved, livePatch.dependencies.unresolved);
+  const resolvedUnresolvedGuids = new Set((livePatch.resolvesUnresolvedGuids || [])
+    .map(guid => String(guid).toLowerCase()));
+  const unresolved = mergeUnresolved(
+    merged.dependencies.unresolved,
+    livePatch.dependencies.unresolved,
+    resolvedUnresolvedGuids,
+  );
   merged.dependencies = {
     ...merged.dependencies,
     ...cloneValue(livePatch.dependencies),

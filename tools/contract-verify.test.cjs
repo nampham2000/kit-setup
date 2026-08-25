@@ -1,9 +1,11 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const test = require('node:test');
 
-const { CAPABILITIES } = require('../ai/capabilities.def.cjs');
+const { CAPABILITIES, CORE_RULES } = require('../ai/capabilities.def.cjs');
 const { fullCommand } = require('./capability-manifest.cjs');
 const { findEmbeddedArgumentDuplicates } = require('./contract-verify.cjs');
 
@@ -26,4 +28,42 @@ test('port.plan full command contains each required operand once', () => {
   const command = fullCommand(capability);
   assert.equal((command.match(/--project/g) || []).length, 1);
   assert.equal((command.match(/<UnityProjectRoot>/g) || []).length, 1);
+});
+
+test('unity preflight agent contract points only at declared compact capabilities', () => {
+  const rule = CORE_RULES.find(item => item.id === 'unity-preflight');
+  assert.ok(rule);
+  assert.deepEqual(rule.agentContract.entrypoints, ['port.preflight']);
+  assert.equal(rule.agentContract.evidenceQuery, 'unity.intel.query');
+  assert.equal(rule.agentContract.completionHighPolicy, 'agent-disposition-required');
+  const ids = new Set(CAPABILITIES.map(item => item.id));
+  for (const id of [...rule.agentContract.entrypoints, rule.agentContract.evidenceQuery]) {
+    assert.equal(ids.has(id), true, id);
+  }
+});
+
+test('shared-kit package template distributes every Unity intelligence and preflight alias', () => {
+  const templatePath = path.resolve(__dirname, '..', 'template-config', 'package.scripts_TEMPLATE.json');
+  const template = JSON.parse(fs.readFileSync(templatePath, 'utf8'));
+  const rootPackage = JSON.parse(fs.readFileSync(path.resolve(__dirname, '..', '..', 'package.json'), 'utf8'));
+  const expected = {
+    'ai:port:preflight': 'node playable-shared-kit/tools/unity-intel-cli.cjs preflight --json',
+    'unity:intel:doctor': 'node playable-shared-kit/tools/unity-intel-cli.cjs doctor',
+    'unity:intel:setup': 'node playable-shared-kit/tools/unity-intel-cli.cjs setup',
+    'unity:intel:scan': 'node playable-shared-kit/tools/unity-intel-cli.cjs scan',
+    'unity:intel:preflight': 'node playable-shared-kit/tools/unity-intel-cli.cjs preflight',
+    'ai:unity:preflight': 'node playable-shared-kit/tools/unity-intel-cli.cjs preflight --json',
+    'ai:unity:scan': 'node playable-shared-kit/tools/unity-intel-cli.cjs scan --json',
+    'ai:unity:query': 'node playable-shared-kit/tools/unity-intel-cli.cjs query --json',
+    'unity:intel:mcp': 'node playable-shared-kit/tools/unity-intel-mcp.cjs',
+  };
+  for (const [name, command] of Object.entries(expected)) {
+    assert.equal(template.scripts[name], command, name);
+    assert.equal(rootPackage.scripts[name], command, `root:${name}`);
+  }
+  assert.match(template.scripts['test:unity:intel'], /unity-intel\/preflight\.test\.cjs/);
+  assert.equal(
+    template.scripts['test:unity:intel:samples'],
+    'node playable-shared-kit/tools/unity-intel/sample-project-regression.cjs',
+  );
 });

@@ -14,6 +14,7 @@ function packageInfo(dir, fallbackName = null) {
   return {
     name: typeof json.name === 'string' && json.name ? json.name : (fallbackName || inferred),
     version: typeof json.version === 'string' ? json.version : null,
+    fingerprint: typeof json._fingerprint === 'string' ? json._fingerprint : null,
   };
 }
 
@@ -53,6 +54,7 @@ function descriptor(dir, kind, precedence, fallbackName = null) {
     origin: 'package',
     packageName: info.name,
     packageVersion: info.version,
+    packageFingerprint: info.fingerprint,
     physicalRoot: path.resolve(dir),
     logicalPrefix: `Packages/${info.name}`,
     precedence,
@@ -75,13 +77,37 @@ function versionExpected(name, expected) {
   return null;
 }
 
-function selectCacheCandidate(candidates, expectedVersion) {
-  return [...candidates].sort((a, b) => {
-    const aExact = Number(!!expectedVersion && a.packageVersion === expectedVersion);
-    const bExact = Number(!!expectedVersion && b.packageVersion === expectedVersion);
-    return bExact - aExact || b.packageVersion?.localeCompare(a.packageVersion || '') ||
-      a.physicalRoot.localeCompare(b.physicalRoot);
-  })[0];
+function selectedPackageResolution(projectRoot, name, locked) {
+  if (!locked || !['git', 'local-tarball'].includes(locked.source) || typeof locked.version !== 'string') return null;
+  const resolution = readJson(path.join(projectRoot, 'Library', 'PackageManager', 'projectResolution.json'));
+  const expectedPackagesPath = path.resolve(projectRoot, 'Packages').replace(/\\/g, '/').toLowerCase();
+  const contextPath = resolution && resolution.context && typeof resolution.context.projectPath === 'string'
+    ? path.resolve(resolution.context.projectPath).replace(/\\/g, '/').toLowerCase()
+    : null;
+  if (contextPath !== expectedPackagesPath || !resolution.outputs || typeof resolution.outputs !== 'object') return null;
+  const exact = resolution.outputs[`${name}@${locked.version}`];
+  const matches = exact
+    ? [exact]
+    : Object.values(resolution.outputs).filter(output => output && output.name === name && output.source === locked.source);
+  if (matches.length !== 1) return null;
+  const selected = matches[0];
+  if (selected.name !== name || selected.source !== locked.source || typeof selected.resolvedPath !== 'string' ||
+      typeof selected.fingerprint !== 'string') return null;
+  return selected;
+}
+
+function selectCacheCandidate(candidates, expectedVersion, gitResolution = null) {
+  if (gitResolution) {
+    const resolved = path.resolve(gitResolution.resolvedPath).replace(/\\/g, '/').toLowerCase();
+    return [...candidates].find(candidate =>
+      path.resolve(candidate.physicalRoot).replace(/\\/g, '/').toLowerCase() === resolved &&
+      candidate.packageFingerprint === gitResolution.fingerprint &&
+      gitResolution.fingerprint.startsWith(path.basename(candidate.physicalRoot).split('@').pop())) || null;
+  }
+  if (!expectedVersion) return null;
+  return [...candidates]
+    .filter(candidate => candidate.packageVersion === expectedVersion)
+    .sort((a, b) => a.physicalRoot.localeCompare(b.physicalRoot))[0] || null;
 }
 
 function discoverPackageRoots(projectRoot) {
@@ -113,13 +139,21 @@ function discoverPackageRoots(projectRoot) {
   const packageCache = path.join(projectRoot, 'Library', 'PackageCache');
   for (const dir of immediateDirectories(packageCache)) {
     const item = descriptor(dir, 'package-cache', 20);
-    if (expected.names.size && !expected.names.has(item.packageName)) continue;
+    // PackageCache is not an authority by itself. Only a package selected by
+    // manifest/lock may become a source root; otherwise an arbitrary sibling
+    // folder under Library could borrow the project's preflight receipt.
+    if (!expected.names.has(item.packageName)) continue;
     if (!cacheByName.has(item.packageName)) cacheByName.set(item.packageName, []);
     cacheByName.get(item.packageName).push(item);
   }
   for (const [name, candidates] of cacheByName) {
     if (selected.has(name)) continue;
-    selected.set(name, selectCacheCandidate(candidates, versionExpected(name, expected)));
+    const locked = expected.locked[name];
+    const packageResolution = selectedPackageResolution(projectRoot, name, locked);
+    const candidate = locked && ['git', 'local-tarball'].includes(locked.source)
+      ? selectCacheCandidate(candidates, null, packageResolution)
+      : selectCacheCandidate(candidates, versionExpected(name, expected));
+    if (candidate) selected.set(name, candidate);
   }
 
   const unavailable = [...expected.names]

@@ -18,6 +18,35 @@ const {
   setupUnityMcpPackages,
   rollbackUnityMcpPackages,
 } = require('./unity-bootstrap.cjs');
+const scannerPackage = require('../../packages/unity-intelligence/package.json');
+
+test('bootstrap package identity is sourced from the shipped Unity package manifest', () => {
+  assert.equal(SCANNER_PACKAGE_NAME, scannerPackage.name);
+  assert.equal(SCANNER_PACKAGE_VERSION, scannerPackage.version);
+});
+
+test('shipped Unity scanner keeps nested traversal and global candidate evidence budgets', () => {
+  const scannerSource = fs.readFileSync(path.resolve(
+    __dirname,
+    '../../packages/unity-intelligence/Editor/UnityIntelligenceScanner.cs',
+  ), 'utf8');
+  assert.match(scannerSource, /while \(property\.Next\(true\)\)/,
+    'serialized traversal must enter nested structs, arrays, and lists');
+  assert.match(scannerSource, /AssetDatabase\.LoadAllAssetsAtPath\(assetPath\)/,
+    'serialized traversal must include sub-assets, not only the main asset');
+  assert.match(scannerSource, /components\.Count\(component => component == null\)/,
+    'missing MonoBehaviour slots must force a partial disposition');
+  assert.match(scannerSource, /TryGetGUIDAndLocalFileIdentifier\(referenced/,
+    'sub-asset references must retain their local file identifier');
+  assert.match(scannerSource, /MaxCandidateReferencesTotal\s*=\s*512/);
+  assert.match(scannerSource, /MaxCandidateReferenceBytesTotal\s*=\s*256 \* 1024/);
+  assert.match(scannerSource, /MaxSerializedCandidateDispositions\s*=\s*96/);
+  assert.match(scannerSource, /MaxCandidateDispositionBytesTotal\s*=\s*768 \* 1024/);
+  assert.match(scannerSource, /if \(!IsBoundedAssetPath\(referencedPath\)\)[\s\S]{0,500}referencesComplete = false/,
+    'every non-null unrepresentable ObjectReference must force partial evidence');
+  assert.match(scannerSource, /EnforceCandidateDispositionBudget\(snapshot\.candidateDispositions\)/,
+    'whole candidate payload must be bounded before returning the live patch');
+});
 const { validateUnityProject } = require('./unity-editor.cjs');
 const { createUnityFixture } = require('./test-fixture.cjs');
 

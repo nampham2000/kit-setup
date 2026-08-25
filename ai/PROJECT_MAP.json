@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "generatedAt": "2026-08-24T09:30:57.177Z",
+    "generatedAt": "2026-08-25T16:28:44.058Z",
     "description": "Compact project manifest for AI Agents. Use this instead of scanning file trees.",
     "project": {
       "projectName": "cc_playable_framework",
@@ -738,6 +738,7 @@
     "memory.query": "npm run memory:query -- <keyword>",
     "unity.intel.doctor": "npm run unity:intel:doctor -- --project <UnityProjectRoot>",
     "unity.intel.setup": "npm run unity:intel:setup -- --project <UnityProjectRoot>",
+    "port.preflight": "npm run ai:port:preflight -- --project <UnityProjectRoot>",
     "unity.intel.scan": "npm run ai:unity:scan -- --project <UnityProjectRoot>",
     "unity.intel.query": "npm run ai:unity:query -- --project <UnityProjectRoot> --section <name>",
     "port.plan": "npm run ai:port:plan -- --project <UnityProjectRoot>",

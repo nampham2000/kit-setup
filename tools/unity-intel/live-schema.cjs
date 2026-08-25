@@ -6,6 +6,12 @@ const LIVE_PATCH_SCHEMA_VERSION = 1;
 const LIVE_PATCH_KIND = 'unity-live-patch';
 const LIVE_PROVIDERS = new Set(['unity-mcp', 'unity-batch', 'unity-editor']);
 const SEVERITIES = new Set(['high', 'medium', 'low']);
+const MAX_LIVE_DIAGNOSTICS = 64;
+const MAX_DIAGNOSTIC_CODE_LENGTH = 96;
+const MAX_CANDIDATE_REFERENCES_TOTAL = 512;
+const MAX_CANDIDATE_DISPOSITIONS_BYTES = 768 * 1024;
+const MAX_CANDIDATE_PATH_LENGTH = 320;
+const MAX_CANDIDATE_TYPE_LENGTH = 160;
 const FORBIDDEN_KEY = /(?:raw[-_]?(?:source|yaml|csharp|code)|source[-_]?text|token|password|secret|api[-_]?key|authorization|credential|private[-_]?key)/i;
 
 function stableValue(value, seen = new Set()) {
@@ -126,6 +132,8 @@ function createUnityLiveSnapshotPatch(input = {}) {
     features: input.features || {},
     diagnostics: Array.isArray(input.diagnostics) ? input.diagnostics : [],
     resolvesDiagnosticKeys: [...new Set(input.resolvesDiagnosticKeys || [])].sort(),
+    resolvesUnresolvedGuids: [...new Set(input.resolvesUnresolvedGuids || [])].sort(),
+    candidateDispositions: Array.isArray(input.candidateDispositions) ? input.candidateDispositions : [],
     capabilities: input.capabilities || { playModeCapture: false },
   };
 }
@@ -162,6 +170,9 @@ function validateUnityLiveSnapshotPatch(patch, options = {}) {
     errors.push('dependencies must contain edges and unresolved arrays');
   }
   if (!Array.isArray(patch.diagnostics)) errors.push('diagnostics must be an array');
+  else if (patch.diagnostics.length > MAX_LIVE_DIAGNOSTICS) {
+    errors.push(`diagnostics must contain at most ${MAX_LIVE_DIAGNOSTICS} entries`);
+  }
   for (const diagnostic of patch.diagnostics || []) {
     if (!diagnostic || typeof diagnostic !== 'object') {
       errors.push('diagnostic must be an object');
@@ -171,10 +182,80 @@ function validateUnityLiveSnapshotPatch(patch, options = {}) {
       errors.push(`diagnostic severity is invalid: ${diagnostic.severity}`);
       break;
     }
+    if (typeof diagnostic.code !== 'string' || !diagnostic.code.trim() ||
+        diagnostic.code.length > MAX_DIAGNOSTIC_CODE_LENGTH) {
+      errors.push(`diagnostic code must contain 1-${MAX_DIAGNOSTIC_CODE_LENGTH} characters`);
+      break;
+    }
   }
   if (!Array.isArray(patch.resolvesDiagnosticKeys) ||
       patch.resolvesDiagnosticKeys.some(key => typeof key !== 'string' || !key.trim())) {
     errors.push('resolvesDiagnosticKeys must contain non-empty strings');
+  }
+  if (patch.resolvesUnresolvedGuids !== undefined &&
+      (!Array.isArray(patch.resolvesUnresolvedGuids) || patch.resolvesUnresolvedGuids.length > 512 ||
+       patch.resolvesUnresolvedGuids.some(guid => typeof guid !== 'string' || !/^[0-9a-f]{32}$/i.test(guid)))) {
+    errors.push('resolvesUnresolvedGuids must contain at most 512 Unity GUIDs');
+  }
+  if (patch.candidateDispositions !== undefined &&
+      (!Array.isArray(patch.candidateDispositions) || patch.candidateDispositions.length > 1024)) {
+    errors.push('candidateDispositions must be an array with at most 1024 entries');
+  } else if (Array.isArray(patch.candidateDispositions)) {
+    const totalReferences = patch.candidateDispositions.reduce((total, disposition) =>
+      total + (Array.isArray(disposition && disposition.references) ? disposition.references.length : 0), 0);
+    if (totalReferences > MAX_CANDIDATE_REFERENCES_TOTAL) {
+      errors.push(`candidateDispositions exceed the global ${MAX_CANDIDATE_REFERENCES_TOTAL} reference budget`);
+    }
+    if (Buffer.byteLength(JSON.stringify(patch.candidateDispositions), 'utf8') > MAX_CANDIDATE_DISPOSITIONS_BYTES) {
+      errors.push(`candidateDispositions exceed the global ${MAX_CANDIDATE_DISPOSITIONS_BYTES} byte budget`);
+    }
+    for (const disposition of patch.candidateDispositions) {
+      const assetPath = disposition && disposition.assetPath;
+      if (!disposition || !['guid', 'serialized-asset'].includes(disposition.kind) ||
+          typeof disposition.key !== 'string' || !disposition.key || disposition.key.length > 320 ||
+          !['resolved', 'missing', 'partial'].includes(disposition.status) ||
+          (assetPath && (typeof assetPath !== 'string' || assetPath.length > MAX_CANDIDATE_PATH_LENGTH ||
+            !/^(?:Assets|Packages)\//.test(assetPath))) ||
+          (disposition.assetType !== undefined &&
+            (typeof disposition.assetType !== 'string' || disposition.assetType.length > MAX_CANDIDATE_TYPE_LENGTH)) ||
+          (disposition.dependencyCount !== undefined &&
+            (!Number.isInteger(disposition.dependencyCount) || disposition.dependencyCount < 0)) ||
+          (disposition.serializedScanComplete !== undefined && typeof disposition.serializedScanComplete !== 'boolean') ||
+          (disposition.serializedPropertyCount !== undefined &&
+            (!Number.isInteger(disposition.serializedPropertyCount) || disposition.serializedPropertyCount < 0)) ||
+          (disposition.missingReferenceCount !== undefined &&
+            (!Number.isInteger(disposition.missingReferenceCount) || disposition.missingReferenceCount < 0)) ||
+          (disposition.references !== undefined &&
+            (!Array.isArray(disposition.references) || disposition.references.length > 128 ||
+             disposition.references.some(reference => !reference ||
+               typeof reference.fieldPath !== 'string' || reference.fieldPath.length > 320 ||
+               typeof reference.assetPath !== 'string' || reference.assetPath.length > MAX_CANDIDATE_PATH_LENGTH ||
+                 !/^(?:Assets|Packages)\//.test(reference.assetPath) ||
+               typeof reference.guid !== 'string' || (reference.guid && !/^[0-9a-f]{32}$/i.test(reference.guid)) ||
+               (reference.objectId !== undefined &&
+                 (typeof reference.objectId !== 'string' ||
+                  !((reference.objectId === '' && reference.fieldPath === '') || /^-?\d{1,20}$/.test(reference.objectId)))) ||
+               typeof reference.type !== 'string' || reference.type.length > MAX_CANDIDATE_TYPE_LENGTH)))) {
+        errors.push('candidateDisposition contains an invalid kind/key/status/assetPath');
+        break;
+      }
+      const references = Array.isArray(disposition.references) ? disposition.references : [];
+      const dependencyReferences = references.filter(reference => reference && reference.fieldPath === '');
+      if ((disposition.kind === 'guid' && !/^[0-9a-f]{32}$/i.test(disposition.key)) ||
+          (disposition.kind === 'serialized-asset' && !/^(?:Assets|Packages)\//.test(disposition.key)) ||
+          (disposition.status === 'resolved' &&
+            (!assetPath || disposition.referencesComplete !== true || !Array.isArray(disposition.references) ||
+             !Number.isInteger(disposition.dependencyCount) ||
+             disposition.dependencyCount > dependencyReferences.length)) ||
+          (disposition.kind === 'serialized-asset' && disposition.status === 'resolved' &&
+            (assetPath !== disposition.key || disposition.serializedScanComplete !== true ||
+             !Number.isInteger(disposition.serializedPropertyCount) || disposition.missingReferenceCount !== 0 ||
+             references.some(reference => reference.fieldPath && !reference.objectId))) ||
+          (disposition.status === 'missing' && !!assetPath)) {
+        errors.push('candidateDisposition status is inconsistent with its bounded evidence');
+        break;
+      }
+    }
   }
   const unsafe = findUnsafePayloadEntries(patch);
   if (unsafe.length) errors.push(`live patch contains unsafe payload: ${unsafe.slice(0, 3).join('; ')}`);
@@ -191,6 +272,10 @@ module.exports = {
   LIVE_PATCH_SCHEMA_VERSION,
   LIVE_PATCH_KIND,
   LIVE_PROVIDERS,
+  MAX_LIVE_DIAGNOSTICS,
+  MAX_DIAGNOSTIC_CODE_LENGTH,
+  MAX_CANDIDATE_REFERENCES_TOTAL,
+  MAX_CANDIDATE_DISPOSITIONS_BYTES,
   stableStringify,
   sha256Hex,
   computeStaticProjectFingerprint,

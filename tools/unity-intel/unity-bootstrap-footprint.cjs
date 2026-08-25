@@ -62,6 +62,7 @@ function captureUnityBootstrapFootprint(projectRoot, options = {}) {
     pluginsMetaPath,
     pluginsMetaExisted: fsImpl.existsSync(pluginsMetaPath),
     projectSettingsAsset,
+    projectSettingsBytes: settingsBytes,
     definesBefore: defineMap(settingsBytes && settingsBytes.toString('utf8')),
   });
 }
@@ -69,6 +70,58 @@ function captureUnityBootstrapFootprint(projectRoot, options = {}) {
 function sameBytes(left, right) {
   if (left === null || right === null) return left === right;
   return Buffer.isBuffer(left) && Buffer.isBuffer(right) && left.equals(right);
+}
+
+function directoryDigest(directory, fsImpl = fs, pathImpl = path) {
+  if (!fsImpl.existsSync(directory)) return null;
+  const root = fsImpl.realpathSync(directory);
+  const entries = [];
+  const stack = [root];
+  while (stack.length) {
+    const current = stack.pop();
+    for (const entry of fsImpl.readdirSync(current, { withFileTypes: true })) {
+      const full = pathImpl.join(current, entry.name);
+      const relative = pathImpl.relative(root, full).replace(/\\/g, '/');
+      if (entry.isSymbolicLink()) {
+        const error = new Error('Bootstrap footprint cannot seal a symbolic link.');
+        error.code = 'UNITY_BOOTSTRAP_FOOTPRINT_SYMLINK';
+        throw error;
+      }
+      if (entry.isDirectory()) {
+        entries.push(`d:${relative}`);
+        stack.push(full);
+      } else if (entry.isFile()) {
+        const bytes = fsImpl.readFileSync(full);
+        entries.push(`f:${relative}:${bytes.length}:${crypto.createHash('sha256').update(bytes).digest('hex')}`);
+      } else {
+        const error = new Error('Bootstrap footprint contains a non-regular entry.');
+        error.code = 'UNITY_BOOTSTRAP_FOOTPRINT_INVALID';
+        throw error;
+      }
+    }
+  }
+  entries.sort();
+  return crypto.createHash('sha256').update(entries.join('\n')).digest('hex');
+}
+
+function sealUnityBootstrapFootprint(fingerprint, options = {}) {
+  const fsImpl = options.fs || fs;
+  const pathImpl = options.path || path;
+  const project = validateUnityProject(fingerprint && fingerprint.projectRoot, { fs: fsImpl, path: pathImpl });
+  if (!fingerprint || fingerprint.schemaVersion !== 1 || project.projectRoot !== fingerprint.projectRoot) {
+    const error = new Error('Bootstrap footprint does not match this Unity project.');
+    error.code = 'UNITY_BOOTSTRAP_FOOTPRINT_INVALID';
+    throw error;
+  }
+  return Object.freeze({
+    ...fingerprint,
+    sealed: true,
+    packageLockBytesAfter: optionalBytes(fingerprint.packageLockPath, fsImpl),
+    nugetDigestAfter: directoryDigest(fingerprint.nugetPath, fsImpl, pathImpl),
+    nugetMetaBytesAfter: optionalBytes(fingerprint.nugetMetaPath, fsImpl),
+    pluginsMetaBytesAfter: optionalBytes(fingerprint.pluginsMetaPath, fsImpl),
+    projectSettingsBytesAfter: optionalBytes(fingerprint.projectSettingsAsset, fsImpl),
+  });
 }
 
 function atomicReplace(filePath, bytes, expectedCurrent, fsImpl = fs) {
@@ -87,9 +140,14 @@ function atomicReplace(filePath, bytes, expectedCurrent, fsImpl = fs) {
   }
 }
 
-function restoreOptionalFile(filePath, beforeBytes, fsImpl = fs) {
+function restoreOptionalFile(filePath, beforeBytes, fsImpl = fs, expectedCurrent = undefined) {
   const current = optionalBytes(filePath, fsImpl);
   if (sameBytes(current, beforeBytes)) return 'unchanged';
+  if (expectedCurrent !== undefined && !sameBytes(current, expectedCurrent)) {
+    const error = new Error(`Concurrent change detected for ${path.basename(filePath)}.`);
+    error.code = 'UNITY_BOOTSTRAP_FOOTPRINT_CONFLICT';
+    throw error;
+  }
   if (beforeBytes === null) {
     if (fsImpl.lstatSync(filePath).isSymbolicLink()) {
       const error = new Error(`Refusing to remove symbolic link ${path.basename(filePath)}.`);
@@ -101,6 +159,26 @@ function restoreOptionalFile(filePath, beforeBytes, fsImpl = fs) {
   }
   atomicReplace(filePath, beforeBytes, current, fsImpl);
   return 'restored';
+}
+
+function validateOptionalRestore(filePath, beforeBytes, fsImpl = fs, expectedCurrent = undefined) {
+  const current = optionalBytes(filePath, fsImpl);
+  if (sameBytes(current, beforeBytes)) return 'unchanged';
+  if (expectedCurrent === undefined || !sameBytes(current, expectedCurrent)) {
+    const error = new Error(`Concurrent change detected for ${path.basename(filePath)}.`);
+    error.code = 'UNITY_BOOTSTRAP_FOOTPRINT_CONFLICT';
+    throw error;
+  }
+  if (beforeBytes === null) {
+    const entry = fsImpl.lstatSync(filePath);
+    if (entry.isSymbolicLink() || !entry.isFile()) {
+      const error = new Error(`Refusing to remove unsafe ${path.basename(filePath)}.`);
+      error.code = 'UNITY_BOOTSTRAP_FOOTPRINT_SYMLINK';
+      throw error;
+    }
+    return 'remove-generated';
+  }
+  return 'restore';
 }
 
 function stripAddedMcpDefines(text, definesBefore) {
@@ -128,7 +206,7 @@ function stripAddedMcpDefines(text, definesBefore) {
   return lines.join(eol);
 }
 
-function removeGeneratedNuget(fingerprint, fsImpl, pathImpl) {
+function validateGeneratedNuget(fingerprint, fsImpl, pathImpl) {
   if (fingerprint.nugetExisted || !fsImpl.existsSync(fingerprint.nugetPath)) return 'unchanged';
   const entry = fsImpl.lstatSync(fingerprint.nugetPath);
   if (entry.isSymbolicLink() || !entry.isDirectory()) {
@@ -144,19 +222,65 @@ function removeGeneratedNuget(fingerprint, fsImpl, pathImpl) {
     error.code = 'UNITY_BOOTSTRAP_FOOTPRINT_ESCAPE';
     throw error;
   }
+  if (directoryDigest(resolved, fsImpl, pathImpl) !== fingerprint.nugetDigestAfter) {
+    const error = new Error('Concurrent change detected in generated NuGet directory.');
+    error.code = 'UNITY_BOOTSTRAP_FOOTPRINT_CONFLICT';
+    throw error;
+  }
+  return 'remove-generated';
+}
+
+function removeGeneratedNuget(fingerprint, fsImpl, pathImpl) {
+  const validation = validateGeneratedNuget(fingerprint, fsImpl, pathImpl);
+  if (validation === 'unchanged') return validation;
+  const resolved = fsImpl.realpathSync(fingerprint.nugetPath);
   fsImpl.rmSync(resolved, { recursive: true, force: false });
   return 'removed-generated';
 }
 
-function removeEmptyGeneratedParent(fingerprint, fsImpl) {
+function validateEmptyGeneratedParent(fingerprint, fsImpl) {
   if (fingerprint.pluginsExisted || !fsImpl.existsSync(fingerprint.pluginsPath)) return 'unchanged';
+  const entry = fsImpl.lstatSync(fingerprint.pluginsPath);
+  if (entry.isSymbolicLink() || !entry.isDirectory()) {
+    const error = new Error('Generated Assets/Plugins target is not a safe directory.');
+    error.code = 'UNITY_BOOTSTRAP_FOOTPRINT_SYMLINK';
+    throw error;
+  }
+  const remaining = fsImpl.readdirSync(fingerprint.pluginsPath)
+    .filter(name => name !== path.basename(fingerprint.nugetPath) &&
+      name !== path.basename(fingerprint.nugetMetaPath));
+  if (remaining.length > 0) return 'preserved-nonempty';
+  if (!fingerprint.pluginsMetaExisted) {
+    validateOptionalRestore(fingerprint.pluginsMetaPath, null, fsImpl, fingerprint.pluginsMetaBytesAfter);
+  }
+  return 'remove-generated';
+}
+
+function removeEmptyGeneratedParent(fingerprint, fsImpl) {
+  const validation = validateEmptyGeneratedParent(fingerprint, fsImpl);
+  if (validation !== 'remove-generated') return validation;
   if (fsImpl.readdirSync(fingerprint.pluginsPath).length > 0) return 'preserved-nonempty';
+  if (!fingerprint.pluginsMetaExisted) {
+    // Recheck the CAS boundary before deleting the parent. This prevents a
+    // concurrent Plugins.meta edit from leaving an orphaned meta file.
+    validateOptionalRestore(fingerprint.pluginsMetaPath, null, fsImpl, fingerprint.pluginsMetaBytesAfter);
+  }
   fsImpl.rmdirSync(fingerprint.pluginsPath);
-  if (!fingerprint.pluginsMetaExisted && fsImpl.existsSync(fingerprint.pluginsMetaPath) &&
-      !fsImpl.lstatSync(fingerprint.pluginsMetaPath).isSymbolicLink()) {
-    fsImpl.unlinkSync(fingerprint.pluginsMetaPath);
+  if (!fingerprint.pluginsMetaExisted) {
+    restoreOptionalFile(fingerprint.pluginsMetaPath, null, fsImpl, fingerprint.pluginsMetaBytesAfter);
   }
   return 'removed-generated';
+}
+
+function validateScriptingDefinesRollback(fingerprint, fsImpl) {
+  const current = optionalBytes(fingerprint.projectSettingsAsset, fsImpl);
+  if (sameBytes(current, fingerprint.projectSettingsBytes)) return 'unchanged';
+  if (!sameBytes(current, fingerprint.projectSettingsBytesAfter)) {
+    const error = new Error('Concurrent change detected for ProjectSettings.asset.');
+    error.code = 'UNITY_BOOTSTRAP_FOOTPRINT_CONFLICT';
+    throw error;
+  }
+  return current === null ? 'unchanged' : 'remove-generated';
 }
 
 function rollbackUnityBootstrapFootprint(fingerprint, options = {}) {
@@ -168,29 +292,78 @@ function rollbackUnityBootstrapFootprint(fingerprint, options = {}) {
     error.code = 'UNITY_BOOTSTRAP_FOOTPRINT_INVALID';
     throw error;
   }
+  if (fingerprint.sealed !== true) {
+    return {
+      complete: false,
+      steps: {},
+      errors: [{ step: 'seal', code: 'UNITY_BOOTSTRAP_FOOTPRINT_UNSEALED' }],
+    };
+  }
+  if (options.ownershipConfirmed !== true) {
+    // A capture->Unity-import->seal window cannot attribute intermediate file
+    // writes to Unity versus the user. Production bootstrap therefore keeps
+    // the full generation after reload failure; destructive rollback requires
+    // an external, artifact-level ownership proof that this module cannot infer.
+    return {
+      complete: false,
+      phase: 'ownership',
+      steps: {},
+      errors: [{ step: 'ownership', code: 'UNITY_BOOTSTRAP_FOOTPRINT_OWNERSHIP_AMBIGUOUS' }],
+    };
+  }
   const steps = {};
   const errors = [];
+  const validations = [
+    ['packagesLock', () => validateOptionalRestore(
+      fingerprint.packageLockPath, fingerprint.packageLockBytes, fsImpl, fingerprint.packageLockBytesAfter)],
+    ['nugetDirectory', () => validateGeneratedNuget(fingerprint, fsImpl, pathImpl)],
+    ['nugetMeta', () => fingerprint.nugetMetaExisted
+      ? 'unchanged'
+      : validateOptionalRestore(fingerprint.nugetMetaPath, null, fsImpl, fingerprint.nugetMetaBytesAfter)],
+    ['pluginsDirectory', () => validateEmptyGeneratedParent(fingerprint, fsImpl)],
+    ['scriptingDefines', () => validateScriptingDefinesRollback(fingerprint, fsImpl)],
+  ];
+  for (const [name, validate] of validations) {
+    try { steps[name] = `validated:${validate()}`; } catch (error) {
+      steps[name] = error.code || 'failed';
+      errors.push({ step: name, code: error.code || 'failed' });
+    }
+  }
+  if (errors.length) return { complete: false, phase: 'validation', steps, errors };
+  if (options.validateOnly) return { complete: true, phase: 'validation', steps, errors: [] };
+
   const run = (name, action) => {
     try { steps[name] = action(); } catch (error) {
       steps[name] = error.code || 'failed';
       errors.push({ step: name, code: error.code || 'failed' });
     }
   };
-  run('packagesLock', () => restoreOptionalFile(fingerprint.packageLockPath, fingerprint.packageLockBytes, fsImpl));
+  run('packagesLock', () => restoreOptionalFile(
+    fingerprint.packageLockPath, fingerprint.packageLockBytes, fsImpl, fingerprint.packageLockBytesAfter));
   run('nugetDirectory', () => removeGeneratedNuget(fingerprint, fsImpl, pathImpl));
   run('nugetMeta', () => fingerprint.nugetMetaExisted
     ? 'unchanged'
-    : restoreOptionalFile(fingerprint.nugetMetaPath, null, fsImpl));
+    : restoreOptionalFile(fingerprint.nugetMetaPath, null, fsImpl, fingerprint.nugetMetaBytesAfter));
   run('pluginsDirectory', () => removeEmptyGeneratedParent(fingerprint, fsImpl));
   run('scriptingDefines', () => {
-    if (!fsImpl.existsSync(fingerprint.projectSettingsAsset)) return 'missing';
-    const current = fsImpl.readFileSync(fingerprint.projectSettingsAsset);
+    const current = optionalBytes(fingerprint.projectSettingsAsset, fsImpl);
+    if (current === null) return 'missing';
+    if (sameBytes(current, fingerprint.projectSettingsBytes)) return 'unchanged';
+    if (!sameBytes(current, fingerprint.projectSettingsBytesAfter)) {
+      const error = new Error('Concurrent change detected for ProjectSettings.asset.');
+      error.code = 'UNITY_BOOTSTRAP_FOOTPRINT_CONFLICT';
+      throw error;
+    }
     const stripped = Buffer.from(stripAddedMcpDefines(current.toString('utf8'), fingerprint.definesBefore), 'utf8');
     if (current.equals(stripped)) return 'unchanged';
     atomicReplace(fingerprint.projectSettingsAsset, stripped, current, fsImpl);
     return 'removed-generated';
   });
   return { complete: errors.length === 0, steps, errors };
+}
+
+function validateUnityBootstrapFootprintRollback(fingerprint, options = {}) {
+  return rollbackUnityBootstrapFootprint(fingerprint, { ...options, validateOnly: true });
 }
 
 module.exports = {
@@ -200,10 +373,13 @@ module.exports = {
   defineSet,
   defineMap,
   captureUnityBootstrapFootprint,
+  directoryDigest,
+  sealUnityBootstrapFootprint,
   sameBytes,
   atomicReplace,
   restoreOptionalFile,
   stripAddedMcpDefines,
   removeGeneratedNuget,
+  validateUnityBootstrapFootprintRollback,
   rollbackUnityBootstrapFootprint,
 };

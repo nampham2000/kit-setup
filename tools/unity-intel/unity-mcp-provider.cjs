@@ -322,12 +322,27 @@ function validateToolOptions(options) {
       (typeof expectedFingerprint !== 'string' || !/^[0-9a-f]{64}$/i.test(expectedFingerprint))) {
     throw providerError('UNITY_MCP_FINGERPRINT_INVALID', 'Expected Unity project fingerprint is invalid.');
   }
+  const includeUnresolvedGuids = Object.prototype.hasOwnProperty.call(options, 'unresolvedGuids');
+  const includeSerializedAssetPaths = Object.prototype.hasOwnProperty.call(options, 'serializedAssetPaths');
+  const unresolvedGuids = Array.isArray(options.unresolvedGuids) ? options.unresolvedGuids : [];
+  const serializedAssetPaths = Array.isArray(options.serializedAssetPaths) ? options.serializedAssetPaths : [];
+  if (unresolvedGuids.length > 512 || unresolvedGuids.some(value => typeof value !== 'string' || !/^[0-9a-f]{32}$/i.test(value))) {
+    throw providerError('UNITY_MCP_OPTIONS_INVALID', 'unresolvedGuids must contain at most 512 Unity GUIDs.');
+  }
+  if (serializedAssetPaths.length > 96 || serializedAssetPaths.some(value =>
+    typeof value !== 'string' || !/^(?:Assets|Packages)\//.test(value.replace(/\\/g, '/')) || value.length > 320)) {
+    throw providerError('UNITY_MCP_OPTIONS_INVALID', 'serializedAssetPaths must contain at most 96 logical Unity asset paths.');
+  }
   return {
     action,
     expectedFingerprint: expectedFingerprint ? expectedFingerprint.toLowerCase() : undefined,
     cursor: integerInRange(options.cursor, 0, 0, Number.MAX_SAFE_INTEGER, 'cursor'),
     pageSize: integerInRange(options.pageSize, 128, 1, 512, 'pageSize'),
     maxPrefabs: integerInRange(options.maxPrefabs, 96, 0, 256, 'maxPrefabs'),
+    includeUnresolvedGuids,
+    includeSerializedAssetPaths,
+    unresolvedGuids: [...new Set(unresolvedGuids.map(value => value.toLowerCase()))].sort(),
+    serializedAssetPaths: [...new Set(serializedAssetPaths.map(value => value.replace(/\\/g, '/'))) ].sort(),
   };
 }
 
@@ -394,6 +409,8 @@ async function invokeUnityMcpTool(options = {}) {
     pageSize: input.pageSize,
     maxPrefabs: input.maxPrefabs,
   };
+  if (input.includeUnresolvedGuids) body.unresolvedGuids = input.unresolvedGuids;
+  if (input.includeSerializedAssetPaths) body.serializedAssetPaths = input.serializedAssetPaths;
   if (input.expectedFingerprint) body.expectedFingerprint = input.expectedFingerprint;
   const response = await postJsonWithRetry(
     connection,

@@ -29,6 +29,7 @@ require('./lib/auto-strip-ansi.cjs');
 
 const fs = require('fs');
 const path = require('path');
+const { assertUnityPortPreflight } = require('./unity-intel/preflight.cjs');
 const crypto = require('crypto');
 const { parseUnityFile } = require('./lib/unity-yaml.cjs');
 const { isBinarySerializedFile, parseBinaryUnityFile, binaryDocsToUnityYaml } = require('./lib/unity-serialized-file.cjs');
@@ -939,6 +940,8 @@ function main () {
         process.exit(1);
     }
 
+    assertUnityPortPreflight(options.scene, { projectRoot: options.unityRoot, requireProject: true });
+
     const outPath = path.resolve(ROOT_DIR, options.out);
     const manifestPath = options.manifest
         ? path.resolve(ROOT_DIR, options.manifest)
@@ -982,6 +985,11 @@ function main () {
     console.log('======================================================');
 }
 
-if (require.main === module) main();
+if (require.main === module) {
+    try { main(); } catch (error) {
+        console.error(`[scene-port] ${error.code || 'FAILED'}: ${error.message}`);
+        process.exitCode = 1;
+    }
+}
 
 module.exports = { portScene };

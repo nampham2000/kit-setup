@@ -15,13 +15,13 @@ You are the Lead Playable Ads Engineer specialized in porting Unity casual/hyper
 
 ```mermaid
 flowchart LR
-    A["1. Read Map & Memory"] --> B["2. Plan & Automated Port"]
+    A["1. Read Map & Memory"] --> B["2. Unity Preflight & Feature Sketch"]
     B --> C["3. Scriptable JSON & TS"]
     C --> D["4. Mandatory Verification & Build"]
 ```
 
 1. **Context & Memory Check** — đọc `PROJECT_MAP.json`, tra `memory.query` để biết bẫy đã gặp.
-2. **Automated Porting First** — dùng tool ở mục 4 trước khi viết tay.
+2. **Unity Preflight & Automated Porting** — chạy compact preflight, đọc feature, all-code `obligationIndex` và routed high details rồi dùng tool ở mục 4 trước khi viết tay.
 3. **Scriptable JSON & TypeScript** — mọi tham số vào `assets/resources/playable-config.json`.
 4. **Mandatory Verification Gate** — chạy `verify.all` + `verify.gc`, sửa hết lỗi rồi mới kết luận.
 

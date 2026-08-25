@@ -27,6 +27,8 @@ namespace CcPlayable.UnityIntelligence
         public Dictionary<string, object> features { get; set; } = new Dictionary<string, object>();
         public List<UnityScanDiagnostic> diagnostics { get; set; } = new List<UnityScanDiagnostic>();
         public List<string> resolvesDiagnosticKeys { get; set; } = new List<string>();
+        public List<string> resolvesUnresolvedGuids { get; set; } = new List<string>();
+        public List<UnityCandidateDisposition> candidateDispositions { get; set; } = new List<UnityCandidateDisposition>();
         public UnityScanCapabilities capabilities { get; set; } = new UnityScanCapabilities();
     }
 
@@ -152,5 +154,30 @@ namespace CcPlayable.UnityIntelligence
     public sealed class UnityScanCapabilities
     {
         public bool playModeCapture { get; set; }
+        public bool candidateDisposition { get; set; } = true;
+    }
+
+    public sealed class UnityCandidateDisposition
+    {
+        public string kind { get; set; } = string.Empty;
+        public string key { get; set; } = string.Empty;
+        public string status { get; set; } = "unknown";
+        public string assetPath { get; set; } = string.Empty;
+        public string assetType { get; set; } = "Unknown";
+        public int dependencyCount { get; set; }
+        public bool serializedScanComplete { get; set; }
+        public int serializedPropertyCount { get; set; }
+        public int missingReferenceCount { get; set; }
+        public bool referencesComplete { get; set; }
+        public List<UnityCandidateReference> references { get; set; } = new List<UnityCandidateReference>();
+    }
+
+    public sealed class UnityCandidateReference
+    {
+        public string fieldPath { get; set; } = string.Empty;
+        public string assetPath { get; set; } = string.Empty;
+        public string guid { get; set; } = string.Empty;
+        public string objectId { get; set; } = string.Empty;
+        public string type { get; set; } = "Unknown";
     }
 }

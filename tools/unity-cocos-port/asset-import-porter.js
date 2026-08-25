@@ -123,6 +123,10 @@ module.exports = function createAssetImportPorter(deps) {
 
   function convertFbxToGlb(unityAsset, converter, options, reporter, severity = 'medium') {
     const dest = path.join(options.cocosRoot, 'assets', 'unity_imported', unityAsset.relativePath).replace(/\.fbx$/i, '.glb');
+    if (options.dryRun) {
+      reporter.add(severity, 'FBX_FALLBACK_SKIPPED_DRY_RUN', unityAsset.relativePath, toPosix(path.relative(options.cocosRoot, dest)), 'FBX fallback would run during a real port; dry-run did not create files or launch a converter');
+      return '';
+    }
     ensureDir(path.dirname(dest));
     ensureDirectoryMetas(path.dirname(dest), path.join(options.cocosRoot, 'assets'));
     if (fs.existsSync(dest)) {
@@ -234,6 +238,11 @@ module.exports = function createAssetImportPorter(deps) {
     }
 
     if (options.convertFbxFallback) {
+      if (options.dryRun) {
+        const fallbackDest = importedUnityAssetPath(meshAsset, options).replace(/\.fbx$/i, '.glb');
+        reporter.add(severity, 'FBX_FALLBACK_SKIPPED_DRY_RUN', meshAsset.relativePath, toPosix(path.relative(options.cocosRoot, fallbackDest)), 'FBX fallback would run during a real port; dry-run did not create files or launch a converter');
+        return { pendingImport: Boolean(copiedDest), detail: copiedDest ? toPosix(path.relative(options.cocosRoot, copiedDest)) : '', resolved: null };
+      }
       const converter = findCommand(['FBX2glTF', 'FBX2glTF.exe', 'assimp', 'assimp.exe']);
       if (converter) {
         const convertedDest = convertFbxToGlb(meshAsset, converter, options, reporter, severity);

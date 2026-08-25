@@ -11,6 +11,12 @@ This skill provides step-by-step guidance and architectural rules for converting
 ## 1. Automated Tooling First
 
 Trước khi viết tay bất kỳ prefab / shader / script nào, dùng tool sẵn có.
+Luôn hoàn tất rule generated `unity-preflight`: đọc compact `decision`, `features`, `obligationIndex`, `obligations`
+và chỉ mở evidence slice được brief yêu cầu trước khi implement.
+Khi `port.closure --copy-to` tạo staging ngoài Unity project, giữ nguyên `.unity-port-provenance.json`
+và truyền `--unity-project <UnityProjectRoot>` cho `port.compile`; không copy/ghép thêm source vào staging đã ký.
+Không đi vòng mutation gate qua symlink/reparse path. `--dry-run` phải hoàn toàn read-only; nếu thấy tool tạo
+folder, `.meta`, chạy converter hoặc ghi output thì coi là lỗi gate và dừng workflow.
 Bảng lệnh dưới đây được **sinh tự động** từ `playable-shared-kit/ai/capabilities.def.cjs`
 và được `npm run ai:contract:verify` đối chiếu với CLI thật.
 

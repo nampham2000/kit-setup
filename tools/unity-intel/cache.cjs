@@ -43,6 +43,34 @@ function isInside(parent, candidate) {
   return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
 }
 
+function nearestExistingAncestor(candidate) {
+  let current = path.resolve(candidate);
+  while (!fs.existsSync(current)) {
+    const parent = path.dirname(current);
+    if (parent === current) return null;
+    current = parent;
+  }
+  return current;
+}
+
+function assertExternalCacheLocation(cacheDir, protectedRoots = []) {
+  const candidate = path.resolve(cacheDir);
+  const ancestor = nearestExistingAncestor(candidate);
+  for (const protectedRoot of protectedRoots.filter(Boolean)) {
+    if (isInside(protectedRoot, candidate)) {
+      throw new Error(`Unity intelligence cache must stay outside source/project: ${candidate}`);
+    }
+    if (!ancestor || !fs.existsSync(protectedRoot)) continue;
+    const realProtected = fs.realpathSync.native(protectedRoot);
+    const realAncestor = fs.realpathSync.native(ancestor);
+    const prospective = path.resolve(realAncestor, path.relative(ancestor, candidate));
+    if (isInside(realProtected, prospective)) {
+      throw new Error('Unity intelligence cache symlink/junction must stay outside source/project.');
+    }
+  }
+  return candidate;
+}
+
 function resolveDefaultCacheDir() {
   const configured = process.env.CC_PLAYABLE_UNITY_INTEL_CACHE;
   if (configured) return path.resolve(configured);
@@ -64,18 +92,16 @@ function createCacheContext(options) {
     })),
   });
   const key = crypto.createHash('sha256').update(identity).digest('hex').slice(0, 24);
-  const cacheDir = path.resolve(options.cacheDir || resolveDefaultCacheDir());
-  for (const protectedRoot of [options.projectRoot, options.sourceRoot].filter(Boolean)) {
-    if (isInside(protectedRoot, cacheDir)) {
-      throw new Error(`Unity intelligence cache must stay outside source/project: ${cacheDir}`);
-    }
-  }
-  return { enabled: true, key, file: path.join(cacheDir, `${key}.json`) };
+  const protectedRoots = [options.projectRoot, options.sourceRoot].filter(Boolean).map(value => path.resolve(value));
+  const cacheDir = assertExternalCacheLocation(options.cacheDir || resolveDefaultCacheDir(), protectedRoots);
+  return { enabled: true, key, file: path.join(cacheDir, `${key}.json`), protectedRoots };
 }
 
 function loadIndexCache(context) {
   if (!context.enabled || !context.file || !fs.existsSync(context.file)) return null;
   try {
+    assertExternalCacheLocation(path.dirname(context.file), context.protectedRoots);
+    if (fs.lstatSync(context.file).isSymbolicLink()) return null;
     const cache = JSON.parse(fs.readFileSync(context.file, 'utf8'));
     if (cache.schemaVersion !== CACHE_SCHEMA_VERSION || cache.indexerVersion !== INDEXER_VERSION ||
         cache.extractorFingerprint !== EXTRACTOR_FINGERPRINT) return null;
@@ -90,7 +116,12 @@ function saveIndexCache(context, entries) {
   if (!context.enabled || !context.file) return { written: false, error: null };
   let tempFile = null;
   try {
+    assertExternalCacheLocation(path.dirname(context.file), context.protectedRoots);
     fs.mkdirSync(path.dirname(context.file), { recursive: true });
+    assertExternalCacheLocation(path.dirname(context.file), context.protectedRoots);
+    if (fs.existsSync(context.file) && fs.lstatSync(context.file).isSymbolicLink()) {
+      throw new Error('Unity intelligence cache file must not be a symlink.');
+    }
     tempFile = `${context.file}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`;
     fs.writeFileSync(tempFile, `${JSON.stringify({
       schemaVersion: CACHE_SCHEMA_VERSION,
@@ -138,6 +169,7 @@ module.exports = {
   INDEXER_VERSION,
   EXTRACTOR_FINGERPRINT,
   resolveDefaultCacheDir,
+  assertExternalCacheLocation,
   createCacheContext,
   loadIndexCache,
   saveIndexCache,

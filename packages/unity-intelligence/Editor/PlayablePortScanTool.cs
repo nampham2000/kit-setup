@@ -1,5 +1,6 @@
 #nullable enable
 using System.ComponentModel;
+using System.Collections.Generic;
 using com.IvanMurzak.McpPlugin;
 using com.IvanMurzak.ReflectorNet.Utils;
 
@@ -26,14 +27,20 @@ namespace CcPlayable.UnityIntelligence
             [Description("GUID evidence page size from 1 to 512.")]
             int pageSize = 128,
             [Description("Maximum reachable prefabs whose component types are counted by scan, from 0 to 256.")]
-            int maxPrefabs = 96)
+            int maxPrefabs = 96,
+            [Description("Bounded GUID candidates reported unresolved by the static scanner; Unity returns authoritative resolved/missing dispositions.")]
+            List<string>? unresolvedGuids = null,
+            [Description("Bounded logical asset paths whose binary serialization needs an authoritative Unity import disposition.")]
+            List<string>? serializedAssetPaths = null)
         {
             return MainThread.Instance.Run(() => UnityIntelligenceScanner.Execute(
                 action,
                 expectedFingerprint,
                 cursor,
                 pageSize,
-                maxPrefabs));
+                maxPrefabs,
+                unresolvedGuids,
+                serializedAssetPaths));
         }
     }
 }

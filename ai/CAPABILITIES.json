@@ -4,7 +4,7 @@
     "source": "playable-shared-kit/ai/capabilities.def.cjs",
     "generatedBy": "npm run ai:sync",
     "contractCheck": "npm run ai:contract:verify",
-    "count": 35
+    "count": 36
   },
   "coreRules": [
     {
@@ -34,6 +34,30 @@
     {
       "id": "meta-files",
       "rule": "Không sửa tay file `.meta`. Luôn đi qua tool hoặc Cocos editor để giữ UUID nhất quán."
+    },
+    {
+      "id": "unity-preflight",
+      "rule": "Trước khi agent đọc raw Unity source hoặc chạy bất kỳ port tool có ghi output, BẮT BUỘC chạy `npm run ai:port:preflight -- --project <UnityProjectRoot>` (hoặc MCP `scanUnityProject`) và đọc `decision`, `features`, `obligationIndex`, `obligations`. Chỉ query evidence bounded khi brief yêu cầu. Hard blocker chặn implement; mọi source high còn lại phải có action + verification và phải được giải quyết hoặc chứng minh out-of-scope trước khi hoàn tất. Mutation receipt chỉ áp dụng cho Assets/package root đã khai báo; closure staging ngoài project phải có exact provenance và explicit --unity-project.",
+      "agentContract": {
+        "entrypoints": [
+          "port.preflight"
+        ],
+        "mcpEntrypoint": "scanUnityProject",
+        "mustConsume": [
+          "decision",
+          "features",
+          "obligationIndex",
+          "obligations",
+          "receiptId"
+        ],
+        "before": [
+          "read-unity-source",
+          "port-implementation"
+        ],
+        "evidenceQuery": "unity.intel.query",
+        "sourceHighPolicy": "disposition-required",
+        "completionHighPolicy": "agent-disposition-required"
+      }
     }
   ],
   "capabilities": {
@@ -136,7 +160,49 @@
           "Không khởi chạy Unity instance thứ hai khi UnityLockfile đang bị giữ và không kill Editor của người dùng.",
           "Project đóng chỉ được batch-launch khi có đúng Unity version khai báo; không âm thầm dùng version gần nhất.",
           "Compile error có sẵn trong Unity project có thể chặn package import/executeMethod; tool chỉ coi marker JSON hợp lệ là thành công, không tin exit code 0.",
+          "Bootstrap scan đầu chỉ xác nhận import/domain reload. Tool rebuild static baseline rồi bắt buộc scan xác nhận lần hai; marker đầu không bao giờ authorize implement.",
+          "Editor đang mở có thể vẫn trả scanner cũ trong lúc domain reload; readiness call không gửi field candidate mới, retry version/capability mismatch đến deadline và chỉ chấp nhận đúng package 0.3.0, protocol 1, cùng candidateDisposition khi request có candidate.",
+          "Trước reload, manifest/config rollback theo CAS và chỉ mutate sau khi tất cả target cùng qua validation. Sau khi reload bắt đầu, ownership có thể đã đổi nên tool fail-preserve toàn bộ setup generation; sửa compile/import error rồi chạy lại setup.",
+          "Unity Editor disposition tối đa 512 unresolved GUID + 96 serialized asset paths; partial/truncated reference evidence không được clear source high.",
+          "Live scanner duyệt nested/list SerializedProperty trên mọi sub-asset; reference evidence dùng GUID + local file ID, có budget toàn scan 512 reference/256 KiB và candidate array 768 KiB. Non-null reference không biểu diễn được buộc disposition partial.",
           "Scanner chỉ quan sát edit-time/imported assets; `playModeCapture=false`, không khẳng định GameObject chỉ sinh ở runtime."
+        ],
+        "verify": null,
+        "status": "partial"
+      },
+      {
+        "id": "port.preflight",
+        "title": "Unity port preflight: compact feature brief + high routing + fresh mutation receipt",
+        "run": "npm run ai:port:preflight -- --project <UnityProjectRoot>",
+        "command": "node playable-shared-kit/tools/unity-intel-cli.cjs preflight --json --project <UnityProjectRoot>",
+        "optional": [
+          "--provider <auto|static|unity-mcp>",
+          "--bootstrap",
+          "--intent <kind>",
+          "--target <logical-path-or-symbol>",
+          "--unity <file>",
+          "--mcp-url <url>",
+          "--timeout-ms <n>",
+          "--include-vendor",
+          "--cache-dir <dir>",
+          "--no-cache",
+          "--refresh-cache"
+        ],
+        "when": "BƯỚC DUY NHẤT đầu tiên trước khi agent đọc Unity source hoặc chạy tool có ghi output. Tự scan, phác thảo feature, định tuyến mọi high và cấp receipt theo state source.",
+        "outputs": [
+          "stdout JSON <=12 KiB: decision, feature plan, all-code/count obligationIndex, routed high details, implementation/verification routes và receiptId"
+        ],
+        "limits": [
+          "Mặc định không ghi Unity/Cocos project; receipt atomic <=4 KiB nằm trong user-local cache. Chỉ --bootstrap mới cài/reload Unity package.",
+          "`--cache-dir` chỉ đổi incremental scan index; mutation receipt luôn nằm trong fixed user-local store để mọi port gate cùng đọc được.",
+          "Hard source-integrity high chặn implement; DOTween/coroutine/animator/shader high trở thành nghĩa vụ implement/verify và không gây deadlock.",
+          "Receipt hết hạn hoặc tự stale khi C#/prefab/shader/meta/manifest/project settings hay extractor thay đổi.",
+          "Receipt chỉ authorize source trong Assets hoặc embedded/local/exact PackageCache root do manifest chọn. Temp/UserSettings/arbitrary project file bị từ chối; closure staging ngoài project cần provenance exact-hash do port.closure sinh.",
+          "Directory walker/cache fail-closed với symlink, reparse point, absolute/traversal path; mọi --dry-run dừng trước mkdir, meta, converter và output write.",
+          "Live candidate disposition là all-or-nothing theo bounded request: resolved GUID phải có path + complete dependency mappings; serialized asset phải có complete SerializedObject/reference evidence. Missing/partial trở thành authoritative live high.",
+          "Brief giữ toàn bộ high code/count trong obligationIndex dù phải trim detail/evidence; chỉ query bounded khi evidenceQueries yêu cầu.",
+          "Chỉ intent project (mặc định) cấp mutation receipt. Intent scene/prefab/script/shader/feature/diagnostic là focused analysis-only và không thể dùng để mở gate ghi output.",
+          "Scanner edit-time đặt playModeCapture=false; object chỉ sinh runtime vẫn là coverage gap cần xác minh runtime."
         ],
         "verify": null,
         "status": "partial"
@@ -158,13 +224,16 @@
           "--no-cache",
           "--refresh-cache"
         ],
-        "when": "BƯỚC ĐẦU TIÊN trước khi agent đọc file hoặc implement một Unity port. Provider auto thử Unity-MCP sẵn có rồi fallback static mà không tự ghi project.",
+        "when": "Dùng để xem compact inventory/diagnostics thuần khi không chuẩn bị implement. Với port workflow, dùng port.preflight thay vì gọi cả scan và port.plan.",
         "outputs": [
-          "stdout JSON <=24 KiB: inventory, build scenes, feature sketch có evidence, diagnostics và section counts"
+          "stdout JSON <=24 KiB: inventory, build scenes, feature sketch, diagnosticCounts, preflightGate và section counts"
         ],
         "limits": [
           "Mặc định read-only: provider auto không cài package. Chỉ --bootstrap mới ghi Unity project.",
           "Live patch bị từ chối nếu fingerprint project/editor khác static snapshot.",
+          "Live scan nhận tối đa 512 unresolved GUID và 96 serialized path từ static snapshot. Chỉ disposition đầy đủ mới resolve static uncertainty; partial/truncated evidence vẫn giữ high.",
+          "Khi --bootstrap, scan đầu chỉ chờ reload; static baseline được rebuild trước scan xác nhận authoritative lần hai.",
+          "Bootstrap chỉ hoàn tất khi live patch đúng scanner 0.3.0/protocol 1; Editor đang domain-reload được retry có giới hạn thay vì yêu cầu setup thủ công lần hai.",
           "Không trả raw YAML/C# hoặc token; absolute filesystem path bị redaction trong compact projection.",
           "Edit-time scan không quan sát object chỉ sinh trong Play Mode; `playModeCapture=false`."
         ],
@@ -185,7 +254,7 @@
           "--limit <n>",
           "--include-vendor"
         ],
-        "when": "Sau compact scan, chỉ gọi khi cần evidence cụ thể. Thay cho việc đọc hàng loạt Unity YAML/C# hoặc dump toàn bộ MCP response.",
+        "when": "Sau port.preflight, chỉ gọi khi implementation brief yêu cầu evidence cụ thể. Thay cho việc đọc hàng loạt Unity YAML/C# hoặc dump toàn bộ MCP response.",
         "outputs": [
           "stdout JSON page <=48 KiB, tối đa 200 item, opaque nextCursor"
         ],
@@ -216,7 +285,7 @@
           "--no-cache",
           "--refresh-cache"
         ],
-        "when": "BƯỚC ĐẦU TIÊN khi nhận một project Unity mới. Sinh compact snapshot + port plan thay vì tự quét cây thư mục.",
+        "when": "Legacy/deep dependency planner, chỉ gọi khi implementation brief của port.preflight chưa đủ. Không gọi mặc định cho cùng task/fingerprint để tránh scan và token lặp.",
         "outputs": [
           "stdout JSON: Unity version/packages, build scenes, inventory, dependency summary, diagnostics, cache metrics và thứ tự port"
         ],
@@ -224,8 +293,10 @@
           "Provider auto thử live Unity-MCP rồi fallback static với diagnostic; dùng --provider unity-mcp khi muốn fail-fast nếu live scan thiếu.",
           "Mặc định chỉ đọc Unity/Cocos project. Chỉ --bootstrap mới cài package/config và reload Unity.",
           "Unity-side scanner chỉ quan sát edit-time; `playModeCapture=false`, không khẳng định object chỉ sinh runtime.",
+          "Bootstrap dùng scan xác nhận lần hai trên rebuilt baseline; candidate disposition incomplete không được clear diagnostic.",
           "Incremental cache mặc định nằm trong user-local cache; dùng --no-cache để tắt.",
           "Library/PackageCache được coi là immutable theo contract của Unity Package Manager; nếu sửa tay package cache tại chỗ, chạy --refresh-cache.",
+          "Registry package chỉ chọn exact manifest/lock version; git/local-tarball package chỉ chọn resolvedPath + fingerprint được context-matched projectResolution.json khóa, không đoán theo sibling cache gần tên.",
           "GUID index resolve cả Assets và package source đang cài; vendor/sample/editor vẫn nằm trong raw evidence nhưng mặc định bị lọc khỏi porting view. Dùng --include-vendor nếu chính package/sample đó là mục tiêu port.",
           "SerializedFile nhị phân được đọc khi còn type tree; asset bundle/stripped type tree được báo diagnostic và cần Unity-side scanner xác nhận."
         ],
@@ -349,12 +420,13 @@
         "when": "CHẠY TRƯỚC port.compile khi cần port một prefab có gắn C# component: giải m_Script guid ra file .cs rồi mở rộng theo dependency. Đừng port cả Assets/ — closure của một prefab thường 10-50 file.",
         "outputs": [
           "JSON: attachedScripts, closure (kèm depth), unresolved, depthHistogram, byTopFolder, nextActions",
-          "<copy-to>/**/*.cs (staging cho port.compile --src)"
+          "<copy-to>/**/*.cs + .unity-port-provenance.json (staging exact-hash cho port.compile --src)"
         ],
         "limits": [
           "Dùng chung ScriptIndex của port.plan: hiểu GUID, partial class và .asmdef; type dependency vẫn suy ra bằng identifier lexical nên thiên về gom THỪA hơn bỏ SÓT.",
           "Default `--max-depth 2` là CHỦ Ý: closure bắc cầu hội tụ về gần cả project (đo trên BlastShooter: d1=11, d2=48, d8=400/648 file). Đọc `depthHistogram` + `byTopFolder` rồi quyết định tăng depth hay `--exclude`, đừng tăng bừa.",
-          "Script nằm trong Packages/ hoặc trong DLL sẽ vào `unresolved` — không có .cs để port, phải tự viết lại bằng TypeScript."
+          "Script nằm trong Packages/ hoặc trong DLL sẽ vào `unresolved` — không có .cs để port, phải tự viết lại bằng TypeScript.",
+          "`--copy-to` chỉ cấp provenance sau khi từng staged byte khớp origin trong Assets/package root đã khai báo. File thêm/xóa/sửa hoặc marker bị chuyển directory sẽ làm compiler fail-closed."
         ],
         "verify": "npm run ai:verify",
         "status": "ok"
@@ -372,7 +444,8 @@
           "--verbose",
           "--no-typecheck",
           "--cc-types <path>",
-          "--diagnostics <path>"
+          "--diagnostics <path>",
+          "--unity-project <UnityProjectRoot>"
         ],
         "when": "Port script/logic C# sang TS: AI Agent LUÔN CHẠY LỆNH NÀY TRƯỚC TIÊN để tạo static first pass, sau đó đọc report và refine/polish gameplay semantics.",
         "outputs": [
@@ -385,7 +458,8 @@
           "Đọc `validationScope.typescriptTypes` trước khi tin `typeErrorCount`: chỉ giá trị `checked` mới có nghĩa; `unavailable-cc-types` / `skipped-dry-run` / `disabled` nghĩa là KHÔNG BIẾT, không phải 0 lỗi.",
           "Type-check thêm ~1s cho 82 file; `--no-typecheck` bỏ qua nhưng khi đó confidence chỉ phản ánh chất lượng emit.",
           "Các file có TODO hoặc warning luôn cần AI refine; dùng `--runtime-only` để bỏ Unity Editor code khi port playable runtime.",
-          "Mặc định giữ cấu trúc thư mục để tránh ghi đè basename; `--flat-output` chỉ dùng khi đã kiểm tra collision."
+          "Mặc định giữ cấu trúc thư mục để tránh ghi đè basename; `--flat-output` chỉ dùng khi đã kiểm tra collision.",
+          "CLI có ghi output bắt buộc receipt từ port.preflight. Khi compile closure staging ngoài Unity project, truyền `--unity-project <UnityProjectRoot>`; compiler kiểm tra project/receipt/provenance và exact hash của toàn bộ subtree trước lần ghi đầu."
         ],
         "verify": "npm run ai:verify",
         "status": "partial"
@@ -422,10 +496,10 @@
         "outputs": [
           "<out-dir>/effects/*.effect",
           "<out-dir>/materials/*.mtl",
-          ".ucshader-guid-index.json"
+          "user-local incremental GUID cache"
         ],
         "limits": [
-          "Không ghi gì nếu thiếu --out-dir; mặc định chỉ đọc và liệt kê.",
+          "Không ghi Unity/Cocos project nếu thiếu --out-dir; mặc định chỉ đọc source, liệt kê và có thể cập nhật user-local incremental cache.",
           "Texture và mesh CHỈ được liệt kê, không tự import — phải tự đưa vào Cocos rồi mới bind được UUID.",
           "`_effectAsset` của .mtl để rỗng: UUID chỉ tồn tại sau khi Cocos import .effect. Chạy lại `shader.material` với --effect-uuid để bind.",
           "Material dùng shader built-in/package của Unity (không có file .shader) chỉ được BÁO TÊN — phải tự viết lại hoặc map sang effect built-in của Cocos.",
@@ -444,6 +518,7 @@
         "optional": [
           "-m",
           "--mode auto|unlit|surface-pbr",
+          "--unity-project <UnityProjectRoot>",
           "--unity-uv",
           "--report",
           "--no-report",
@@ -477,7 +552,8 @@
         "command": "node playable-shared-kit/tools/shader-compiler/unity-shader-compiler.cjs batch --dir <unity_shader_dir> --out-dir <assets/effects>",
         "optional": [
           "-m",
-          "--mode auto|unlit|surface-pbr"
+          "--mode auto|unlit|surface-pbr",
+          "--unity-project <UnityProjectRoot>"
         ],
         "when": "Chuyển nhiều shader một lượt (đo được: 110 shader trong 0,75s).",
         "outputs": [
@@ -498,7 +574,8 @@
         "command": "node playable-shared-kit/tools/shader-compiler/unity-shader-compiler.cjs convert-mat --src <UnityMaterial.mat> --out <assets/materials/X.mtl>",
         "optional": [
           "--effect <X.effect>",
-          "--effect-uuid <uuid>"
+          "--effect-uuid <uuid>",
+          "--unity-project <UnityProjectRoot>"
         ],
         "when": "Sau khi effect đã được Cocos import và có UUID. Mang color/float/texture + tiling/offset từ Unity sang.",
         "outputs": [

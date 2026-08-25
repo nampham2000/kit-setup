@@ -5,6 +5,8 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const binarySerializedFile = require('./lib/unity-serialized-file.cjs');
+const { createPathBoundary, inspectContainedPath } = require('./lib/path-boundary.cjs');
+const { assertUnityPortPreflight } = require('./unity-intel/preflight.cjs');
 const {
   ROOT_DIR,
   BUILTIN_DEFAULT_SPRITE_RENDERER_MATERIAL_UUID,
@@ -402,6 +404,7 @@ function parseArgs(argv) {
     src: '',
     out: '',
     report: path.join(ROOT_DIR, '.unity', 'port-report.csv'),
+    reportExplicit: false,
     overwrite: false,
     dryRun: false,
     recursive: false,
@@ -461,10 +464,12 @@ function parseArgs(argv) {
     }
     if (arg === '--report') {
       options.report = path.resolve(readValue(arg));
+      options.reportExplicit = true;
       continue;
     }
     if (arg.startsWith('--report=')) {
       options.report = path.resolve(arg.slice('--report='.length));
+      options.reportExplicit = true;
       continue;
     }
     if (arg === '--overwrite') {
@@ -1180,23 +1185,49 @@ function compressUuid(uuid) {
   return head + b64;
 }
 
-function findFiles(root, predicate) {
+const PORT_SCAN_SKIPPED_DIRECTORIES = new Set(['node_modules', 'library', 'temp', '.git']);
+
+function walkContainedFiles(root, predicate, options = {}) {
   const result = [];
-  if (!fs.existsSync(root)) return result;
-  const stack = [root];
+  let boundary;
+  try {
+    boundary = createPathBoundary(root);
+  } catch {
+    return result;
+  }
+
+  const recursive = options.recursive !== false;
+  const skipDirectories = options.skipDirectories || new Set();
+  const stack = [boundary.resolvedRoot];
   while (stack.length) {
     const dir = stack.pop();
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+
+    for (const entry of entries) {
       const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        if (entry.name === 'node_modules' || entry.name === 'library' || entry.name === 'temp' || entry.name === '.git') continue;
+      const inspected = inspectContainedPath(boundary, full);
+      if (!inspected) continue;
+
+      if (inspected.stat.isDirectory()) {
+        if (!recursive || skipDirectories.has(entry.name)) continue;
         stack.push(full);
-      } else if (predicate(full)) {
+      } else if (inspected.stat.isFile() && predicate(full)) {
         result.push(full);
       }
     }
   }
   return result;
+}
+
+function findFiles(root, predicate) {
+  return walkContainedFiles(root, predicate, {
+    skipDirectories: PORT_SCAN_SKIPPED_DIRECTORIES,
+  });
 }
 
 // Assets referenced by a prefab often live in an embedded or registry package
@@ -1268,7 +1299,7 @@ class CocosAssetDatabase {
     this.layersByName = new Map();
   }
 
-  scan() {
+  scan(options = {}) {
     this.scanLayers();
     for (const metaFile of findFiles(this.assetsRoot, (file) => file.endsWith('.meta'))) {
       const meta = readJsonIfExists(metaFile);
@@ -1290,7 +1321,7 @@ class CocosAssetDatabase {
             pruned = true;
           }
         }
-        if (pruned) fs.writeFileSync(metaFile, `${JSON.stringify(meta, null, 2)}\n`, 'utf8');
+        if (pruned && !options.readOnly) fs.writeFileSync(metaFile, `${JSON.stringify(meta, null, 2)}\n`, 'utf8');
       }
 
       const record = {
@@ -2526,7 +2557,7 @@ function ensureSpineAtlasMeta(assetFile, options) {
     subMetas: {},
     userData: { ...(existing.userData || {}) },
   };
-  if (JSON.stringify(existing) !== JSON.stringify(meta)) {
+  if (!options.dryRun && JSON.stringify(existing) !== JSON.stringify(meta)) {
     fs.writeFileSync(metaFile, `${JSON.stringify(meta, null, 2)}\n`, 'utf8');
   }
   return meta;
@@ -2550,7 +2581,7 @@ function ensureSpineDataMeta(assetFile, atlasUuid, options) {
       atlasUuid,
     },
   };
-  if (JSON.stringify(existing) !== JSON.stringify(meta)) {
+  if (!options.dryRun && JSON.stringify(existing) !== JSON.stringify(meta)) {
     fs.writeFileSync(metaFile, `${JSON.stringify(meta, null, 2)}\n`, 'utf8');
   }
   return meta;
@@ -5524,10 +5555,13 @@ function repairPrefabAndImportedLibraryAssetRefs(prefabFile, cocosDb, reporter, 
 function repairSiblingPrefabAssetRefs(outputFile, cocosDb, reporter, options) {
   if (options.dryRun) return;
   const dir = path.dirname(outputFile);
-  if (!fs.existsSync(dir)) return;
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    if (!entry.isFile() || !entry.name.endsWith('.prefab')) continue;
-    repairPrefabAndImportedLibraryAssetRefs(path.join(dir, entry.name), cocosDb, reporter, options);
+  const siblingPrefabs = walkContainedFiles(
+    dir,
+    (file) => file.endsWith('.prefab'),
+    { recursive: false },
+  );
+  for (const prefabFile of siblingPrefabs) {
+    repairPrefabAndImportedLibraryAssetRefs(prefabFile, cocosDb, reporter, options);
   }
 }
 
@@ -5694,20 +5728,20 @@ function portPrefab(options, reporter) {
   runtimeComponentPorter.ensureSpriteRendererColorAdapterScript(options, reporter);
   runtimeComponentPorter.ensureSpriteRendererColorAssets(options, reporter);
   const cocosDb = new CocosAssetDatabase(options.cocosRoot);
-  cocosDb.scan();
+  cocosDb.scan({ readOnly: !!options.dryRun });
 
   const model = buildUnityPrefabModel(options.src, unityDb, reporter, options);
   const { builder, rootName } = buildCocosPrefabBuilder(model, options.out, options, reporter, unityDb, cocosDb);
   writeCocosPrefab(options.out, builder, rootName, options);
   writeQueuedNestedPrefabAssets(options, reporter, unityDb, cocosDb);
   const refreshedCocosDb = new CocosAssetDatabase(options.cocosRoot);
-  refreshedCocosDb.scan();
+  refreshedCocosDb.scan({ readOnly: !!options.dryRun });
   repairAllPendingMeshRefs(refreshedCocosDb, reporter, options);
   repairSiblingPrefabAssetRefs(options.out, refreshedCocosDb, reporter, options);
   patchParticleRendererMeshLibraryAssets(options.out, reporter, options);
 
   emitCreatorReopenNotice(options, reporter);
-  const actualReport = options.report ? reporter.writeCsv(options.report, rootName) : '';
+  const actualReport = options.report && !options.dryRun ? reporter.writeCsv(options.report, rootName) : '';
   const counts = reporter.summary();
   log(`${options.dryRun ? 'Dry-run built' : 'Wrote'} ${toPosix(path.relative(options.cocosRoot, options.out))}`);
   if (actualReport) {
@@ -5838,7 +5872,7 @@ function portPrefabBatch(options) {
       const message = error?.message || String(error);
       reporter.high('PREFAB_PORT_FAILED', entry.sourceFile, entry.outputFile, message);
       const prefabName = path.basename(entry.sourceFile, path.extname(entry.sourceFile));
-      const actualReport = reporter.writeCsv(options.report, prefabName);
+      const actualReport = options.dryRun ? '' : reporter.writeCsv(options.report, prefabName);
       const counts = reporter.summary();
       result = { actualReport, counts, rootName: prefabName, outputFile: entry.outputFile, failed: true };
       console.error(`[unity-cocos-port] ERROR: ${entry.relative}: ${message}`);
@@ -5891,9 +5925,9 @@ async function runShardedBatch(options, plan) {
       __filename,
       ...cleanedArgs,
       '--shard', `${index}/${jobs}`,
-      '--report', shardReport,
       '--quiet',
     ];
+    if (!options.dryRun) args.push('--report', shardReport);
     children.push({ index, shardReport, args });
   }
 
@@ -5942,12 +5976,15 @@ async function runShardedBatch(options, plan) {
     const m = /high=(\d+), medium=(\d+), low=(\d+)/.exec(summary || '');
     if (m) { totals.high += +m[1]; totals.medium += +m[2]; totals.low += +m[3]; }
 
-    // Gộp report của shard vào report chính.
-    try {
-      const text = fs.readFileSync(children[i].shardReport, 'utf8').split(/\r?\n/).filter(Boolean);
-      if (text.length) mergedLines.push(...(mergedLines.length ? text.slice(1) : text));
-      fs.unlinkSync(children[i].shardReport);
-    } catch (_) { /* shard không tạo được report — đã báo ở trên */ }
+    // Dry-run is strictly non-mutating: do not read/delete a stale shard report
+    // and never synthesize a merged report from a previous run.
+    if (!options.dryRun) {
+      try {
+        const text = fs.readFileSync(children[i].shardReport, 'utf8').split(/\r?\n/).filter(Boolean);
+        if (text.length) mergedLines.push(...(mergedLines.length ? text.slice(1) : text));
+        fs.unlinkSync(children[i].shardReport);
+      } catch (_) { /* shard không tạo được report — đã báo ở trên */ }
+    }
   }
 
   if (mergedLines.length) {
@@ -7145,15 +7182,18 @@ function doctor(options) {
   const unityDb = new UnityAssetDatabase(unityRoot, unityPackageAssetRoots(unityRoot));
   unityDb.scan();
   const cocosDb = new CocosAssetDatabase(options.cocosRoot);
-  cocosDb.scan();
+  // Doctor only observes project health. It must never repair importer metadata
+  // as a side effect of inspection, even when the caller did not pass --dry-run.
+  cocosDb.scan({ readOnly: true });
   log(`Unity root: ${unityRoot}`);
   log(`Unity meta records: ${unityDb.byGuid.size}`);
   log(`Cocos root: ${options.cocosRoot}`);
   log(`Cocos asset records: ${cocosDb.records.length}`);
   log(`Cocos script classes: ${cocosDb.scriptsByClass.size}`);
   log(`Cocos layers: ${[...cocosDb.layersByName.entries()].map(([name, value]) => `${name}=${value}`).join(', ')}`);
-  const actualReport = reporter.writeCsv(options.report, 'doctor');
-  log(`Report: ${toPosix(path.relative(options.cocosRoot, actualReport))}`);
+  const actualReport = options.reportExplicit && !options.dryRun ? reporter.writeCsv(options.report, 'doctor') : '';
+  if (actualReport) log(`Report: ${toPosix(path.relative(options.cocosRoot, actualReport))}`);
+  else log('Doctor is read-only; no report was written.');
 }
 
 function runScriptScaffold(options) {
@@ -7164,6 +7204,10 @@ function runScriptScaffold(options) {
   const srcPath = path.resolve(options.src);
   if (!fs.existsSync(srcPath)) {
     fail(`Source path not found: ${srcPath}`);
+  }
+  if (options.dryRun) {
+    log('Dry-run: script scaffold output is not written.');
+    return [];
   }
 
   const outDir = options.out ? path.resolve(options.out) : path.join(ROOT_DIR, 'assets', 'script');
@@ -7176,24 +7220,16 @@ function runScriptScaffold(options) {
   }
 
   const results = [];
-  function scanCs(dir) {
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
-    for (const e of entries) {
-      const full = path.join(dir, e.name);
-      if (e.isDirectory()) {
-        scanCs(full);
-      } else if (e.isFile() && e.name.endsWith('.cs')) {
-        try {
-          const res = scaffoldFile(full, path.join(outDir, `${path.basename(full, '.cs')}.ts`));
-          log(`Scaffolded C# -> TS: ${toPosix(path.relative(ROOT_DIR, res.outputPath))} (${res.fieldCount} properties)`);
-          results.push(res);
-        } catch (err) {
-          log(`[warn] Failed to scaffold ${full}: ${err.message}`);
-        }
-      }
+  const sourceFiles = walkContainedFiles(srcPath, (file) => file.endsWith('.cs'));
+  for (const full of sourceFiles) {
+    try {
+      const res = scaffoldFile(full, path.join(outDir, `${path.basename(full, '.cs')}.ts`));
+      log(`Scaffolded C# -> TS: ${toPosix(path.relative(ROOT_DIR, res.outputPath))} (${res.fieldCount} properties)`);
+      results.push(res);
+    } catch (err) {
+      log(`[warn] Failed to scaffold ${full}: ${err.message}`);
     }
   }
-  scanCs(srcPath);
   log(`Total scripts scaffolded: ${results.length}`);
   return results;
 }
@@ -7244,8 +7280,18 @@ async function main() {
     return;
   }
   if (options.command === 'doctor') {
+    if (options.reportExplicit && !options.dryRun) {
+      const doctorRoot = options.unityRoot || inferUnityRoot(options.src || process.cwd());
+      assertUnityPortPreflight(doctorRoot, { projectRoot: doctorRoot, requireProject: true });
+    }
     doctor(options);
     return;
+  }
+  if (!options.dryRun) {
+    assertUnityPortPreflight(options.src || options.unityRoot, {
+      projectRoot: options.unityRoot || undefined,
+      requireProject: true,
+    });
   }
   if (options.command === 'scaffold-script' || options.command === 'port-script') {
     runScriptScaffold(options);
@@ -7263,7 +7309,7 @@ if (require.main === module) {
     .then(main)
     .catch((error) => {
       const message = error?.message || String(error);
-      console.error(`[unity-cocos-port] ERROR: ${message}`);
+      console.error(`[unity-cocos-port] ${error?.code || 'ERROR'}: ${message}`);
       process.exit(1);
     });
 }
@@ -7271,6 +7317,7 @@ if (require.main === module) {
 module.exports = {
   portPrefab,
   portPrefabBatch,
+  findFiles,
   runScriptScaffold,
   runSmartPort,
   convertUnityPhysicsMaterialToCocos,
