@@ -10,10 +10,46 @@ const { assertUnityLiveSnapshotPatch } = require('./live-schema.cjs');
 const BATCH_METHOD = 'CcPlayable.UnityIntelligence.BatchEntry.Scan';
 const DEFAULT_TIMEOUT_MS = 180_000;
 const MAX_BATCH_RESULT_BYTES = 2 * 1024 * 1024;
+const MAX_BATCH_UNRESOLVED_GUIDS = 512;
+const MAX_BATCH_SERIALIZED_ASSETS = 96;
+const MAX_BATCH_CANDIDATE_BYTES = 256 * 1024;
+const BATCH_CANDIDATE_FILE = 'candidates.json';
 
 function tail(value, max = 4000) {
   const text = String(value || '').replace(/\r\n/g, '\n');
   return text.length <= max ? text : text.slice(text.length - max);
+}
+
+function normalizeBatchCandidates(input = {}) {
+  const unresolvedGuids = [...new Set(input.unresolvedGuids || [])].map(value => String(value).toLowerCase()).sort();
+  const serializedAssetPaths = [...new Set(input.serializedAssetPaths || [])]
+    .map(value => String(value).replace(/\\/g, '/')).sort();
+  if (unresolvedGuids.length > MAX_BATCH_UNRESOLVED_GUIDS ||
+      unresolvedGuids.some(value => !/^[0-9a-f]{32}$/.test(value))) {
+    throw new Error(`Batch unresolvedGuids must contain at most ${MAX_BATCH_UNRESOLVED_GUIDS} Unity GUIDs.`);
+  }
+  if (serializedAssetPaths.length > MAX_BATCH_SERIALIZED_ASSETS ||
+      serializedAssetPaths.some(value => !/^(?:Assets|Packages)\//.test(value) || value.length > 320)) {
+    throw new Error(`Batch serializedAssetPaths must contain at most ${MAX_BATCH_SERIALIZED_ASSETS} logical paths.`);
+  }
+  return { schemaVersion: 1, unresolvedGuids, serializedAssetPaths };
+}
+
+function writeBatchCandidateRequest(file, input, fsImpl = fs) {
+  const request = normalizeBatchCandidates(input);
+  const payload = Buffer.from(JSON.stringify(request), 'utf8');
+  if (payload.length > MAX_BATCH_CANDIDATE_BYTES) {
+    throw new Error(`Batch candidate request exceeds ${MAX_BATCH_CANDIDATE_BYTES} bytes.`);
+  }
+  const resolved = path.resolve(file);
+  const temp = `${resolved}.${process.pid}.${Math.random().toString(16).slice(2)}.tmp`;
+  try {
+    fsImpl.writeFileSync(temp, payload, { flag: 'wx', mode: 0o600 });
+    fsImpl.renameSync(temp, resolved);
+  } finally {
+    try { if (fsImpl.existsSync(temp)) fsImpl.unlinkSync(temp); } catch (_) { /* temp cleanup */ }
+  }
+  return { file: resolved, request, bytes: payload.length };
 }
 
 function buildUnityBatchInvocation(input) {
@@ -21,6 +57,7 @@ function buildUnityBatchInvocation(input) {
     throw new Error('Unity batch invocation thiếu editorExe/projectRoot/output/log path.');
   }
   const projectRoot = path.resolve(input.projectRoot);
+  normalizeBatchCandidates(input);
   return {
     executable: path.resolve(input.editorExe),
     args: [
@@ -145,11 +182,13 @@ async function runUnityBatchScan(input, options = {}) {
   const outputFile = path.join(tempRoot, 'result.json');
   const logFile = path.join(tempRoot, 'unity.log');
   const upmLogFile = path.join(tempRoot, 'upm.log');
-  const invocation = buildUnityBatchInvocation({ ...input, outputFile, logFile, upmLogFile });
+  const candidateFile = path.join(tempRoot, BATCH_CANDIDATE_FILE);
   const spawnImpl = options.spawn || spawn;
   let processResult;
   let succeeded = false;
   try {
+    writeBatchCandidateRequest(candidateFile, input, fsImpl);
+    const invocation = buildUnityBatchInvocation({ ...input, outputFile, logFile, upmLogFile });
     const child = spawnImpl(invocation.executable, invocation.args, {
       cwd: invocation.cwd,
       env: invocation.env,
@@ -183,7 +222,13 @@ module.exports = {
   BATCH_METHOD,
   DEFAULT_TIMEOUT_MS,
   MAX_BATCH_RESULT_BYTES,
+  MAX_BATCH_UNRESOLVED_GUIDS,
+  MAX_BATCH_SERIALIZED_ASSETS,
+  MAX_BATCH_CANDIDATE_BYTES,
+  BATCH_CANDIDATE_FILE,
   tail,
+  normalizeBatchCandidates,
+  writeBatchCandidateRequest,
   buildUnityBatchInvocation,
   parseBatchResult,
   waitForChild,

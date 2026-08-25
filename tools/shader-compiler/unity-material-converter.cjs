@@ -347,9 +347,11 @@ function convertMatFile(srcPath, outPath, options = {}) {
     );
   }
 
-  const outDir = path.dirname(outPath);
-  if (outDir && !fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
-  fs.writeFileSync(outPath, JSON.stringify(mtl, null, 2), 'utf8');
+  if (!options.dryRun) {
+    const outDir = path.dirname(outPath);
+    if (outDir && !fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+    fs.writeFileSync(outPath, JSON.stringify(mtl, null, 2), 'utf8');
+  }
 
   const props = (mtl._props && mtl._props[0]) || {};
   return {

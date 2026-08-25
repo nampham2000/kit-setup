@@ -63,6 +63,13 @@ test('summary is deterministic, safe and always within 24 KiB', () => {
   assert.doesNotMatch(serialized, /C:\\\\Users|D:\/private|token-\d+|public class Secret/);
   assert.ok(summary.truncated.packages > 0);
   assert.ok(summary.truncated.diagnostics > 0);
+  assert.deepEqual(summary.diagnosticCounts, { high: 27, medium: 53, low: 0 });
+  assert.deepEqual(summary.preflightGate, {
+    scanComplete: true,
+    featureCount: 40,
+    sourceHighCount: 27,
+    state: 'disposition-required',
+  });
 });
 
 test('projection keeps safe loopback URLs while redacting Windows paths', () => {

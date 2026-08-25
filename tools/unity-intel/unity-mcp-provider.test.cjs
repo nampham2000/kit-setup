@@ -17,7 +17,7 @@ const {
 function livePatch(fingerprint = 'a'.repeat(64)) {
   return {
     protocolVersion: 1,
-    packageVersion: '0.2.0',
+    packageVersion: '0.3.0',
     kind: 'unity-live-patch',
     schemaVersion: 1,
     snapshotSchemaVersion: 1,
@@ -85,6 +85,8 @@ test('resolves UserSettings connection, retries readiness, and unwraps structure
     sleepImpl: async () => {},
     retryDelayMs: 1,
     maxAttempts: 3,
+    unresolvedGuids: ['B'.repeat(32), 'a'.repeat(32)],
+    serializedAssetPaths: ['Assets/Game/Binary.asset'],
   });
 
   assert.deepEqual(result, patch);
@@ -100,6 +102,8 @@ test('resolves UserSettings connection, retries readiness, and unwraps structure
     cursor: 0,
     pageSize: 128,
     maxPrefabs: 96,
+    unresolvedGuids: ['a'.repeat(32), 'b'.repeat(32)],
+    serializedAssetPaths: ['Assets/Game/Binary.asset'],
     expectedFingerprint: 'a'.repeat(64),
   });
 });
@@ -113,6 +117,36 @@ test('enforces loopback hosts by default', () => {
     resolveUnityMcpConnection({ url: 'https://example.com', token: 'x', allowRemote: true }).url,
     'https://example.com',
   );
+});
+
+test('direct MCP candidate limits match the scanner and batch contracts', async () => {
+  await assert.rejects(
+    invokeUnityMcpTool({
+      url: 'http://127.0.0.1:9000',
+      serializedAssetPaths: Array.from({ length: 97 }, (_, index) => `Assets/Binary/${index}.asset`),
+    }),
+    assertProviderCode('UNITY_MCP_OPTIONS_INVALID'),
+  );
+});
+
+test('candidate fields are absent from a backward-compatible readiness request', async () => {
+  const calls = [];
+  const responses = [
+    httpResponse(200, { result: 'pong' }),
+    httpResponse(200, { structuredContent: livePatch() }),
+  ];
+  await invokeUnityMcpTool({
+    url: 'http://127.0.0.1:9000',
+    expectedFingerprint: 'a'.repeat(64),
+    fetchImpl: async (_url, init) => {
+      calls.push(init);
+      return responses.shift();
+    },
+    maxAttempts: 1,
+  });
+  const body = JSON.parse(calls[1].body);
+  assert.equal(Object.prototype.hasOwnProperty.call(body, 'unresolvedGuids'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(body, 'serializedAssetPaths'), false);
 });
 
 test('accepts Unity-MCP 0.89 direct HTTP structured envelope', () => {

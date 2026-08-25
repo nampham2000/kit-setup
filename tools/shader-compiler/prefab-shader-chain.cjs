@@ -16,6 +16,11 @@
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
+const { assertExternalCacheLocation, resolveDefaultCacheDir } = require('../unity-intel/cache.cjs');
+const { findUnityProjectRoot } = require('../unity-intel/project-index.cjs');
+const { computeUnityProjectState, projectKey } = require('../unity-intel/project-state.cjs');
+const { createPathBoundary, inspectContainedPath } = require('../lib/path-boundary.cjs');
 
 const GUID_RE = /guid:\s*([0-9a-f]{32})/g;
 const SHADER_REF_RE = /m_Shader:\s*\{fileID:\s*-?\d+,\s*guid:\s*([0-9a-f]{32})/;
@@ -27,42 +32,148 @@ const MESH_EXT = /\.(fbx|obj|blend|dae|3ds)$/i;
  * Cached on disk: the walk dominates runtime on a real project (~2k assets),
  * and a chain query is usually one of many in a porting session.
  */
-function buildGuidIndex(unityAssetsRoot, options = {}) {
-  const cachePath = options.cachePath ||
-    path.join(unityAssetsRoot, '..', '.ucshader-guid-index.json');
+function normalizedRoot(value) {
+  const resolved = path.resolve(value).replace(/\\/g, '/');
+  return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+}
 
-  if (!options.noCache && fs.existsSync(cachePath)) {
+function containedMetaFiles(unityAssetsRoot) {
+  let boundary;
+  try {
+    boundary = createPathBoundary(unityAssetsRoot);
+  } catch {
+    return [];
+  }
+
+  const metaFiles = [];
+  const stack = [boundary.resolvedRoot];
+  while (stack.length) {
+    const dir = stack.pop();
+    let children;
+    try { children = fs.readdirSync(dir, { withFileTypes: true }); } catch { continue; }
+    for (const child of children) {
+      const full = path.join(dir, child.name);
+      const inspected = inspectContainedPath(boundary, full);
+      if (!inspected) continue;
+      if (inspected.stat.isDirectory()) { stack.push(full); continue; }
+      if (!inspected.stat.isFile() || !child.name.endsWith('.meta')) continue;
+      if (!inspectContainedPath(boundary, full.slice(0, -5))) continue;
+      metaFiles.push(full);
+    }
+  }
+  return metaFiles;
+}
+
+function fallbackMetaFingerprint(unityAssetsRoot) {
+  const entries = [];
+  for (const metaFile of containedMetaFiles(unityAssetsRoot)) {
     try {
+      const stat = fs.lstatSync(metaFile);
+      entries.push(`${path.relative(unityAssetsRoot, metaFile).replace(/\\/g, '/')}:${stat.size}:${stat.mtimeMs}:${stat.ctimeMs}`);
+    } catch { /* skip files disappearing during scan */ }
+  }
+  entries.sort();
+  return crypto.createHash('sha256').update(entries.join('\n')).digest('hex');
+}
+
+function guidCacheContext(unityAssetsRoot, options) {
+  const assetsRoot = path.resolve(unityAssetsRoot);
+  const unityProjectRoot = findUnityProjectRoot(assetsRoot);
+  const stateFingerprint = unityProjectRoot
+    ? computeUnityProjectState(unityProjectRoot).fingerprint
+    : fallbackMetaFingerprint(assetsRoot);
+  const key = projectKey(unityProjectRoot || assetsRoot);
+  const cachePath = path.resolve(options.cachePath || path.join(resolveDefaultCacheDir(), 'shader-guid', `${key}.json`));
+  const protectedRoots = [assetsRoot, unityProjectRoot].filter(Boolean);
+  assertExternalCacheLocation(path.dirname(cachePath), protectedRoots);
+  return { assetsRoot, key, stateFingerprint, cachePath, protectedRoots };
+}
+
+function cachedGuidMap(context, guids) {
+  if (!guids || typeof guids !== 'object' || Array.isArray(guids)) return null;
+
+  let boundary;
+  try {
+    boundary = createPathBoundary(context.assetsRoot);
+  } catch {
+    return null;
+  }
+
+  const guidToFile = new Map();
+  for (const [guid, relative] of Object.entries(guids)) {
+    if (!/^[0-9a-f]{32}$/.test(guid) || typeof relative !== 'string' || relative.length === 0) {
+      return null;
+    }
+    if (path.isAbsolute(relative) || path.posix.isAbsolute(relative) || path.win32.isAbsolute(relative)) {
+      return null;
+    }
+
+    const portable = relative.replace(/\\/g, '/');
+    const segments = portable.split('/');
+    if (segments.some((segment) => segment === '' || segment === '.' || segment === '..')) {
+      return null;
+    }
+
+    const candidate = path.resolve(context.assetsRoot, ...segments);
+    const asset = inspectContainedPath(boundary, candidate);
+    const meta = inspectContainedPath(boundary, `${candidate}.meta`);
+    if (!asset || !meta || !meta.stat.isFile()) return null;
+    guidToFile.set(guid, asset.resolvedPath);
+  }
+  return guidToFile;
+}
+
+function buildGuidIndex(unityAssetsRoot, options = {}) {
+  const context = options.noCache ? null : guidCacheContext(unityAssetsRoot, options);
+  const cachePath = context && context.cachePath;
+
+  if (context && fs.existsSync(cachePath)) {
+    try {
+      const cacheStat = fs.lstatSync(cachePath);
+      if (cacheStat.isSymbolicLink() || !cacheStat.isFile()) {
+        throw new Error('Shader GUID cache file must be a regular file, not a symlink.');
+      }
       const cached = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
-      if (cached.root === unityAssetsRoot && cached.guids) {
-        return { guidToFile: new Map(Object.entries(cached.guids)), fromCache: true };
+      if (cached.schemaVersion === 1 && cached.projectKey === context.key &&
+          cached.stateFingerprint === context.stateFingerprint && cached.guids) {
+        const guidToFile = cachedGuidMap(context, cached.guids);
+        if (guidToFile) return { guidToFile, fromCache: true };
       }
     } catch { /* rebuild on any cache problem */ }
   }
 
   const guidToFile = new Map();
-  const stack = [unityAssetsRoot];
-  while (stack.length) {
-    const dir = stack.pop();
-    let entries;
-    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { continue; }
-    for (const e of entries) {
-      const p = path.join(dir, e.name);
-      if (e.isDirectory()) { stack.push(p); continue; }
-      if (!e.name.endsWith('.meta')) continue;
-      let head;
-      try { head = fs.readFileSync(p, 'utf8').slice(0, 400); } catch { continue; }
-      const m = /guid:\s*([0-9a-f]{32})/.exec(head);
-      if (m) guidToFile.set(m[1], p.slice(0, -5));
-    }
+  for (const metaFile of containedMetaFiles(unityAssetsRoot)) {
+    let head;
+    try { head = fs.readFileSync(metaFile, 'utf8').slice(0, 400); } catch { continue; }
+    const match = /guid:\s*([0-9a-f]{32})/.exec(head);
+    if (match) guidToFile.set(match[1], metaFile.slice(0, -5));
   }
 
-  try {
-    fs.writeFileSync(cachePath, JSON.stringify({
-      root: unityAssetsRoot,
-      guids: Object.fromEntries(guidToFile),
-    }), 'utf8');
-  } catch { /* cache is an optimisation, not a requirement */ }
+  if (context) {
+    let temp = null;
+    try {
+      assertExternalCacheLocation(path.dirname(cachePath), context.protectedRoots);
+      fs.mkdirSync(path.dirname(cachePath), { recursive: true });
+      assertExternalCacheLocation(path.dirname(cachePath), context.protectedRoots);
+      if (fs.existsSync(cachePath) && fs.lstatSync(cachePath).isSymbolicLink()) {
+        throw new Error('Shader GUID cache file must not be a symlink.');
+      }
+      temp = `${cachePath}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`;
+      const guids = Object.fromEntries([...guidToFile].map(([guid, file]) => [
+        guid, path.relative(context.assetsRoot, file).replace(/\\/g, '/'),
+      ]));
+      fs.writeFileSync(temp, JSON.stringify({
+        schemaVersion: 1,
+        projectKey: context.key,
+        stateFingerprint: context.stateFingerprint,
+        guids,
+      }), { encoding: 'utf8', flag: 'wx' });
+      fs.renameSync(temp, cachePath);
+    } catch {
+      if (temp) try { fs.unlinkSync(temp); } catch { /* best effort */ }
+    }
+  }
 
   return { guidToFile, fromCache: false };
 }
@@ -152,4 +263,11 @@ function resolveChain(prefabPath, unityAssetsRoot, options = {}) {
   };
 }
 
-module.exports = { resolveChain, buildGuidIndex, referencedGuids };
+module.exports = {
+  resolveChain,
+  buildGuidIndex,
+  referencedGuids,
+  guidCacheContext,
+  fallbackMetaFingerprint,
+  normalizedRoot,
+};

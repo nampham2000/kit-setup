@@ -195,19 +195,28 @@ function ensureUnityMcpConfig(projectRoot, options = {}) {
   const installedBytes = changed ? nextBytes : previous.bytes;
   let rolledBack = false;
 
+  function validateRollback() {
+    if (rolledBack || !changed) {
+      return { restorable: false, reason: rolledBack ? 'already-rolled-back' : 'unchanged' };
+    }
+    const current = readJsonIfPresent(filePath, fsImpl);
+    if (!current.bytes || !current.bytes.equals(installedBytes)) {
+      const error = new Error('Không rollback Unity-MCP config vì file đã được Unity/người dùng thay đổi sau bootstrap.');
+      error.code = 'UNITY_MCP_CONFIG_ROLLBACK_CONFLICT';
+      throw error;
+    }
+    return { restorable: true };
+  }
+
   return {
     path: CONFIG_RELATIVE_PATH,
     url: managed.url,
     token: managed.token,
     changed,
+    validateRollback,
     rollback() {
-      if (rolledBack || !changed) return { restored: false, reason: rolledBack ? 'already-rolled-back' : 'unchanged' };
-      const current = readJsonIfPresent(filePath, fsImpl);
-      if (!current.bytes || !current.bytes.equals(installedBytes)) {
-        const error = new Error('Không rollback Unity-MCP config vì file đã được Unity/người dùng thay đổi sau bootstrap.');
-        error.code = 'UNITY_MCP_CONFIG_ROLLBACK_CONFLICT';
-        throw error;
-      }
+      const validation = validateRollback();
+      if (!validation.restorable) return { restored: false, reason: validation.reason };
       if (previous.exists) writeAtomic(filePath, previous.bytes, fsImpl, installedBytes);
       else fsImpl.unlinkSync(filePath);
       rolledBack = true;

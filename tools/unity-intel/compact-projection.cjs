@@ -126,7 +126,7 @@ function stableItemId(item, section) {
     const direct = item.stableId || item.id || item.key || item.guid || item.assetPath || item.path;
     if (direct) return String(direct);
     if (section === 'dependencies') {
-      return [item.from || '', item.to || '', item.kind || '', item.fieldPath || ''].join('|');
+      return [item.from || '', item.to || '', item.kind || '', item.objectId || '', item.fieldPath || ''].join('|');
     }
     if (section === 'diagnostics') return [item.code || '', item.objectId || '', item.fieldPath || ''].join('|');
   }
@@ -177,7 +177,7 @@ function oversizedPlaceholder(entry) {
 
 function createCompactPage(snapshot, request = {}) {
   const section = request.section || 'assets';
-  const scanId = String(request.scanId || snapshot.live && snapshot.live.scanId || snapshot.scanId || snapshot.fingerprint || 'static');
+  const scanId = String(request.scanId || snapshot.scanId || snapshot.live && snapshot.live.scanId || snapshot.fingerprint || 'static');
   const query = request.query || {};
   const digest = queryHash(query);
   const pageSize = request.pageSize === undefined ? DEFAULT_PAGE_SIZE : Number(request.pageSize);
@@ -260,10 +260,16 @@ function createCompactSummary(snapshot, options = {}) {
     (SEVERITY_ORDER.get(b.severity) || 0) - (SEVERITY_ORDER.get(a.severity) || 0) ||
     String(a.code || '').localeCompare(String(b.code || '')));
   const allScenes = [...(snapshot.buildScenes || [])].sort((a, b) => String(a.path || '').localeCompare(String(b.path || '')));
+  const diagnosticCounts = { high: 0, medium: 0, low: 0 };
+  for (const diagnostic of allDiagnostics) {
+    if (Object.prototype.hasOwnProperty.call(diagnosticCounts, diagnostic.severity)) {
+      diagnosticCounts[diagnostic.severity] += Math.max(1, Number(diagnostic.count) || 1);
+    }
+  }
   const summary = {
     schemaVersion: snapshot.schemaVersion,
     provider: snapshot.provider,
-    scanId: snapshot.live && snapshot.live.scanId || snapshot.scanId || snapshot.fingerprint || 'static',
+    scanId: snapshot.scanId || snapshot.live && snapshot.live.scanId || snapshot.fingerprint || 'static',
     project: {
       name: snapshot.project && snapshot.project.name || null,
       unityVersion: snapshot.project && snapshot.project.unityVersion || null,
@@ -281,6 +287,13 @@ function createCompactSummary(snapshot, options = {}) {
     },
     featureSketch: sanitizeForProjection(allFeatures.slice(0, 20), { maxString: 200, maxArray: 20 }),
     diagnostics: allDiagnostics.slice(0, 30).map(compactDiagnostic),
+    diagnosticCounts,
+    preflightGate: {
+      scanComplete: true,
+      featureCount: allFeatures.length,
+      sourceHighCount: diagnosticCounts.high,
+      state: diagnosticCounts.high ? 'disposition-required' : 'ready',
+    },
     sections: {
       assets: snapshot.assets && snapshot.assets.records && snapshot.assets.records.length || 0,
       dependencies: snapshot.dependencies && snapshot.dependencies.edges && snapshot.dependencies.edges.length || 0,
@@ -324,6 +337,8 @@ function createCompactSummary(snapshot, options = {}) {
       project: { name: summary.project.name, unityVersion: summary.project.unityVersion },
       inventory: summary.inventory,
       dependencySummary: summary.dependencySummary,
+      diagnosticCounts: summary.diagnosticCounts,
+      preflightGate: summary.preflightGate,
       sections: summary.sections,
       truncated: { ...summary.truncated, compacted: true },
     };

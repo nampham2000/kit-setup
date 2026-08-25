@@ -1,6 +1,6 @@
 {
   "name": "com.ccplayable.unity-intelligence",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "displayName": "CC Playable Unity Intelligence",
   "description": "A compact, read-only Unity project scanner exposed through Unity-MCP for Unity-to-Cocos playable porting.",
   "unity": "2022.3",

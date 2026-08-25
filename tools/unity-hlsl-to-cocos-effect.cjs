@@ -18,6 +18,8 @@ const path = require('path');
 const { ShaderGraphParser } = require('./unity-cocos-port/unity-shadergraph-parser');
 const { HlslAstTranspiler } = require('./unity-cocos-port/hlsl-ast-transpiler');
 const { packStd140Uniforms } = require('./unity-cocos-port/ubo-alignment-formatter');
+const { assertUnityPortPreflight } = require('./unity-intel/preflight.cjs');
+const { createPathBoundary, inspectContainedPath } = require('./lib/path-boundary.cjs');
 
 function findProjectRoot(startDir) {
   let current = path.resolve(startDir);
@@ -56,6 +58,7 @@ Options:
   --shading-model <model>  Force shading model: 'auto', 'unlit', 'lit', 'toon', 'matcap', 'dissolve'. Default: 'auto'.
   --generate-material, -m  Also generate corresponding Cocos .mtl file alongside the .effect.
   --cocos-root <path>      Cocos project root. Default: current repo root.
+  --unity-project <path>   Unity project binding for a declared local package/staging source.
   --shader-name <name>     Cocos program/effect display name. Default: derived from filename.
   --report <path>          CSV report path. Default: .unity/hlsl-port-report.csv.
   --overwrite              Allow replacing existing output files.
@@ -172,6 +175,7 @@ function parseArgs(argv) {
     forceTransparent: false,
     forceOpaque: false,
     alphaClip: false,
+    unityProject: '',
   };
 
   const optionStartIndex = command === 'help' && argv[0] && String(argv[0]).startsWith('-') ? 0 : 1;
@@ -195,6 +199,8 @@ function parseArgs(argv) {
     if (arg.startsWith('--out-dir=')) { options.outDir = arg.slice('--out-dir='.length); continue; }
     if (arg === '--cocos-root') { options.cocosRoot = path.resolve(readValue(arg)); continue; }
     if (arg.startsWith('--cocos-root=')) { options.cocosRoot = path.resolve(arg.slice('--cocos-root='.length)); continue; }
+    if (arg === '--unity-project') { options.unityProject = path.resolve(readValue(arg)); continue; }
+    if (arg.startsWith('--unity-project=')) { options.unityProject = path.resolve(arg.slice('--unity-project='.length)); continue; }
     if (arg === '--shader-name') { options.shaderName = readValue(arg); continue; }
     if (arg.startsWith('--shader-name=')) { options.shaderName = arg.slice('--shader-name='.length); continue; }
     if (arg === '--shading-model') { options.shadingModel = readValue(arg).toLowerCase(); continue; }
@@ -435,27 +441,53 @@ function convertUnityHlslToCocosEffect(options, externalReporter) {
     }
   }
 
-  if (options.report) reporter.writeCsv(path.resolve(options.report));
+  if (options.report && !options.dryRun) reporter.writeCsv(path.resolve(options.report));
   return { effectText, properties, isTransparent, report: reporter, outputFile: outFile, shaderName };
 }
 
 /**
  * Batch converts a folder of shaders/shadergraphs.
  */
+function findBatchShaderFiles(dir) {
+  let boundary;
+  try {
+    boundary = createPathBoundary(dir);
+  } catch {
+    return [];
+  }
+
+  const results = [];
+  let entries;
+  try {
+    entries = fs.readdirSync(boundary.resolvedRoot, { withFileTypes: true });
+  } catch {
+    return results;
+  }
+
+  for (const entry of entries) {
+    const full = path.join(boundary.resolvedRoot, entry.name);
+    const inspected = inspectContainedPath(boundary, full);
+    if (!inspected || !inspected.stat.isFile()) continue;
+    const extension = path.extname(entry.name).toLowerCase();
+    if (extension === '.shader' || extension === '.hlsl' || extension === '.shadergraph') {
+      results.push(full);
+    }
+  }
+  return results;
+}
+
 function batchConvert(options, reporter) {
+  if (!options.dir) fail('batch requires --dir <FolderOfShaders>');
   const dir = path.resolve(options.dir);
   const outDir = path.resolve(options.outDir || path.join(options.cocosRoot, 'assets', 'effects'));
   if (!fs.existsSync(dir)) fail(`Input directory not found: ${dir}`);
 
-  const files = fs.readdirSync(dir).filter((f) => {
-    const e = path.extname(f).toLowerCase();
-    return e === '.shader' || e === '.hlsl' || e === '.shadergraph';
-  });
+  const files = findBatchShaderFiles(dir);
 
   log(`Found ${files.length} shader(s) in ${toPosix(dir)}`);
   const results = [];
-  for (const file of files) {
-    const src = path.join(dir, file);
+  for (const src of files) {
+    const file = path.basename(src);
     const stem = path.basename(file, path.extname(file));
     const out = path.join(outDir, `${stem}.effect`);
     log(`Converting: ${file} -> ${path.basename(out)}`);
@@ -475,6 +507,11 @@ function main() {
     printHelp();
     return;
   }
+  if (options.command === 'batch' && !options.dir) fail('batch requires --dir <FolderOfShaders>');
+  if (!options.dryRun) assertUnityPortPreflight(options.src || options.dir, {
+    projectRoot: options.unityProject || undefined,
+    requireProject: true,
+  });
   const reporter = new Reporter();
   if (options.command === 'batch') {
     batchConvert(options, reporter);
@@ -486,16 +523,22 @@ function main() {
     if (options.generateMaterial && !options.dryRun) {
       log(`Wrote material: ${toPosix(result.outputFile.replace(/\.effect$/i, '.mtl'))}`);
     }
-    if (options.report) log(`Report written to: ${toPosix(path.resolve(options.report))} (${summary.high} high, ${summary.medium} medium, ${summary.low} low)`);
+    if (options.report && !options.dryRun) log(`Report written to: ${toPosix(path.resolve(options.report))} (${summary.high} high, ${summary.medium} medium, ${summary.low} low)`);
   }
 }
 
-if (require.main === module) main();
+if (require.main === module) {
+  try { main(); } catch (error) {
+    console.error(`[unity-hlsl-to-cocos-effect] ${error.code || 'FAILED'}: ${error.message}`);
+    process.exitCode = 1;
+  }
+}
 
 module.exports = {
   Reporter,
   convertUnityHlslToCocosEffect,
   batchConvert,
+  findBatchShaderFiles,
   generateMatchingMaterial,
   ensureEffectMeta,
   ensureMaterialMeta,

@@ -7,12 +7,14 @@ const os = require('node:os');
 const path = require('node:path');
 
 const { buildUnityProjectSnapshot } = require('./index.cjs');
+const { scanUnityProject } = require('./service.cjs');
+const { PREFLIGHT_MAX_BYTES, createImplementationBrief } = require('./preflight.cjs');
 
 const DEFAULT_ROOT = 'D:/Work/Unity/@Puzzle/unity_games_2026';
 const PROJECTS = [
   {
     name: 'HarvestTile',
-    unityVersion: '6000.0.66f2',
+    unityVersion: '6000.3.1f1',
     enabledScenes: ['Assets/Project/Scene/Loading.unity', 'Assets/Project/Scene/Gameplay.unity'],
     packages: {
       'com.unity.addressables': '2.8.1',
@@ -23,7 +25,7 @@ const PROJECTS = [
   },
   {
     name: 'CatSmash',
-    unityVersion: '6000.0.66f2',
+    unityVersion: '6000.3.1f1',
     enabledScenes: [
       'Assets/_Game/Scenes/1.entry.unity',
       'Assets/_Game/Scenes/2.loading.unity',
@@ -39,6 +41,7 @@ const PROJECTS = [
     },
     rawMinimums: { scenes: 35, prefabs: 220, scripts: 500, models: 80 },
     minimumEdges: 3000,
+    requiredResolvedPackages: ['com.google.firebase.analytics', 'com.google.firebase.app'],
   },
   {
     name: 'TapeJam',
@@ -52,6 +55,7 @@ const PROJECTS = [
     },
     rawMinimums: { scenes: 15, prefabs: 350, scripts: 800, sceneObjects: 19000 },
     minimumEdges: 12000,
+    requiredResolvedPackages: ['com.google.external-dependency-manager'],
   },
 ];
 
@@ -75,7 +79,7 @@ function stableSummary(snapshot) {
   };
 }
 
-function main() {
+async function main() {
   const corpusRoot = path.resolve(parseRoot(process.argv.slice(2)) || '');
   if (!fs.existsSync(corpusRoot)) throw new Error(`Không tìm thấy Unity sample root: ${corpusRoot}`);
   const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'unity-intel-samples-'));
@@ -87,7 +91,12 @@ function main() {
       assert.ok(fs.existsSync(assets), `Thiếu sample ${expected.name}: ${assets}`);
       const options = { projectRoot, sourceRoot: assets, cacheDir };
       const cold = buildUnityProjectSnapshot(options);
-      const warm = buildUnityProjectSnapshot(options);
+      const phase3Scan = await scanUnityProject({ project: projectRoot, provider: 'static', cacheDir });
+      const warm = phase3Scan.snapshot;
+      const briefInput = { project: projectRoot, intent: 'project', now: 0 };
+      const brief = createImplementationBrief(phase3Scan, briefInput);
+      const repeatedBrief = createImplementationBrief(phase3Scan, briefInput);
+      const briefJson = JSON.stringify(brief);
 
       assert.equal(cold.project.unityVersion, expected.unityVersion);
       assert.deepEqual(stableSummary(warm), stableSummary(cold));
@@ -102,6 +111,12 @@ function main() {
       for (const [packageName, version] of Object.entries(expected.packages)) {
         assert.equal(cold.project.packages[packageName], version, `${expected.name}: ${packageName}`);
       }
+      for (const packageName of expected.requiredResolvedPackages || []) {
+        assert.equal(cold.project.layout.unavailablePackages.includes(packageName), false,
+          `${expected.name}: package resolution làm rơi ${packageName}`);
+        assert.equal(cold.project.layout.roots.some(root => root.packageName === packageName), true,
+          `${expected.name}: package root không bind được ${packageName}`);
+      }
       for (const [key, minimum] of Object.entries(expected.rawMinimums)) {
         assert.ok(cold.assets.rawInventory[key] >= minimum,
           `${expected.name}: raw ${key} ${cold.assets.rawInventory[key]} < ${minimum}`);
@@ -115,6 +130,30 @@ function main() {
       for (const code of ['UNITY_DUPLICATE_GUID', 'UNITY_BUILD_SCENE_OUTSIDE_SCAN_SCOPE', 'UNITY_BUILD_SCENE_GUID_MISMATCH']) {
         assert.equal(structuralCodes.has(code), false, `${expected.name}: structural diagnostic ${code}`);
       }
+      assert.equal(brief.kind, 'unity-port-implementation-brief');
+      assert.equal(brief.briefId, repeatedBrief.briefId, `${expected.name}: brief không deterministic`);
+      assert.ok(Buffer.byteLength(briefJson, 'utf8') <= PREFLIGHT_MAX_BYTES,
+        `${expected.name}: compact brief vượt ${PREFLIGHT_MAX_BYTES} bytes`);
+      assert.equal(briefJson.toLowerCase().includes(projectRoot.replace(/\\/g, '/').toLowerCase()), false,
+        `${expected.name}: compact brief lộ absolute project path`);
+      assert.ok(brief.features.length > 0, `${expected.name}: Phase 3 không phác thảo được feature`);
+      const hardCodes = brief.obligationIndex.filter(item => item[2] === 1).map(item => item[0]);
+      assert.equal(
+        brief.decision.implementationAllowed,
+        true,
+        `${expected.name}: Phase 3 bị deadlock bởi hard blocker: ${hardCodes.join(', ') || '(unknown)'}`,
+      );
+      assert.equal(
+        brief.decision.hardBlockerCount,
+        0,
+        `${expected.name}: hardBlockerCount không khớp: ${hardCodes.join(', ') || '(unknown)'}`,
+      );
+      const sourceHighCodes = [...new Set(warm.diagnostics
+        .filter(item => item.severity === 'high')
+        .map(item => item.code))].sort();
+      const routedHighCodes = brief.obligationIndex.map(item => item[0]).sort();
+      assert.deepEqual(routedHighCodes, sourceHighCodes,
+        `${expected.name}: Phase 3 làm rơi hoặc tự thêm source high obligation`);
       if (expected.name === 'HarvestTile') {
         assert.equal(cold.views.entryPrefabs.some(prefab =>
           /Animation\/Tutorial\/handcursor\.prefab$/i.test(prefab.assetPath)), true,
@@ -139,6 +178,14 @@ function main() {
         dependencyEdges: cold.dependencies.edgeCount,
         dependencyClassifications: cold.dependencies.classificationCounts,
         entryPrefabs: cold.views.entryPrefabs.length,
+        phase3: {
+          briefBytes: Buffer.byteLength(briefJson, 'utf8'),
+          status: brief.decision.status,
+          implementationAllowed: brief.decision.implementationAllowed,
+          features: brief.features.length,
+          obligations: brief.decision.obligationCount,
+          hardBlockers: brief.decision.hardBlockerCount,
+        },
       });
     }
   } finally {
@@ -148,10 +195,10 @@ function main() {
 }
 
 if (require.main === module) {
-  try { main(); } catch (error) {
+  main().catch(error => {
     console.error(`[unity-intel-samples] ${error.message}`);
     process.exitCode = 1;
-  }
+  });
 }
 
 module.exports = { PROJECTS, stableSummary };

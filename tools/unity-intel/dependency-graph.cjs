@@ -197,13 +197,32 @@ function buildDependencyGraph(records, guidIndex, options = {}) {
           category,
           occurrences: 0,
           sources: [],
+          sourceEvidence: [],
           kinds: new Set(),
           fields: new Set(),
         });
       }
       const entry = grouped.get(item.guid);
-      if ((priority.get(category) || 0) > (priority.get(entry.category) || 0)) entry.category = category;
-      if (entry.sources.length < 5 && !entry.sources.includes(item.source)) entry.sources.push(item.source);
+      const categoryPriority = priority.get(category) || 0;
+      const entryPriority = priority.get(entry.category) || 0;
+      const evidence = {
+        source: item.source,
+        category,
+        kinds: [...item.kinds].sort(),
+        fields: [...item.fields].sort().slice(0, 5),
+        occurrences: item.occurrences,
+      };
+      if (categoryPriority > entryPriority) {
+        // When a later source raises the GUID to a more important category,
+        // discard lower-priority samples so the bounded list always retains
+        // at least one gameplay-reachable source for live edge restoration.
+        entry.category = category;
+        entry.sources = [item.source];
+        entry.sourceEvidence = [evidence];
+      } else if (categoryPriority === entryPriority && !entry.sources.includes(item.source) && entry.sources.length < 5) {
+        entry.sources.push(item.source);
+        entry.sourceEvidence.push(evidence);
+      }
       for (const kind of item.kinds) entry.kinds.add(kind);
       for (const field of item.fields) entry.fields.add(field);
       entry.occurrences += item.occurrences;
@@ -212,6 +231,7 @@ function buildDependencyGraph(records, guidIndex, options = {}) {
       .map(entry => ({
         ...entry,
         sources: entry.sources.sort(),
+        sourceEvidence: entry.sourceEvidence.sort((left, right) => left.source.localeCompare(right.source)),
         kinds: [...entry.kinds].sort(),
         fields: [...entry.fields].sort().slice(0, 5),
       }))

@@ -5,10 +5,22 @@ Unity Intelligence is the canonical project-understanding layer shared by the Un
 Agents should start with:
 
 ```text
-npm run ai:port:plan -- --project <UnityProjectRoot>
+npm run ai:port:preflight -- --project <UnityProjectRoot>
 ```
 
-`port.plan` uses provider `auto`: it briefly probes an already-running local Unity-MCP endpoint, merges authoritative live facts when available, and otherwise continues with the static snapshot plus an explicit diagnostic. It never installs anything unless `--bootstrap` is supplied.
+`port.preflight` uses provider `auto`: it briefly probes an already-running local Unity-MCP endpoint, merges authoritative live facts when available, and otherwise continues with the static snapshot plus an explicit diagnostic. In one process it builds a feature sketch, routes every high diagnostic to implementation/verification, and writes a content-bound receipt to user-local cache. It never installs anything unless `--bootstrap` is supplied. `port.plan` remains a legacy/deep dependency planner and should only run when the compact brief is insufficient.
+
+## Implementation preflight and mutation gate
+
+The default project intent emits a <=12 KiB `unity-port-implementation-brief` containing `decision`, `features`, a complete compact `obligationIndex` (all high code/counts), routed `obligations`, ordered capabilities, verification steps, and a receipt ID. When detail must be trimmed, the index remains complete and the agent follows the shared compact route plus a bounded diagnostic query. Focused scene/prefab/script/shader/feature/diagnostic intents route typed evidence but are analysis-only; they do not authorize output writes.
+
+The receipt is atomic, <=4 KiB, contains no absolute path/source/token, and lives in one fixed user-local receipt store so every port gate reads the same authorization. `--cache-dir` only relocates the larger incremental scan index. A receipt expires after 24 hours and becomes stale immediately when editable Unity source, `.meta`, package manifest, project settings, snapshot provider/merger, extractor, router, or capability workflow changes. Scene, prefab, closure-output, C# compiler, and shader CLI write boundaries validate it before their first output write. Dry runs stop before directory creation, `.meta` generation, converter launch, and output writes. A real write must bind to `Assets`, an embedded/local/exact PackageCache root selected by the Unity manifest, or a closure staging directory carrying exact provenance; `Temp`, `UserSettings`, arbitrary project files, unrelated external sources, symlink/reparse escapes, and cached absolute/traversal paths are rejected.
+
+`port.closure --copy-to` writes `.unity-port-provenance.json` atomically next to the staged C# files. The marker binds the current receipt, project state, staging-directory identity, origin logical paths, and source/target SHA-256 hashes without storing absolute paths. `port.compile` consumes it with `--unity-project <UnityProjectRoot>` and fails before output if a file was added, removed, edited, copied from another project, or if the marker was moved.
+
+Static `UNITY_REACHABLE_GUID_UNRESOLVED` evidence is a completion obligation, not an implementation deadlock: static YAML can report references that require Unity's imported asset database to interpret. The live scanner receives at most 512 such GUIDs and 96 reachable partial serialized paths. It clears static uncertainty only when every requested candidate returns bounded complete evidence: a resolved GUID includes its recovered path and complete direct dependency mappings; a serialized asset includes a complete bounded `SerializedObject`/object-reference walk. Missing or partial/truncated evidence becomes an authoritative live high and blocks implementation. Candidate dispositions remain internal; agents still consume the compact decision/features/obligations contract.
+
+High source diagnostics are not treated uniformly: source-integrity/unknown highs block implementation, while DOTween, coroutine, animator, Addressables, DI, and shader highs become mandatory completion obligations. This lets agents implement the missing behavior without pretending the original Unity source warning must disappear.
 
 ## One-command Unity setup
 
@@ -19,7 +31,7 @@ npm run unity:intel:setup -- --project <UnityProjectRoot>
 
 Setup installs:
 
-- local UPM package `com.ccplayable.unity-intelligence@0.2.0`;
+- local UPM package `com.ccplayable.unity-intelligence@0.3.0`;
 - upstream [IvanMurzak/Unity-MCP 0.89.0](https://github.com/IvanMurzak/Unity-MCP/tree/71931e260b32339ca35f89de409da0516930cb5c), pinned to an exact commit;
 - the OpenUPM scopes required by the upstream package.
 
@@ -28,7 +40,7 @@ The tool writes `Packages/manifest.json` atomically, creates a loopback-only tok
 - attach to the existing Editor when its project lock and exact version agree; or
 - launch the exact declared Unity Editor in batch mode for a closed project.
 
-It never launches a second Editor against a held lock and never substitutes a nearby Unity version. Success requires a fresh, schema-valid result marker with the same project fingerprint; Unity exit code alone is not trusted. On failure, the default rollback covers manifest/config, `packages-lock.json`, a newly generated reserved `Assets/Plugins/NuGet` footprint, and Unity-MCP gate defines. `--keep-on-failure` is an explicit opt-out for debugging.
+It never launches a second Editor against a held lock and never substitutes a nearby Unity version. An attached Editor can briefly serve the old endpoint while domain reload is in progress, so compatibility readiness calls omit the candidate parameters introduced in `0.3.0` and retry only scanner-version/capability mismatches within the requested deadline. Setup accepts readiness only from package `0.3.0`, protocol `1`, and (when candidates will be sent) the `candidateDisposition` capability. The first valid bootstrap scan only proves import/domain-reload readiness. The service then rebuilds the static baseline and requires a second authoritative scan against that exact fingerprint; the first marker can never authorize implementation. Unity exit code alone is not trusted. Before reload begins, manifest/config use validate-all-then-mutate CAS rollback. Once reload/import begins, ownership of generated package state may have changed; failure therefore preserves the complete setup generation instead of partially deleting it. Fix the reported compile/import error and rerun setup. `--keep-on-failure` remains an explicit debugging option but does not weaken this safety boundary.
 
 ## Compact contract
 
@@ -39,18 +51,20 @@ The static `UnityProjectSnapshot` keeps the full internal graph needed by portin
 - bounded prefab component census;
 - registered packages and compiled assemblies;
 - evidence-backed diagnostics and feature signals.
+- bounded static-candidate dispositions with recovered dependency/reference edges. Candidate input travels through a read-bounded temporary JSON file (<=256 KiB, including maximum UTF-8 paths) in batch mode, never an environment variable.
 
-The merger rejects another project's patch, keeps inputs immutable, records static/live conflicts, and only clears a static diagnostic through an explicit `resolvesDiagnosticKeys` entry.
+The merger rejects another project's patch, keeps inputs immutable, records static/live conflicts, and only clears a static diagnostic through an explicit complete candidate disposition/`resolvesDiagnosticKeys` entry. Partial candidate pages never imply completeness.
 
 Agent-facing output is deliberately smaller than the internal index:
 
 - summary and feature sketch: at most 24 KiB;
+- implementation preflight brief: at most 12 KiB; receipt: at most 4 KiB;
 - paged section query: at most 48 KiB and 200 items;
 - cursor bound to `scanId + section + query`;
 - no raw YAML, raw C#, token/credential fields, or absolute filesystem paths;
 - at most three compact evidence items per feature/diagnostic summary.
 
-The Unity scanner is edit-time only and always reports `playModeCapture: false`; it does not claim to observe GameObjects created only at runtime.
+The Unity scanner is edit-time only and always reports `playModeCapture: false`; it does not claim to observe GameObjects created only at runtime. It walks nested/list serialized properties across every sub-asset at a logical path, identifies object references by GUID plus local file ID, and treats missing scripts or non-null references that cannot be represented inside `Assets/Packages` as incomplete evidence. Direct MCP and batch both accept at most 512 unresolved GUIDs plus 96 serialized assets. Reference evidence is globally bounded to 512 entries and 256 KiB; the exact serialized candidate array is bounded to 768 KiB. Excess evidence is degraded to compact `partial` records while preserving every requested key, so truncation can never clear a source diagnostic.
 
 ## Focused commands
 
@@ -60,10 +74,10 @@ npm run ai:unity:query -- --project <UnityProjectRoot> --section features
 npm run ai:unity:query -- --project <UnityProjectRoot> --section scripts --search GameManager
 ```
 
-The workspace MCP server (`unity-intel`) exposes only four tools: doctor, scan, feature sketch, and bounded slice. The full upstream Unity-MCP tool catalog is intentionally not forwarded to agents, reducing schema/token overhead while retaining the authoritative Unity-side scan.
+The workspace MCP server (`unity-intel`) exposes only four tools: doctor, mandatory preflight scan, feature sketch, and bounded slice. Feature/slice calls fail with `UNITY_SCAN_REQUIRED` when an agent skips the scan, instead of silently rescanning and hiding the brief. Error payloads redact absolute paths. Concurrent scans are generation-ordered per project: only the newest-started scan may publish its snapshot, and a superseded caller must use the newer brief. The full upstream Unity-MCP tool catalog is intentionally not forwarded to agents, reducing schema/token overhead while retaining the authoritative Unity-side scan.
 
 ## Static index and cache
 
-The static provider discovers `Assets`, embedded/local packages, and matching `Library/PackageCache` versions; builds GUID, asset, dependency and C# type/assembly indexes; and starts reachability from enabled build scenes. Vendor/sample/editor evidence remains available for GUID resolution while the default porting view filters it out.
+The static provider discovers `Assets`, embedded/local packages, and exact installed package roots; builds GUID, asset, dependency and C# type/assembly indexes; and starts reachability from enabled build scenes. Registry packages require the exact manifest/lock version. Git and local-tarball packages require the resolved path and fingerprint recorded by the context-matched `Library/PackageManager/projectResolution.json`; similarly named stale cache siblings are rejected. Vendor/sample/editor evidence remains available for GUID resolution while the default porting view filters it out.
 
 Incremental cache lives outside both Unity and Cocos projects. Editable assets are checked per file. `Library/PackageCache` is treated as immutable for warm-scan performance; use `--refresh-cache` after manual in-place edits.

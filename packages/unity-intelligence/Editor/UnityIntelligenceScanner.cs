@@ -7,6 +7,7 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using UnityEditor;
 using UnityEditor.Compilation;
 using UnityEditor.PackageManager;
@@ -20,7 +21,7 @@ namespace CcPlayable.UnityIntelligence
     /// </summary>
     public static class UnityIntelligenceScanner
     {
-        public const string PackageVersion = "0.2.0";
+        public const string PackageVersion = "0.3.0";
         public const int ProtocolVersion = 1;
 
         private const int MaxReachableAssets = 12000;
@@ -28,6 +29,16 @@ namespace CcPlayable.UnityIntelligence
         private const int MaxEvidencePageSize = 512;
         private const int MaxPackages = 512;
         private const int MaxAssemblies = 512;
+        private const int MaxCandidateDispositions = 512;
+        private const int MaxSerializedCandidateDispositions = 96;
+        private const int MaxCandidateReferences = 128;
+        private const int MaxCandidateReferencesTotal = 512;
+        private const int MaxCandidateReferenceBytesTotal = 256 * 1024;
+        private const int MaxCandidateDispositionBytesTotal = 768 * 1024;
+        private const int MaxCandidatePathCharacters = 320;
+        private const int MaxCandidateTypeCharacters = 160;
+        private const int MaxSerializedProperties = 2048;
+        private const int MaxSerializedTargets = 512;
 
         private static readonly HashSet<string> AllowedActions = new HashSet<string>(StringComparer.Ordinal)
         {
@@ -41,7 +52,9 @@ namespace CcPlayable.UnityIntelligence
             string? expectedFingerprint = null,
             int cursor = 0,
             int pageSize = 128,
-            int maxPrefabs = 96)
+            int maxPrefabs = 96,
+            List<string>? unresolvedGuids = null,
+            List<string>? serializedAssetPaths = null)
         {
             action = (action ?? string.Empty).Trim().ToLowerInvariant();
             if (!AllowedActions.Contains(action))
@@ -52,6 +65,13 @@ namespace CcPlayable.UnityIntelligence
                 throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize is outside the supported range.");
             if (maxPrefabs < 0 || maxPrefabs > MaxEntryPrefabs)
                 throw new ArgumentOutOfRangeException(nameof(maxPrefabs), "maxPrefabs is outside the supported range.");
+            if ((unresolvedGuids?.Count ?? 0) > MaxCandidateDispositions)
+                throw new ArgumentOutOfRangeException(nameof(unresolvedGuids), "unresolvedGuids exceeds the bounded candidate limit.");
+            if ((serializedAssetPaths?.Count ?? 0) > MaxSerializedCandidateDispositions)
+                throw new ArgumentOutOfRangeException(nameof(serializedAssetPaths), "serializedAssetPaths exceeds the bounded candidate limit.");
+            if ((serializedAssetPaths ?? new List<string>()).Any(value =>
+                    !IsBoundedAssetPath(NormalizeAssetPath(value))))
+                throw new ArgumentException("serializedAssetPaths contains an invalid or oversized logical asset path.", nameof(serializedAssetPaths));
             if (!string.IsNullOrEmpty(expectedFingerprint) && !IsSha256(expectedFingerprint))
                 throw new ArgumentException("expectedFingerprint must be a SHA-256 hex string.", nameof(expectedFingerprint));
 
@@ -98,6 +118,7 @@ namespace CcPlayable.UnityIntelligence
                 CollectPackages(snapshot);
                 CollectCompiledAssemblies(snapshot);
                 CollectReachableFacts(snapshot, action, cursor, pageSize, maxPrefabs);
+                CollectCandidateDispositions(snapshot, unresolvedGuids, serializedAssetPaths);
                 InferFeatures(snapshot);
             }
             timer.Stop();
@@ -106,6 +127,338 @@ namespace CcPlayable.UnityIntelligence
             snapshot.facts.metrics.assemblyCount = snapshot.facts.compiledAssemblies.Count;
             snapshot.facts.metrics.guidResolutionsReturned = snapshot.assets.records.Count;
             return snapshot;
+        }
+
+        private static void CollectCandidateDispositions(
+            UnityLiveSnapshot snapshot,
+            List<string>? unresolvedGuids,
+            List<string>? serializedAssetPaths)
+        {
+            var remainingReferenceCount = MaxCandidateReferencesTotal;
+            var remainingReferenceBytes = MaxCandidateReferenceBytesTotal;
+            foreach (var guid in (unresolvedGuids ?? new List<string>())
+                         .Where(IsUnityGuid)
+                         .Select(value => value.ToLowerInvariant())
+                         .Distinct(StringComparer.Ordinal)
+                         .OrderBy(value => value, StringComparer.Ordinal))
+            {
+                var assetPath = NormalizeAssetPath(AssetDatabase.GUIDToAssetPath(guid));
+                var pathResolved = IsBoundedAssetPath(assetPath);
+                var dependencyCount = 0;
+                var referencesComplete = false;
+                var references = pathResolved
+                    ? CollectDependencyReferences(
+                        assetPath,
+                        ref remainingReferenceCount,
+                        ref remainingReferenceBytes,
+                        out dependencyCount,
+                        out referencesComplete)
+                    : new List<UnityCandidateReference>();
+                snapshot.candidateDispositions.Add(new UnityCandidateDisposition
+                {
+                    kind = "guid",
+                    key = guid,
+                    status = !pathResolved ? "missing" : (referencesComplete ? "resolved" : "partial"),
+                    assetPath = pathResolved ? assetPath : string.Empty,
+                    assetType = pathResolved ? BoundedTypeName(GetAssetType(assetPath)) : "Unknown",
+                    dependencyCount = dependencyCount,
+                    referencesComplete = referencesComplete,
+                    references = references,
+                });
+            }
+
+            foreach (var assetPath in (serializedAssetPaths ?? new List<string>())
+                         .Select(NormalizeAssetPath)
+                         .Where(IsBoundedAssetPath)
+                         .Distinct(StringComparer.Ordinal)
+                         .OrderBy(value => value, StringComparer.Ordinal))
+            {
+                UnityEngine.Object? asset = null;
+                var allAssets = Array.Empty<UnityEngine.Object>();
+                var allAssetsLoaded = false;
+                try
+                {
+                    asset = AssetDatabase.LoadMainAssetAtPath(assetPath);
+                    allAssets = AssetDatabase.LoadAllAssetsAtPath(assetPath) ?? Array.Empty<UnityEngine.Object>();
+                    allAssetsLoaded = true;
+                }
+                catch { /* missing/failed import is an authoritative non-resolved disposition */ }
+                var dependencyCount = 0;
+                var referencesComplete = false;
+                var references = asset == null
+                    ? new List<UnityCandidateReference>()
+                    : CollectDependencyReferences(
+                        assetPath,
+                        ref remainingReferenceCount,
+                        ref remainingReferenceBytes,
+                        out dependencyCount,
+                        out referencesComplete);
+                var propertyCount = 0;
+                var missingReferenceCount = 0;
+                var serializedComplete = asset != null && allAssetsLoaded && TryCollectSerializedEvidence(
+                    allAssets,
+                    references,
+                    ref referencesComplete,
+                    ref remainingReferenceCount,
+                    ref remainingReferenceBytes,
+                    out propertyCount,
+                    out missingReferenceCount);
+                snapshot.candidateDispositions.Add(new UnityCandidateDisposition
+                {
+                    kind = "serialized-asset",
+                    key = assetPath,
+                    status = asset == null ? "missing" : (serializedComplete && referencesComplete ? "resolved" : "partial"),
+                    assetPath = asset == null ? string.Empty : assetPath,
+                    assetType = asset == null ? "Unknown" : BoundedTypeName(GetAssetType(assetPath)),
+                    dependencyCount = dependencyCount,
+                    serializedScanComplete = serializedComplete,
+                    serializedPropertyCount = propertyCount,
+                    missingReferenceCount = missingReferenceCount,
+                    referencesComplete = referencesComplete,
+                    references = references,
+                });
+            }
+            EnforceCandidateDispositionBudget(snapshot.candidateDispositions);
+        }
+
+        private static List<UnityCandidateReference> CollectDependencyReferences(
+            string assetPath,
+            ref int remainingReferenceCount,
+            ref int remainingReferenceBytes,
+            out int dependencyCount,
+            out bool complete)
+        {
+            var references = new List<UnityCandidateReference>();
+            dependencyCount = 0;
+            complete = false;
+            string[] dependencies;
+            try { dependencies = AssetDatabase.GetDependencies(assetPath, false) ?? Array.Empty<string>(); }
+            catch { return references; }
+            var normalizedDependencies = dependencies
+                .Select(NormalizeAssetPath)
+                .Where(path => !string.Equals(path, assetPath, StringComparison.Ordinal))
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(path => path, StringComparer.Ordinal)
+                .ToList();
+            dependencyCount = normalizedDependencies.Count;
+            complete = normalizedDependencies.All(IsBoundedAssetPath);
+            foreach (var dependency in normalizedDependencies)
+            {
+                if (!IsBoundedAssetPath(dependency))
+                    continue;
+                var guid = (AssetDatabase.AssetPathToGUID(dependency) ?? string.Empty).ToLowerInvariant();
+                if (!IsUnityGuid(guid))
+                    complete = false;
+                var reference = new UnityCandidateReference
+                {
+                    fieldPath = string.Empty,
+                    assetPath = dependency,
+                    guid = guid,
+                    objectId = string.Empty,
+                    type = BoundedTypeName(GetAssetType(dependency)),
+                };
+                TryAddCandidateReference(
+                    references,
+                    reference,
+                    ref complete,
+                    ref remainingReferenceCount,
+                    ref remainingReferenceBytes);
+            }
+            return references;
+        }
+
+        private static bool TryCollectSerializedEvidence(
+            UnityEngine.Object[] assets,
+            List<UnityCandidateReference> references,
+            ref bool referencesComplete,
+            ref int remainingReferenceCount,
+            ref int remainingReferenceBytes,
+            out int propertyCount,
+            out int missingReferenceCount)
+        {
+            propertyCount = 0;
+            missingReferenceCount = 0;
+            if (assets.Any(asset => asset is SceneAsset))
+                return false; // Never open/replace the user's scenes during an edit-time scan.
+
+            var targets = new List<UnityEngine.Object>();
+            var targetIds = new HashSet<int>();
+            foreach (var asset in assets)
+            {
+                if (asset == null)
+                {
+                    missingReferenceCount++;
+                    return false;
+                }
+                if (targetIds.Add(asset.GetInstanceID()))
+                    targets.Add(asset);
+                if (asset is GameObject root)
+                {
+                    var components = root.GetComponentsInChildren<Component>(true);
+                    var missingScripts = components.Count(component => component == null);
+                    if (missingScripts > 0)
+                    {
+                        missingReferenceCount += missingScripts;
+                        return false;
+                    }
+                    foreach (var component in components)
+                    {
+                        if (component != null && targetIds.Add(component.GetInstanceID()))
+                            targets.Add(component);
+                    }
+                }
+                if (targets.Count > MaxSerializedTargets)
+                    return false;
+            }
+            if (targets.Count == 0 || targets.Count > MaxSerializedTargets)
+                return false;
+
+            var seen = new HashSet<string>(references.Select(ReferenceKey), StringComparer.Ordinal);
+            try
+            {
+                foreach (var target in targets)
+                {
+                    var serialized = new SerializedObject(target);
+                    var property = serialized.GetIterator();
+                    // Always enter children: object references commonly live inside nested
+                    // serializable structs, arrays, and lists. The global property cap keeps
+                    // this full traversal bounded and forces a partial disposition on overflow.
+                    while (property.Next(true))
+                    {
+                        propertyCount++;
+                        if (propertyCount > MaxSerializedProperties)
+                            return false;
+                        if (property.propertyType != SerializedPropertyType.ObjectReference)
+                            continue;
+                        var referenced = property.objectReferenceValue;
+                        if (referenced == null)
+                        {
+                            if (property.objectReferenceInstanceIDValue != 0)
+                                missingReferenceCount++;
+                            continue;
+                        }
+                        var referencedPath = NormalizeAssetPath(AssetDatabase.GetAssetPath(referenced));
+                        if (!IsBoundedAssetPath(referencedPath))
+                        {
+                            // A non-null reference that cannot be represented by the compact
+                            // Assets/Packages contract is still evidence. Never silently omit
+                            // built-in, transient, external, or oversized paths as "complete".
+                            referencesComplete = false;
+                            continue;
+                        }
+                        var fieldPath = property.propertyPath ?? string.Empty;
+                        if (fieldPath.Length > MaxCandidatePathCharacters)
+                        {
+                            referencesComplete = false;
+                            continue;
+                        }
+                        if (!AssetDatabase.TryGetGUIDAndLocalFileIdentifier(referenced, out string referencedGuid, out long localId) ||
+                            !IsUnityGuid(referencedGuid))
+                        {
+                            referencesComplete = false;
+                            continue;
+                        }
+                        var candidate = new UnityCandidateReference
+                        {
+                            fieldPath = fieldPath,
+                            assetPath = referencedPath,
+                            guid = referencedGuid.ToLowerInvariant(),
+                            objectId = localId.ToString(CultureInfo.InvariantCulture),
+                            type = BoundedTypeName(referenced.GetType().FullName ?? referenced.GetType().Name),
+                        };
+                        if (seen.Add(ReferenceKey(candidate)))
+                            TryAddCandidateReference(
+                                references,
+                                candidate,
+                                ref referencesComplete,
+                                ref remainingReferenceCount,
+                                ref remainingReferenceBytes);
+                    }
+                }
+            }
+            catch
+            {
+                return false;
+            }
+            return missingReferenceCount == 0 && referencesComplete;
+        }
+
+        private static void EnforceCandidateDispositionBudget(List<UnityCandidateDisposition> dispositions)
+        {
+            var itemBytes = dispositions
+                .Select(CandidateDispositionJsonBytes)
+                .ToArray();
+            var totalBytes = 2 + itemBytes.Sum() + Math.Max(0, dispositions.Count - 1);
+            if (totalBytes <= MaxCandidateDispositionBytesTotal)
+                return;
+
+            // Keep every requested key so the Node merger can fail closed per candidate,
+            // but collapse lower-priority evidence from the end until the exact serialized
+            // UTF-8 payload fits the cross-language live-schema budget.
+            for (var index = dispositions.Count - 1;
+                 index >= 0 && totalBytes > MaxCandidateDispositionBytesTotal;
+                 index--)
+            {
+                var disposition = dispositions[index];
+                var previousBytes = itemBytes[index];
+                disposition.status = "partial";
+                disposition.assetPath = string.Empty;
+                disposition.assetType = "Unknown";
+                disposition.dependencyCount = 0;
+                disposition.serializedScanComplete = false;
+                disposition.serializedPropertyCount = 0;
+                disposition.missingReferenceCount = 0;
+                disposition.referencesComplete = false;
+                disposition.references.Clear();
+                itemBytes[index] = CandidateDispositionJsonBytes(disposition);
+                totalBytes -= previousBytes - itemBytes[index];
+            }
+
+            if (totalBytes > MaxCandidateDispositionBytesTotal)
+                throw new InvalidOperationException("candidate_disposition_budget_unrepresentable");
+        }
+
+        private static int CandidateDispositionJsonBytes(UnityCandidateDisposition disposition)
+        {
+            return Encoding.UTF8.GetByteCount(JsonSerializer.Serialize(disposition));
+        }
+
+        private static void TryAddCandidateReference(
+            List<UnityCandidateReference> references,
+            UnityCandidateReference candidate,
+            ref bool complete,
+            ref int remainingReferenceCount,
+            ref int remainingReferenceBytes)
+        {
+            var byteCost = 64 + Encoding.UTF8.GetByteCount(candidate.fieldPath) +
+                           Encoding.UTF8.GetByteCount(candidate.assetPath) +
+                           Encoding.UTF8.GetByteCount(candidate.guid) +
+                           Encoding.UTF8.GetByteCount(candidate.objectId) +
+                           Encoding.UTF8.GetByteCount(candidate.type);
+            if (references.Count >= MaxCandidateReferences || remainingReferenceCount <= 0 ||
+                byteCost > remainingReferenceBytes)
+            {
+                complete = false;
+                return;
+            }
+            references.Add(candidate);
+            remainingReferenceCount--;
+            remainingReferenceBytes -= byteCost;
+        }
+
+        private static string ReferenceKey(UnityCandidateReference reference)
+        {
+            return (reference.fieldPath ?? string.Empty) + "\0" +
+                   (reference.assetPath ?? string.Empty) + "\0" +
+                   (reference.objectId ?? string.Empty);
+        }
+
+        private static string BoundedTypeName(string? value)
+        {
+            var text = value ?? "Unknown";
+            return text.Length <= MaxCandidateTypeCharacters
+                ? text
+                : text.Substring(0, MaxCandidateTypeCharacters);
         }
 
         private static string GetProjectDirectoryName()
@@ -542,6 +895,11 @@ namespace CcPlayable.UnityIntelligence
                    path.StartsWith("Packages/", StringComparison.Ordinal);
         }
 
+        private static bool IsBoundedAssetPath(string path)
+        {
+            return path.Length <= MaxCandidatePathCharacters && IsSafeAssetPath(path);
+        }
+
         private static string ClassifyScope(string path)
         {
             if (path.StartsWith("Packages/", StringComparison.Ordinal))
@@ -557,6 +915,21 @@ namespace CcPlayable.UnityIntelligence
         private static bool IsSha256(string value)
         {
             if (value.Length != 64)
+                return false;
+            foreach (var character in value)
+            {
+                var isDigit = character >= '0' && character <= '9';
+                var isLower = character >= 'a' && character <= 'f';
+                var isUpper = character >= 'A' && character <= 'F';
+                if (!isDigit && !isLower && !isUpper)
+                    return false;
+            }
+            return true;
+        }
+
+        private static bool IsUnityGuid(string value)
+        {
+            if (string.IsNullOrEmpty(value) || value.Length != 32)
                 return false;
             foreach (var character in value)
             {

@@ -23,6 +23,16 @@ test('setup is the explicit write boundary and selects strict Unity-MCP', () => 
   assert.equal(parsed.unity, 'D:/Unity/Unity.exe');
 });
 
+test('preflight accepts a bounded intent and repeated targets', () => {
+  const parsed = parseArgs([
+    'preflight', '--project', 'D:/Game', '--intent', 'prefab',
+    '--target', 'Assets/A.prefab', '--target=Assets/B.prefab',
+  ]);
+  assert.equal(parsed.command, 'preflight');
+  assert.equal(parsed.intent, 'prefab');
+  assert.deepEqual(parsed.targets, ['Assets/A.prefab', 'Assets/B.prefab']);
+});
+
 test('parser rejects accidental unbounded pages and unknown providers', () => {
   assert.throws(() => parseArgs(['query', '--project', 'D:/Game', '--limit', '201']), /1\.\.200/);
   assert.throws(() => parseArgs(['scan', '--project', 'D:/Game', '--provider', 'cloud']), /auto/);

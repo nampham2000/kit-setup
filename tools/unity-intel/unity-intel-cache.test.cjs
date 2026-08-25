@@ -106,3 +106,25 @@ test('cache directory inside Unity project is rejected to preserve read-only sou
     cacheDir: path.join(fixture.assets, '.unity-intel-cache'),
   }), /cache must stay outside source\/project/i);
 });
+
+test('cache directory junction cannot redirect an external-looking cache back into Unity source', t => {
+  const fixture = createUnityFixture(t);
+  const external = fs.mkdtempSync(path.join(os.tmpdir(), 'unity-intel-cache-junction-'));
+  t.after(() => fs.rmSync(external, { recursive: true, force: true }));
+  const redirect = path.join(external, 'redirect');
+  try {
+    fs.symlinkSync(fixture.root, redirect, process.platform === 'win32' ? 'junction' : 'dir');
+  } catch (error) {
+    if (error && (error.code === 'EPERM' || error.code === 'EACCES')) {
+      t.skip('Host does not allow directory symlinks/junctions.');
+      return;
+    }
+    throw error;
+  }
+  assert.throws(() => buildUnityProjectSnapshot({
+    projectRoot: fixture.root,
+    sourceRoot: fixture.assets,
+    cacheDir: path.join(redirect, 'must-not-exist'),
+  }), /symlink\/junction must stay outside source\/project/i);
+  assert.equal(fs.existsSync(path.join(fixture.root, 'must-not-exist')), false);
+});

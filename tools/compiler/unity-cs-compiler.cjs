@@ -6,7 +6,7 @@
  * Produces a static first-pass Cocos Creator TypeScript migration for AI refinement.
  *
  * Usage:
- *   node playable-shared-kit/tools/compiler/unity-cs-compiler.cjs --src <cs_file_or_dir> --out <out_dir> [--dry-run] [--report <path>] [--runtime-only]
+ *   node playable-shared-kit/tools/compiler/unity-cs-compiler.cjs --src <cs_file_or_dir> --out <out_dir> [--dry-run] [--report <path>] [--runtime-only] [--unity-project <UnityProjectRoot>]
  *
  * The emitted files are type-checked against the Cocos engine's own cc.d.ts before
  * confidence is scored, so a high score means "compiles", not merely "parses".
@@ -27,6 +27,7 @@ const { WorkspaceIndexer } = require('./workspace-indexer.cjs');
 const { SkeletonGenerator } = require('./skeleton-generator.cjs');
 const { TscDiagnosticLoop } = require('./tsc-diagnostic-loop.cjs');
 const { AstChunkExtractor } = require('./ast-chunk-extractor.cjs');
+const { assertUnityPortPreflight } = require('../unity-intel/preflight.cjs');
 
 /**
  * Confidence >= this value is what the migration spec calls the "bypass AI" band.
@@ -54,6 +55,7 @@ function parseArgs() {
     diagnostics: '',
     digest: false,
     chunks: '',
+    unityProject: '',
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -85,6 +87,8 @@ function parseArgs() {
       options.digest = true;
     } else if (args[i] === '--chunks' && args[i + 1]) {
       options.chunks = args[++i];
+    } else if (args[i] === '--unity-project' && args[i + 1]) {
+      options.unityProject = args[++i];
     }
   }
 
@@ -625,6 +629,12 @@ function main() {
     console.error('Error: --src <file_or_dir> is required.');
     process.exit(1);
   }
+  if (!options.dryRun) {
+    assertUnityPortPreflight(options.src, {
+      projectRoot: options.unityProject || undefined,
+      requireProject: true,
+    });
+  }
 
   const discoveredFiles = collectCsFiles(options.src);
   const skippedEditorFiles = options.runtimeOnly ? discoveredFiles.filter(isEditorFile).length : 0;
@@ -721,7 +731,7 @@ function main() {
   console.log(`Migration TODOs: ${results.reduce((sum, result) => sum + (result.todoCount || 0), 0)}`);
   console.log('Gameplay semantic equivalence: NOT VALIDATED (AI refinement required)');
 
-  if (options.diagnostics && typeCheck.errors.length > 0) {
+  if (options.diagnostics && !options.dryRun && typeCheck.errors.length > 0) {
     const diagnosticsPath = path.resolve(options.diagnostics);
     fs.mkdirSync(path.dirname(diagnosticsPath), { recursive: true });
     fs.writeFileSync(diagnosticsPath, JSON.stringify({
@@ -739,12 +749,12 @@ function main() {
     console.log(`Type diagnostics written to ${options.diagnostics}`);
   }
 
-  if (options.chunks) {
+  if (options.chunks && !options.dryRun) {
     const chunkPayload = writeRefinementChunks(results, typeCheck, options.chunks);
     console.log(`Refinement chunks: ${chunkPayload.chunks} member(s) -> ${options.chunks}${chunkPayload.truncated ? ' (truncated)' : ''}`);
   }
 
-  if (options.report) {
+  if (options.report && !options.dryRun) {
     const outRoot = path.resolve(options.out);
     const { compactResults: reportResults, warningCatalog } = compactReportResults(results, sourceRoot, outRoot);
     const reportData = {
@@ -813,7 +823,10 @@ function main() {
 }
 
 if (require.main === module) {
-  main();
+  try { main(); } catch (error) {
+    console.error(`[unity-cs-compiler] ${error.code || 'FAILED'}: ${error.message}`);
+    process.exitCode = 1;
+  }
 }
 
 module.exports = {

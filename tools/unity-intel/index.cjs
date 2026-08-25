@@ -3,6 +3,8 @@
 module.exports = {
   ...require('./schema.cjs'),
   ...require('./diagnostics.cjs'),
+  ...require('./project-state.cjs'),
+  ...require('./preflight.cjs'),
   ...require('./guid-index.cjs'),
   ...require('./dependency-graph.cjs'),
   ...require('./cache.cjs'),

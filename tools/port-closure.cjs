@@ -14,7 +14,7 @@
  *
  * Luồng dùng:
  *   1. npm run port:closure -- --prefab <file.prefab> --unity-root <Assets> --copy-to .unity/closure
- *   2. npm run port:compile -- --src .unity/closure --out assets/script/ --runtime-only
+ *   2. npm run port:compile -- --src .unity/closure --out assets/script/ --runtime-only --unity-project <UnityProjectRoot>
  *   3. npm run port -- port --src <file.prefab> --out assets/... --unity-root <Assets>
  *
  * Vì sao phải có bước 1: port cả `Assets/` là 2.184 file C# (~43k token chỉ để
@@ -25,6 +25,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { assertUnityPortPreflight, writePortProvenance } = require('./unity-intel/preflight.cjs');
 
 const { color } = require('./lib/term-color.cjs');
 const { readAssetEvidence } = require('./unity-intel/asset-reader.cjs');
@@ -42,7 +43,7 @@ Options:
   --prefab <path>    File .prefab/.unity/.asset, hoặc thư mục chứa chúng.
   --unity-root <dir> Thư mục Assets của Unity. Mặc định: suy ra từ --prefab.
   --copy-to <dir>    Copy closure ra thư mục staging (giữ cấu trúc tương đối)
-                     để đưa thẳng vào port.compile --src.
+                     và ghi exact provenance để đưa vào port.compile --src.
   --max-depth <n>    Giới hạn độ sâu closure. Default: 2.
   --exclude <a,b>    Bỏ file có đường dẫn chứa các chuỗi này (vendor, monetization...).
   --json             Xuất JSON (mặc định khi không phải TTY).
@@ -267,13 +268,15 @@ function copyClosure(files, unityRoot, destination) {
   const root = path.resolve(destination);
   fs.mkdirSync(root, { recursive: true });
   let copied = 0;
+  const copyRecords = [];
   for (const file of files) {
     const target = path.join(root, relativeTo(unityRoot, file));
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.copyFileSync(file, target);
+    copyRecords.push({ source: file, target });
     copied += 1;
   }
-  return { root, copied };
+  return { root, copied, copyRecords };
 }
 
 function collectAssetFiles(target) {
@@ -332,6 +335,9 @@ function main() {
     console.error(`Error: unity root not found: ${unityRoot}`);
     process.exit(1);
   }
+  const preflightGate = options.copyTo || options.out
+    ? assertUnityPortPreflight(options.prefab, { projectRoot: unityRoot, requireProject: true })
+    : null;
 
   const assetFiles = collectAssetFiles(options.prefab);
   if (assetFiles.length === 0) {
@@ -350,14 +356,19 @@ function main() {
     .sort((a, b) => (a.depth - b.depth) || a.file.localeCompare(b.file));
 
   let staging = null;
-  if (options.copyTo) staging = copyClosure(all, unityRoot, options.copyTo);
+  if (options.copyTo) {
+    staging = copyClosure(all, unityRoot, options.copyTo);
+    writePortProvenance(preflightGate.projectRoot, staging.root, staging.copyRecords, {
+      receipt: preflightGate.receipt,
+    });
+  }
 
   const compileSrc = staging ? relativeTo(PROJECT_ROOT, staging.root) : '<closure_dir>';
   const nextActions = [];
   if (!staging) {
     nextActions.push(`Chạy lại với --copy-to .unity/closure để gom ${all.length} file vào một thư mục staging.`);
   }
-  nextActions.push(`npm run port:compile -- --src ${compileSrc} --out assets/script/ --runtime-only`);
+  nextActions.push(`npm run port:compile -- --src ${compileSrc} --out assets/script/ --runtime-only --unity-project ${relativeTo(PROJECT_ROOT, path.dirname(unityRoot))}`);
   if (closure.unresolved.length > 0) {
     nextActions.push(`${closure.unresolved.length} script GUID không nằm trong ${relativeTo(PROJECT_ROOT, unityRoot)} (script của package/DLL) — cài lại hành vi bằng TypeScript nếu gameplay cần.`);
   }
@@ -448,7 +459,10 @@ function main() {
 }
 
 if (require.main === module) {
-  main();
+  try { main(); } catch (error) {
+    console.error(`[port-closure] ${error.code || 'FAILED'}: ${error.message}`);
+    process.exitCode = 1;
+  }
 }
 
 module.exports = { buildIndex, readScriptGuids, referencedProjectTypes, resolveClosure, stripCommentsAndStrings };

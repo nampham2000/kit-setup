@@ -10,8 +10,9 @@ const {
   queryUnitySnapshot,
   scanUnityProject,
 } = require('./unity-intel/service.cjs');
+const { runUnityPortPreflight } = require('./unity-intel/preflight.cjs');
 
-const COMMANDS = new Set(['doctor', 'setup', 'scan', 'query']);
+const COMMANDS = new Set(['doctor', 'setup', 'preflight', 'scan', 'query']);
 const SECTIONS = new Set(['features', 'assets', 'dependencies', 'unresolved', 'diagnostics', 'scenes', 'scripts']);
 
 const USAGE = `Unity Intelligence
@@ -19,19 +20,21 @@ const USAGE = `Unity Intelligence
 Usage:
   node playable-shared-kit/tools/unity-intel-cli.cjs doctor --project <UnityProjectRoot> [options]
   node playable-shared-kit/tools/unity-intel-cli.cjs setup  --project <UnityProjectRoot> [options]
+  node playable-shared-kit/tools/unity-intel-cli.cjs preflight --project <UnityProjectRoot> [options]
   node playable-shared-kit/tools/unity-intel-cli.cjs scan   --project <UnityProjectRoot> [options]
   node playable-shared-kit/tools/unity-intel-cli.cjs query  --project <UnityProjectRoot> --section <name> [options]
 
 Commands:
   doctor             Kiểm tra Unity version/editor/lock và Unity-MCP endpoint, không ghi project.
   setup              Cài package scanner + Unity-MCP, cấu hình loopback, reload và scan trong một lệnh.
+  preflight          Bắt buộc trước port: scan + feature sketch + high routing + receipt ngoài project.
   scan               Static-first compact scan; provider auto không tự cài package.
   query              Lấy một page nhỏ từ feature/assets/dependency/script/diagnostic index.
 
 Options:
   --project <path>   Unity project root (bắt buộc).
   --provider <mode>  auto | static | unity-mcp. Default: auto.
-  --bootstrap        Cho phép scan tự cài/reload Unity-MCP (scan only; setup luôn bật).
+  --bootstrap        Cho phép scan/preflight tự cài/reload Unity-MCP (setup luôn bật).
   --unity <file>     Unity Editor executable; phải đúng version project.
   --mcp-url <url>    Override HTTP loopback endpoint. Token chỉ nhận qua UNITY_MCP_TOKEN.
   --timeout-ms <n>   Thời gian chờ setup/reload/live scan. Default: 180000 khi bootstrap.
@@ -41,6 +44,8 @@ Options:
   --cache-dir <dir>  Static incremental cache ngoài Unity project.
   --no-cache         Tắt static cache.
   --refresh-cache    Bỏ static cache cũ.
+  --intent <kind>    project | scene | prefab | script | shader | feature | diagnostic. Default: project.
+  --target <value>   Logical path/symbol cần tập trung; có thể lặp lại (intent khác project).
   --section <name>   features | assets | dependencies | unresolved | diagnostics | scenes | scripts.
   --search <text>    Lọc page theo chuỗi compact.
   --severity <level> high | medium | low.
@@ -87,13 +92,16 @@ function parseArgs(argv) {
     const name = equal ? equal[1] : argument.startsWith('--') ? argument.slice(2) : null;
     const supported = new Set([
       'project', 'provider', 'unity', 'mcp-url', 'timeout-ms', 'request-timeout-ms', 'cache-dir', 'section',
-      'search', 'severity', 'type', 'cursor', 'limit', 'out',
+      'search', 'severity', 'type', 'cursor', 'limit', 'out', 'intent', 'target',
     ]);
     if (!name || !supported.has(name)) throw new Error(`Option không hỗ trợ: ${argument}`);
     const value = equal ? equal[2] : valueAfter(argv, index, `--${name}`);
     if (!equal) index += 1;
     const key = name.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
-    options[key] = value;
+    if (key === 'target') {
+      options.targets = options.targets || [];
+      options.targets.push(value);
+    } else options[key] = value;
   }
   if (options.timeoutMs !== undefined) options.timeoutMs = Number(options.timeoutMs);
   if (options.requestTimeoutMs !== undefined) options.requestTimeoutMs = Number(options.requestTimeoutMs);
@@ -114,6 +122,12 @@ function parseArgs(argv) {
     throw new Error('--severity phải là high, medium hoặc low.');
   }
   if (options.section && !SECTIONS.has(options.section)) throw new Error(`--section không hỗ trợ: ${options.section}`);
+  if (options.intent && !['project', 'scene', 'prefab', 'script', 'shader', 'feature', 'diagnostic'].includes(options.intent)) {
+    throw new Error('--intent không hỗ trợ.');
+  }
+  if (options.targets && (options.targets.length > 8 || options.targets.some(value => value.length > 320))) {
+    throw new Error('--target tối đa 8 giá trị, mỗi giá trị <=320 ký tự.');
+  }
   if (options.command === 'setup') {
     options.bootstrap = true;
     options.provider = 'unity-mcp';
@@ -154,6 +168,18 @@ async function execute(options) {
       mcpToken: process.env.UNITY_MCP_TOKEN || undefined,
     });
   }
+  if (options.command === 'preflight') {
+    const result = await runUnityPortPreflight({
+      ...scanInput(options),
+      intent: options.intent || 'project',
+      targets: options.targets,
+      indexCacheDir: options.cacheDir,
+      // --cache-dir scopes the potentially large incremental index only. Mutation
+      // receipts stay in the fixed user-local receipt store used by every port gate.
+      cacheDir: undefined,
+    });
+    return result.brief;
+  }
   const result = await scanUnityProject(scanInput(options));
   if (options.command === 'query') {
     return queryUnitySnapshot(result.snapshot, {
@@ -180,6 +206,13 @@ function printHuman(payload, command) {
     console.log(`${payload.section}: ${payload.count}/${payload.total}`);
     for (const item of payload.items) console.log(`  ${JSON.stringify(item)}`);
     if (payload.nextCursor) console.log(`nextCursor: ${payload.nextCursor}`);
+    return;
+  }
+  if (payload.kind === 'unity-port-implementation-brief') {
+    console.log(`${payload.project.name || 'Unity project'} — ${payload.project.provider}`);
+    console.log(`Preflight: ${payload.decision.status} (${payload.receiptId})`);
+    console.log(`Features: ${payload.features.map(item => item.id).join(', ') || '(none)'}`);
+    console.log(`High obligations: ${payload.decision.obligationCount}; hard blockers: ${payload.decision.hardBlockerCount}`);
     return;
   }
   console.log(`${payload.project.name || 'Unity project'} — ${payload.provider}`);

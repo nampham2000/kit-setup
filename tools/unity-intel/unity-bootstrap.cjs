@@ -16,8 +16,9 @@ const UPSTREAM_PACKAGE_SPEC = 'https://github.com/IvanMurzak/Unity-MCP.git?path=
 const UPSTREAM_TRANSITIVE_OPENUPM_DEPENDENCIES = Object.freeze([
   'extensions.unity.playerprefsex',
 ]);
-const SCANNER_PACKAGE_NAME = 'com.ccplayable.unity-intelligence';
-const SCANNER_PACKAGE_VERSION = '0.2.0';
+const SCANNER_PACKAGE_METADATA = require('../../packages/unity-intelligence/package.json');
+const SCANNER_PACKAGE_NAME = SCANNER_PACKAGE_METADATA.name;
+const SCANNER_PACKAGE_VERSION = SCANNER_PACKAGE_METADATA.version;
 const OPENUPM_URL = 'https://package.openupm.com';
 const OPENUPM_REQUIRED_SCOPES = Object.freeze([
   'com.ivanmurzak',
@@ -524,7 +525,7 @@ function assertRollbackToken(project, token, options = {}) {
   return { manifestPath, storageRoot, backupFile };
 }
 
-function rollbackUnityMcpPackages(transaction, options = {}) {
+function validatePackageRollbackState(transaction, options = {}) {
   const fsImpl = options.fs || fs;
   const pathImpl = options.path || path;
   if (!transaction || !transaction.projectRoot) {
@@ -533,27 +534,45 @@ function rollbackUnityMcpPackages(transaction, options = {}) {
   const project = validateUnityProject(transaction.projectRoot, { fs: fsImpl, path: pathImpl });
   const paths = assertRollbackToken(project, transaction, options);
   validateManifestPath(project, options);
+  const currentBytes = fsImpl.readFileSync(paths.manifestPath);
+  const currentHash = sha256(currentBytes);
+  if (currentHash !== transaction.afterHash) {
+    throw new UnityBootstrapError(
+      'UNITY_BOOTSTRAP_ROLLBACK_CONFLICT',
+      'Packages/manifest.json changed after setup; refusing CAS rollback.',
+      { expectedHash: transaction.afterHash, actualHash: currentHash },
+    );
+  }
+  const backupBytes = fsImpl.readFileSync(paths.backupFile);
+  const backupHash = sha256(backupBytes);
+  if (backupHash !== transaction.beforeHash) {
+    throw new UnityBootstrapError(
+      'UNITY_BOOTSTRAP_BACKUP_CONFLICT',
+      'Manifest backup no longer matches the setup transaction.',
+      { expectedHash: transaction.beforeHash, actualHash: backupHash },
+    );
+  }
+  return { project, paths, backupBytes };
+}
+
+function validateUnityMcpPackageRollback(transaction, options = {}) {
+  const validated = validatePackageRollbackState(transaction, options);
+  return {
+    restorable: true,
+    projectRoot: validated.project.projectRoot,
+    manifestPath: validated.paths.manifestPath,
+  };
+}
+
+function rollbackUnityMcpPackages(transaction, options = {}) {
+  const fsImpl = options.fs || fs;
+  const initial = validatePackageRollbackState(transaction, options);
+  const project = initial.project;
+  const paths = initial.paths;
   const lock = acquireProjectBootstrapLock(project, { ...options, storageRoot: paths.storageRoot });
   try {
-    const currentBytes = fsImpl.readFileSync(paths.manifestPath);
-    const currentHash = sha256(currentBytes);
-    if (currentHash !== transaction.afterHash) {
-      throw new UnityBootstrapError(
-        'UNITY_BOOTSTRAP_ROLLBACK_CONFLICT',
-        'Packages/manifest.json changed after setup; refusing CAS rollback.',
-        { expectedHash: transaction.afterHash, actualHash: currentHash },
-      );
-    }
-    const backupBytes = fsImpl.readFileSync(paths.backupFile);
-    const backupHash = sha256(backupBytes);
-    if (backupHash !== transaction.beforeHash) {
-      throw new UnityBootstrapError(
-        'UNITY_BOOTSTRAP_BACKUP_CONFLICT',
-        'Manifest backup no longer matches the setup transaction.',
-        { expectedHash: transaction.beforeHash, actualHash: backupHash },
-      );
-    }
-    atomicReplace(paths.manifestPath, backupBytes, transaction.afterHash, options);
+    const validated = validatePackageRollbackState(transaction, options);
+    atomicReplace(paths.manifestPath, validated.backupBytes, transaction.afterHash, options);
     return {
       rolledBack: true,
       projectRoot: project.projectRoot,
@@ -586,5 +605,6 @@ module.exports = {
   projectStorageRoot,
   acquireProjectBootstrapLock,
   setupUnityMcpPackages,
+  validateUnityMcpPackageRollback,
   rollbackUnityMcpPackages,
 };

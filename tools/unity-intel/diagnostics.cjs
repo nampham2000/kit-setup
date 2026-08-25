@@ -151,7 +151,7 @@ function aggregateBlockers(records, options = {}) {
       }
       const hit = hits.get(id);
       hit.count += 1;
-      if (hit.examples.length < maxExamples) hit.examples.push(record.path);
+      if (hit.examples.length < maxExamples) hit.examples.push(record.assetPath || record.path);
     }
   }
   return [...hits.values()].sort((a, b) => b.count - a.count || a.id.localeCompare(b.id));

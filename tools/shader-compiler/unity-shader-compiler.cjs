@@ -37,6 +37,8 @@ const {
 const { probeNativeBackends } = require('./native-backends.cjs');
 const { convertMatFile, convertUnityMatToCocosMtl } = require('./unity-material-converter.cjs');
 const { generateVariantManifest } = require('./shader-variant-manager.cjs');
+const { assertUnityPortPreflight } = require('../unity-intel/preflight.cjs');
+const { createPathBoundary, inspectContainedPath } = require('../lib/path-boundary.cjs');
 
 function ensureDir(dir) {
   fs.mkdirSync(dir, { recursive: true });
@@ -44,17 +46,34 @@ function ensureDir(dir) {
 
 function findShadersInDir(dir) {
   const results = [];
-  if (!fs.existsSync(dir)) return results;
+  let boundary;
+  try {
+    boundary = createPathBoundary(dir);
+  } catch {
+    return results;
+  }
 
-  const entries = fs.readdirSync(dir, { withFileTypes: true });
-  for (const entry of entries) {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      results.push(...findShadersInDir(full));
-    } else if (/\.(shader|hlsl|cginc)$/i.test(entry.name)) {
-      results.push(full);
+  function scan(currentDir) {
+    let entries;
+    try {
+      entries = fs.readdirSync(currentDir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    for (const entry of entries) {
+      const full = path.join(currentDir, entry.name);
+      const inspected = inspectContainedPath(boundary, full);
+      if (!inspected) continue;
+
+      if (inspected.stat.isDirectory()) {
+        scan(full);
+      } else if (inspected.stat.isFile() && /\.(shader|hlsl|cginc)$/i.test(entry.name)) {
+        results.push(full);
+      }
     }
   }
+  scan(boundary.resolvedRoot);
   return results;
 }
 
@@ -289,12 +308,13 @@ function cmdConvertMat(options) {
 }
 
 function cmdBatch(options) {
-  const dir = options.dir || '.';
+  if (!options.dir) throw Object.assign(new Error('batch requires --dir <UnityShadersDir>.'), { code: 'SHADER_BATCH_DIR_REQUIRED' });
+  const dir = options.dir;
   const outDir = options.outDir || 'assets/effects';
   const shaders = findShadersInDir(dir).filter(f => f.endsWith('.shader'));
 
   console.log(`Batch converting ${shaders.length} shaders from '${dir}' to '${outDir}'...`);
-  ensureDir(outDir);
+  if (!options.dryRun) ensureDir(outDir);
 
   let successCount = 0;
   for (const src of shaders) {
@@ -366,7 +386,10 @@ function cmdChain(options) {
       const dest = path.join(effectsDir, `${sh.name}.effect`);
       try {
         const res = transpileShaderFile(sh.path, dest, { ...options, report: true });
-        const analysis = analyzeEffect(fs.readFileSync(dest, 'utf8'));
+        // Dry-run deliberately creates no effect on disk. Analyze the exact
+        // generated payload instead of failing on a missing file (or, worse,
+        // validating a stale effect left by an earlier run).
+        const analysis = analyzeEffect(options.dryRun ? res.effectCode : fs.readFileSync(dest, 'utf8'));
         effectByShader.set(sh.path, dest);
         sh.effect = dest;
         sh.score = res.scoreInfo.score;
@@ -473,6 +496,7 @@ function main() {
     m: false,
     dryRun: false,
     mode: 'auto',
+    unityProject: '',
   };
 
   for (let i = 1; i < args.length; i++) {
@@ -494,9 +518,25 @@ function main() {
     else if (arg === '--effect' && args[i + 1]) options.effectPath = args[++i];
     // chain: GUID resolution needs the Unity Assets root.
     else if (arg === '--unity-root' && args[i + 1]) options.unityRoot = args[++i];
+    else if (arg === '--unity-project' && args[i + 1]) options.unityProject = args[++i];
     else if (arg === '--json') options.json = true;
     else if (arg === '--no-cache') options.noCache = true;
   }
+
+  if (command === 'batch' && !options.dir) {
+    throw Object.assign(new Error('batch requires --dir <UnityShadersDir>.'), { code: 'SHADER_BATCH_DIR_REQUIRED' });
+  }
+  const mutationSource = command === 'batch' ? options.dir
+    : command === 'chain' ? options.src || args[1]
+      : options.src || args[1];
+  const mutates = !options.dryRun && (
+    command === 'convert' || command === 'convert-mat' || command === 'batch' ||
+    (command === 'chain' && !!options.outDir)
+  );
+  if (mutates && mutationSource) assertUnityPortPreflight(mutationSource, {
+    projectRoot: command === 'chain' ? (options.unityRoot || options.unityProject) : (options.unityProject || undefined),
+    requireProject: true,
+  });
 
   // Handle positionals
   if (command === 'scan') {
@@ -525,7 +565,7 @@ UCShaderTranspiler - Unity HLSL/ShaderLab -> Cocos Creator 3.8.8 GLSL Effect Tra
 
 Usage:
   node unity-shader-compiler.cjs chain --src <Prefab> --unity-root <Assets> [--out-dir <dir>] [--json] [--no-cache]
-  node unity-shader-compiler.cjs convert --src <Shader> --out <Effect> [-m] [--mode auto|unlit|surface-pbr] [--unity-uv] [--report|--no-report] [--dry-run]
+  node unity-shader-compiler.cjs convert --src <Shader> --out <Effect> [-m] [--mode auto|unlit|surface-pbr] [--unity-project <UnityProject>] [--unity-uv] [--report|--no-report] [--dry-run]
 
   --unity-uv  Lấy mẫu texture theo quy ước UV của Unity (gốc dưới-trái) bằng texU().
               Bật khi shader chạy trên hình học mang UV từ Unity. Mặc định TẮT vì
@@ -545,7 +585,10 @@ only what still needs a decision.
 }
 
 if (require.main === module) {
-  main();
+  try { main(); } catch (error) {
+    console.error(`[unity-shader-compiler] ${error.code || 'FAILED'}: ${error.message}`);
+    process.exitCode = 1;
+  }
 }
 
 module.exports = {

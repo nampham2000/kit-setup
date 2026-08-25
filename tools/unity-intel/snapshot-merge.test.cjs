@@ -105,3 +105,42 @@ test('merge rejects mismatched fingerprints and records authoritative provider c
   assert.equal(merged.project.unityVersion, '6000.3.1f1');
   assert.equal(merged.diagnostics.some(item => item.code === 'UNITY_PROVIDER_CONFLICT'), true);
 });
+
+test('merge replaces static unresolved candidates only when the live patch names their GUIDs', () => {
+  const source = staticSnapshot();
+  const resolvedGuid = 'd'.repeat(32);
+  const retainedGuid = 'e'.repeat(32);
+  source.dependencies.unresolved = [
+    { guid: resolvedGuid, category: 'reachable-missing', source: 'Assets/Main.unity' },
+    { guid: retainedGuid, category: 'reachable-missing', source: 'Assets/Main.unity' },
+  ];
+  source.dependencies.unresolvedCount = 2;
+  const patch = createUnityLiveSnapshotPatch({
+    generatedAt: '2026-08-24T01:00:00.000Z',
+    projectFingerprint: computeStaticProjectFingerprint(source),
+    scanId: 'resolve-unresolved',
+    resolvesUnresolvedGuids: [resolvedGuid],
+    assets: { records: [{ guid: resolvedGuid, assetPath: 'Assets/Recovered.asset' }] },
+    dependencies: {
+      unresolved: [],
+      edges: [
+        {
+          from: 'Assets/Main.unity', to: 'Assets/Recovered.asset', guid: resolvedGuid,
+          kind: 'asset', resolution: 'unity-editor-confirmed', provider: 'unity-mcp',
+        },
+        {
+          from: 'Assets/Recovered.asset', to: 'Assets/RecoveredDependency.asset', guid: 'f'.repeat(32),
+          kind: 'live-asset-dependency', resolution: 'unity-editor-confirmed', provider: 'unity-mcp',
+        },
+      ],
+    },
+  });
+  const merged = mergeUnityProjectSnapshots(source, patch);
+  assert.deepEqual(merged.dependencies.unresolved.map(item => item.guid), [retainedGuid]);
+  assert.equal(merged.dependencies.unresolvedCount, 1);
+  assert.equal(merged.assets.records.some(item => item.guid === resolvedGuid), true);
+  assert.equal(merged.dependencies.edges.some(item =>
+    item.from === 'Assets/Main.unity' && item.to === 'Assets/Recovered.asset'), true);
+  assert.equal(merged.dependencies.edges.some(item =>
+    item.from === 'Assets/Recovered.asset' && item.to === 'Assets/RecoveredDependency.asset'), true);
+});
