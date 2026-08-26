@@ -3,6 +3,7 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const childProcess = require('node:child_process');
 
 const UNITY_VERSION_RE = /(\d+\.\d+\.\d+[abfp]\d+)/i;
 const EXPLICIT_EDITOR_ENV_KEYS = Object.freeze([
@@ -407,6 +408,193 @@ function getUnityProjectLockStatus(projectOrPath, options = {}) {
   };
 }
 
+function readOpenUnityEditorInstance(projectOrPath, options = {}) {
+  const fsImpl = options.fs || fs;
+  const pathImpl = options.path || path;
+  const project = typeof projectOrPath === 'string'
+    ? validateUnityProject(projectOrPath, { fs: fsImpl, path: pathImpl })
+    : projectOrPath;
+  const instanceFile = pathImpl.join(project.projectRoot, 'Library', 'EditorInstance.json');
+  const instance = readJsonIfPresent(instanceFile, fsImpl);
+  if (!instance) return { status: 'missing', processId: null, instanceFile };
+  const processId = Number(instance.process_id);
+  if (!Number.isSafeInteger(processId) || processId <= 0) {
+    return { status: 'invalid', processId: null, instanceFile };
+  }
+  const version = normalizeVersion(instance.version);
+  if (version !== project.unityVersion) {
+    return { status: 'version-mismatch', processId, version, instanceFile };
+  }
+  return { status: 'ready', processId, version, instanceFile };
+}
+
+const WINDOWS_EDITOR_REFRESH_SCRIPT = String.raw`
+$ErrorActionPreference = 'Stop'
+$targetPid = [int]$env:CC_PLAYABLE_REFRESH_PID
+$expectedProject = [IO.Path]::GetFullPath($env:CC_PLAYABLE_REFRESH_PROJECT).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+$processInfo = Get-CimInstance Win32_Process -Filter ("ProcessId = " + $targetPid)
+if (-not $processInfo -or $processInfo.Name -ne 'Unity.exe') { exit 11 }
+$commandLine = [string]$processInfo.CommandLine
+if ($commandLine -notmatch '(?i)(?:^|\s)-projectpath\s+(?:"(?<quoted>[^"]+)"|(?<plain>\S+))') { exit 12 }
+$actualProjectValue = if ($Matches['quoted']) { $Matches['quoted'] } else { $Matches['plain'] }
+$actualProject = [IO.Path]::GetFullPath($actualProjectValue).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+if (-not [StringComparer]::OrdinalIgnoreCase.Equals($expectedProject, $actualProject)) { exit 13 }
+Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public static class CcPlayableUnityRefreshKeys {
+  [DllImport("user32.dll")] public static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
+  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+  [DllImport("user32.dll")] public static extern void keybd_event(byte virtualKey, byte scanCode, uint flags, UIntPtr extraInfo);
+}
+'@
+$editor = Get-Process -Id $targetPid
+if ($editor.MainWindowHandle -eq [IntPtr]::Zero) { exit 14 }
+[CcPlayableUnityRefreshKeys]::ShowWindowAsync($editor.MainWindowHandle, 9) | Out-Null
+if (-not [CcPlayableUnityRefreshKeys]::SetForegroundWindow($editor.MainWindowHandle)) { exit 15 }
+Start-Sleep -Milliseconds 200
+$foregroundPid = [uint32]0
+[CcPlayableUnityRefreshKeys]::GetWindowThreadProcessId([CcPlayableUnityRefreshKeys]::GetForegroundWindow(), [ref]$foregroundPid) | Out-Null
+if ($foregroundPid -ne $targetPid) { exit 16 }
+[CcPlayableUnityRefreshKeys]::keybd_event(0x11, 0, 0, [UIntPtr]::Zero)
+[CcPlayableUnityRefreshKeys]::keybd_event(0x52, 0, 0, [UIntPtr]::Zero)
+[CcPlayableUnityRefreshKeys]::keybd_event(0x52, 0, 2, [UIntPtr]::Zero)
+[CcPlayableUnityRefreshKeys]::keybd_event(0x11, 0, 2, [UIntPtr]::Zero)
+`;
+
+function refreshOpenUnityEditor(projectOrPath, options = {}) {
+  const processImpl = options.process || process;
+  const platform = options.platform || processImpl.platform;
+  const project = typeof projectOrPath === 'string'
+    ? validateUnityProject(projectOrPath, options)
+    : projectOrPath;
+  const instance = readOpenUnityEditorInstance(project, options);
+  if (instance.status !== 'ready') {
+    return { attempted: false, dispatched: false, reason: `editor-instance-${instance.status}` };
+  }
+  if (platform !== 'win32') {
+    return { attempted: false, dispatched: false, reason: 'platform-refresh-unsupported' };
+  }
+  const env = options.env || processImpl.env || {};
+  const pathImpl = options.path || path;
+  const powershell = pathImpl.join(
+    env.SystemRoot || env.SYSTEMROOT || 'C:\\Windows',
+    'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe',
+  );
+  const spawnSync = options.spawnSync || childProcess.spawnSync;
+  const result = spawnSync(powershell, [
+    '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+    '-Command', WINDOWS_EDITOR_REFRESH_SCRIPT,
+  ], {
+    cwd: project.projectRoot,
+    env: {
+      ...env,
+      CC_PLAYABLE_REFRESH_PID: String(instance.processId),
+      CC_PLAYABLE_REFRESH_PROJECT: project.projectRoot,
+    },
+    encoding: 'utf8',
+    timeout: Number.isFinite(options.timeoutMs) ? options.timeoutMs : 10_000,
+    windowsHide: true,
+  });
+  if (result.error || result.status !== 0) {
+    return {
+      attempted: true,
+      dispatched: false,
+      reason: result.error && result.error.code || `refresh-exit-${result.status}`,
+    };
+  }
+  return {
+    attempted: true,
+    dispatched: true,
+    method: 'windows-targeted-ctrl-r',
+    processId: instance.processId,
+  };
+}
+
+function defaultEditorLogPath(platform, env, homeDir, pathImpl) {
+  if (platform === 'win32') {
+    return env.LOCALAPPDATA ? pathImpl.join(env.LOCALAPPDATA, 'Unity', 'Editor', 'Editor.log') : null;
+  }
+  if (platform === 'darwin') return pathImpl.join(homeDir, 'Library', 'Logs', 'Unity', 'Editor.log');
+  return pathImpl.join(env.XDG_CONFIG_HOME || pathImpl.join(homeDir, '.config'), 'unity3d', 'Editor.log');
+}
+
+function readBoundedFileTail(filePath, maxBytes, fsImpl) {
+  let descriptor = null;
+  try {
+    descriptor = fsImpl.openSync(filePath, 'r');
+    const stat = fsImpl.fstatSync(descriptor);
+    const length = Math.min(stat.size, maxBytes);
+    const buffer = Buffer.alloc(length);
+    fsImpl.readSync(descriptor, buffer, 0, length, stat.size - length);
+    return buffer.toString('utf8');
+  } catch (_) {
+    return null;
+  } finally {
+    if (descriptor !== null) {
+      try { fsImpl.closeSync(descriptor); } catch (_) { /* best effort */ }
+    }
+  }
+}
+
+function readUnityCompileDiagnostics(projectOrPath, options = {}) {
+  const fsImpl = options.fs || fs;
+  const pathImpl = options.path || path;
+  const processImpl = options.process || process;
+  const platform = options.platform || processImpl.platform;
+  const env = options.env || processImpl.env || {};
+  const homeDir = options.homeDir || os.homedir();
+  const project = typeof projectOrPath === 'string'
+    ? validateUnityProject(projectOrPath, { fs: fsImpl, path: pathImpl })
+    : projectOrPath;
+  const logPath = options.editorLog || defaultEditorLogPath(platform, env, homeDir, pathImpl);
+  if (!logPath) return null;
+  const maxBytes = Number.isFinite(options.maxBytes)
+    ? Math.max(64 * 1024, Math.min(Math.floor(options.maxBytes), 32 * 1024 * 1024))
+    : 16 * 1024 * 1024;
+  const tail = readBoundedFileTail(logPath, maxBytes, fsImpl);
+  if (!tail) return null;
+  const lines = tail.split(/\r?\n/);
+  const projectKey = project.projectRoot.replace(/\\/g, '/').replace(/\/$/, '').toLowerCase();
+  let targetStart = -1;
+  for (let index = 0; index < lines.length; index += 1) {
+    const match = /^WorkingDir:\s*(.+?)\s*$/.exec(lines[index]);
+    if (!match) continue;
+    const workingDir = match[1].replace(/\\/g, '/').replace(/\/$/, '').toLowerCase();
+    if (workingDir === projectKey) targetStart = index + 1;
+  }
+  if (targetStart < 0) return null;
+  let targetEnd = lines.length;
+  for (let index = targetStart; index < lines.length; index += 1) {
+    if (/^WorkingDir:\s*/.test(lines[index])) { targetEnd = index; break; }
+  }
+  const evidence = [];
+  const seen = new Set();
+  for (const line of lines.slice(targetStart, targetEnd)) {
+    const trimmed = line.trim();
+    if (!/^(?:(?:Assets|Packages)[\\/]|[A-Za-z]:[\\/]).+\(\d+,\d+\):\s*error\s+CS\d+:/i.test(trimmed)) continue;
+    let logical = trimmed;
+    const normalized = logical.replace(/\\/g, '/');
+    const absolutePrefix = `${projectKey}/`;
+    if (normalized.toLowerCase().startsWith(absolutePrefix)) logical = normalized.slice(absolutePrefix.length);
+    logical = logical.slice(0, 500);
+    if (seen.has(logical)) continue;
+    seen.add(logical);
+    evidence.push(logical);
+    if (evidence.length >= 64) break;
+  }
+  if (!evidence.length) return null;
+  return {
+    code: 'UNITY_PROJECT_COMPILE_ERRORS',
+    count: evidence.length,
+    evidence: evidence.slice(0, 8),
+    source: 'bounded-editor-log-tail',
+    truncated: evidence.length > 8,
+  };
+}
+
 function defaultHubPath(platform, env, pathImpl) {
   if (platform === 'win32') return pathImpl.join(env.PROGRAMFILES || 'C:\\Program Files', 'Unity Hub', 'Unity Hub.exe');
   if (platform === 'darwin') return '/Applications/Unity Hub.app/Contents/MacOS/Unity Hub';
@@ -497,6 +685,9 @@ module.exports = {
   inferEditorVersion,
   discoverUnityEditor,
   getUnityProjectLockStatus,
+  readOpenUnityEditorInstance,
+  refreshOpenUnityEditor,
+  readUnityCompileDiagnostics,
   buildHubInstallRemediation,
   doctorUnityEditor,
   isInside,

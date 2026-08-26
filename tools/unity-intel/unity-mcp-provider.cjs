@@ -232,7 +232,7 @@ async function postJsonOnce(connection, route, body, options) {
       throw providerError('UNITY_MCP_MALFORMED_RESPONSE', 'Unity MCP returned an invalid HTTP response.');
     }
     if (!response.ok) {
-      const retryable = response.status === 404 || response.status === 503;
+      const retryable = [404, 502, 503, 504].includes(response.status);
       throw providerError(
         retryable ? 'UNITY_MCP_NOT_READY' : 'UNITY_MCP_HTTP_ERROR',
         `Unity MCP returned HTTP ${response.status}.`,

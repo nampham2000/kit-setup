@@ -41,7 +41,7 @@ const TOOLS = [
   },
   {
     name: 'scanUnityProject',
-    description: 'MANDATORY FIRST tool for every Unity port/implementation task. Returns a <=12 KiB implementation brief with feature sketch, all high dispositions, verification routes, and a fresh mutation receipt. Read decision/features/obligations before implementation. Default auto mode is project-read-only and falls back to static; bootstrap only when install/reload is allowed.',
+    description: 'MANDATORY FIRST tool for every Unity port/implementation task. Defaults to a playable-core brief: selects the gameplay scene, excludes menu/shop/online services from implementation routes, preserves all highs in the audit index, and requires runnable + evidence-backed 80/90 fidelity acceptance. Read decision/coreGameplay/features/obligations before implementation.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -55,6 +55,7 @@ const TOOLS = [
         includeVendor: { type: 'boolean', default: false },
         refreshCache: { type: 'boolean', default: false },
         intent: { type: 'string', enum: ['project', 'scene', 'prefab', 'script', 'shader', 'feature', 'diagnostic'], default: 'project', description: 'Project intent issues the mutation receipt. Focused intents are analysis-only evidence briefs.' },
+        profile: { type: 'string', enum: ['playable-core', 'full-project'], default: 'playable-core', description: 'Playable-core routes only the minimum runnable gameplay loop; full-project preserves legacy whole-project routing.' },
         targets: { type: 'array', maxItems: 8, items: { type: 'string', maxLength: 320 }, description: 'Exact logical paths/symbols for a focused analysis-only intent.' },
       },
       required: ['project'],
@@ -183,6 +184,7 @@ async function handleToolCall(name, args = {}, dependencies = {}) {
       includeVendor: args.includeVendor === true,
       refreshCache: args.refreshCache === true,
       intent: args.intent || 'project',
+      profile: args.profile || 'playable-core',
       targets: args.targets,
     };
     const result = await preflight(input, { scanProject: scan });

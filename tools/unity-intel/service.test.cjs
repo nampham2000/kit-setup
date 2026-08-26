@@ -67,6 +67,7 @@ test('bootstrap on a locked Editor waits the full requested readiness window and
   const seen = [];
   let batchCalls = 0;
   let scanCalls = 0;
+  let refreshCalls = 0;
   const result = await scanUnityProject({
     project: fixture.root,
     provider: 'unity-mcp',
@@ -77,6 +78,11 @@ test('bootstrap on a locked Editor waits the full requested readiness window and
     doctor: () => doctorState(fixture.root, false),
     setupPackages: () => ({ changed: true, scannerPackageSpec: 'file:scanner', upstreamPackageSpec: 'git', transaction: {} }),
     ensureConfig: () => ({ url: 'http://127.0.0.1:25000', token: 'secret', changed: true, rollback: () => ({ restored: true }) }),
+    refreshOpenEditor: projectRoot => {
+      refreshCalls += 1;
+      assert.equal(projectRoot, fixture.root);
+      return { attempted: true, dispatched: true };
+    },
     runBatch: async () => { batchCalls++; },
     liveProvider: {
       probe: async options => { seen.push(options.timeoutMs); return livePatch(fingerprint); },
@@ -84,6 +90,7 @@ test('bootstrap on a locked Editor waits the full requested readiness window and
     },
   });
   assert.equal(batchCalls, 0);
+  assert.equal(refreshCalls, 1);
   assert.equal(scanCalls, 2);
   assert.deepEqual(seen, [42_000]);
   assert.equal(result.snapshot.provider, 'hybrid');
@@ -120,6 +127,37 @@ test('bootstrap never marks reload complete for an older Unity scanner package',
     },
   );
   assert.ok(scans > 1);
+});
+
+test('bootstrap promotes bounded project compile evidence over a generic readiness timeout', async t => {
+  const { fixture, snapshot } = staticFixture(t);
+  await assert.rejects(
+    scanUnityProject({ project: fixture.root, provider: 'unity-mcp', bootstrap: true, timeoutMs: 10 }, {
+      buildStaticSnapshot: () => snapshot,
+      doctor: () => doctorState(fixture.root, false),
+      setupPackages: () => ({ changed: true, scannerPackageSpec: 'file:scanner', upstreamPackageSpec: 'git', transaction: {} }),
+      ensureConfig: () => ({ url: 'http://127.0.0.1:25000', token: 'secret', changed: true }),
+      refreshOpenEditor: () => ({ attempted: true, dispatched: true }),
+      liveProvider: {
+        wait: async () => {
+          const error = new Error('window expired');
+          error.code = 'UNITY_MCP_TIMEOUT';
+          throw error;
+        },
+      },
+      readCompileDiagnostics: () => ({
+        code: 'UNITY_PROJECT_COMPILE_ERRORS',
+        count: 2,
+        evidence: ['Assets/Game/Main.cs(1,2): error CS0103: missing'],
+      }),
+    }),
+    error => {
+      assert.equal(error.code, 'UNITY_PROJECT_COMPILE_ERRORS');
+      assert.equal(error.details.causeCode, 'UNITY_MCP_TIMEOUT');
+      assert.match(error.message, /Assets\/Game\/Main\.cs/);
+      return true;
+    },
+  );
 });
 
 test('existing-editor bootstrap retries until the expected scanner finishes domain reload', async t => {

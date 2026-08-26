@@ -16,6 +16,7 @@ const PROJECTS = [
     name: 'HarvestTile',
     unityVersion: '6000.3.1f1',
     enabledScenes: ['Assets/Project/Scene/Loading.unity', 'Assets/Project/Scene/Gameplay.unity'],
+    coreEntry: 'Assets/Project/Scene/Gameplay.unity',
     packages: {
       'com.unity.addressables': '2.8.1',
       'com.unity.inputsystem': '1.18.0',
@@ -34,6 +35,7 @@ const PROJECTS = [
       'Assets/_Game/Scenes/LevelDesign/SceneLevelDesigner.unity',
       'Assets/Plugins/MobileConsoleKit/Assets/LogConsole.unity',
     ],
+    coreEntry: 'Assets/_Game/Scenes/4.gameplay.unity',
     packages: {
       'com.unity.render-pipelines.universal': '17.3.0',
       'com.unity.ai.navigation': '2.0.9',
@@ -47,6 +49,7 @@ const PROJECTS = [
     name: 'TapeJam',
     unityVersion: '6000.3.1f1',
     enabledScenes: ['Assets/_Game/Scenes/MainScene.unity', 'Assets/_Game/Scenes/GameplayScene.unity'],
+    coreEntry: 'Assets/_Game/Scenes/GameplayScene.unity',
     packages: {
       'com.unity.addressables': '2.8.1',
       'com.unity.render-pipelines.universal': '17.3.0',
@@ -137,6 +140,21 @@ async function main() {
       assert.equal(briefJson.toLowerCase().includes(projectRoot.replace(/\\/g, '/').toLowerCase()), false,
         `${expected.name}: compact brief lộ absolute project path`);
       assert.ok(brief.features.length > 0, `${expected.name}: Phase 3 không phác thảo được feature`);
+      assert.equal(brief.intent.profile, 'playable-core', `${expected.name}: preflight không default playable-core`);
+      assert.equal(brief.coreGameplay.entry.primary, expected.coreEntry, `${expected.name}: chọn sai core gameplay scene`);
+      assert.equal(brief.decision.coreEntryReady, true, `${expected.name}: core gameplay entry còn mơ hồ`);
+      assert.deepEqual(brief.implementation.slice(0, 2).map(item => item.capabilityId), ['port.core.init', 'port.scene'],
+        `${expected.name}: core route không bắt đầu từ manifest + gameplay scene`);
+      assert.equal(brief.coreGameplay.acceptance.minimumFidelity, 80);
+      assert.equal(brief.coreGameplay.acceptance.targetFidelity, 90);
+      assert.equal(brief.coreGameplay.acceptance.weights.reduce((sum, item) => sum + item[1], 0), 100);
+      assert.ok(brief.coreGameplay.closure.includedCount < cold.assets.projectCount,
+        `${expected.name}: core closure không giảm scope project`);
+      const routedEvidence = JSON.stringify(brief.features.flatMap(feature => feature.evidence || [])).toLowerCase();
+      for (const forbidden of ['/editor/', '/dailylogin/', '/shop/', 'mainmenu']) {
+        assert.equal(routedEvidence.includes(forbidden), false,
+          `${expected.name}: core feature evidence còn non-playable path ${forbidden}`);
+      }
       const hardCodes = brief.obligationIndex.filter(item => item[2] === 1).map(item => item[0]);
       assert.equal(
         brief.decision.implementationAllowed,
@@ -185,6 +203,9 @@ async function main() {
           features: brief.features.length,
           obligations: brief.decision.obligationCount,
           hardBlockers: brief.decision.hardBlockerCount,
+          coreEntry: brief.coreGameplay.entry.primary,
+          corePaths: brief.coreGameplay.closure.includedCount,
+          coreObligations: brief.decision.coreObligationCount,
         },
       });
     }

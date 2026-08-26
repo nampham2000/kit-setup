@@ -12,7 +12,20 @@ npm run ai:port:preflight -- --project <UnityProjectRoot>
 
 ## Implementation preflight and mutation gate
 
-The default project intent emits a <=12 KiB `unity-port-implementation-brief` containing `decision`, `features`, a complete compact `obligationIndex` (all high code/counts), routed `obligations`, ordered capabilities, verification steps, and a receipt ID. When detail must be trimmed, the index remains complete and the agent follows the shared compact route plus a bounded diagnostic query. Focused scene/prefab/script/shader/feature/diagnostic intents route typed evidence but are analysis-only; they do not authorize output writes.
+The default project intent emits a <=12 KiB `unity-port-implementation-brief` containing `decision`, `coreGameplay`, core-routed `features`, a complete compact `obligationIndex` (all high code/counts), `coreObligationIndex`, routed `obligations`, ordered capabilities, verification steps, and a receipt ID. When detail must be trimmed, both indexes remain complete and the agent follows the shared compact route plus a bounded diagnostic query. Focused scene/prefab/script/shader/feature/diagnostic intents route typed evidence but are analysis-only; they do not authorize output writes.
+
+### Playable-core golden path (Phase 5)
+
+`playable-core` is the default preflight profile. It scores enabled build scenes, selects one gameplay entry, and rebuilds reachability from that scene instead of every loading/menu scene. The resulting closure keeps core input/rules/state/movement/spawn/timing/win-lose feedback. Main menu, shop/IAP, daily/meta screens, persistence, analytics/ads SDKs, and online services are classified as deterministic adapters or explicit deferred scope. No high is deleted: `obligationIndex` is the full source audit, while `coreObligationIndex` records `required`, `adapter`, or `deferred` disposition. Use `--profile full-project` only for a deliberate non-playable/full-game port.
+
+Start and finish a core port with:
+
+```text
+npm run ai:port:core:init -- --unity-project <UnityProjectRoot> --cocos-project <CocosProjectRoot>
+npm run ai:port:core:verify -- --unity-project <UnityProjectRoot> --cocos-project <CocosProjectRoot>
+```
+
+`core:init` reruns mandatory preflight and writes `.ai/port/core-gameplay.json` with pending, compact fidelity checkpoints. It refuses a hard-blocked source or ambiguous gameplay entry. `core:verify` runs verify, zero-GC lint, Cocos asset import, build, and Chrome runtime smoke in order. It then computes a 100-point evidence-weighted core parity score. The minimum acceptance is 80, the target is 90, and input response, core rules/state, and win/lose/restart are mandatory. Compiler confidence and unchecked booleans never count: every checkpoint needs existing Unity evidence, an existing Cocos target, and matching JSON runtime/visual evidence. The score is a transparent parity rubric, not a claim of pixel-perfect or automatically proven semantic equivalence.
 
 The receipt is atomic, <=4 KiB, contains no absolute path/source/token, and lives in one fixed user-local receipt store so every port gate reads the same authorization. `--cache-dir` only relocates the larger incremental scan index. A receipt expires after 24 hours and becomes stale immediately when editable Unity source, `.meta`, package manifest, project settings, snapshot provider/merger, extractor, router, or capability workflow changes. Scene, prefab, closure-output, C# compiler, and shader CLI write boundaries validate it before their first output write. Dry runs stop before directory creation, `.meta` generation, converter launch, and output writes. A real write must bind to `Assets`, an embedded/local/exact PackageCache root selected by the Unity manifest, or a closure staging directory carrying exact provenance; `Temp`, `UserSettings`, arbitrary project files, unrelated external sources, symlink/reparse escapes, and cached absolute/traversal paths are rejected.
 

@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "generatedAt": "2026-08-25T16:28:44.058Z",
+    "generatedAt": "2026-08-26T00:08:32.511Z",
     "description": "Compact project manifest for AI Agents. Use this instead of scanning file trees.",
     "project": {
       "projectName": "cc_playable_framework",
@@ -739,6 +739,7 @@
     "unity.intel.doctor": "npm run unity:intel:doctor -- --project <UnityProjectRoot>",
     "unity.intel.setup": "npm run unity:intel:setup -- --project <UnityProjectRoot>",
     "port.preflight": "npm run ai:port:preflight -- --project <UnityProjectRoot>",
+    "port.core.init": "npm run ai:port:core:init -- --unity-project <UnityProjectRoot> --cocos-project <CocosProjectRoot>",
     "unity.intel.scan": "npm run ai:unity:scan -- --project <UnityProjectRoot>",
     "unity.intel.query": "npm run ai:unity:query -- --project <UnityProjectRoot> --section <name>",
     "port.plan": "npm run ai:port:plan -- --project <UnityProjectRoot>",
@@ -755,6 +756,7 @@
     "shader.material": "node playable-shared-kit/tools/shader-compiler/unity-shader-compiler.cjs convert-mat --src <UnityMaterial.mat> --out <assets/materials/X.mtl>",
     "shader.validate": "node playable-shared-kit/tools/shader-compiler/unity-shader-compiler.cjs validate <assets/effects/X.effect>",
     "fbx.strip": "npm run fbx:strip -- <file.fbx>",
+    "port.core.acceptance": "npm run ai:port:core:verify -- --unity-project <UnityProjectRoot> --cocos-project <CocosProjectRoot>",
     "verify.all": "npm run ai:verify",
     "verify.prefab": "npm run ai:verify:prefab",
     "verify.assets": "npm run ai:verify:assets",

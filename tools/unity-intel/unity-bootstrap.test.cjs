@@ -42,6 +42,11 @@ test('shipped Unity scanner keeps nested traversal and global candidate evidence
   assert.match(scannerSource, /MaxCandidateReferenceBytesTotal\s*=\s*256 \* 1024/);
   assert.match(scannerSource, /MaxSerializedCandidateDispositions\s*=\s*96/);
   assert.match(scannerSource, /MaxCandidateDispositionBytesTotal\s*=\s*768 \* 1024/);
+  assert.match(scannerSource,
+    /using PackageManagerPackageInfo = UnityEditor\.PackageManager\.PackageInfo;/,
+    'Unity 6.3 adds UnityEditor.PackageInfo, so the UPM type must remain unambiguous');
+  assert.doesNotMatch(scannerSource, /^\s*PackageInfo\[\]/m,
+    'the scanner must not use the ambiguous unqualified PackageInfo type');
   assert.match(scannerSource, /if \(!IsBoundedAssetPath\(referencedPath\)\)[\s\S]{0,500}referencesComplete = false/,
     'every non-null unrepresentable ObjectReference must force partial evidence');
   assert.match(scannerSource, /EnforceCandidateDispositionBudget\(snapshot\.candidateDispositions\)/,
