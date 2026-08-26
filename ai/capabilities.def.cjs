@@ -167,8 +167,8 @@ const CAPABILITIES = [
     outputs: ['<CocosProjectRoot>/.ai/port/core-gameplay.json', 'stdout JSON compact core scope + next action'],
     limits: [
       'Chỉ tạo manifest; không tự tuyên bố đã port gameplay. Refuse khi hard blocker hoặc gameplay entry còn mơ hồ.',
-      '`--dry-run` dừng trước mkdir/write. Không overwrite manifest nếu thiếu `--force`.',
-      'Manifest chỉ khởi tạo checkpoint pending; agent phải implement/refine và cung cấp source + target + runtime/visual evidence.',
+      '`--dry-run` dừng trước mkdir/write. Không overwrite manifest nếu thiếu `--force`; force dùng lock + compare-and-swap và giữ nguyên concurrent edit.',
+      'Manifest schema v2 khóa exact gameplay entry output, 9 checkpoint/weight/mandatory, gate 80/90 và evidence contract; agent không thể tự hạ rubric.',
     ],
     status: 'partial',
     probe: 'help',
@@ -548,8 +548,8 @@ const CAPABILITIES = [
     outputs: ['stdout JSON compact: runnable gates, artifact presence, fidelity score/checkpoints, nextActions'],
     limits: [
       'Score là rubric parity có evidence, không phải pixel-perfect hoặc semantic proof tự động; target 90 và minimum accept 80.',
-      'Compiler confidence, status boolean hoặc file tồn tại đơn lẻ không được tính điểm. Mỗi checkpoint cần Unity source evidence, Cocos target và JSON runtime/visual evidence khớp checkpoint.',
-      'Mặc định chạy tuần tự `ai:verify`, `ai:lint`, `ai:verify:assets`, `build`, `ai:verify:runtime`; dừng ở gate đầu thất bại. `--no-run-gates` không thể trả accepted/runnable.',
+      'Compiler confidence, status boolean hoặc file tồn tại đơn lẻ không được tính điểm. Evidence schema v1 phải bind current brief/state/checkpoint và SHA-256 của từng Cocos target; target đổi làm evidence stale. Mandatory input/rules/win-lose chỉ nhận runtime, không nhận visual-only.',
+      'Mặc định chạy tuần tự `ai:verify`, `ai:lint`, `ai:verify:assets`, `build`, `ai:verify:runtime`; dừng ở gate đầu thất bại, timeout/output bounded và redacted. `--no-run-gates` không thể trả accepted/runnable.',
     ],
     status: 'partial',
     probe: 'help',

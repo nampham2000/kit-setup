@@ -8,13 +8,23 @@ const { spawnSync } = require('node:child_process');
 
 const { isPathInside } = require('./lib/path-boundary.cjs');
 const { runUnityPortPreflight, assertUnityPortPreflight } = require('./unity-intel/preflight.cjs');
+const { FIDELITY_CHECKPOINTS } = require('./unity-intel/core-gameplay-scope.cjs');
 
-const MANIFEST_SCHEMA_VERSION = 1;
+const MANIFEST_SCHEMA_VERSION = 2;
 const MANIFEST_KIND = 'cc-playable-core-port-manifest';
+const EVIDENCE_SCHEMA_VERSION = 1;
+const EVIDENCE_KIND = 'cc-playable-core-checkpoint-evidence';
 const DEFAULT_MANIFEST = '.ai/port/core-gameplay.json';
 const MAX_MANIFEST_BYTES = 64 * 1024;
 const MAX_EVIDENCE_BYTES = 256 * 1024;
+const MAX_PACKAGE_BYTES = 256 * 1024;
+const MAX_EVIDENCE_PATHS = 8;
+const MAX_PATH_CHARS = 512;
+const MAX_OBSERVATION_CHARS = 1200;
 const GATE_TIMEOUT_MS = 10 * 60 * 1000;
+const GATE_MAX_BUFFER_BYTES = 2 * 1024 * 1024;
+const EVIDENCE_METHODS = Object.freeze(['runtime', 'visual', 'runtime-visual']);
+const VISUAL_ONLY_ALLOWED = new Set(['camera-layout', 'animation-vfx-feedback']);
 const REQUIRED_SCRIPTS = Object.freeze([
   Object.freeze({ id: 'verify.all', script: 'ai:verify' }),
   Object.freeze({ id: 'verify.gc', script: 'ai:lint' }),
@@ -46,7 +56,8 @@ Options:
   --help                 Show help.
 
 The command never claims gameplay fidelity from compiler confidence. A checkpoint
-counts only when source, Cocos target, and checkpoint runtime/visual JSON evidence exist.`;
+counts only when source, current Cocos target hashes, and schema-validated runtime/visual
+evidence are bound to the current Unity preflight receipt.`;
 
 function corePortError(code, message, details = null) {
   const error = new Error(message);
@@ -91,20 +102,35 @@ function parseArgs(argv) {
 }
 
 function validateUnityRoot(value) {
-  const root = path.resolve(String(value || ''));
-  if (!fs.existsSync(path.join(root, 'Assets')) ||
-      !fs.existsSync(path.join(root, 'ProjectSettings', 'ProjectVersion.txt'))) {
+  const candidate = path.resolve(String(value || ''));
+  if (!fs.existsSync(candidate)) {
     throw corePortError('CORE_PORT_UNITY_INVALID', 'Unity project root khong hop le.');
   }
-  return fs.realpathSync.native(root);
+  const root = fs.realpathSync.native(candidate);
+  try {
+    const assets = resolveContained(root, 'Assets', { mustExist: true });
+    const version = resolveContained(root, 'ProjectSettings/ProjectVersion.txt', { mustExist: true });
+    if (!fs.statSync(assets).isDirectory() || !fs.statSync(version).isFile()) throw new Error('shape');
+  } catch (_) {
+    throw corePortError('CORE_PORT_UNITY_INVALID', 'Unity project root khong hop le hoac chua path redirect.');
+  }
+  return root;
 }
 
 function validateCocosRoot(value) {
-  const root = path.resolve(String(value || ''));
-  if (!fs.existsSync(path.join(root, 'package.json')) || !fs.existsSync(path.join(root, 'assets'))) {
+  const candidate = path.resolve(String(value || ''));
+  if (!fs.existsSync(candidate)) {
     throw corePortError('CORE_PORT_COCOS_INVALID', 'Cocos project root can package.json va assets/.');
   }
-  return fs.realpathSync.native(root);
+  const root = fs.realpathSync.native(candidate);
+  try {
+    const packageFile = resolveContained(root, 'package.json', { mustExist: true });
+    const assets = resolveContained(root, 'assets', { mustExist: true });
+    if (!fs.statSync(packageFile).isFile() || !fs.statSync(assets).isDirectory()) throw new Error('shape');
+  } catch (_) {
+    throw corePortError('CORE_PORT_COCOS_INVALID', 'Cocos project root can package.json va assets/ khong redirect.');
+  }
+  return root;
 }
 
 function resolveContained(root, relativeOrAbsolute, options = {}) {
@@ -141,7 +167,27 @@ function manifestPath(cocosRoot, value) {
   return resolveContained(cocosRoot, value || DEFAULT_MANIFEST);
 }
 
-function atomicWriteJson(root, file, value) {
+function hashBytes(value) {
+  return crypto.createHash('sha256').update(value).digest('hex');
+}
+
+function hashFile(file) {
+  const hash = crypto.createHash('sha256');
+  const descriptor = fs.openSync(file, 'r');
+  const buffer = Buffer.allocUnsafe(64 * 1024);
+  try {
+    for (;;) {
+      const read = fs.readSync(descriptor, buffer, 0, buffer.length, null);
+      if (!read) break;
+      hash.update(buffer.subarray(0, read));
+    }
+  } finally {
+    fs.closeSync(descriptor);
+  }
+  return hash.digest('hex');
+}
+
+function atomicWriteJson(root, file, value, options = {}) {
   const parent = path.dirname(file);
   fs.mkdirSync(parent, { recursive: true });
   resolveContained(root, parent, { mustExist: true });
@@ -150,17 +196,57 @@ function atomicWriteJson(root, file, value) {
     throw corePortError('CORE_PORT_MANIFEST_TOO_LARGE', `Manifest vuot ${MAX_MANIFEST_BYTES} bytes.`);
   }
   const temp = `${file}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`;
+  const lock = `${file}.lock`;
+  let lockDescriptor;
   try {
+    try {
+      lockDescriptor = fs.openSync(lock, 'wx', 0o600);
+    } catch (error) {
+      if (error && error.code === 'EEXIST') {
+        throw corePortError('CORE_PORT_MANIFEST_LOCKED', 'Manifest dang duoc mot core:init khac cap nhat.');
+      }
+      throw error;
+    }
+    const existed = fs.existsSync(file);
+    const currentHash = existed ? hashFile(file) : null;
+    if (!options.force && existed) {
+      throw corePortError('CORE_PORT_MANIFEST_EXISTS', `Manifest da ton tai: ${relativeSlash(root, file)}. Dung --force neu muon tao lai.`);
+    }
+    if (options.force && currentHash !== (options.expectedHash || null)) {
+      throw corePortError('CORE_PORT_MANIFEST_CONCURRENT', 'Manifest thay doi sau khi init bat dau; khong overwrite thay doi moi.');
+    }
     fs.writeFileSync(temp, payload, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
-    fs.renameSync(temp, file);
+    const latestHash = fs.existsSync(file) ? hashFile(file) : null;
+    if (latestHash !== currentHash) {
+      throw corePortError('CORE_PORT_MANIFEST_CONCURRENT', 'Manifest thay doi trong luc tao generation moi.');
+    }
+    if (existed) {
+      fs.renameSync(temp, file);
+    } else {
+      fs.linkSync(temp, file);
+      try { fs.unlinkSync(temp); } catch (_) { /* linked target is already complete */ }
+    }
+    return hashBytes(payload);
   } catch (error) {
     try { fs.unlinkSync(temp); } catch (_) { /* best effort */ }
     throw error;
+  } finally {
+    if (lockDescriptor !== undefined) {
+      fs.closeSync(lockDescriptor);
+      try { fs.unlinkSync(lock); } catch (_) { /* best effort */ }
+    }
   }
+}
+
+function targetScenePath(entryScene) {
+  const base = path.posix.basename(String(entryScene || '').replace(/\\/g, '/'), '.unity');
+  const safe = base.replace(/[^a-z0-9_. -]+/gi, '-').trim() || 'CoreGameplay';
+  return `assets/${safe}.scene`;
 }
 
 function createManifest(brief) {
   const core = brief.coreGameplay;
+  const targetEntryScene = targetScenePath(core.entry.primary);
   return {
     schemaVersion: MANIFEST_SCHEMA_VERSION,
     kind: MANIFEST_KIND,
@@ -175,8 +261,15 @@ function createManifest(brief) {
     delivery: {
       minimumFidelity: core.acceptance.minimumFidelity,
       targetFidelity: core.acceptance.targetFidelity,
+      targetEntryScene,
+      evidenceContract: {
+        schemaVersion: EVIDENCE_SCHEMA_VERSION,
+        kind: EVIDENCE_KIND,
+        methods: EVIDENCE_METHODS,
+        binds: ['briefId', 'stateFingerprint', 'checkpoint', 'targetHashes'],
+      },
       requiredArtifacts: [
-        'assets/**/*.scene',
+        targetEntryScene,
         'assets/script/**/*.ts',
         'assets/resources/playable-config.json',
         'build/common/**/*.html',
@@ -233,6 +326,8 @@ async function initCorePort(options, dependencies = {}) {
   const unityRoot = validateUnityRoot(options.unityProject);
   const cocosRoot = validateCocosRoot(options.cocosProject);
   const runPreflight = dependencies.runPreflight || runUnityPortPreflight;
+  const progress = dependencies.onProgress || (() => {});
+  progress({ stage: 'preflight', status: 'start' });
   const result = await runPreflight({
     project: unityRoot,
     provider: options.provider || 'auto',
@@ -240,6 +335,7 @@ async function initCorePort(options, dependencies = {}) {
     profile: 'playable-core',
     intent: 'project',
   });
+  progress({ stage: 'preflight', status: 'complete' });
   const brief = result.brief;
   if (!brief.decision.implementationAllowed) {
     throw corePortError('CORE_PORT_PREFLIGHT_BLOCKED', 'Unity preflight dang co hard blocker.', {
@@ -250,12 +346,18 @@ async function initCorePort(options, dependencies = {}) {
     throw corePortError('CORE_PORT_ENTRY_REQUIRED', 'Khong chon duoc duy nhat gameplay entry scene; can bounded scene decision.');
   }
   const file = manifestPath(cocosRoot, options.manifest);
-  if (fs.existsSync(file) && !options.force) {
+  const existed = fs.existsSync(file);
+  const expectedHash = existed ? hashFile(file) : null;
+  if (existed && !options.force) {
     throw corePortError('CORE_PORT_MANIFEST_EXISTS', `Manifest da ton tai: ${relativeSlash(cocosRoot, file)}. Dung --force neu muon tao lai.`);
   }
   brief.coreGameplayCheckpointEvidence = checkpointSourcesFromBrief(brief);
   const manifest = createManifest(brief);
-  if (!options.dryRun) atomicWriteJson(cocosRoot, file, manifest);
+  if (!options.dryRun) {
+    progress({ stage: 'manifest', status: 'start' });
+    atomicWriteJson(cocosRoot, file, manifest, { force: !!options.force, expectedHash });
+    progress({ stage: 'manifest', status: 'complete' });
+  }
   return {
     ok: true,
     command: 'init',
@@ -283,47 +385,140 @@ function readJsonBounded(file, maxBytes, code) {
   }
 }
 
+function arraysEqual(left, right) {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+function validateLogicalPath(value, kind) {
+  if (typeof value !== 'string' || value.length < 1 || value.length > MAX_PATH_CHARS ||
+      value.includes('\\') || /[\0-\x1f]/.test(value) || path.posix.isAbsolute(value) ||
+      path.win32.isAbsolute(value) || path.posix.normalize(value) !== value || value.split('/').includes('..')) {
+    throw corePortError('CORE_PORT_MANIFEST_INVALID', `${kind} evidence path khong an toan.`);
+  }
+  if (kind === 'source' && !/^(?:Assets|Packages)\//.test(value)) {
+    throw corePortError('CORE_PORT_MANIFEST_INVALID', 'Source evidence chi duoc nam trong Assets/ hoac Packages/.');
+  }
+  if (kind === 'target' && !/^assets\//.test(value)) {
+    throw corePortError('CORE_PORT_MANIFEST_INVALID', 'Target evidence chi duoc nam trong assets/.');
+  }
+  if (kind === 'verification' && !/^\.ai\/port\/evidence\/.+\.json$/i.test(value)) {
+    throw corePortError('CORE_PORT_MANIFEST_INVALID', 'Verification evidence chi duoc nam trong .ai/port/evidence/*.json.');
+  }
+  return value;
+}
+
+function validatePathArray(value, kind, checkpointId) {
+  if (!Array.isArray(value) || value.length > MAX_EVIDENCE_PATHS || new Set(value).size !== value.length) {
+    throw corePortError('CORE_PORT_MANIFEST_INVALID', `${checkpointId}: ${kind} evidence phai unique va <=${MAX_EVIDENCE_PATHS}.`);
+  }
+  for (const item of value) validateLogicalPath(item, kind);
+}
+
 function validateManifest(cocosRoot, file) {
   const manifest = readJsonBounded(file, MAX_MANIFEST_BYTES, 'CORE_PORT_MANIFEST_INVALID');
   if (manifest.schemaVersion !== MANIFEST_SCHEMA_VERSION || manifest.kind !== MANIFEST_KIND ||
-      manifest.profile !== 'playable-core' || !manifest.source || !Array.isArray(manifest.checkpoints)) {
+      manifest.profile !== 'playable-core' || !manifest.source || !manifest.delivery || !Array.isArray(manifest.checkpoints)) {
     throw corePortError('CORE_PORT_MANIFEST_INVALID', 'Manifest sai schema/kind/profile.');
   }
-  if (manifest.checkpoints.length !== 9 || new Set(manifest.checkpoints.map(item => item.id)).size !== 9) {
-    throw corePortError('CORE_PORT_MANIFEST_INVALID', 'Manifest phai co dung 9 fidelity checkpoints.');
+  for (const key of ['briefId', 'receiptId', 'projectFingerprint', 'stateFingerprint', 'entryScene']) {
+    if (typeof manifest.source[key] !== 'string' || !manifest.source[key] || manifest.source[key].length > MAX_PATH_CHARS) {
+      throw corePortError('CORE_PORT_MANIFEST_INVALID', `Manifest source.${key} khong hop le.`);
+    }
   }
-  for (const checkpoint of manifest.checkpoints) {
-    if (!Number.isInteger(checkpoint.weight) || checkpoint.weight < 1 || checkpoint.weight > 100 ||
+  validateLogicalPath(manifest.source.entryScene, 'source');
+  if (manifest.delivery.minimumFidelity !== 80 || manifest.delivery.targetFidelity !== 90) {
+    throw corePortError('CORE_PORT_MANIFEST_INVALID', 'Fidelity threshold bi thay doi; minimum/target bat buoc la 80/90.');
+  }
+  const evidenceContract = manifest.delivery.evidenceContract;
+  if (!evidenceContract || evidenceContract.schemaVersion !== EVIDENCE_SCHEMA_VERSION ||
+      evidenceContract.kind !== EVIDENCE_KIND || !arraysEqual(evidenceContract.methods || [], EVIDENCE_METHODS) ||
+      !arraysEqual(evidenceContract.binds || [], ['briefId', 'stateFingerprint', 'checkpoint', 'targetHashes'])) {
+    throw corePortError('CORE_PORT_MANIFEST_INVALID', 'Checkpoint evidence contract bi thay doi.');
+  }
+  validateLogicalPath(manifest.delivery.targetEntryScene, 'target');
+  if (!manifest.delivery.targetEntryScene.endsWith('.scene')) {
+    throw corePortError('CORE_PORT_MANIFEST_INVALID', 'delivery.targetEntryScene phai la Cocos .scene.');
+  }
+  const expectedArtifacts = [
+    manifest.delivery.targetEntryScene,
+    'assets/script/**/*.ts',
+    'assets/resources/playable-config.json',
+    'build/common/**/*.html',
+  ];
+  const expectedGates = REQUIRED_SCRIPTS.map(item => item.id);
+  if (!Array.isArray(manifest.delivery.requiredArtifacts) ||
+      !arraysEqual(manifest.delivery.requiredArtifacts, expectedArtifacts) ||
+      !Array.isArray(manifest.delivery.requiredGates) ||
+      !arraysEqual(manifest.delivery.requiredGates, expectedGates)) {
+    throw corePortError('CORE_PORT_MANIFEST_INVALID', 'Runnable artifact/gate contract bi thay doi.');
+  }
+  if (manifest.checkpoints.length !== FIDELITY_CHECKPOINTS.length ||
+      new Set(manifest.checkpoints.map(item => item.id)).size !== FIDELITY_CHECKPOINTS.length) {
+    throw corePortError('CORE_PORT_MANIFEST_INVALID', `Manifest phai co dung ${FIDELITY_CHECKPOINTS.length} fidelity checkpoints.`);
+  }
+  for (let index = 0; index < FIDELITY_CHECKPOINTS.length; index += 1) {
+    const expected = FIDELITY_CHECKPOINTS[index];
+    const checkpoint = manifest.checkpoints[index];
+    if (checkpoint.id !== expected.id || checkpoint.weight !== expected.weight ||
+        checkpoint.mandatory !== expected.mandatory ||
         !['pending', 'pass', 'fail', 'out-of-scope'].includes(checkpoint.status) ||
         !Array.isArray(checkpoint.sourceEvidence) || !Array.isArray(checkpoint.targetEvidence) ||
         !Array.isArray(checkpoint.verificationEvidence)) {
       throw corePortError('CORE_PORT_MANIFEST_INVALID', `Checkpoint khong hop le: ${checkpoint.id}`);
     }
+    validatePathArray(checkpoint.sourceEvidence, 'source', checkpoint.id);
+    validatePathArray(checkpoint.targetEvidence, 'target', checkpoint.id);
+    validatePathArray(checkpoint.verificationEvidence, 'verification', checkpoint.id);
   }
-  const totalWeight = manifest.checkpoints.reduce((sum, item) => sum + item.weight, 0);
-  if (totalWeight !== 100) throw corePortError('CORE_PORT_MANIFEST_INVALID', 'Tong fidelity weight phai bang 100.');
   return manifest;
 }
 
 function safeUnityEvidence(unityRoot, logical) {
   const normalized = String(logical || '').replace(/\\/g, '/');
   if (!/^(?:Assets|Packages)\//.test(normalized) || normalized.includes('../')) return false;
-  const candidate = path.resolve(unityRoot, ...normalized.split('/'));
-  if (!isPathInside(unityRoot, candidate) || !fs.existsSync(candidate)) return false;
-  const stat = fs.lstatSync(candidate);
-  if (stat.isSymbolicLink() || !stat.isFile()) return false;
-  return isPathInside(fs.realpathSync.native(unityRoot), fs.realpathSync.native(candidate));
+  try {
+    const candidate = resolveContained(unityRoot, normalized, { mustExist: true });
+    return fs.statSync(candidate).isFile();
+  } catch (_) { return false; }
 }
 
-function runtimeEvidencePasses(cocosRoot, relative, checkpointId) {
+function currentTargetHashes(cocosRoot, targetEvidence) {
+  const hashes = [];
+  for (const relative of [...targetEvidence].sort()) {
+    let file;
+    try { file = resolveContained(cocosRoot, relative, { mustExist: true }); } catch (_) { return null; }
+    const stat = fs.statSync(file);
+    if (!stat.isFile()) return null;
+    hashes.push({ path: relative, sha256: hashFile(file) });
+  }
+  return hashes;
+}
+
+function boundedObservation(value) {
+  return typeof value === 'string' && value.trim().length >= 8 && value.length <= MAX_OBSERVATION_CHARS &&
+    !/[\0-\x08\x0b\x0c\x0e-\x1f]/.test(value);
+}
+
+function checkpointEvidencePasses(cocosRoot, relative, checkpoint, manifest) {
   let file;
   try { file = resolveContained(cocosRoot, relative, { mustExist: true }); } catch (_) { return false; }
   let payload;
   try { payload = readJsonBounded(file, MAX_EVIDENCE_BYTES, 'CORE_PORT_EVIDENCE_INVALID'); } catch (_) { return false; }
-  if (payload.ok !== true) return false;
-  if (payload.checkpoint === checkpointId) return true;
-  if (Array.isArray(payload.checkpoints) && payload.checkpoints.includes(checkpointId)) return true;
-  return !!(payload.results && payload.results[checkpointId] && payload.results[checkpointId].ok === true);
+  if (payload.schemaVersion !== EVIDENCE_SCHEMA_VERSION || payload.kind !== EVIDENCE_KIND || payload.ok !== true ||
+      payload.checkpoint !== checkpoint.id || payload.briefId !== manifest.source.briefId ||
+      payload.stateFingerprint !== manifest.source.stateFingerprint || !EVIDENCE_METHODS.includes(payload.method) ||
+      !payload.observations || !boundedObservation(payload.observations.source) ||
+      !boundedObservation(payload.observations.target) || !Array.isArray(payload.targetHashes)) return false;
+  if (payload.method === 'visual' && !VISUAL_ONLY_ALLOWED.has(checkpoint.id)) return false;
+  if (checkpoint.mandatory && payload.method === 'visual') return false;
+  const current = currentTargetHashes(cocosRoot, checkpoint.targetEvidence);
+  if (!current || payload.targetHashes.length !== current.length) return false;
+  if (payload.targetHashes.some(item => !item || typeof item !== 'object')) return false;
+  const projected = payload.targetHashes
+    .map(item => ({ path: item.path, sha256: item.sha256 }))
+    .sort((left, right) => String(left.path).localeCompare(String(right.path)));
+  return projected.every((item, index) => item.path === current[index].path &&
+    typeof item.sha256 === 'string' && /^[a-f0-9]{64}$/.test(item.sha256) && item.sha256 === current[index].sha256);
 }
 
 function evaluateFidelity(manifest, unityRoot, cocosRoot) {
@@ -340,7 +535,7 @@ function evaluateFidelity(manifest, unityRoot, cocosRoot) {
       } catch (_) { return false; }
     });
     const verification = checkpoint.verificationEvidence.length > 0 &&
-      checkpoint.verificationEvidence.some(item => runtimeEvidencePasses(cocosRoot, item, checkpoint.id));
+      checkpoint.verificationEvidence.some(item => checkpointEvidencePasses(cocosRoot, item, checkpoint, manifest));
     const grounded = checkpoint.status === 'pass' && source && target && verification;
     if (grounded) score += checkpoint.weight;
     items.push({
@@ -362,16 +557,23 @@ function redactOutput(value, roots) {
     output = output.split(root).join('<project>');
     output = output.split(root.replace(/\\/g, '/')).join('<project>');
   }
+  output = output
+    .replace(/(["']?authorization["']?\s*:\s*["']?(?:bearer\s+)?)[^\s"',}]+/gi, '$1<redacted>')
+    .replace(/(["']?(?:api[_-]?key|token|secret|password)["']?\s*[=:]\s*["']?)[^\s"',}]+/gi, '$1<redacted>');
   return output.trim().split(/\r?\n/).slice(-8).join('\n').slice(-2000);
 }
 
 function runRequiredGates(cocosRoot, options = {}) {
-  const packageJson = JSON.parse(fs.readFileSync(path.join(cocosRoot, 'package.json'), 'utf8'));
+  const packageFile = resolveContained(cocosRoot, 'package.json', { mustExist: true });
+  const packageJson = readJsonBounded(packageFile, MAX_PACKAGE_BYTES, 'CORE_PORT_PACKAGE_INVALID');
   const scripts = packageJson.scripts || {};
+  if (!scripts || typeof scripts !== 'object' || Array.isArray(scripts)) {
+    throw corePortError('CORE_PORT_PACKAGE_INVALID', 'package.json scripts khong hop le.');
+  }
   const executable = process.platform === 'win32' ? 'npm.cmd' : 'npm';
   const results = [];
   for (const gate of REQUIRED_SCRIPTS) {
-    if (!scripts[gate.script]) {
+    if (typeof scripts[gate.script] !== 'string' || !scripts[gate.script].trim()) {
       results.push({ id: gate.id, ok: false, code: 'script-missing', script: gate.script });
       break;
     }
@@ -380,16 +582,23 @@ function runRequiredGates(cocosRoot, options = {}) {
       encoding: 'utf8',
       windowsHide: true,
       timeout: options.timeoutMs || GATE_TIMEOUT_MS,
-      maxBuffer: 8 * 1024 * 1024,
+      maxBuffer: GATE_MAX_BUFFER_BYTES,
       shell: false,
     });
     const ok = child.status === 0 && !child.error;
+    const timedOut = !!(child.error && child.error.code === 'ETIMEDOUT');
     results.push({
       id: gate.id,
       script: gate.script,
       ok,
       exitCode: Number.isInteger(child.status) ? child.status : null,
-      output: ok ? undefined : redactOutput(`${child.stdout || ''}\n${child.stderr || ''}\n${child.error || ''}`, [cocosRoot]),
+      signal: child.signal || undefined,
+      timedOut: timedOut || undefined,
+      code: child.error && child.error.code || undefined,
+      output: ok ? undefined : redactOutput(
+        `${child.stdout || ''}\n${child.stderr || ''}\n${child.error || ''}`,
+        [cocosRoot, ...(options.redactRoots || [])],
+      ),
     });
     if (!ok) break;
   }
@@ -397,6 +606,8 @@ function runRequiredGates(cocosRoot, options = {}) {
 }
 
 function hasArtifact(root, predicate) {
+  if (!fs.existsSync(root)) return false;
+  const boundary = fs.realpathSync.native(root);
   const stack = [root];
   while (stack.length) {
     const current = stack.pop();
@@ -404,7 +615,12 @@ function hasArtifact(root, predicate) {
     try { entries = fs.readdirSync(current, { withFileTypes: true }); } catch (_) { continue; }
     for (const entry of entries) {
       const full = path.join(current, entry.name);
-      if (entry.isSymbolicLink()) continue;
+      let stat;
+      try { stat = fs.lstatSync(full); } catch (_) { continue; }
+      if (stat.isSymbolicLink()) continue;
+      let real;
+      try { real = fs.realpathSync.native(full); } catch (_) { continue; }
+      if (!isPathInside(boundary, real)) continue;
       if (entry.isDirectory()) { stack.push(full); continue; }
       if (predicate(full)) return true;
     }
@@ -412,13 +628,23 @@ function hasArtifact(root, predicate) {
   return false;
 }
 
-function inspectRequiredArtifacts(cocosRoot) {
+function existingContainedFile(root, relative) {
+  try {
+    const file = resolveContained(root, relative, { mustExist: true });
+    return fs.statSync(file).isFile();
+  } catch (_) { return false; }
+}
+
+function inspectRequiredArtifacts(cocosRoot, manifest) {
   const assets = path.join(cocosRoot, 'assets');
-  const config = path.join(assets, 'resources', 'playable-config.json');
+  const mandatoryTargets = manifest.checkpoints
+    .filter(item => item.mandatory)
+    .flatMap(item => item.targetEvidence)
+    .filter(item => /^assets\/script\/.+\.ts$/i.test(item));
   return {
-    scene: hasArtifact(assets, file => file.endsWith('.scene')),
-    gameplayScript: hasArtifact(path.join(assets, 'script'), file => file.endsWith('.ts')),
-    config: fs.existsSync(config) && fs.statSync(config).isFile(),
+    scene: existingContainedFile(cocosRoot, manifest.delivery.targetEntryScene),
+    gameplayScript: mandatoryTargets.length > 0 && mandatoryTargets.every(item => existingContainedFile(cocosRoot, item)),
+    config: existingContainedFile(cocosRoot, 'assets/resources/playable-config.json'),
     builtHtml: hasArtifact(path.join(cocosRoot, 'build', 'common'), file => /\.html?$/i.test(file)),
   };
 }
@@ -438,9 +664,12 @@ function verifyCorePort(options, dependencies = {}) {
   const fidelity = evaluateFidelity(manifest, unityRoot, cocosRoot);
   const gateResults = options.runGates === false
     ? []
-    : (dependencies.runGates || runRequiredGates)(cocosRoot, dependencies.gateOptions || {});
+    : (dependencies.runGates || runRequiredGates)(cocosRoot, {
+      ...(dependencies.gateOptions || {}),
+      redactRoots: [unityRoot, ...((dependencies.gateOptions && dependencies.gateOptions.redactRoots) || [])],
+    });
   const gatesPassed = gateResults.length === REQUIRED_SCRIPTS.length && gateResults.every(item => item.ok);
-  const artifacts = inspectRequiredArtifacts(cocosRoot);
+  const artifacts = inspectRequiredArtifacts(cocosRoot, manifest);
   const artifactsPassed = Object.values(artifacts).every(Boolean);
   const accepted = gatesPassed && artifactsPassed && fidelity.mandatoryPassed && fidelity.score >= fidelity.minimum;
   return {
@@ -449,11 +678,13 @@ function verifyCorePort(options, dependencies = {}) {
     accepted,
     runnable: { passed: gatesPassed && artifactsPassed, gatesRun: options.runGates !== false, gates: gateResults, artifacts },
     fidelity,
+    evidenceContract: manifest.delivery.evidenceContract,
     claim: accepted
       ? `Core gameplay accepted at ${fidelity.score}/100 (target ${fidelity.target}).`
       : 'Do not claim 80-90% fidelity or runnable delivery until every reported gate passes.',
     nextActions: [
-      ...fidelity.items.filter(item => !item.grounded).slice(0, 5).map(item => `Add grounded evidence for ${item.id}: ${item.missing.join(', ')}`),
+      ...fidelity.items.filter(item => !item.grounded).slice(0, 5).map(item =>
+        `Add schema-v${EVIDENCE_SCHEMA_VERSION} ${item.mandatory ? 'runtime' : 'runtime/visual'} evidence for ${item.id}: ${item.missing.join(', ')}`),
       ...gateResults.filter(item => !item.ok).map(item => `Fix ${item.id}`),
       ...Object.entries(artifacts).filter(([, ok]) => !ok).map(([id]) => `Create/import ${id}`),
     ].slice(0, 8),
@@ -470,7 +701,12 @@ async function main() {
   try {
     const options = parseArgs(process.argv.slice(2));
     if (options.help) { console.log(USAGE); return; }
-    const result = await execute(options);
+    const startedAt = Date.now();
+    const result = await execute(options, {
+      onProgress(event) {
+        console.error(`[core-port] ${event.stage}:${event.status} ${Date.now() - startedAt}ms`);
+      },
+    });
     console.log(JSON.stringify(result, null, options.json ? 0 : 2));
     if (!result.ok) process.exitCode = 1;
   } catch (error) {
@@ -485,17 +721,25 @@ if (require.main === module) main();
 module.exports = {
   MANIFEST_SCHEMA_VERSION,
   MANIFEST_KIND,
+  EVIDENCE_SCHEMA_VERSION,
+  EVIDENCE_KIND,
   DEFAULT_MANIFEST,
   MAX_MANIFEST_BYTES,
+  MAX_EVIDENCE_BYTES,
   REQUIRED_SCRIPTS,
   parseArgs,
   validateUnityRoot,
   validateCocosRoot,
   resolveContained,
+  hashFile,
+  atomicWriteJson,
+  targetScenePath,
   createManifest,
   checkpointSourcesFromBrief,
   initCorePort,
   validateManifest,
+  currentTargetHashes,
+  checkpointEvidencePasses,
   evaluateFidelity,
   runRequiredGates,
   inspectRequiredArtifacts,

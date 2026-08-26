@@ -23,6 +23,8 @@ const PROJECTS = [
     },
     rawMinimums: { scenes: 30, prefabs: 180, scripts: 800 },
     minimumEdges: 3000,
+    maximumWarmMs: 20000,
+    maximumCoreRatio: 0.2,
   },
   {
     name: 'CatSmash',
@@ -43,6 +45,8 @@ const PROJECTS = [
     },
     rawMinimums: { scenes: 35, prefabs: 220, scripts: 500, models: 80 },
     minimumEdges: 3000,
+    maximumWarmMs: 20000,
+    maximumCoreRatio: 0.2,
     requiredResolvedPackages: ['com.google.firebase.analytics', 'com.google.firebase.app'],
   },
   {
@@ -58,6 +62,8 @@ const PROJECTS = [
     },
     rawMinimums: { scenes: 15, prefabs: 350, scripts: 800, sceneObjects: 19000 },
     minimumEdges: 12000,
+    maximumWarmMs: 20000,
+    maximumCoreRatio: 0.2,
     requiredResolvedPackages: ['com.google.external-dependency-manager'],
   },
 ];
@@ -89,13 +95,17 @@ async function main() {
   const results = [];
   try {
     for (const expected of PROJECTS) {
+      const projectStartedAt = Date.now();
+      console.error(`[unity-intel-samples] ${expected.name}:cold-scan:start`);
       const projectRoot = path.join(corpusRoot, expected.name);
       const assets = path.join(projectRoot, 'Assets');
       assert.ok(fs.existsSync(assets), `Thiếu sample ${expected.name}: ${assets}`);
       const options = { projectRoot, sourceRoot: assets, cacheDir };
       const cold = buildUnityProjectSnapshot(options);
+      console.error(`[unity-intel-samples] ${expected.name}:cold-scan:complete ${Math.round(cold.metrics.durationMs)}ms`);
       const phase3Scan = await scanUnityProject({ project: projectRoot, provider: 'static', cacheDir });
       const warm = phase3Scan.snapshot;
+      console.error(`[unity-intel-samples] ${expected.name}:warm-scan:complete ${Math.round(warm.metrics.durationMs)}ms`);
       const briefInput = { project: projectRoot, intent: 'project', now: 0 };
       const brief = createImplementationBrief(phase3Scan, briefInput);
       const repeatedBrief = createImplementationBrief(phase3Scan, briefInput);
@@ -106,6 +116,8 @@ async function main() {
       assert.equal(warm.cache.mode, 'warm');
       assert.equal(warm.cache.misses, 0);
       assert.equal(warm.cache.hits, cold.assets.count);
+      assert.ok(warm.metrics.durationMs <= expected.maximumWarmMs,
+        `${expected.name}: warm scan ${warm.metrics.durationMs}ms > ${expected.maximumWarmMs}ms`);
       assert.deepEqual(
         cold.buildScenes.filter(scene => scene.enabled).map(scene => scene.path),
         expected.enabledScenes
@@ -150,6 +162,9 @@ async function main() {
       assert.equal(brief.coreGameplay.acceptance.weights.reduce((sum, item) => sum + item[1], 0), 100);
       assert.ok(brief.coreGameplay.closure.includedCount < cold.assets.projectCount,
         `${expected.name}: core closure không giảm scope project`);
+      const coreRatio = brief.coreGameplay.closure.includedCount / cold.assets.projectCount;
+      assert.ok(coreRatio <= expected.maximumCoreRatio,
+        `${expected.name}: core closure ratio ${coreRatio.toFixed(3)} > ${expected.maximumCoreRatio}`);
       const routedEvidence = JSON.stringify(brief.features.flatMap(feature => feature.evidence || [])).toLowerCase();
       for (const forbidden of ['/editor/', '/dailylogin/', '/shop/', 'mainmenu']) {
         assert.equal(routedEvidence.includes(forbidden), false,
@@ -206,8 +221,11 @@ async function main() {
           coreEntry: brief.coreGameplay.entry.primary,
           corePaths: brief.coreGameplay.closure.includedCount,
           coreObligations: brief.decision.coreObligationCount,
+          coreRatio: Number(coreRatio.toFixed(4)),
         },
+        warmSpeedup: Number((cold.metrics.durationMs / Math.max(1, warm.metrics.durationMs)).toFixed(1)),
       });
+      console.error(`[unity-intel-samples] ${expected.name}:pass ${Date.now() - projectStartedAt}ms`);
     }
   } finally {
     fs.rmSync(cacheDir, { recursive: true, force: true });
