@@ -3,7 +3,11 @@
 const path = require('node:path');
 
 const { buildUnityProjectSnapshot, findUnityProjectRoot } = require('./project-index.cjs');
-const { doctorUnityEditor } = require('./unity-editor.cjs');
+const {
+  doctorUnityEditor,
+  readUnityCompileDiagnostics,
+  refreshOpenUnityEditor,
+} = require('./unity-editor.cjs');
 const {
   rollbackUnityMcpPackages,
   SCANNER_PACKAGE_VERSION,
@@ -310,6 +314,8 @@ async function waitAndScan(provider, connection, fingerprint, options) {
 const BOOTSTRAP_SCANNER_RETRY_CODES = new Set([
   'UNITY_SCANNER_VERSION_MISMATCH',
   'UNITY_SCANNER_CAPABILITY_MISSING',
+  'UNITY_MCP_NOT_READY',
+  'UNITY_MCP_NETWORK_ERROR',
 ]);
 
 async function waitForBootstrapScannerPatch(
@@ -647,6 +653,17 @@ async function scanUnityProject(input = {}, injected = {}) {
       configTransaction = config;
       connection = { url: config.url, token: config.token, source: 'managed-project-config' };
 
+      if (doctor.canAttach && (setup.changed || config.changed)) {
+        // An open Editor may have Auto Refresh disabled. Dispatch Unity's own
+        // Assets > Refresh command to the PID recorded by this exact project;
+        // the helper revalidates the process command line before sending keys.
+        // Mark reload ownership ambiguous first because Unity can observe the
+        // manifest mutation independently of this best-effort signal.
+        bootstrapReloadStarted = true;
+        const refreshEditor = injected.refreshOpenEditor || refreshOpenUnityEditor;
+        await Promise.resolve(refreshEditor(projectRoot));
+      }
+
       if (doctor.canLaunch) {
         const runBatch = injected.runBatch || runUnityBatchScan;
         bootstrapReloadStarted = true;
@@ -828,6 +845,24 @@ async function scanUnityProject(input = {}, injected = {}) {
       // PackageManager/NuGet/settings byte. Preserve the whole setup generation
       // (manifest + config included) rather than risk deleting a concurrent user file.
       error.rollback = { preserved: true, reason: 'reload-started-ownership-ambiguous' };
+    }
+    if (input.bootstrap && [
+      'UNITY_MCP_TIMEOUT',
+      'UNITY_MCP_NOT_READY',
+      'UNITY_MCP_NETWORK_ERROR',
+      'UNITY_MCP_HTTP_ERROR',
+      'UNITY_MCP_UNAVAILABLE',
+    ].includes(error.code)) {
+      const readCompileDiagnostics = injected.readCompileDiagnostics || readUnityCompileDiagnostics;
+      const compile = readCompileDiagnostics(projectRoot);
+      if (compile && compile.count > 0) {
+        const causeCode = error.code;
+        const examples = compile.evidence.slice(0, 2).join(' | ');
+        error.code = 'UNITY_PROJECT_COMPILE_ERRORS';
+        error.message = `Unity project có ${compile.count} compile error trong bounded log tail; ` +
+          `domain reload/scanner bị chặn. ${examples}`;
+        error.details = { ...(error.details || {}), causeCode, compile };
+      }
     }
     if (providerMode === 'unity-mcp' || input.bootstrap) {
       if (!error.code) error.code = 'UNITY_MCP_SCAN_FAILED';

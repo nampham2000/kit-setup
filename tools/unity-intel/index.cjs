@@ -16,6 +16,7 @@ module.exports = {
   ...require('./snapshot-merge.cjs'),
   ...require('./compact-projection.cjs'),
   ...require('./feature-sketch.cjs'),
+  ...require('./core-gameplay-scope.cjs'),
   ...require('./unity-editor.cjs'),
   ...require('./unity-bootstrap.cjs'),
   ...require('./unity-bootstrap-footprint.cjs'),

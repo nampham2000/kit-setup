@@ -4,7 +4,7 @@
     "source": "playable-shared-kit/ai/capabilities.def.cjs",
     "generatedBy": "npm run ai:sync",
     "contractCheck": "npm run ai:contract:verify",
-    "count": 36
+    "count": 38
   },
   "coreRules": [
     {
@@ -17,7 +17,7 @@
     },
     {
       "id": "verify-gate",
-      "rule": "Sau mọi lần sửa code hoặc port: chạy `npm run ai:verify` và `npm run ai:lint`. Phải sạch trước khi kết thúc lượt trả lời."
+      "rule": "Sau mọi lần sửa code hoặc port: chạy `npm run ai:verify` và `npm run ai:lint`. Với port core Unity, còn phải chạy `npm run ai:port:core:verify` và chỉ kết luận runnable/fidelity khi acceptance pass."
     },
     {
       "id": "canonical-paths",
@@ -32,12 +32,16 @@
       "rule": "Tool báo thành công KHÔNG đồng nghĩa kết quả đúng. Luôn mở ít nhất một file sinh ra để đối chiếu với nguồn trước khi kết luận."
     },
     {
+      "id": "playable-core-first",
+      "rule": "Mặc định chỉ port core gameplay closure từ `coreGameplay`: input, luật/state, movement/physics, spawn/timing, win-lose-restart và feedback cần để đạt fidelity. Main menu, shop/IAP, meta screen, persistence dài hạn và online SDK phải defer/replace; không đưa source implementation đó vào playable. Chỉ dùng full-project khi user yêu cầu rõ."
+    },
+    {
       "id": "meta-files",
       "rule": "Không sửa tay file `.meta`. Luôn đi qua tool hoặc Cocos editor để giữ UUID nhất quán."
     },
     {
       "id": "unity-preflight",
-      "rule": "Trước khi agent đọc raw Unity source hoặc chạy bất kỳ port tool có ghi output, BẮT BUỘC chạy `npm run ai:port:preflight -- --project <UnityProjectRoot>` (hoặc MCP `scanUnityProject`) và đọc `decision`, `features`, `obligationIndex`, `obligations`. Chỉ query evidence bounded khi brief yêu cầu. Hard blocker chặn implement; mọi source high còn lại phải có action + verification và phải được giải quyết hoặc chứng minh out-of-scope trước khi hoàn tất. Mutation receipt chỉ áp dụng cho Assets/package root đã khai báo; closure staging ngoài project phải có exact provenance và explicit --unity-project.",
+      "rule": "Trước khi agent đọc raw Unity source hoặc chạy bất kỳ port tool có ghi output, BẮT BUỘC chạy `npm run ai:port:preflight -- --project <UnityProjectRoot>` (hoặc MCP `scanUnityProject`) và đọc `decision`, `coreGameplay`, `features`, `obligationIndex`, `coreObligationIndex`, `obligations`. Chỉ query evidence bounded khi brief yêu cầu. Hard blocker chặn implement; source high trong core/adapter phải được giải quyết, source high deferred phải có explicit out-of-scope disposition. Mutation receipt chỉ áp dụng cho Assets/package root đã khai báo; closure staging ngoài project phải có exact provenance và explicit --unity-project.",
       "agentContract": {
         "entrypoints": [
           "port.preflight"
@@ -45,8 +49,10 @@
         "mcpEntrypoint": "scanUnityProject",
         "mustConsume": [
           "decision",
+          "coreGameplay",
           "features",
           "obligationIndex",
+          "coreObligationIndex",
           "obligations",
           "receiptId"
         ],
@@ -55,8 +61,8 @@
           "port-implementation"
         ],
         "evidenceQuery": "unity.intel.query",
-        "sourceHighPolicy": "disposition-required",
-        "completionHighPolicy": "agent-disposition-required"
+        "sourceHighPolicy": "full-audit-core-route-or-explicit-defer",
+        "completionHighPolicy": "core-acceptance-required"
       }
     }
   ],
@@ -159,9 +165,10 @@
           "Có sửa `Packages/manifest.json` và `UserSettings/AI-Game-Developer-Config.json`; manifest có exact-byte backup + CAS transaction.",
           "Không khởi chạy Unity instance thứ hai khi UnityLockfile đang bị giữ và không kill Editor của người dùng.",
           "Project đóng chỉ được batch-launch khi có đúng Unity version khai báo; không âm thầm dùng version gần nhất.",
-          "Compile error có sẵn trong Unity project có thể chặn package import/executeMethod; tool chỉ coi marker JSON hợp lệ là thành công, không tin exit code 0.",
+          "Compile error có sẵn trong Unity project có thể chặn package import/executeMethod; setup đọc bounded Editor.log tail theo đúng WorkingDir và trả UNITY_PROJECT_COMPILE_ERRORS với evidence gọn, không nạp toàn bộ log. Tool chỉ coi marker JSON hợp lệ là thành công, không tin exit code 0.",
           "Bootstrap scan đầu chỉ xác nhận import/domain reload. Tool rebuild static baseline rồi bắt buộc scan xác nhận lần hai; marker đầu không bao giờ authorize implement.",
-          "Editor đang mở có thể vẫn trả scanner cũ trong lúc domain reload; readiness call không gửi field candidate mới, retry version/capability mismatch đến deadline và chỉ chấp nhận đúng package 0.3.0, protocol 1, cùng candidateDisposition khi request có candidate.",
+          "Khi manifest/config đổi và Editor Windows đang mở, setup đọc EditorInstance.json rồi kiểm tra lại PID + exact -projectPath trước khi tự gửi Assets > Refresh; không gửi phím nếu metadata stale/mismatch. Platform không hỗ trợ vẫn dùng file watcher/readiness fail-closed.",
+          "Editor đang mở có thể vẫn trả scanner cũ hoặc HTTP 502/503/504 trong lúc domain reload; readiness call không gửi field candidate mới, retry transient/version/capability mismatch đến deadline và chỉ chấp nhận đúng package 0.3.0, protocol 1, cùng candidateDisposition khi request có candidate.",
           "Trước reload, manifest/config rollback theo CAS và chỉ mutate sau khi tất cả target cùng qua validation. Sau khi reload bắt đầu, ownership có thể đã đổi nên tool fail-preserve toàn bộ setup generation; sửa compile/import error rồi chạy lại setup.",
           "Unity Editor disposition tối đa 512 unresolved GUID + 96 serialized asset paths; partial/truncated reference evidence không được clear source high.",
           "Live scanner duyệt nested/list SerializedProperty trên mọi sub-asset; reference evidence dùng GUID + local file ID, có budget toàn scan 512 reference/256 KiB và candidate array 768 KiB. Non-null reference không biểu diễn được buộc disposition partial.",
@@ -172,7 +179,7 @@
       },
       {
         "id": "port.preflight",
-        "title": "Unity port preflight: compact feature brief + high routing + fresh mutation receipt",
+        "title": "Unity port preflight: playable-core brief + full high audit + fresh mutation receipt",
         "run": "npm run ai:port:preflight -- --project <UnityProjectRoot>",
         "command": "node playable-shared-kit/tools/unity-intel-cli.cjs preflight --json --project <UnityProjectRoot>",
         "optional": [
@@ -180,6 +187,7 @@
           "--bootstrap",
           "--intent <kind>",
           "--target <logical-path-or-symbol>",
+          "--profile <playable-core|full-project>",
           "--unity <file>",
           "--mcp-url <url>",
           "--timeout-ms <n>",
@@ -188,9 +196,9 @@
           "--no-cache",
           "--refresh-cache"
         ],
-        "when": "BƯỚC DUY NHẤT đầu tiên trước khi agent đọc Unity source hoặc chạy tool có ghi output. Tự scan, phác thảo feature, định tuyến mọi high và cấp receipt theo state source.",
+        "when": "BƯỚC DUY NHẤT đầu tiên trước khi agent đọc Unity source hoặc chạy tool có ghi output. Mặc định chọn gameplay scene/closure, loại menu-shop-online khỏi implementation route, giữ full high audit và cấp receipt theo source state.",
         "outputs": [
-          "stdout JSON <=12 KiB: decision, feature plan, all-code/count obligationIndex, routed high details, implementation/verification routes và receiptId"
+          "stdout JSON <=12 KiB: decision, coreGameplay entry/closure/exclusions/80-90 acceptance, core features, full obligationIndex, coreObligationIndex, routes và receiptId"
         ],
         "limits": [
           "Mặc định không ghi Unity/Cocos project; receipt atomic <=4 KiB nằm trong user-local cache. Chỉ --bootstrap mới cài/reload Unity package.",
@@ -201,8 +209,36 @@
           "Directory walker/cache fail-closed với symlink, reparse point, absolute/traversal path; mọi --dry-run dừng trước mkdir, meta, converter và output write.",
           "Live candidate disposition là all-or-nothing theo bounded request: resolved GUID phải có path + complete dependency mappings; serialized asset phải có complete SerializedObject/reference evidence. Missing/partial trở thành authoritative live high.",
           "Brief giữ toàn bộ high code/count trong obligationIndex dù phải trim detail/evidence; chỉ query bounded khi evidenceQueries yêu cầu.",
+          "Mặc định `--profile playable-core`: chỉ route gameplay closure và adapter cần cho playable; main menu/shop/meta/online SDK được explicit defer/replace nhưng vẫn nằm trong full high audit. Dùng `--profile full-project` chỉ khi brief thực sự yêu cầu.",
+          "Fidelity 80-90 trong brief là acceptance target, không phải kết quả scan. Chỉ port.core.acceptance có runtime/build + checkpoint evidence mới được phép kết luận.",
           "Chỉ intent project (mặc định) cấp mutation receipt. Intent scene/prefab/script/shader/feature/diagnostic là focused analysis-only và không thể dùng để mở gate ghi output.",
           "Scanner edit-time đặt playModeCapture=false; object chỉ sinh runtime vẫn là coverage gap cần xác minh runtime."
+        ],
+        "verify": null,
+        "status": "partial"
+      },
+      {
+        "id": "port.core.init",
+        "title": "Khởi tạo manifest port core gameplay từ preflight closure",
+        "run": "npm run ai:port:core:init -- --unity-project <UnityProjectRoot> --cocos-project <CocosProjectRoot>",
+        "command": "node playable-shared-kit/tools/core-gameplay-port.cjs init --json --unity-project <UnityProjectRoot> --cocos-project <CocosProjectRoot>",
+        "optional": [
+          "--provider <auto|static|unity-mcp>",
+          "--bootstrap",
+          "--manifest <file>",
+          "--force",
+          "--dry-run",
+          "--json"
+        ],
+        "when": "Bước đầu implementation core playable. Lệnh tự chạy preflight playable-core, khóa gameplay entry/closure và tạo manifest evidence nhỏ để agent không phải đọc lại toàn project.",
+        "outputs": [
+          "<CocosProjectRoot>/.ai/port/core-gameplay.json",
+          "stdout JSON compact core scope + next action"
+        ],
+        "limits": [
+          "Chỉ tạo manifest; không tự tuyên bố đã port gameplay. Refuse khi hard blocker hoặc gameplay entry còn mơ hồ.",
+          "`--dry-run` dừng trước mkdir/write. Không overwrite manifest nếu thiếu `--force`.",
+          "Manifest chỉ khởi tạo checkpoint pending; agent phải implement/refine và cung cấp source + target + runtime/visual evidence."
         ],
         "verify": null,
         "status": "partial"
@@ -621,6 +657,28 @@
         ],
         "verify": null,
         "status": "broken"
+      },
+      {
+        "id": "port.core.acceptance",
+        "title": "Cổng runnable + evidence-weighted core gameplay fidelity 80/90",
+        "run": "npm run ai:port:core:verify -- --unity-project <UnityProjectRoot> --cocos-project <CocosProjectRoot>",
+        "command": "node playable-shared-kit/tools/core-gameplay-port.cjs verify --json --unity-project <UnityProjectRoot> --cocos-project <CocosProjectRoot>",
+        "optional": [
+          "--manifest <file>",
+          "--no-run-gates",
+          "--json"
+        ],
+        "when": "Cổng kết thúc port core. Tự chạy verify/lint/assets/build/runtime và chỉ accept khi score >=80, mọi mandatory behavior checkpoint có evidence.",
+        "outputs": [
+          "stdout JSON compact: runnable gates, artifact presence, fidelity score/checkpoints, nextActions"
+        ],
+        "limits": [
+          "Score là rubric parity có evidence, không phải pixel-perfect hoặc semantic proof tự động; target 90 và minimum accept 80.",
+          "Compiler confidence, status boolean hoặc file tồn tại đơn lẻ không được tính điểm. Mỗi checkpoint cần Unity source evidence, Cocos target và JSON runtime/visual evidence khớp checkpoint.",
+          "Mặc định chạy tuần tự `ai:verify`, `ai:lint`, `ai:verify:assets`, `build`, `ai:verify:runtime`; dừng ở gate đầu thất bại. `--no-run-gates` không thể trả accepted/runnable."
+        ],
+        "verify": null,
+        "status": "partial"
       },
       {
         "id": "verify.all",

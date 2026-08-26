@@ -34,6 +34,7 @@ test('MCP surface stays narrow and descriptions make preflight scan mandatory', 
     'doctorUnityProject', 'scanUnityProject', 'getUnityProjectFeatures', 'getUnityProjectSlice',
   ]);
   assert.match(TOOLS[1].description, /MANDATORY FIRST tool/);
+  assert.equal(TOOLS[1].inputSchema.properties.profile.default, 'playable-core');
   assert.match(TOOLS[2].description, /UNITY_SCAN_REQUIRED/);
   assert.equal(TOOLS[2].annotations.readOnlyHint, true);
 });
@@ -42,6 +43,7 @@ test('scan returns compact implementation brief, keeps full snapshot only in-pro
   snapshotCache.clear();
   const snapshot = fakeSnapshot();
   let scannedProject = null;
+  let scannedProfile = null;
   let freshnessProject = null;
   const dependencies = {
     resolveProjectRoot: () => 'D:/Tiny',
@@ -59,6 +61,7 @@ test('scan returns compact implementation brief, keeps full snapshot only in-pro
     }),
     runPreflight: async input => {
       scannedProject = input.project;
+      scannedProfile = input.profile;
       return {
         snapshot,
         brief: {
@@ -83,6 +86,7 @@ test('scan returns compact implementation brief, keeps full snapshot only in-pro
   assert.equal(JSON.stringify(scanResult.structuredContent).includes('D:/secret'), false);
   assert.equal(snapshotCache.size, 1);
   assert.equal(scannedProject, 'D:/Tiny');
+  assert.equal(scannedProfile, 'playable-core');
 
   const features = await handleToolCall('getUnityProjectFeatures', { project: 'D:/Tiny/Assets/Game.prefab', limit: 10 }, dependencies);
   assert.equal(features.structuredContent.section, 'features');

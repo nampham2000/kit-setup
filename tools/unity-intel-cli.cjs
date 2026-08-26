@@ -45,6 +45,7 @@ Options:
   --no-cache         Tắt static cache.
   --refresh-cache    Bỏ static cache cũ.
   --intent <kind>    project | scene | prefab | script | shader | feature | diagnostic. Default: project.
+  --profile <name>   playable-core (default) | full-project. Core profile routes only the runnable playable loop.
   --target <value>   Logical path/symbol cần tập trung; có thể lặp lại (intent khác project).
   --section <name>   features | assets | dependencies | unresolved | diagnostics | scenes | scripts.
   --search <text>    Lọc page theo chuỗi compact.
@@ -92,7 +93,7 @@ function parseArgs(argv) {
     const name = equal ? equal[1] : argument.startsWith('--') ? argument.slice(2) : null;
     const supported = new Set([
       'project', 'provider', 'unity', 'mcp-url', 'timeout-ms', 'request-timeout-ms', 'cache-dir', 'section',
-      'search', 'severity', 'type', 'cursor', 'limit', 'out', 'intent', 'target',
+      'search', 'severity', 'type', 'cursor', 'limit', 'out', 'intent', 'target', 'profile',
     ]);
     if (!name || !supported.has(name)) throw new Error(`Option không hỗ trợ: ${argument}`);
     const value = equal ? equal[2] : valueAfter(argv, index, `--${name}`);
@@ -124,6 +125,9 @@ function parseArgs(argv) {
   if (options.section && !SECTIONS.has(options.section)) throw new Error(`--section không hỗ trợ: ${options.section}`);
   if (options.intent && !['project', 'scene', 'prefab', 'script', 'shader', 'feature', 'diagnostic'].includes(options.intent)) {
     throw new Error('--intent không hỗ trợ.');
+  }
+  if (options.profile && !['playable-core', 'full-project'].includes(options.profile)) {
+    throw new Error('--profile phải là playable-core hoặc full-project.');
   }
   if (options.targets && (options.targets.length > 8 || options.targets.some(value => value.length > 320))) {
     throw new Error('--target tối đa 8 giá trị, mỗi giá trị <=320 ký tự.');
@@ -172,6 +176,7 @@ async function execute(options) {
     const result = await runUnityPortPreflight({
       ...scanInput(options),
       intent: options.intent || 'project',
+      profile: options.profile || 'playable-core',
       targets: options.targets,
       indexCacheDir: options.cacheDir,
       // --cache-dir scopes the potentially large incremental index only. Mutation
@@ -212,6 +217,7 @@ function printHuman(payload, command) {
     console.log(`${payload.project.name || 'Unity project'} — ${payload.project.provider}`);
     console.log(`Preflight: ${payload.decision.status} (${payload.receiptId})`);
     console.log(`Features: ${payload.features.map(item => item.id).join(', ') || '(none)'}`);
+    if (payload.coreGameplay) console.log(`Core entry: ${payload.coreGameplay.entry.primary || '(needs decision)'}`);
     console.log(`High obligations: ${payload.decision.obligationCount}; hard blockers: ${payload.decision.hardBlockerCount}`);
     return;
   }

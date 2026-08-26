@@ -6,13 +6,18 @@ const path = require('node:path');
 
 const { resolveDefaultCacheDir } = require('./cache.cjs');
 const { jsonBytes, sanitizeForProjection } = require('./compact-projection.cjs');
+const {
+  buildCoreGameplayScope,
+  coreGameplayProjection,
+  normalizePortProfile,
+} = require('./core-gameplay-scope.cjs');
 const { stableStringify } = require('./live-schema.cjs');
 const { discoverPackageRoots } = require('./package-roots.cjs');
 const { findUnityProjectRoot } = require('./project-index.cjs');
 const { computeUnityProjectState, normalizedRealPath, projectKey } = require('./project-state.cjs');
 
-const PREFLIGHT_SCHEMA_VERSION = 1;
-const PREFLIGHT_POLICY_VERSION = 1;
+const PREFLIGHT_SCHEMA_VERSION = 2;
+const PREFLIGHT_POLICY_VERSION = 2;
 const PREFLIGHT_MAX_BYTES = 12 * 1024;
 const PREFLIGHT_ID_RESERVE_BYTES = 256;
 const RECEIPT_MAX_BYTES = 4 * 1024;
@@ -42,6 +47,7 @@ const WORKFLOW_FILES = [
   'unity-bootstrap.cjs',
   'unity-bootstrap-footprint.cjs',
   'feature-sketch.cjs',
+  'core-gameplay-scope.cjs',
   'compact-projection.cjs',
   path.join('..', 'lib', 'path-boundary.cjs'),
   path.join('..', '..', 'packages', 'unity-intelligence', 'package.json'),
@@ -133,6 +139,15 @@ const FEATURE_ROUTES = Object.freeze({
   'analytics-monetization': ['port.compile', 'verify.all', 'verify.runtime'],
 });
 
+const DIAGNOSTIC_FEATURES = Object.freeze({
+  UNITY_ADDRESSABLES_RUNTIME_LOAD: 'runtime-loading',
+  UNITY_ANIMATOR_STATE_MACHINE: 'animation',
+  UNITY_COROUTINE: 'timing-coroutines',
+  UNITY_DOTWEEN: 'tweening',
+  UNITY_SHADER_GRAPH: 'rendering-shaders',
+  UNITY_SHADERLAB: 'rendering-shaders',
+});
+
 function sha256(value) {
   return crypto.createHash('sha256').update(value).digest('hex');
 }
@@ -154,6 +169,7 @@ function preflightError(code, message, details = null) {
 
 function normalizeIntent(projectRoot, input = {}) {
   const kind = String(input.intent || 'project').toLowerCase();
+  const profile = normalizePortProfile(input.profile);
   const supported = new Set(['project', 'scene', 'prefab', 'script', 'shader', 'feature', 'diagnostic']);
   if (!supported.has(kind)) throw preflightError('UNITY_PREFLIGHT_INTENT_INVALID', `Intent không hỗ trợ: ${kind}`);
   const values = input.targets || (input.target ? [input.target] : []);
@@ -170,7 +186,7 @@ function normalizeIntent(projectRoot, input = {}) {
   if (kind !== 'project' && !targets.length) {
     throw preflightError('UNITY_PREFLIGHT_TARGET_REQUIRED', `Intent ${kind} cần --target.`);
   }
-  return { kind, targets, hash: sha256(stableStringify({ kind, targets })).slice(0, 24) };
+  return { kind, targets, profile, hash: sha256(stableStringify({ kind, targets, profile })).slice(0, 24) };
 }
 
 function evidencePaths(value, output = []) {
@@ -343,8 +359,8 @@ function buildObligations(snapshot, intent, scope) {
   return obligations.sort((left, right) => left.code.localeCompare(right.code));
 }
 
-function buildFeatures(snapshot, intent, scope) {
-  const candidates = (snapshot.features && snapshot.features.sketch || []).filter(feature => {
+function buildFeatures(snapshot, intent, scope, sourceFeatures) {
+  const candidates = (sourceFeatures || snapshot.features && snapshot.features.sketch || []).filter(feature => {
     if (!scope.paths) return true;
     if (intent.kind === 'feature' && intent.targets.some(target => target.toLowerCase() === String(feature.id).toLowerCase())) return true;
     return (feature.evidence || []).some(item => evidencePaths(item).some(logical => scope.paths.has(logical)));
@@ -354,12 +370,13 @@ function buildFeatures(snapshot, intent, scope) {
     confidence: feature.confidence,
     target: feature.porting && feature.porting.target || null,
     action: feature.porting && feature.porting.action || null,
+    coverageGap: feature.coverageGap === true || undefined,
     capabilities: FEATURE_ROUTES[feature.id] || ['port.plan', 'verify.runtime'],
     evidence: (feature.evidence || []).map(item => item.path).filter(Boolean).slice(0, 2),
   }));
 }
 
-function implementationSteps(obligations, features) {
+function implementationSteps(obligations, features, coreScope) {
   const steps = new Map();
   function add(capabilityId, reason, satisfies) {
     if (!steps.has(capabilityId)) steps.set(capabilityId, { capabilityId, reasons: [], satisfies: [] });
@@ -367,40 +384,72 @@ function implementationSteps(obligations, features) {
     if (reason && step.reasons.length < 3 && !step.reasons.includes(reason)) step.reasons.push(reason);
     if (satisfies && !step.satisfies.includes(satisfies)) step.satisfies.push(satisfies);
   }
-  for (const obligation of obligations.filter(item => !item.hard)) {
+  if (coreScope && coreScope.profile === 'playable-core' && coreScope.entry.primary) {
+    add('port.core.init', 'lock-core-scope-and-acceptance', null);
+    add('port.scene', 'core-gameplay-entry', null);
+    if (coreScope.coreScripts.length) {
+      add('port.closure', 'core-gameplay-scripts', null);
+      add('port.compile', 'core-gameplay-scripts', null);
+    }
+  }
+  for (const obligation of obligations.filter(item => !item.hard && item.coreDisposition !== 'deferred')) {
     for (const capability of obligation.capabilities) add(capability, obligation.code, obligation.id);
   }
   for (const feature of features) {
-    for (const capability of feature.capabilities) add(capability, feature.id, null);
+    for (const capability of feature.capabilities.filter(value =>
+      !value.startsWith('verify.') && value !== 'shader.validate')) add(capability, feature.id, null);
   }
   return [...steps.values()].slice(0, 12).map((step, index) => ({ order: index + 1, ...step }));
 }
 
-function verificationSteps(obligations, features) {
+function verificationSteps(obligations, features, coreScope) {
   const values = new Set(['verify.all', 'verify.gc']);
-  for (const item of obligations) for (const value of item.verify) values.add(value);
+  for (const item of obligations.filter(obligation => obligation.coreDisposition !== 'deferred')) {
+    for (const value of item.verify) values.add(value);
+  }
   for (const feature of features) {
     for (const value of feature.capabilities.filter(capability => capability.startsWith('verify.') || capability === 'shader.validate')) {
       values.add(value);
     }
   }
+  if (coreScope && coreScope.profile === 'playable-core') {
+    values.add('verify.assets');
+    values.add('build.playable');
+    values.add('verify.runtime');
+    values.add('port.core.acceptance');
+  }
   return [...values];
+}
+
+function coreDisposition(obligation, coreScope) {
+  if (!coreScope || coreScope.profile === 'full-project') return 'required';
+  if (obligation.hard) return 'required';
+  const featureId = DIAGNOSTIC_FEATURES[obligation.code];
+  const feature = featureId && coreScope.features.find(item => item.id === featureId);
+  if (feature) return feature.tier === 'adapter' || feature.tier === 'lifecycle' ? 'adapter' : 'required';
+  const evidence = obligation.evidence || [];
+  if (!evidence.length) return 'required';
+  if (evidence.some(item => coreScope.pathSet.has(item))) return 'required';
+  if (evidence.some(item => coreScope.adapterPathSet.has(item))) return 'adapter';
+  return 'deferred';
 }
 
 function trimBrief(brief) {
   const bodyLimit = PREFLIGHT_MAX_BYTES - PREFLIGHT_ID_RESERVE_BYTES;
-  while (jsonBytes(brief) > bodyLimit && brief.features.some(item => item.evidence.length)) {
-    const feature = brief.features.findLast ? brief.features.findLast(item => item.evidence.length) : [...brief.features].reverse().find(item => item.evidence.length);
-    feature.evidence.pop();
-    brief.truncated.evidence += 1;
+  while (jsonBytes(brief) > bodyLimit && brief.coreGameplay &&
+      [...brief.coreGameplay.excluded, ...brief.coreGameplay.adapters].some(item => item.examples.length)) {
+    const groups = [...brief.coreGameplay.excluded, ...brief.coreGameplay.adapters];
+    const group = [...groups].reverse().find(item => item.examples.length);
+    group.examples.pop();
+    brief.truncated.coreEvidence += 1;
   }
-  while (jsonBytes(brief) > bodyLimit && brief.features.length) {
-    brief.features.pop();
-    brief.truncated.features += 1;
+  while (jsonBytes(brief) > bodyLimit && brief.coreGameplay && brief.coreGameplay.coreScripts.length > 3) {
+    brief.coreGameplay.coreScripts.pop();
+    brief.truncated.coreEvidence += 1;
   }
-  while (jsonBytes(brief) > bodyLimit && brief.implementation.length > 2) {
-    brief.implementation.pop();
-    brief.truncated.implementation += 1;
+  while (jsonBytes(brief) > bodyLimit && brief.coreGameplay && brief.coreGameplay.entryPrefabs.length > 3) {
+    brief.coreGameplay.entryPrefabs.pop();
+    brief.truncated.coreEvidence += 1;
   }
   while (jsonBytes(brief) > bodyLimit && brief.obligations.some(item => item.evidence.length)) {
     const item = [...brief.obligations].reverse().find(obligation => obligation.evidence.length);
@@ -416,6 +465,19 @@ function trimBrief(brief) {
     delete item.evidence;
     item.routeRef = 'compact';
     brief.truncated.obligationDetails += 1;
+  }
+  while (jsonBytes(brief) > bodyLimit && brief.features.some(item => item.evidence.length)) {
+    const feature = brief.features.findLast ? brief.features.findLast(item => item.evidence.length) : [...brief.features].reverse().find(item => item.evidence.length);
+    feature.evidence.pop();
+    brief.truncated.evidence += 1;
+  }
+  while (jsonBytes(brief) > bodyLimit && brief.features.length) {
+    brief.features.pop();
+    brief.truncated.features += 1;
+  }
+  while (jsonBytes(brief) > bodyLimit && brief.implementation.length > 2) {
+    brief.implementation.pop();
+    brief.truncated.implementation += 1;
   }
   while (jsonBytes(brief) > bodyLimit && brief.obligations.length) {
     brief.obligations.pop();
@@ -437,9 +499,21 @@ function createImplementationBrief(scanResult, input = {}) {
   const projectRoot = scanResult.projectRoot || findUnityProjectRoot(input.project);
   const intent = normalizeIntent(projectRoot, input);
   const scope = resolveIntentScope(snapshot, intent);
-  const obligations = buildObligations(snapshot, intent, scope);
-  const features = buildFeatures(snapshot, intent, scope);
+  const coreScope = buildCoreGameplayScope(snapshot, { profile: intent.profile });
+  const obligations = buildObligations(snapshot, intent, scope).map(obligation => ({
+    ...obligation,
+    coreDisposition: coreDisposition(obligation, coreScope),
+  }));
+  const featureSource = intent.kind === 'project' && coreScope.profile === 'playable-core'
+    ? coreScope.features
+    : null;
+  const features = buildFeatures(snapshot, intent, scope, featureSource).map(feature => ({
+    ...feature,
+    tier: coreScope.featureTiers && Object.entries(coreScope.featureTiers)
+      .find(([, ids]) => ids.includes(feature.id))?.[0] || 'core',
+  }));
   const hard = obligations.filter(item => item.hard);
+  const coreObligations = obligations.filter(item => item.coreDisposition !== 'deferred');
   const status = hard.length ? 'blocked' : obligations.length ? 'ready-with-obligations' : 'ready';
   const stateFingerprint = snapshot.stateFingerprint || computeUnityProjectState(projectRoot).fingerprint;
   const projectFingerprint = snapshot.projectFingerprint || snapshot.live && snapshot.live.projectFingerprint || snapshot.fingerprint;
@@ -475,30 +549,35 @@ function createImplementationBrief(scanResult, input = {}) {
       status,
       implementationAllowed: hard.length === 0,
       sourceHighFree: obligations.length === 0,
-      completionDispositionRequired: obligations.length > 0,
-      completionGate: obligations.length ? 'agent-disposition-required' : 'source-high-free',
+      completionDispositionRequired: coreObligations.length > 0,
+      completionGate: coreObligations.length ? 'core-obligation-and-acceptance-required' : 'core-acceptance-required',
       mutationReceiptIssued: intent.kind === 'project',
       hardBlockerCount: hard.length,
       obligationCount: obligations.length,
+      coreObligationCount: coreObligations.length,
+      coreEntryReady: !coreScope.entry.needsDecision,
     },
     diagnosticCounts: scanResult.summary && scanResult.summary.diagnosticCounts || null,
     features,
+    coreGameplay: coreGameplayProjection(coreScope),
     obligations,
     obligationIndexSchema: ['code', 'count', 'hard', 'gate', 'class'],
     obligationIndex: obligations.map(item => [item.code, item.count, item.hard ? 1 : 0, item.gate, item.class]),
+    coreObligationIndexSchema: ['code', 'disposition'],
+    coreObligationIndex: obligations.map(item => [item.code, item.coreDisposition]),
     obligationRoutes: { compact: COMPACT_OBLIGATION_ROUTE },
-    implementation: implementationSteps(obligations, features),
-    verification: verificationSteps(obligations, features),
+    implementation: implementationSteps(obligations, features, coreScope),
+    verification: verificationSteps(obligations, features, coreScope),
     coverageGaps: snapshot.live && snapshot.live.capabilities && snapshot.live.capabilities.playModeCapture
       ? []
       : ['play-mode-runtime-objects-not-captured'],
-    evidenceQueries: hard.length || obligations.some(item => item.capabilities.includes('unity.intel.query'))
+    evidenceQueries: hard.length || coreObligations.some(item => item.capabilities.includes('unity.intel.query'))
       ? [
         'npm run ai:unity:query -- --project <UnityProjectRoot> --section diagnostics --severity high',
         'npm run unity:intel:setup -- --project <UnityProjectRoot>',
       ]
       : [],
-    truncated: { features: 0, evidence: 0, implementation: 0, obligationDetails: 0, obligations: 0 },
+    truncated: { coreEvidence: 0, features: 0, evidence: 0, implementation: 0, obligationDetails: 0, obligations: 0 },
   };
   trimBrief(brief);
   const semantic = semanticBriefBody(brief);

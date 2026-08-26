@@ -35,7 +35,11 @@ test('unity preflight agent contract points only at declared compact capabilitie
   assert.ok(rule);
   assert.deepEqual(rule.agentContract.entrypoints, ['port.preflight']);
   assert.equal(rule.agentContract.evidenceQuery, 'unity.intel.query');
-  assert.equal(rule.agentContract.completionHighPolicy, 'agent-disposition-required');
+  assert.equal(rule.agentContract.completionHighPolicy, 'core-acceptance-required');
+  assert.deepEqual(
+    rule.agentContract.mustConsume.filter(id => id.startsWith('core')),
+    ['coreGameplay', 'coreObligationIndex'],
+  );
   const ids = new Set(CAPABILITIES.map(item => item.id));
   for (const id of [...rule.agentContract.entrypoints, rule.agentContract.evidenceQuery]) {
     assert.equal(ids.has(id), true, id);
@@ -48,6 +52,10 @@ test('shared-kit package template distributes every Unity intelligence and prefl
   const rootPackage = JSON.parse(fs.readFileSync(path.resolve(__dirname, '..', '..', 'package.json'), 'utf8'));
   const expected = {
     'ai:port:preflight': 'node playable-shared-kit/tools/unity-intel-cli.cjs preflight --json',
+    'port:core:init': 'node playable-shared-kit/tools/core-gameplay-port.cjs init',
+    'port:core:verify': 'node playable-shared-kit/tools/core-gameplay-port.cjs verify',
+    'ai:port:core:init': 'node playable-shared-kit/tools/core-gameplay-port.cjs init --json',
+    'ai:port:core:verify': 'node playable-shared-kit/tools/core-gameplay-port.cjs verify --json',
     'unity:intel:doctor': 'node playable-shared-kit/tools/unity-intel-cli.cjs doctor',
     'unity:intel:setup': 'node playable-shared-kit/tools/unity-intel-cli.cjs setup',
     'unity:intel:scan': 'node playable-shared-kit/tools/unity-intel-cli.cjs scan',
@@ -62,6 +70,8 @@ test('shared-kit package template distributes every Unity intelligence and prefl
     assert.equal(rootPackage.scripts[name], command, `root:${name}`);
   }
   assert.match(template.scripts['test:unity:intel'], /unity-intel\/preflight\.test\.cjs/);
+  assert.match(template.scripts['test:unity:intel'], /unity-intel\/core-gameplay-scope\.test\.cjs/);
+  assert.match(template.scripts['test:unity:intel'], /tools\/core-gameplay-port\.test\.cjs/);
   assert.equal(
     template.scripts['test:unity:intel:samples'],
     'node playable-shared-kit/tools/unity-intel/sample-project-regression.cjs',

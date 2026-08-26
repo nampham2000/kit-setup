@@ -177,6 +177,23 @@ test('reports a bounded request timeout', async () => {
   );
 });
 
+test('retries transient gateway 504 while Unity main thread finishes domain reload', async () => {
+  let calls = 0;
+  await invokeUnityMcpTool({
+    url: 'http://127.0.0.1:9009',
+    expectedFingerprint: 'a'.repeat(64),
+    fetchImpl: async () => {
+      calls += 1;
+      if (calls === 1) return httpResponse(200, { result: 'pong' });
+      if (calls === 2) return httpResponse(504, { error: 'Unity callback timeout' });
+      return httpResponse(200, { structuredContent: livePatch() });
+    },
+    sleepImpl: async () => {},
+    maxAttempts: 2,
+  });
+  assert.equal(calls, 3);
+});
+
 test('rejects malformed tool response envelopes', async () => {
   let call = 0;
   const fetchImpl = async () => {

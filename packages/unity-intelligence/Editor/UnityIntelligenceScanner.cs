@@ -12,6 +12,7 @@ using UnityEditor;
 using UnityEditor.Compilation;
 using UnityEditor.PackageManager;
 using UnityEngine;
+using PackageManagerPackageInfo = UnityEditor.PackageManager.PackageInfo;
 
 namespace CcPlayable.UnityIntelligence
 {
@@ -72,7 +73,7 @@ namespace CcPlayable.UnityIntelligence
             if ((serializedAssetPaths ?? new List<string>()).Any(value =>
                     !IsBoundedAssetPath(NormalizeAssetPath(value))))
                 throw new ArgumentException("serializedAssetPaths contains an invalid or oversized logical asset path.", nameof(serializedAssetPaths));
-            if (!string.IsNullOrEmpty(expectedFingerprint) && !IsSha256(expectedFingerprint))
+            if (!string.IsNullOrEmpty(expectedFingerprint) && !IsSha256(expectedFingerprint ?? string.Empty))
                 throw new ArgumentException("expectedFingerprint must be a SHA-256 hex string.", nameof(expectedFingerprint));
 
             var timer = Stopwatch.StartNew();
@@ -533,10 +534,11 @@ namespace CcPlayable.UnityIntelligence
 
         private static void CollectPackages(UnityLiveSnapshot snapshot)
         {
-            PackageInfo[] packages;
+            PackageManagerPackageInfo[] packages;
             try
             {
-                packages = PackageInfo.GetAllRegisteredPackages() ?? Array.Empty<PackageInfo>();
+                packages = PackageManagerPackageInfo.GetAllRegisteredPackages() ??
+                           Array.Empty<PackageManagerPackageInfo>();
             }
             catch
             {

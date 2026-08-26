@@ -11,6 +11,9 @@ const {
   discoverUnityEditor,
   getUnityProjectLockStatus,
   doctorUnityEditor,
+  readOpenUnityEditorInstance,
+  refreshOpenUnityEditor,
+  readUnityCompileDiagnostics,
 } = require('./unity-editor.cjs');
 const { createUnityFixture } = require('./test-fixture.cjs');
 
@@ -161,5 +164,76 @@ test('doctor blocks duplicate launch, permits attach, and emits exact Hub remedi
   assert.deepEqual(missing.remediation.args, [
     '--', '--headless', 'install', '--version', PROJECT_VERSION,
     '--changeset', PROJECT_REVISION, '--errors',
+  ]);
+});
+
+test('reads an exact project-owned Editor instance and dispatches bounded Windows refresh', t => {
+  const fixture = createUnityFixture(t);
+  setProjectRevision(fixture);
+  fixture.write('Library/EditorInstance.json', `${JSON.stringify({
+    process_id: 4242,
+    version: PROJECT_VERSION,
+    app_path: 'D:/Unity/Editor/Unity.exe',
+  })}\n`);
+  const instance = readOpenUnityEditorInstance(fixture.root);
+  assert.equal(instance.status, 'ready');
+  assert.equal(instance.processId, 4242);
+
+  let invocation = null;
+  const result = refreshOpenUnityEditor(fixture.root, {
+    platform: 'win32',
+    env: { SystemRoot: 'C:\\Windows', SAFE_SENTINEL: 'kept' },
+    spawnSync: (executable, args, options) => {
+      invocation = { executable, args, options };
+      return { status: 0, stdout: '', stderr: '' };
+    },
+  });
+  assert.equal(result.dispatched, true);
+  assert.equal(result.processId, 4242);
+  assert.equal(invocation.executable,
+    'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe');
+  assert.equal(invocation.options.env.CC_PLAYABLE_REFRESH_PID, '4242');
+  assert.equal(invocation.options.env.CC_PLAYABLE_REFRESH_PROJECT, fs.realpathSync(fixture.root));
+  assert.equal(invocation.options.env.SAFE_SENTINEL, 'kept');
+  assert.match(invocation.args.at(-1), /Get-CimInstance Win32_Process/);
+  assert.match(invocation.args.at(-1), /SetForegroundWindow/);
+});
+
+test('never dispatches refresh for stale or version-mismatched EditorInstance metadata', t => {
+  const fixture = createUnityFixture(t);
+  setProjectRevision(fixture);
+  let calls = 0;
+  const options = {
+    platform: 'win32',
+    spawnSync: () => { calls += 1; return { status: 0 }; },
+  };
+  assert.equal(refreshOpenUnityEditor(fixture.root, options).dispatched, false);
+  fixture.write('Library/EditorInstance.json', '{"process_id":1,"version":"6000.3.1f1"}\n');
+  const result = refreshOpenUnityEditor(fixture.root, options);
+  assert.equal(result.reason, 'editor-instance-version-mismatch');
+  assert.equal(calls, 0);
+});
+
+test('extracts only project-owned compile errors from a bounded shared Editor log tail', t => {
+  const fixture = createUnityFixture(t);
+  setProjectRevision(fixture);
+  const logRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'unity-editor-log-'));
+  t.after(() => fs.rmSync(logRoot, { recursive: true, force: true }));
+  const editorLog = path.join(logRoot, 'Editor.log');
+  fs.writeFileSync(editorLog, [
+    'WorkingDir: D:/Other/UnityProject',
+    'Assets/Other.cs(1,2): error CS0001: unrelated',
+    `WorkingDir: ${fixture.root.replace(/\\/g, '/')}`,
+    'Assets/Game/Main.cs(10,20): error CS0103: missing symbol',
+    'Assets/Game/Main.cs(10,20): error CS0103: missing symbol',
+    'Packages/com.example/Runtime.cs(3,4): error CS0117: missing member',
+    '',
+  ].join('\n'));
+  const result = readUnityCompileDiagnostics(fixture.root, { editorLog, maxBytes: 64 * 1024 });
+  assert.equal(result.code, 'UNITY_PROJECT_COMPILE_ERRORS');
+  assert.equal(result.count, 2);
+  assert.deepEqual(result.evidence, [
+    'Assets/Game/Main.cs(10,20): error CS0103: missing symbol',
+    'Packages/com.example/Runtime.cs(3,4): error CS0117: missing member',
   ]);
 });
