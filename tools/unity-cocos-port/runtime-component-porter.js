@@ -17,7 +17,8 @@ const {
 const { parseUnityParticleDoc } = require('./particle-system-converter');
 
 const RUNTIME_DIR = path.join(__dirname, 'runtime');
-const SCRIPT_TARGET_DIR = path.join('assets', 'scripts');
+const SCRIPT_TARGET_DIR = path.join('assets', 'script');
+const LEGACY_SCRIPT_TARGET_DIR = path.join('assets', 'scripts');
 
 const SUB_EMITTER_TYPE = {
   birth: 0,
@@ -59,6 +60,10 @@ function scriptTargetPath(script) {
   return path.join(SCRIPT_TARGET_DIR, `${script.className}.ts`);
 }
 
+function legacyScriptTargetPath(script) {
+  return path.join(LEGACY_SCRIPT_TARGET_DIR, `${script.className}.ts`);
+}
+
 function scriptTemplatePath(script) {
   return path.join(RUNTIME_DIR, `${script.className}.ts`);
 }
@@ -85,17 +90,44 @@ function writeStableRuntimeScript(script, options, reporter, ensureDirectoryMeta
     return;
   }
 
+  const sourceText = fs.readFileSync(templateFile, 'utf8');
   const targetFile = path.join(options.cocosRoot, scriptTargetPath(script));
+  const legacyFile = path.join(options.cocosRoot, legacyScriptTargetPath(script));
+  const legacyMetaFile = `${legacyFile}.meta`;
+  const legacyExists = fs.existsSync(legacyFile) || fs.existsSync(legacyMetaFile);
+  const legacyText = fs.existsSync(legacyFile) ? fs.readFileSync(legacyFile, 'utf8') : '';
+  const legacyMeta = readJsonIfExists(legacyMetaFile) || {};
+  const targetMetaFile = `${targetFile}.meta`;
+  const targetMeta = readJsonIfExists(targetMetaFile) || {};
+
+  if (legacyMeta.uuid && targetMeta.uuid && legacyMeta.uuid !== targetMeta.uuid) {
+    reporter?.high(
+      'RUNTIME_SCRIPT_UUID_CONFLICT',
+      legacyMetaFile,
+      targetMetaFile,
+      `Refusing to remove legacy ${script.className}: canonical and legacy scripts have different UUIDs, so existing prefab references need an explicit migration`,
+    );
+    return;
+  }
+
+  if (legacyExists && legacyText && legacyText !== sourceText) {
+    reporter?.high(
+      'RUNTIME_SCRIPT_LEGACY_CUSTOMIZED',
+      legacyFile,
+      targetFile,
+      `Refusing to migrate customized ${script.className} from assets/scripts; reconcile it with the shared runtime template before porting`,
+    );
+    return;
+  }
+
   const targetDir = path.dirname(targetFile);
   ensureDir(targetDir);
   ensureDirectoryMetas(targetDir, path.join(options.cocosRoot, 'assets'));
 
-  const sourceText = fs.readFileSync(templateFile, 'utf8');
   const targetText = fs.existsSync(targetFile) ? fs.readFileSync(targetFile, 'utf8') : '';
   if (sourceText !== targetText) fs.writeFileSync(targetFile, sourceText, 'utf8');
 
-  const metaFile = `${targetFile}.meta`;
-  const existing = readJsonIfExists(metaFile) || {};
+  const existing = Object.keys(targetMeta).length ? targetMeta : legacyMeta;
   const meta = {
     ver: existing.ver || '4.0.24',
     importer: existing.importer || 'typescript',
@@ -106,7 +138,26 @@ function writeStableRuntimeScript(script, options, reporter, ensureDirectoryMeta
     userData: { ...(existing.userData || {}) },
   };
   if (JSON.stringify(existing) !== JSON.stringify(meta)) {
-    fs.writeFileSync(metaFile, `${JSON.stringify(meta, null, 2)}\n`, 'utf8');
+    fs.writeFileSync(targetMetaFile, `${JSON.stringify(meta, null, 2)}\n`, 'utf8');
+  } else if (!fs.existsSync(targetMetaFile)) {
+    fs.writeFileSync(targetMetaFile, `${JSON.stringify(meta, null, 2)}\n`, 'utf8');
+  }
+
+  if (legacyExists) {
+    if (fs.existsSync(legacyFile)) fs.unlinkSync(legacyFile);
+    if (fs.existsSync(legacyMetaFile)) fs.unlinkSync(legacyMetaFile);
+    const legacyDir = path.dirname(legacyFile);
+    if (fs.existsSync(legacyDir) && fs.readdirSync(legacyDir).length === 0) {
+      fs.rmdirSync(legacyDir);
+      const legacyDirMeta = `${legacyDir}.meta`;
+      if (fs.existsSync(legacyDirMeta)) fs.unlinkSync(legacyDirMeta);
+    }
+    reporter?.low(
+      'RUNTIME_SCRIPT_CANONICAL_PATH_MIGRATED',
+      legacyFile,
+      targetFile,
+      `Migrated ${script.className} to canonical assets/script while preserving its script UUID`,
+    );
   }
 }
 

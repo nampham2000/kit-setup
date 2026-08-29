@@ -48,13 +48,18 @@ function stableUuid(seed) {
 }
 
 function compressUuid(uuid) {
-  const raw = String(uuid || '').replace(/-/g, '');
-  if (raw.length !== 32) return String(uuid || '');
-  return Buffer.from(raw, 'hex')
-    .toString('base64')
-    .replace(/\+/g, 'x')
-    .replace(/\//g, 'y')
-    .replace(/=/g, 'z');
+  const compact = String(uuid || '').replace(/-/g, '');
+  if (!/^[0-9a-fA-F]{32}$/.test(compact)) return String(uuid || '');
+
+  // Cocos keeps the first five hex characters verbatim, then base64-encodes
+  // the remaining 27 nibbles. Padding the odd nibble for Buffer and trimming
+  // the extra base64 character reproduces Editor class IDs exactly.
+  const head = compact.slice(0, 5);
+  const rest = compact.slice(5);
+  const evenRest = rest.length % 2 === 0 ? rest : `${rest}0`;
+  let encoded = Buffer.from(evenRest, 'hex').toString('base64').replace(/=+$/g, '');
+  if (rest.length % 2 !== 0) encoded = encoded.slice(0, -1);
+  return head + encoded;
 }
 
 function randomLocalId() {
