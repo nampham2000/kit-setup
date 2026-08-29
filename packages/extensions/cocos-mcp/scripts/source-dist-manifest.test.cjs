@@ -35,6 +35,12 @@ test('manifest binds both source and the exact clean dist output set', t => {
   assert.equal(fs.readFileSync(path.join(root, 'dist', '.source-manifest.json'), 'utf8'), firstReceipt);
   assert.equal(run(root, 'verify').status, 0);
 
+  for (const relative of ['source/main.ts', 'dist/main.js', 'dist/mcp-server.js']) {
+    const file = path.join(root, relative);
+    fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replace(/\n/g, '\r\n'));
+  }
+  assert.equal(run(root, 'verify').status, 0, 'line-ending-only checkout changes must remain portable');
+
   fs.writeFileSync(path.join(root, 'dist', 'orphan.js'), 'exports.orphan = true;\n');
   const orphan = run(root, 'verify');
   assert.notEqual(orphan.status, 0);
