@@ -216,6 +216,10 @@ Shader "Custom/UnlitWobbleDissolve" {
       assert.ok(effectCode.includes('CCProgram vs %{'));
       assert.ok(effectCode.includes('CCProgram fs %{'));
       assert.ok(effectCode.includes('texture(mainTexture, v_uv)'));
+      assert.ok(effectCode.includes('CCDecodeColorSample(texture(mainTexture, v_uv))'),
+        'Unity sRGB main texture samples must be decoded in Cocos custom effects');
+      assert.ok(!effectCode.includes('CCDecodeColorSample(texture(noiseTex, v_uv))'),
+        'procedural/data textures must remain in their authored data space');
       assert.ok(effectCode.includes('if (noise.r < dissolveAmount) discard;'));
     });
   });
@@ -540,6 +544,8 @@ Shader "Custom/UrpLit" {
       // The preamble that produced those values has to come along.
       assert.ok(effectCode.includes('texture(mainTexture, FSInput_texcoord)'),
         'fragment preamble should be ported with Unity names bound to Cocos ones');
+      assert.ok(effectCode.includes('CCDecodeColorSample(texture(mainTexture, FSInput_texcoord))'),
+        'surface PBR base-map samples must preserve Unity TextureImporter sRGB decoding');
       assert.ok(!/_BaseMap|_Smoothness|_Metallic/.test(effectCode), 'no Unity property names should survive');
     });
 

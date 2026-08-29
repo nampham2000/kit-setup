@@ -17,6 +17,11 @@ const { buildStd140Ubo } = require('./ubo-layout-builder.cjs');
 const { lowerHlslToGlsl } = require('./unity-semantic-lowering.cjs');
 const { allocateBindings } = require('./binding-allocator.cjs');
 const { extractSurfaceShaderIntent, detectPackedMaps } = require('./surface-shader-intent-extractor.cjs');
+const {
+  SRGB_SAMPLE_HELPER,
+  srgbSamplerNames,
+  lowerSrgbTextureSamples,
+} = require('./color-space-lowering.cjs');
 
 /**
  * Lớp tương thích HLSL->GLSL, inline vào program nào thực sự dùng tới.
@@ -668,6 +673,9 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
       helperFunctions.push(funcGlsl);
     }
   }
+  const colorSamplerNames = srgbSamplerNames(samplers);
+  const fragmentHelperFunctions = helperFunctions.map(code =>
+    lowerSrgbTextureSamples(code, colorSamplerNames));
 
   // 5. Generate Vertex Program (CCProgram vs)
   const vsIncludes = [
@@ -913,6 +921,7 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
   const fsIncludes = [
     '  #include <builtin/uniforms/cc-global>',
   ];
+  if (colorSamplerNames.length > 0) fsIncludes.push('  #include <common/color/gamma>');
   if (/cc_fog|cc_fogColor|UNITY_APPLY_FOG/i.test(rawCode)) fsIncludes.push('  #include <builtin/uniforms/cc-fog>');
   if (/cc_shadow|SHADOW_ATTENUATION/i.test(rawCode)) fsIncludes.push('  #include <builtin/uniforms/cc-shadow>');
   if (/cc_mainLitDir|Shade4PointLights|cc_forward_light/i.test(rawCode)) fsIncludes.push('  #include <builtin/uniforms/cc-forward-light>');
@@ -978,8 +987,10 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
   if (fsCompat) fsLines.push(fsCompat);
 
   // Insert helper functions in FS
-  if (helperFunctions.length > 0) {
-    fsLines.push('  ' + helperFunctions.join('\n\n  '));
+  if (colorSamplerNames.length > 0) fsLines.push(SRGB_SAMPLE_HELPER);
+
+  if (fragmentHelperFunctions.length > 0) {
+    fsLines.push('  ' + fragmentHelperFunctions.join('\n\n  '));
     fsLines.push('');
   }
 
@@ -1013,6 +1024,7 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
         fBody = fBody.replace(new RegExp(`\\b${s.originalName}\\b`, 'g'), s.name);
       }
     }
+    fBody = lowerSrgbTextureSamples(fBody, colorSamplerNames);
 
     // Wrap returns
     fBody = fBody.replace(/\breturn\s+fixed4\s*\(/g, 'return vec4(');
@@ -1031,7 +1043,8 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
     const colorName = colorProp ? (colorProp.cocosName || colorProp.name) : 'baseColor';
 
     if (hasTexture) {
-      fsLines.push(`    vec4 col = texture(${texName}, v_uv);`);
+      const sample = lowerSrgbTextureSamples(`texture(${texName}, v_uv)`, colorSamplerNames);
+      fsLines.push(`    vec4 col = ${sample};`);
       if (colorProp) {
         fsLines.push(`    col *= ${colorName};`);
       }
