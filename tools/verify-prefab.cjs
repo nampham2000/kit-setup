@@ -47,6 +47,13 @@ const RENDERER_TYPES = new Set([
   'cc.TiledLayer', 'cc.Spine', 'sp.Skeleton',
 ]);
 
+function spriteRequiresFrame(doc) {
+  // Unity often uses a fully transparent Image as the raycast/target graphic of
+  // a Button. The porter preserves that alpha and UITransform; a missing
+  // built-in white sprite cannot create a visible binding defect in this case.
+  return !(doc && doc._color && Number(doc._color.a) === 0);
+}
+
 // ────────────────────────────────────────────────────────── asset index ──
 
 /** Chỉ mục UUID -> đường dẫn, đọc từ mọi file .meta trong assets/. */
@@ -229,7 +236,8 @@ function verifyDocument(file, docs, index, options, findings) {
     renderers += 1;
     if (type === 'cc.Sprite') {
       const frame = doc._spriteFrame;
-      if (!frame || (typeof frame === 'object' && !frame.__uuid__ && frame.__id__ === undefined)) {
+      if (spriteRequiresFrame(doc)
+        && (!frame || (typeof frame === 'object' && !frame.__uuid__ && frame.__id__ === undefined))) {
         emptyBindings.push(`#${i} cc.Sprite thiếu _spriteFrame`);
       }
     }
@@ -438,4 +446,6 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { buildAssetIndex, verifyDocument, uuidPrefix, scriptPrefixSet, collectUuidRefs };
+module.exports = {
+  buildAssetIndex, verifyDocument, uuidPrefix, scriptPrefixSet, collectUuidRefs, spriteRequiresFrame,
+};

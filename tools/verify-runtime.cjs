@@ -12,14 +12,47 @@
  *   3. Khung hình đầu tiên trông thế nào? (ảnh chụp để người/agent xem)
  *
  * Không cần puppeteer/playwright: dùng Chrome/Edge có sẵn trên máy + WebSocket
- * của Node 22. Không thêm dependency nào.
+ * của Node. Node 20 có WebSocket sau cờ --experimental-websocket; tool tự
+ * khởi động lại đúng một lần với cờ đó thay vì báo lỗi giả trước khi mở trang.
  */
 
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const { color } = require('./lib/term-color.cjs');
+
+const WEBSOCKET_REEXEC_ENV = 'PLAYABLE_VERIFY_RUNTIME_WEBSOCKET_REEXEC';
+
+/**
+ * Node 20 bundles a standards-compatible WebSocket implementation but keeps it
+ * behind --experimental-websocket. The project still supports Node 20, so make
+ * the CLI self-healing instead of requiring every npm script/agent to know the
+ * runtime flag. Returning false means the parent process already forwarded all
+ * output and should exit with the child's status.
+ */
+function ensureWebSocketRuntime() {
+  if (typeof globalThis.WebSocket === 'function') return true;
+  if (process.env[WEBSOCKET_REEXEC_ENV] === '1') {
+    throw new Error(
+      `WebSocket không khả dụng trên ${process.version}. `
+      + 'Dùng Node >=22, hoặc Node 20 có hỗ trợ --experimental-websocket.',
+    );
+  }
+
+  const child = spawnSync(
+    process.execPath,
+    ['--experimental-websocket', __filename, ...process.argv.slice(2)],
+    {
+      stdio: 'inherit',
+      windowsHide: true,
+      env: { ...process.env, [WEBSOCKET_REEXEC_ENV]: '1' },
+    },
+  );
+  if (child.error) throw child.error;
+  process.exitCode = Number.isInteger(child.status) ? child.status : 1;
+  return false;
+}
 
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
 
@@ -37,12 +70,21 @@ Options:
   --seconds <n>        Thời gian chạy để đo FPS. Default: 6.
   --min-fps <n>        FPS tối thiểu coi là đạt. Default: 20.
   --window-size <WxH>  Kích thước cửa sổ Chrome. Default: 720x1280 (dọc).
+  --preview-device <name>
+                       Chọn device trong toolbar Cocos preview (vd
+                       "WebpageFullScreen") trước eval/gesture/screenshot.
   --browser <path>     Đường dẫn Chrome/Edge. Mặc định: tự tìm.
   --screenshot <dir>   Nơi lưu ảnh chụp. Default: .unity/runtime-shots/
   --no-screenshot      Không chụp ảnh.
   --eval <js>          Chạy biểu thức JS TRONG trang sau khi chạy xong và in kết
                        quả (evalResult). Dùng để soi cây scene lúc runtime khi
                        playable boot được nhưng vẽ sai.
+  --eval-before <js>   Chạy biểu thức trước gesture và trả evalBeforeResult.
+  --gesture <spec>     Phát touch thật qua CDP: x1,y1,x2,y2,durationMs[,steps].
+                       Tọa độ 0..1 là tỉ lệ trong canvas; số >1 là viewport px.
+  --gesture-keep-pressed
+                       Giữ touch sau gesture để --eval và screenshot quan sát
+                       trạng thái hold; tool tự nhả touch sau khi chụp.
   --json               Xuất JSON (dùng cho AI agent / CI).
   --help               Hiện trợ giúp và thoát.
 
@@ -157,6 +199,12 @@ class CdpSession {
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
+function pushUniqueBounded(list, value, limit = 50, keyOf = (item) => String(item)) {
+  const key = keyOf(value);
+  if (list.some((item) => keyOf(item) === key)) return;
+  if (list.length < limit) list.push(value);
+}
+
 async function waitForDevTools(port, timeoutMs = 15000) {
   const deadline = Date.now() + timeoutMs;
   let lastError = '';
@@ -215,6 +263,159 @@ function isUrlTarget(target) {
   return /^https?:\/\//i.test(String(target));
 }
 
+function parseGesture(value) {
+  if (!value) return null;
+  const parts = String(value).split(',').map((item) => Number(item.trim()));
+  if (parts.length < 5 || parts.length > 6 || parts.some((item) => !Number.isFinite(item))) {
+    throw new Error('--gesture cần x1,y1,x2,y2,durationMs[,steps]');
+  }
+  const [x1, y1, x2, y2] = parts;
+  const durationMs = Math.max(16, Math.min(5000, Math.round(parts[4])));
+  const steps = Math.max(1, Math.min(120, Math.round(parts[5] || Math.max(4, durationMs / 16))));
+  const normalized = [x1, y1, x2, y2].every((item) => item >= 0 && item <= 1);
+  return { x1, y1, x2, y2, durationMs, steps, normalized };
+}
+
+async function evaluatePage(session, sessionId, expression) {
+  const evaluated = await session.send('Runtime.evaluate', {
+    expression,
+    returnByValue: true,
+    awaitPromise: true,
+  }, sessionId);
+  if (evaluated && evaluated.exceptionDetails) {
+    const detail = evaluated.exceptionDetails;
+    throw new Error(detail.exception
+      ? (detail.exception.description || detail.text)
+      : detail.text);
+  }
+  return evaluated && evaluated.result ? evaluated.result.value : undefined;
+}
+
+async function selectCocosPreviewDevice(session, sessionId, device, timing = {}) {
+  const requested = String(device || '').trim();
+  if (!requested) throw new Error('preview device must be a non-empty string');
+  const waitFor = timing.wait || wait;
+  const persistenceWaitMs = Math.max(0, Number(timing.persistenceWaitMs ?? 250));
+  const settleMs = Math.max(0, Number(timing.settleMs ?? 1000));
+  const reloadPage = timing.reloadPage !== false;
+  const selectedJson = await evaluatePage(session, sessionId, `JSON.stringify((function () {
+    var requested = ${JSON.stringify(requested)};
+    var selector = document.querySelector('#view-select');
+    var previous = selector ? selector.getAttribute('value') : null;
+    var options = document.querySelectorAll('li[data-device]');
+    var option = null;
+    for (var index = 0; index < options.length; index += 1) {
+      if (options[index].getAttribute('data-device') === requested) { option = options[index]; break; }
+    }
+    if (!option) {
+      var available = Array.prototype.map.call(options, function (item) {
+        return item.getAttribute('data-device');
+      });
+      return { ok: false, requested: requested, available: available };
+    }
+    var changed = previous !== requested;
+    if (changed) option.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    return { ok: !!selector && selector.getAttribute('value') === requested, requested: requested,
+      previous: previous, selected: selector ? selector.getAttribute('value') : null, changed: changed };
+  })())`);
+  const selected = JSON.parse(selectedJson || 'null');
+  if (!selected?.ok) {
+    const available = Array.isArray(selected?.available) ? `; available=${selected.available.join(', ')}` : '';
+    throw new Error(`Cocos preview device unavailable: ${requested}${available}`);
+  }
+  let reloaded = false;
+  if (selected.changed && reloadPage) {
+    if (persistenceWaitMs > 0) await waitFor(persistenceWaitMs);
+    await session.send('Page.reload', {}, sessionId);
+    reloaded = true;
+  }
+  if (settleMs > 0) await waitFor(settleMs);
+  const settledJson = await evaluatePage(session, sessionId, `JSON.stringify((function () {
+    var selector = document.querySelector('#view-select');
+    var canvas = document.querySelector('canvas');
+    var rect = canvas ? canvas.getBoundingClientRect() : null;
+    return { selected: selector ? selector.getAttribute('value') : null,
+      readyState: document.readyState,
+      sceneRunning: !!(window.cc && cc.director && cc.director.getScene && cc.director.getScene()),
+      canvas: canvas ? { width: canvas.width, height: canvas.height,
+        cssWidth: rect ? rect.width : 0, cssHeight: rect ? rect.height : 0 } : null };
+  })())`);
+  const settled = JSON.parse(settledJson || 'null');
+  if (settled?.selected !== requested) {
+    throw new Error(`Cocos preview device did not settle: requested=${requested}, selected=${settled?.selected || 'none'}`);
+  }
+  return { requested, previous: selected.previous || null, changed: !!selected.changed, reloaded,
+    selected: settled.selected, readyState: settled.readyState || '',
+    sceneRunning: !!settled.sceneRunning, canvas: settled.canvas || null };
+}
+
+async function dispatchTouchGesture(session, sessionId, gesture, timing = {}) {
+  const now = timing.now || Date.now;
+  const waitFor = timing.wait || wait;
+  const keepPressed = timing.keepPressed === true;
+  // Headless desktop targets do not expose touch input unless emulation is
+  // enabled explicitly; dispatchTouchEvent may otherwise succeed but deliver
+  // nothing to the Cocos input system.
+  await session.send('Emulation.setTouchEmulationEnabled', {
+    enabled: true, maxTouchPoints: 5,
+  }, sessionId);
+  const rectJson = await evaluatePage(session, sessionId, `JSON.stringify((function () {
+    var canvas = document.querySelector('canvas');
+    if (!canvas) return null;
+    var r = canvas.getBoundingClientRect();
+    return { left: r.left, top: r.top, width: r.width, height: r.height };
+  })())`);
+  const rect = JSON.parse(rectJson || 'null');
+  if (!rect || rect.width <= 0 || rect.height <= 0) throw new Error('Không tìm thấy canvas để phát gesture');
+  const point = (x, y) => ({
+    x: gesture.normalized ? rect.left + x * rect.width : x,
+    y: gesture.normalized ? rect.top + y * rect.height : y,
+  });
+  const start = point(gesture.x1, gesture.y1);
+  const end = point(gesture.x2, gesture.y2);
+  const touch = (p) => ({ x: p.x, y: p.y, radiusX: 1, radiusY: 1, force: 1, id: 1 });
+  await session.send('Input.dispatchTouchEvent', {
+    type: 'touchStart', touchPoints: [touch(start)],
+  }, sessionId);
+  const stepDuration = gesture.durationMs / gesture.steps;
+  // Keep the requested wall-clock duration stable. Waiting stepDuration after
+  // every CDP round trip makes a 500 ms gesture take 1-2 seconds on Windows,
+  // which materially changes inertia/rotation behavior in the game under test.
+  const startedAt = now();
+  const moveAcks = [];
+  for (let i = 1; i <= gesture.steps; i += 1) {
+    const t = i / gesture.steps;
+    const current = {
+      x: start.x + (end.x - start.x) * t,
+      y: start.y + (end.y - start.y) * t,
+    };
+    const delay = Math.max(0, startedAt + stepDuration * i - now());
+    if (delay > 0) await waitFor(delay);
+    // CdpSession.send writes to the WebSocket synchronously and returns an ACK
+    // promise. Do not await every ACK here: slow Editor/CDP round trips would
+    // stretch the physical gesture even when deadline waits are compensated.
+    moveAcks.push(session.send('Input.dispatchTouchEvent', {
+      type: 'touchMove', touchPoints: [touch(current)],
+    }, sessionId));
+  }
+  const endAck = keepPressed ? null
+    : session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }, sessionId);
+  const dispatchEnqueueElapsedMs = Math.max(0, now() - startedAt);
+  await Promise.all(endAck ? [...moveAcks, endAck] : moveAcks);
+  const dispatchElapsedMs = Math.max(0, now() - startedAt);
+  await waitFor(100);
+  return {
+    ...gesture,
+    scheduledDurationMs: gesture.durationMs,
+    dispatchEnqueueElapsedMs,
+    dispatchElapsedMs,
+    keepPressed,
+    canvasRect: rect,
+    start,
+    end,
+  };
+}
+
 /**
  * `target` is either a built .html path or an http(s) URL. The URL form is what
  * lets the editor's live preview be smoke-tested without producing a build -
@@ -245,8 +446,10 @@ async function runOne(target, options) {
     file: isUrl ? String(target) : path.relative(PROJECT_ROOT, htmlFile).replace(/\\/g, '/'),
     sizeKb: isUrl ? null : Math.round(fs.statSync(htmlFile).size / 1024),
     exceptions: [],
+    exceptionDetails: [],
     consoleErrors: [],
     consoleWarnings: [],
+    eventCounts: { exceptions: 0, consoleErrors: 0, consoleWarnings: 0 },
     frames: 0,
     fps: 0,
     hasCanvas: false,
@@ -256,10 +459,16 @@ async function runOne(target, options) {
     screenshot: null,
     screenshotBytes: 0,
     uniformFrame: false,
+    previewDevice: null,
+    previewDeviceError: '',
+    previewDeviceRestored: null,
+    previewDeviceRestoreError: '',
     ok: false,
   };
 
   let session = null;
+  let attachedSessionId = null;
+  let gesturePressed = false;
   try {
     const info = await waitForDevTools(port);
     session = new CdpSession(info.webSocketDebuggerUrl);
@@ -268,33 +477,100 @@ async function runOne(target, options) {
     // Mở một target mới và attach để có sessionId cho page domain.
     const { targetId } = await session.send('Target.createTarget', { url: 'about:blank' });
     const { sessionId } = await session.send('Target.attachToTarget', { targetId, flatten: true });
+    attachedSessionId = sessionId;
 
     session.on('Runtime.exceptionThrown', (params) => {
       const d = params.exceptionDetails || {};
-      const text = d.exception?.description || d.text || 'Unknown exception';
-      result.exceptions.push(String(text).split('\n')[0]);
+      const description = String(d.exception?.description || d.text || 'Unknown exception');
+      const message = description.split('\n')[0];
+      const frames = Array.isArray(d.stackTrace?.callFrames) ? d.stackTrace.callFrames : [];
+      const stack = frames.slice(0, 12).map((frame) => ({
+        functionName: frame.functionName || '<anonymous>',
+        url: frame.url || d.url || '',
+        line: Number(frame.lineNumber ?? d.lineNumber ?? -1) + 1,
+        column: Number(frame.columnNumber ?? d.columnNumber ?? -1) + 1,
+      }));
+      const detail = {
+        message,
+        url: d.url || '',
+        line: Number(d.lineNumber ?? -1) + 1,
+        column: Number(d.columnNumber ?? -1) + 1,
+        stack,
+      };
+      result.eventCounts.exceptions += 1;
+      pushUniqueBounded(result.exceptions, message, 50);
+      pushUniqueBounded(
+        result.exceptionDetails,
+        detail,
+        20,
+        (item) => `${item.message}|${item.url}|${item.line}|${item.column}`,
+      );
     });
     session.on('Runtime.consoleAPICalled', (params) => {
       const text = (params.args || [])
         .map((a) => (a.value !== undefined ? a.value : a.description || a.type))
         .join(' ');
-      if (params.type === 'error') result.consoleErrors.push(text.slice(0, 300));
-      else if (params.type === 'warning') result.consoleWarnings.push(text.slice(0, 200));
+      if (params.type === 'error') {
+        result.eventCounts.consoleErrors += 1;
+        pushUniqueBounded(result.consoleErrors, text.slice(0, 300), 50);
+      } else if (params.type === 'warning') {
+        result.eventCounts.consoleWarnings += 1;
+        pushUniqueBounded(result.consoleWarnings, text.slice(0, 200), 50);
+      }
     });
     session.on('Log.entryAdded', (params) => {
       const e = params.entry || {};
-      if (e.level === 'error') result.consoleErrors.push(`[${e.source}] ${String(e.text).slice(0, 300)}`);
+      if (e.level === 'error') {
+        result.eventCounts.consoleErrors += 1;
+        pushUniqueBounded(result.consoleErrors, `[${e.source}] ${String(e.text).slice(0, 300)}`, 50);
+      }
     });
 
     await session.send('Runtime.enable', {}, sessionId);
     await session.send('Log.enable', {}, sessionId);
     await session.send('Page.enable', {}, sessionId);
     await session.send('Page.addScriptToEvaluateOnNewDocument', { source: FRAME_COUNTER }, sessionId);
+    if (options.gesture) {
+      // Enable before navigation so Cocos detects touch capability while its
+      // browser input sources are being constructed.
+      await session.send('Emulation.setTouchEmulationEnabled', {
+        enabled: true, maxTouchPoints: 5,
+      }, sessionId);
+    }
 
     const targetUrl = isUrl ? String(target) : `file:///${htmlFile.replace(/\\/g, '/')}`;
     await session.send('Page.navigate', { url: targetUrl }, sessionId);
 
     await wait(Math.max(1, options.seconds) * 1000);
+
+    if (options.previewDevice) {
+      try {
+        result.previewDevice = await selectCocosPreviewDevice(session, sessionId, options.previewDevice);
+        if (result.previewDevice.reloaded) await wait(Math.max(1, options.seconds) * 1000);
+      } catch (error) {
+        result.previewDeviceError = String(error && error.message ? error.message : error);
+      }
+    }
+
+    if (options.evalBeforeExpression) {
+      try {
+        result.evalBeforeResult = await evaluatePage(session, sessionId, options.evalBeforeExpression);
+      } catch (error) {
+        result.evalBeforeError = error.message;
+      }
+    }
+    if (options.gesture) {
+      try {
+        result.gesture = await dispatchTouchGesture(session, sessionId, options.gesture, {
+          keepPressed: options.gestureKeepPressed === true,
+        });
+        gesturePressed = result.gesture.keepPressed === true;
+      } catch (error) {
+        result.gestureError = error.message;
+        result.eventCounts.exceptions += 1;
+        pushUniqueBounded(result.exceptions, `[gesture] ${error.message}`, 50);
+      }
+    }
 
     const probe = await session.send('Runtime.evaluate', {
       expression: PROBE, returnByValue: true, awaitPromise: false,
@@ -343,18 +619,7 @@ async function runOne(target, options) {
     // trình duyệt hiển thị.
     if (options.evalExpression) {
       try {
-        const evaluated = await session.send('Runtime.evaluate', {
-          expression: options.evalExpression,
-          returnByValue: true,
-          awaitPromise: true,
-        }, sessionId);
-        if (evaluated && evaluated.exceptionDetails) {
-          result.evalError = evaluated.exceptionDetails.exception
-            ? (evaluated.exceptionDetails.exception.description || evaluated.exceptionDetails.text)
-            : evaluated.exceptionDetails.text;
-        } else {
-          result.evalResult = evaluated && evaluated.result ? evaluated.result.value : undefined;
-        }
+        result.evalResult = await evaluatePage(session, sessionId, options.evalExpression);
       } catch (err) {
         result.evalError = String(err && err.message ? err.message : err);
       }
@@ -375,9 +640,29 @@ async function runOne(target, options) {
         result.screenshotBytes = buffer.length;
       }
     }
+    if (gesturePressed) {
+      await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }, sessionId);
+      gesturePressed = false;
+    }
   } catch (error) {
-    result.exceptions.push(`[verify-runtime] ${error.message}`);
+    result.eventCounts.exceptions += 1;
+    pushUniqueBounded(result.exceptions, `[verify-runtime] ${error.message}`, 50);
   } finally {
+    if (session && attachedSessionId && gesturePressed) {
+      try {
+        await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }, attachedSessionId);
+      } catch (_) { /* best-effort release before closing the isolated target */ }
+    }
+    if (session && attachedSessionId && result.previewDevice?.previous
+      && result.previewDevice.previous !== result.previewDevice.selected) {
+      try {
+        result.previewDeviceRestored = await selectCocosPreviewDevice(
+          session, attachedSessionId, result.previewDevice.previous,
+        );
+      } catch (error) {
+        result.previewDeviceRestoreError = String(error && error.message ? error.message : error);
+      }
+    }
     if (session) session.close();
     try { child.kill(); } catch (_) { /* ignore */ }
     try { fs.rmSync(userDataDir, { recursive: true, force: true }); } catch (_) { /* ignore */ }
@@ -385,6 +670,8 @@ async function runOne(target, options) {
 
   result.ok = result.exceptions.length === 0
     && result.consoleErrors.length === 0
+    && !result.previewDeviceError
+    && !result.previewDeviceRestoreError
     && result.frames > 0
     && result.fps >= options.minFps
     && !result.uniformFrame;
@@ -403,6 +690,8 @@ function parseArgs(argv) {
   const o = {
     seconds: 6, minFps: 20, all: false, json: false, noScreenshot: false,
     screenshotDir: path.join('.unity', 'runtime-shots'), help: false, evalExpression: '',
+    evalBeforeExpression: '', gesture: null, gestureKeepPressed: false,
+    previewDevice: '',
     windowSize: '720,1280',
   };
   for (let i = 0; i < argv.length; i += 1) {
@@ -421,10 +710,17 @@ function parseArgs(argv) {
     if (a.startsWith('--min-fps=')) { o.minFps = Number(a.split('=')[1]) || 20; continue; }
     if (a === '--window-size') { o.windowSize = normaliseWindowSize(argv[++i]); continue; }
     if (a.startsWith('--window-size=')) { o.windowSize = normaliseWindowSize(a.split('=')[1]); continue; }
+    if (a === '--preview-device') { o.previewDevice = String(argv[++i] || ''); continue; }
+    if (a.startsWith('--preview-device=')) { o.previewDevice = a.slice('--preview-device='.length); continue; }
     if (a === '--browser') { o.browser = argv[++i]; continue; }
     if (a.startsWith('--browser=')) { o.browser = a.split('=')[1]; continue; }
     if (a === '--eval') { o.evalExpression = argv[++i]; continue; }
     if (a.startsWith('--eval=')) { o.evalExpression = a.slice('--eval='.length); continue; }
+    if (a === '--eval-before') { o.evalBeforeExpression = argv[++i]; continue; }
+    if (a.startsWith('--eval-before=')) { o.evalBeforeExpression = a.slice('--eval-before='.length); continue; }
+    if (a === '--gesture') { o.gesture = parseGesture(argv[++i]); continue; }
+    if (a.startsWith('--gesture=')) { o.gesture = parseGesture(a.slice('--gesture='.length)); continue; }
+    if (a === '--gesture-keep-pressed') { o.gestureKeepPressed = true; continue; }
     if (a === '--screenshot') { o.screenshotDir = argv[++i]; continue; }
     if (a.startsWith('--screenshot=')) { o.screenshotDir = a.split('=')[1]; continue; }
   }
@@ -487,10 +783,20 @@ async function main() {
 }
 
 if (require.main === module) {
-  main().catch((error) => {
+  try {
+    if (ensureWebSocketRuntime()) {
+      main().catch((error) => {
+        console.error(`[verify-runtime] ERROR: ${error.message}`);
+        process.exit(1);
+      });
+    }
+  } catch (error) {
     console.error(`[verify-runtime] ERROR: ${error.message}`);
     process.exit(1);
-  });
+  }
 }
 
-module.exports = { runOne, findBuiltHtml, findBrowser };
+module.exports = {
+  runOne, findBuiltHtml, findBrowser, ensureWebSocketRuntime,
+  parseGesture, dispatchTouchGesture, selectCocosPreviewDevice,
+};

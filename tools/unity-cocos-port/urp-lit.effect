@@ -9,6 +9,7 @@ CCEffect %{
       metallic: { value: 0, target: pbrParams.y }
       alphaThreshold: { value: 0.5, target: pbrParams.z }
       emissive: { value: [0, 0, 0, 1], linear: true, editor: { type: color } }
+      emissiveMap: { value: white }
       planarShadowDirection: { value: [-0.3213938, -0.7660444, -0.5566705, 0] }
     d1: &d1 { depthTest: true, depthWrite: false }
     b1: &b1
@@ -124,6 +125,9 @@ CCProgram urp-lit-fs %{
     in mediump vec2 v_shadowBias;
   #endif
   uniform sampler2D mainTexture;
+  #if USE_EMISSIVE_MAP
+    uniform sampler2D emissiveMap;
+  #endif
 
   float shadowFactor (vec3 normal) {
     float shadow = 1.0;
@@ -180,7 +184,11 @@ CCProgram urp-lit-fs %{
     vec3 direct = (diffuse + specular) * lightColor * noL * shadow;
     float hemisphere = normal.y * 0.5 + 0.5;
     vec3 ambient = mix(cc_ambientGround.rgb, cc_ambientSky.rgb, hemisphere) * cc_ambientSky.w * baseColor.rgb;
-    return CCFragOutput(vec4(direct + ambient + emissive.rgb, baseColor.a));
+    vec3 emissionContribution = emissive.rgb;
+    #if USE_EMISSIVE_MAP
+      emissionContribution *= SRGBToLinear(texture(emissiveMap, v_uv).rgb);
+    #endif
+    return CCFragOutput(vec4(direct + ambient + emissionContribution, baseColor.a));
   }
 }%
 

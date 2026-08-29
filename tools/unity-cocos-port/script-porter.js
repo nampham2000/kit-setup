@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { cocosRef } = require('./core-utils');
 const { SCRIPT_SHAPE_MATCH_THRESHOLD } = require('./constants');
+const { mapUnityImageFill } = require('./ui-image-fill-mapper');
 
 module.exports = function createScriptPorter(deps) {
   const {
@@ -221,13 +222,28 @@ module.exports = function createScriptPorter(deps) {
       if (spriteAsset) {
         spriteUuid = reportResolvedUnitySprite(resolveUnitySpriteFrame(spriteAsset, options, unityDb, cocosDb, reporter), spriteAsset, reporter, options);
       }
+      const imageFill = mapUnityImageFill({
+        type: getField(doc, 'm_Type', 0),
+        method: getField(doc, 'm_FillMethod', 0),
+        amount: getField(doc, 'm_FillAmount', 1),
+        origin: getField(doc, 'm_FillOrigin', 0),
+        clockwise: getField(doc, 'm_FillClockwise', 1),
+      });
+      if (imageFill.approximated) {
+        reporter.medium(
+          'UI_IMAGE_RADIAL_FILL_APPROXIMATED',
+          model.file,
+          '',
+          'Unity Radial90/Radial180 Image fill was mapped to Cocos radial fill; verify the visible arc origin',
+        );
+      }
       builder.addSprite(
         nodeId,
         componentId,
         spriteUuid,
         getField(doc, 'm_Color', { r: 1, g: 1, b: 1, a: 1 }),
         `cmp-sprite-${componentId}`,
-        { preserveAspect },
+        { preserveAspect, ...imageFill },
       );
       return;
     }

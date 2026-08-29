@@ -19,6 +19,30 @@ const {
   toPosix,
 } = require('./core-utils');
 
+function animationTrackBindingInfo(track) {
+  const hierarchy = [];
+  let component = '';
+  let property = '';
+  for (const item of track?._binding?.path?._paths || []) {
+    if (typeof item === 'string') property = item;
+    else if (item?.__type__ === 'cc.animation.HierarchyPath') hierarchy.push(item.path);
+    else if (item?.__type__ === 'cc.animation.ComponentPath') component = item.component;
+  }
+  return { unityPath: hierarchy.join('/'), component, property };
+}
+
+function findRootTransformTracks(clip) {
+  const transformProperties = new Set(['position', 'scale', 'eulerAngles', 'rotation']);
+  const found = new Set();
+  for (const track of clip?._tracks || []) {
+    const binding = animationTrackBindingInfo(track);
+    if (!binding.unityPath && !binding.component && transformProperties.has(binding.property)) {
+      found.add(binding.property);
+    }
+  }
+  return [...found].sort();
+}
+
 module.exports = function createAnimationPorter(deps) {
   const {
     parseUnityYaml,
@@ -904,19 +928,7 @@ module.exports = function createAnimationPorter(deps) {
   }
 
   function trackBindingInfo(track) {
-    const hierarchy = [];
-    let component = '';
-    let property = '';
-    for (const item of track?._binding?.path?._paths || []) {
-      if (typeof item === 'string') {
-        property = item;
-      } else if (item?.__type__ === 'cc.animation.HierarchyPath') {
-        hierarchy.push(item.path);
-      } else if (item?.__type__ === 'cc.animation.ComponentPath') {
-        component = item.component;
-      }
-    }
-    return { unityPath: hierarchy.join('/'), component, property };
+    return animationTrackBindingInfo(track);
   }
 
   function reportDroppedTrackBindings(unresolved, source, reporter) {
@@ -1226,6 +1238,22 @@ module.exports = function createAnimationPorter(deps) {
     let graphUuid = '';
     if (controllerAsset) {
       controller = parseUnityAnimatorController(controllerAsset.path, unityDb, reporter, options);
+      const rootTransformProperties = new Set();
+      for (const state of controller.states.values()) {
+        const clipAsset = state.motionGuid ? unityDb.get(state.motionGuid) : null;
+        if (!clipAsset?.path || clipAsset.ext !== '.anim' || !fs.existsSync(clipAsset.path)) continue;
+        const clip = parseUnityAnimationClip(clipAsset.path, silentReporter(), animationContext);
+        for (const property of findRootTransformTracks(clip)) rootTransformProperties.add(property);
+      }
+      if (rootTransformProperties.size) {
+        reporter.medium(
+          'ANIMATOR_ROOT_TRANSFORM_OWNERSHIP',
+          controllerAsset.relativePath,
+          gameObject?.name || '',
+          `Animator drives root transform propert${rootTransformProperties.size === 1 ? 'y' : 'ies'}: ${[...rootTransformProperties].sort().join(', ')}. Runtime placement on this same Cocos node can be overwritten after instantiation.`,
+          'Place the animated visual under a stable placement wrapper, or explicitly disable the imported Animation/AnimationController when gameplay code owns the transform.',
+        );
+      }
       if (options.overwrite) graphUuid = convertAnimatorControllerAsset(controllerAsset, options, reporter, unityDb, animationContext, cocosDb);
       if (!graphUuid) graphUuid = cocosDb.resolveAnimationGraphByStem(controllerAsset.stem);
       if (!graphUuid) {
@@ -1267,3 +1295,5 @@ module.exports = function createAnimationPorter(deps) {
     emitAnimator,
   };
 };
+
+module.exports.findRootTransformTracks = findRootTransformTracks;

@@ -62,6 +62,7 @@ const CATEGORY_DEFAULTS: Record<string, ToolAnnotations> = {
     referenceImage_:{ readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     // Phase 5
     editorRuntime_:{ readOnlyHint: false, destructiveHint: false, idempotentHint: true,  openWorldHint: false },
+    engineFeature_:{ readOnlyHint: false, destructiveHint: false, idempotentHint: true,  openWorldHint: false },
     // Phase 6
     dx_:           { readOnlyHint: true,  destructiveHint: false, idempotentHint: true,  openWorldHint: false }
 };
@@ -74,6 +75,8 @@ const CATEGORY_DEFAULTS: Record<string, ToolAnnotations> = {
  * signals. Tools omitted here inherit `CATEGORY_DEFAULTS` above.
  */
 const TOOL_HINTS: Record<string, ToolHints> = {
+    'engineFeature_get_features':    { annotations: { readOnlyHint: true,  destructiveHint: false, idempotentHint: true, openWorldHint: false } },
+    'engineFeature_ensure_features': { annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false } },
     // -- scene_ ---------------------------------------------------------
     'scene_get_current_scene':      { annotations: { readOnlyHint: true,  destructiveHint: false, idempotentHint: true } },
     'scene_get_scene_list':         { annotations: { readOnlyHint: true,  destructiveHint: false, idempotentHint: true } },

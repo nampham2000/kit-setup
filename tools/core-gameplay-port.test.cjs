@@ -9,15 +9,21 @@ const test = require('node:test');
 const {
   EVIDENCE_KIND,
   EVIDENCE_SCHEMA_VERSION,
+  DEFAULT_RESUME_PACKET,
+  RESUME_PACKET_KIND,
   REQUIRED_SCRIPTS,
   atomicWriteJson,
+  buildResumePacket,
   currentTargetHashes,
   evaluateFidelity,
   hashFile,
   initCorePort,
   parseArgs,
+  persistStaticScaffoldReceipt,
+  resumeCorePort,
   resolveContained,
   runRequiredGates,
+  scaffoldCorePort,
   validateManifest,
   verifyCorePort,
 } = require('./core-gameplay-port.cjs');
@@ -28,9 +34,11 @@ function projectFixture(t) {
   const unity = path.join(root, 'Unity');
   const cocos = path.join(root, 'Cocos');
   fs.mkdirSync(path.join(unity, 'Assets', 'Game'), { recursive: true });
+  fs.mkdirSync(path.join(unity, 'Assets', 'Scenes'), { recursive: true });
   fs.mkdirSync(path.join(unity, 'ProjectSettings'), { recursive: true });
   fs.writeFileSync(path.join(unity, 'ProjectSettings', 'ProjectVersion.txt'), 'm_EditorVersion: 6000.3.1f1\n');
   fs.writeFileSync(path.join(unity, 'Assets', 'Game', 'Gameplay.cs'), 'class Gameplay {}\n');
+  fs.writeFileSync(path.join(unity, 'Assets', 'Scenes', 'Gameplay.unity'), '%YAML 1.1\n');
   fs.mkdirSync(path.join(cocos, 'assets', 'script'), { recursive: true });
   fs.mkdirSync(path.join(cocos, 'assets', 'resources'), { recursive: true });
   fs.mkdirSync(path.join(cocos, 'build', 'common'), { recursive: true });
@@ -89,6 +97,10 @@ function fakeBrief() {
       },
     },
   };
+}
+
+function freshReceipt() {
+  return { receipt: { receiptId: 'rcp:test', briefId: 'brf:test', stateFingerprint: 'state' } };
 }
 
 test('init dry-run is write-free and real init writes a compact manifest inside Cocos root', async t => {
@@ -224,6 +236,125 @@ test('atomic manifest CAS preserves a concurrent edit', t => {
   assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).generation, 'external');
   atomicWriteJson(fixture.cocos, file, { generation: 2 }, { force: true, expectedHash: hashFile(file) });
   assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).generation, 2);
+});
+
+test('atomic manifest publish supports Windows filesystems without hard links', { skip: process.platform !== 'win32' }, t => {
+  const fixture = projectFixture(t);
+  const file = path.join(fixture.cocos, '.ai', 'port', 'exfat.json');
+  t.mock.method(fs, 'linkSync', () => { throw Object.assign(new Error('unsupported hard link'), { code: 'EISDIR' }); });
+  atomicWriteJson(fixture.cocos, file, { generation: 1 });
+  assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).generation, 1);
+  assert.deepEqual(fs.readdirSync(path.dirname(file)), ['exfat.json']);
+});
+
+test('scaffold defaults to static provider and resume supports explicit packet persistence', () => {
+  assert.equal(parseArgs(['scaffold', '--unity-project', '.']).provider, 'static');
+  assert.equal(parseArgs(['scaffold', '--unity-project', '.', '--provider', 'unity-mcp']).provider, 'unity-mcp');
+  assert.equal(parseArgs(['resume', '--unity-project', '.', '--write']).write, true);
+});
+
+test('static scaffold creates scene wiring and a bounded resume packet for interrupted agents', async t => {
+  const fixture = projectFixture(t);
+  fs.unlinkSync(path.join(fixture.cocos, 'assets', 'Gameplay.scene'));
+  const result = await scaffoldCorePort({
+    command: 'scaffold', unityProject: fixture.unity, cocosProject: fixture.cocos, provider: 'static',
+  }, {
+    runPreflight: async () => ({ brief: fakeBrief() }),
+    assertPreflight: freshReceipt,
+    runStaticScene(request) {
+      fs.mkdirSync(path.dirname(request.outFile), { recursive: true });
+      fs.mkdirSync(path.dirname(request.wiringFile), { recursive: true });
+      fs.writeFileSync(request.outFile, '[]\n');
+      fs.writeFileSync(request.wiringFile, JSON.stringify({
+        stats: { nodes: 12, unresolvedTotal: 3, distinctTasks: 1 },
+        unresolved: { scripts: [{}, {}, {}] },
+        todo: [{ kind: 'script', label: 'Gameplay.cs', nodeCount: 3 }],
+      }));
+      return { ok: true };
+    },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.staticFirst.status, 'created');
+  const packetFile = path.join(fixture.cocos, DEFAULT_RESUME_PACKET);
+  assert.equal(fs.existsSync(packetFile), true);
+  assert.ok(fs.statSync(packetFile).size < 64 * 1024);
+  const packet = JSON.parse(fs.readFileSync(packetFile, 'utf8'));
+  assert.equal(packet.kind, RESUME_PACKET_KIND);
+  assert.equal(packet.staticFirst.status, 'complete');
+  assert.equal(packet.staticFirst.wiring.todo.length, 1);
+  assert.equal(JSON.stringify(packet).includes(fixture.unity), false);
+  assert.equal(JSON.stringify(packet).includes(fixture.cocos), false);
+});
+
+test('resume digests port failures and refreshes the persisted handoff without raw CSV output', async t => {
+  const fixture = projectFixture(t);
+  await initCorePort({ unityProject: fixture.unity, cocosProject: fixture.cocos }, {
+    runPreflight: async () => ({ brief: fakeBrief() }),
+  });
+  const wiringFile = path.join(fixture.cocos, '.ai', 'port', 'static-scaffold.wiring.json');
+  fs.mkdirSync(path.dirname(wiringFile), { recursive: true });
+  fs.writeFileSync(wiringFile, JSON.stringify({ stats: { nodes: 1, unresolvedTotal: 0, distinctTasks: 0 }, unresolved: {}, todo: [] }));
+  const manifest = JSON.parse(fs.readFileSync(path.join(fixture.cocos, '.ai', 'port', 'core-gameplay.json'), 'utf8'));
+  persistStaticScaffoldReceipt(fixture.cocos, manifest);
+  const reportFile = path.join(fixture.cocos, '.unity', 'port-report.csv');
+  fs.mkdirSync(path.dirname(reportFile), { recursive: true });
+  fs.writeFileSync(reportFile, [
+    'severity,code,prefab,source,message',
+    'high,CUSTOM_SHADER_NOT_PORTED,Box,Box.mat,shader missing',
+    'medium,SCRIPT_CLASS_UNRESOLVED,Box,Box.cs,script missing',
+  ].join('\n'));
+  const result = resumeCorePort({
+    command: 'resume', unityProject: fixture.unity, cocosProject: fixture.cocos, write: true,
+  }, { assertPreflight: freshReceipt });
+  assert.equal(result.ok, false);
+  assert.equal(result.packet.phase, 'repair-static-output');
+  assert.equal(result.packet.reports.port.counts.high, 1);
+  assert.equal(result.packet.reports.port.codes.length, 2);
+  assert.equal(result.packet.nextActions.some(item => item.includes('CUSTOM_SHADER_NOT_PORTED')), true);
+  assert.equal(result.packet.persisted, true);
+  assert.ok(fs.statSync(path.join(fixture.cocos, DEFAULT_RESUME_PACKET)).size < 64 * 1024);
+});
+
+test('resume refuses to reuse static outputs after their source-bound hashes change', async t => {
+  const fixture = projectFixture(t);
+  await initCorePort({ unityProject: fixture.unity, cocosProject: fixture.cocos }, {
+    runPreflight: async () => ({ brief: fakeBrief() }),
+  });
+  const wiringFile = path.join(fixture.cocos, '.ai', 'port', 'static-scaffold.wiring.json');
+  fs.mkdirSync(path.dirname(wiringFile), { recursive: true });
+  fs.writeFileSync(wiringFile, JSON.stringify({ stats: { nodes: 1, unresolvedTotal: 0, distinctTasks: 0 }, unresolved: {}, todo: [] }));
+  const manifest = JSON.parse(fs.readFileSync(path.join(fixture.cocos, '.ai', 'port', 'core-gameplay.json'), 'utf8'));
+  persistStaticScaffoldReceipt(fixture.cocos, manifest);
+  fs.appendFileSync(path.join(fixture.cocos, 'assets', 'Gameplay.scene'), '\nexternal edit');
+  const packet = buildResumePacket({ unityProject: fixture.unity, cocosProject: fixture.cocos }, { assertPreflight: freshReceipt });
+  assert.equal(packet.staticFirst.status, 'partial');
+  assert.equal(packet.staticFirst.receipt.code, 'CORE_PORT_STATIC_OUTPUT_CHANGED');
+  assert.equal(packet.nextActions.some(item => item.includes('không reuse mù')), true);
+});
+
+test('resume marks source stale instead of opening raw Unity files again', async t => {
+  const fixture = projectFixture(t);
+  await initCorePort({ unityProject: fixture.unity, cocosProject: fixture.cocos }, {
+    runPreflight: async () => ({ brief: fakeBrief() }),
+  });
+  const packet = buildResumePacket({ unityProject: fixture.unity, cocosProject: fixture.cocos }, {
+    assertPreflight: () => { throw Object.assign(new Error('stale'), { code: 'PORT_PREFLIGHT_RECEIPT_STALE' }); },
+  });
+  assert.equal(packet.phase, 'stale-source');
+  assert.equal(packet.sourceFresh.fresh, false);
+  assert.equal(packet.nextActions[0].includes('--force'), true);
+});
+
+test('Windows publish fallback never overwrites a concurrent destination', { skip: process.platform !== 'win32' }, t => {
+  const fixture = projectFixture(t);
+  const file = path.join(fixture.cocos, '.ai', 'port', 'exfat-race.json');
+  t.mock.method(fs, 'linkSync', () => {
+    fs.writeFileSync(file, '{"generation":"external"}\n');
+    throw Object.assign(new Error('unsupported hard link'), { code: 'EISDIR' });
+  });
+  assert.throws(() => atomicWriteJson(fixture.cocos, file, { generation: 1 }),
+    error => error.code === 'CORE_PORT_MANIFEST_CONCURRENT');
+  assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).generation, 'external');
 });
 
 test('gate runner bounds failures and redacts project paths and credentials', t => {

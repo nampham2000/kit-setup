@@ -15,7 +15,7 @@ When starting a new task or encountering a tricky bug in Cocos 3.8:
 - Or query via CLI:
   ```bash
   npm run memory:stats
-  node playable-shared-kit/tools/work-memory.cjs query --keyword "shader"
+  npm run memory:query -- "shader"
   ```
 
 ---
@@ -31,3 +31,22 @@ Whenever you resolve a tricky bug or discover a reusable porting pattern:
    ```
    - `scope: "global"`: Reusable across all playable projects.
    - `scope: "repo"`: Specific to the current game project.
+
+3. **Via CLI file input** (ưu tiên khi JSON dài để tránh shell quoting):
+   ```bash
+   npm run memory:remember -- --memory-file .unity/work-memory-lessons.json --json
+   ```
+
+## 3. Database Integrity and Portable Runtime
+
+- Node 20 không có `node:sqlite`; project template phải khai báo `better-sqlite3` để keyword memory vẫn chạy.
+- Khi query/stats có count mâu thuẫn hoặc DB được copy từ máy khác, chạy read-only doctor:
+  ```bash
+  npm run memory:doctor -- --json
+  ```
+- Nếu corrupt, luôn dry-run trước. Repair chỉ giữ row hợp lệ, di chuyển DB/WAL/SHM cũ nguyên byte vào backup directory,
+  tạo DB mới, rebuild FTS, kiểm `integrity_check`, rồi mới có thể reindex semantic:
+  ```bash
+  npm run memory:repair -- --scope repo --dry-run --json
+  npm run memory:repair -- --scope repo --reindex-semantic true --json
+  ```

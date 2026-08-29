@@ -43,6 +43,7 @@ import { ReferenceImageTools } from './tools/reference-image-tools';
 import { AssetAdvancedTools } from './tools/asset-advanced-tools';
 import { ValidationTools } from './tools/validation-tools';
 import { EditorRuntimeTools } from './tools/editor-runtime-tools';
+import { EngineFeatureTools } from './tools/engine-feature-tools';
 import { DXTools } from './tools/dx-tools';
 
 /**
@@ -71,6 +72,7 @@ export class CocosToolRegistry implements ToolRegistry {
         this.tools.assetAdvanced = new AssetAdvancedTools();
         this.tools.validation = new ValidationTools();
         this.tools.editorRuntime = new EditorRuntimeTools();
+        this.tools.engineFeature = new EngineFeatureTools();
         this.rebuild();
     }
 

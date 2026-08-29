@@ -8,7 +8,7 @@ const path = require('node:path');
 const test = require('node:test');
 
 const { createUnityFixture } = require('../unity-intel/test-fixture.cjs');
-const { buildGuidIndex, guidCacheContext } = require('./prefab-shader-chain.cjs');
+const { buildGuidIndex, guidCacheContext, resolveChain } = require('./prefab-shader-chain.cjs');
 
 const SHADER_CLI = path.resolve(__dirname, 'unity-shader-compiler.cjs');
 
@@ -46,6 +46,38 @@ test('--no-cache neither reads nor writes a shader GUID cache', t => {
   const result = buildGuidIndex(fixture.assets, { noCache: true, cachePath });
   assert.equal(result.fromCache, false);
   assert.equal(fs.existsSync(cachePath), false);
+});
+
+test('shader chain discovers a ScriptableObject material set and all per-state textures', t => {
+  const fixture = createUnityFixture(t);
+  const materialGuids = ['1'.repeat(32), '2'.repeat(32)];
+  const textureGuids = ['3'.repeat(32), '4'.repeat(32)];
+  const config = fixture.write('Assets/Game/Configs/TapeColors.asset', [
+    'MonoBehaviour:',
+    '  ColorConfigs:',
+    `  - ActiveMaterial: {fileID: 2100000, guid: ${materialGuids[0]}, type: 2}`,
+    `    DisableMaterial: {fileID: 2100000, guid: ${materialGuids[1]}, type: 2}`,
+    '',
+  ].join('\n'));
+  for (let i = 0; i < materialGuids.length; i += 1) {
+    fixture.write(`Assets/Game/Materials/Tape${i}.mat`, [
+      'Material:',
+      '  m_Shader: {fileID: 10720, guid: 0000000000000000f000000000000000, type: 0}',
+      '  m_SavedProperties:',
+      '    m_TexEnvs:',
+      `    - _BaseMap: {m_Texture: {fileID: 2800000, guid: ${textureGuids[i]}, type: 3}}`,
+      '',
+    ].join('\n'));
+    fixture.write(`Assets/Game/Materials/Tape${i}.mat.meta`, `fileFormatVersion: 2\nguid: ${materialGuids[i]}\n`);
+    fixture.write(`Assets/Game/Textures/Tape${i}.png`, `texture-${i}`);
+    fixture.write(`Assets/Game/Textures/Tape${i}.png.meta`, `fileFormatVersion: 2\nguid: ${textureGuids[i]}\n`);
+  }
+
+  const chain = resolveChain(config, fixture.assets, { noCache: true });
+  assert.equal(chain.sourceKind, 'scriptable-object');
+  assert.equal(chain.materialSetDetected, true);
+  assert.equal(chain.materials.length, 2);
+  assert.equal(chain.textures.length, 2);
 });
 
 test('shader GUID cache rejects a junction redirecting its cache directory into the Unity project', t => {

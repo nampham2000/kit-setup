@@ -14,18 +14,23 @@
 
 const fs = require('fs');
 const http = require('http');
+const os = require('os');
 const path = require('path');
 const readline = require('readline');
 const { URL } = require('url');
 
 const COCOS_MCP_URL = process.env.COCOS_MCP_URL || 'http://127.0.0.1:3000/mcp';
 const SCHEMA_CACHE_FILE = path.join(__dirname, 'cocos-mcp-schema.json');
+const USER_SCHEMA_CACHE_FILE = path.join(
+  process.env.COCOS_MCP_CACHE_DIR || path.join(process.env.LOCALAPPDATA || os.homedir(), 'cocos-mcp-proxy'),
+  'live-schema.json',
+);
 
 /**
  * PHÂN TẦNG TOOL THEO PROFILE — cắt token cố định của mỗi request.
  * ================================================================
- * Đo được: cocos-mcp công bố 100 tool = 65.954 ký tự ≈ 18.3k token, và khoản
- * này bị nạp lại ở MỌI request của AI agent, kể cả khi task chỉ cần đọc scene.
+ * Registry lớn có thể tốn hàng chục nghìn token schema cho mỗi request, kể cả
+ * khi task chỉ cần đọc scene. Profile giữ discovery bounded theo workflow.
  *
  * Đặt COCOS_MCP_PROFILE để chỉ công bố nhóm cần dùng. Lọc ở proxy nên không
  * phải sửa extension, và `tools/call` vẫn chuyển tiếp đầy đủ — profile chỉ ảnh
@@ -38,9 +43,9 @@ const SCHEMA_CACHE_FILE = path.join(__dirname, 'cocos-mcp-schema.json');
  *   debug            : log, performance, validate
  */
 const TOOL_PROFILES = {
-  port: ['scene_', 'node_', 'component_', 'prefab_', 'project_get', 'project_query', 'project_find', 'project_import', 'project_refresh', 'project_create_asset', 'project_save', 'debug_get_console', 'debug_validate'],
+  port: ['scene_', 'node_', 'component_', 'prefab_', 'project_get', 'project_query', 'project_find', 'project_import', 'project_refresh', 'project_create_asset', 'project_save', 'editorRuntime_', 'engineFeature_', 'debug_get_console', 'debug_validate'],
   scene: ['scene_', 'node_', 'component_', 'debug_get_node_tree'],
-  build: ['project_build', 'project_check_builder', 'project_get_build', 'project_open_build', 'project_run', 'project_start_preview', 'project_stop_preview', 'project_get_project', 'debug_get_console'],
+  build: ['project_build', 'project_check_builder', 'project_get_build', 'project_open_build', 'project_run', 'project_start_preview', 'project_stop_preview', 'project_get_project', 'editorRuntime_', 'engineFeature_', 'debug_get_console'],
   debug: ['debug_', 'broadcast_', 'server_', 'scene_get_current_scene'],
 };
 
@@ -59,14 +64,45 @@ function applyToolProfile(tools) {
   return filtered;
 }
 
-let cachedTools = [];
-try {
-  if (fs.existsSync(SCHEMA_CACHE_FILE)) {
-    cachedTools = JSON.parse(fs.readFileSync(SCHEMA_CACHE_FILE, 'utf8'));
+function readToolCache(file) {
+  try {
+    const value = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return Array.isArray(value) ? value : [];
+  } catch (_) {
+    return [];
   }
-} catch (e) {
-  cachedTools = [];
 }
+
+function mergeToolLists(canonical, live) {
+  const merged = new Map();
+  // User-local live cache may come from an older Editor. It can contribute
+  // additional runtime tools, but it must never shadow/remove released tools.
+  for (const tool of Array.isArray(live) ? live : []) {
+    if (tool && typeof tool.name === 'string') merged.set(tool.name, tool);
+  }
+  for (const tool of Array.isArray(canonical) ? canonical : []) {
+    if (tool && typeof tool.name === 'string') merged.set(tool.name, tool);
+  }
+  return [...merged.values()];
+}
+
+function writeLiveToolCache(tools) {
+  let temp = '';
+  try {
+    fs.mkdirSync(path.dirname(USER_SCHEMA_CACHE_FILE), { recursive: true });
+    temp = `${USER_SCHEMA_CACHE_FILE}.${process.pid}.tmp`;
+    fs.writeFileSync(temp, `${JSON.stringify(tools, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' });
+    fs.renameSync(temp, USER_SCHEMA_CACHE_FILE);
+  } catch (_) {
+    // Cache persistence must not fail a live MCP response.
+    if (temp) {
+      try { fs.unlinkSync(temp); } catch (_) { /* best-effort user-local cleanup */ }
+    }
+  }
+}
+
+const canonicalTools = readToolCache(SCHEMA_CACHE_FILE);
+let cachedTools = mergeToolLists(canonicalTools, readToolCache(USER_SCHEMA_CACHE_FILE));
 
 function forwardHttp(messageObj) {
   return new Promise((resolve, reject) => {
@@ -150,10 +186,9 @@ async function handleMessage(message) {
     // If tools/list succeeded, update local cache
     if (method === 'tools/list' && liveResponse && liveResponse.result && Array.isArray(liveResponse.result.tools)) {
       // Cache LUÔN lưu danh sách đầy đủ; profile chỉ lọc lúc công bố.
-      cachedTools = liveResponse.result.tools;
-      try {
-        fs.writeFileSync(SCHEMA_CACHE_FILE, JSON.stringify(cachedTools, null, 2), 'utf8');
-      } catch (_) {}
+      const liveTools = liveResponse.result.tools;
+      cachedTools = mergeToolLists(canonicalTools, liveTools);
+      writeLiveToolCache(liveTools);
       liveResponse.result.tools = applyToolProfile(cachedTools);
     }
     sendJsonRpc(liveResponse);
@@ -273,4 +308,16 @@ function main() {
   process.on('SIGTERM', () => process.exit(0));
 }
 
-main();
+if (require.main === module) main();
+
+module.exports = {
+  TOOL_PROFILES,
+  applyToolProfile,
+  mergeToolLists,
+  readToolCache,
+  writeLiveToolCache,
+  handleMessage,
+  main,
+  SCHEMA_CACHE_FILE,
+  USER_SCHEMA_CACHE_FILE,
+};

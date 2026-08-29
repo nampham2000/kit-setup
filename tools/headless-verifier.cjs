@@ -22,6 +22,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const { runLinter } = require('./zero-gc-linter.cjs');
 const { run: runAssetImportCheck } = require('./verify-assets.cjs');
+const { auditCocosEngineFeatures } = require('./cocos-engine-feature-audit.cjs');
 
 function findProjectRoot(startDir) {
   let current = path.resolve(startDir);
@@ -209,6 +210,33 @@ function checkAssetImport() {
   };
 }
 
+function checkEngineFeatureCropping() {
+  const result = { name: 'Engine Feature Cropping', status: 'PASS', errors: [], warnings: [], details: '' };
+  try {
+    const audit = auditCocosEngineFeatures(ROOT_DIR);
+    const backend = audit.physicsDecision.backend
+      ? `${audit.physicsDecision.label} (${audit.physicsDecision.backend})`
+      : 'none';
+    if (!audit.profile.complete) {
+      result.status = 'FAIL';
+      result.errors.push(`Feature profile is missing: ${audit.profile.missing.join(', ')}`);
+    }
+    if (!audit.appliedPreview.available) {
+      result.warnings.push('Preview import map is unavailable; Editor/runtime application is unverified.');
+    } else if (!audit.appliedPreview.complete) {
+      result.status = 'FAIL';
+      result.errors.push(`Active preview import map is stale/missing: ${audit.appliedPreview.missing.join(', ')}`);
+    }
+    result.details = `Required: ${audit.requiredModules.join(', ') || 'none'}; physics decision: ${backend}; ` +
+      `profile=${audit.profile.complete ? 'ready' : 'missing'}, preview=${audit.appliedPreview.complete ? 'ready' : 'pending'}.`;
+  } catch (error) {
+    result.status = 'FAIL';
+    result.errors.push(`[${error.code || 'ENGINE_FEATURE_ERROR'}] ${error.message}`);
+    result.details = 'Could not audit Cocos engine Feature Cropping.';
+  }
+  return result;
+}
+
 function checkBuildSize() {
   const result = { name: 'Playable Bundle Size', status: 'PASS', errors: [], warnings: [], details: '' };
   const buildDir = path.join(ROOT_DIR, 'build');
@@ -272,6 +300,7 @@ function runVerificationSuite() {
     checkZeroGC(),
     checkConfigIntegrity(),
     checkAssetBindings(),
+    checkEngineFeatureCropping(),
     checkMetaIntegrity(),
     checkAssetImport(),
     checkBuildSize()
@@ -351,4 +380,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { runVerificationSuite };
+module.exports = { runVerificationSuite, checkEngineFeatureCropping };

@@ -6,13 +6,16 @@ const os = require('os');
 const path = require('path');
 let DatabaseSync = null;
 let databaseSyncLoadError = null;
+let databaseDriver = null;
 try {
   ({ DatabaseSync } = require('node:sqlite'));
+  databaseDriver = 'node:sqlite';
 } catch (error) {
   try {
     DatabaseSync = require('better-sqlite3');
+    databaseDriver = 'better-sqlite3';
   } catch (err2) {
-    databaseSyncLoadError = error;
+    databaseSyncLoadError = err2 || error;
   }
 }
 const {
@@ -187,18 +190,165 @@ function semanticDistanceToScore(distance) {
   return Number((2.25 / (1 + numericDistance)).toFixed(6));
 }
 
-function createStore(options) {
+function openDatabase(dbPath, { readOnly = false, allowExtension = true } = {}) {
   if (!DatabaseSync) {
-    const reason = databaseSyncLoadError && databaseSyncLoadError.message ? databaseSyncLoadError.message : 'node:sqlite and better-sqlite3 are unavailable';
+    const reason = databaseSyncLoadError && databaseSyncLoadError.message
+      ? databaseSyncLoadError.message : 'node:sqlite and better-sqlite3 are unavailable';
     throw new Error(`Work Memory CLI requires a Node.js runtime with node:sqlite or better-sqlite3 support: ${reason}`);
   }
+  if (databaseDriver === 'better-sqlite3') {
+    return new DatabaseSync(dbPath, { readonly: readOnly, fileMustExist: readOnly });
+  }
+  return new DatabaseSync(dbPath, { readOnly, allowExtension: allowExtension && !readOnly });
+}
+
+function inspectOpenDatabaseIntegrity(db, limit = 100) {
+  try {
+    const rows = db.prepare(`PRAGMA integrity_check(${Math.max(1, Math.floor(limit))})`).all();
+    const messages = rows.map((row) => String(Object.values(row)[0] || '')).filter(Boolean);
+    return { ok: messages.length === 1 && messages[0].toLowerCase() === 'ok', messages };
+  } catch (error) {
+    return { ok: false, messages: [error && error.message ? error.message : String(error)] };
+  }
+}
+
+function inspectDatabaseIntegrity(dbPath, limit = 100) {
+  const resolved = path.resolve(dbPath);
+  if (!fs.existsSync(resolved)) return { exists: false, ok: true, dbPath: resolved, messages: [] };
+  const db = openDatabase(resolved, { readOnly: true, allowExtension: false });
+  try {
+    return { exists: true, dbPath: resolved, ...inspectOpenDatabaseIntegrity(db, limit) };
+  } finally {
+    db.close();
+  }
+}
+
+function isRecoverableMemoryRow(row) {
+  const required = ['id', 'scope', 'category', 'title', 'content', 'tags_json', 'created_at', 'updated_at'];
+  return required.every((key) => row[key] !== null && row[key] !== undefined && String(row[key]).length > 0)
+    && (row.scope === 'repo' || row.scope === 'global');
+}
+
+function backupComponentPaths(dbPath) {
+  return ['', '-wal', '-shm'].map((suffix) => `${dbPath}${suffix}`).filter((file) => fs.existsSync(file));
+}
+
+async function repairDatabase(options) {
+  const dbPath = path.resolve(options.dbPath);
+  if (!fs.existsSync(dbPath)) throw new Error(`Work Memory database not found: ${dbPath}`);
+  const before = inspectDatabaseIntegrity(dbPath);
+  const source = openDatabase(dbPath, { readOnly: true, allowExtension: false });
+  let rawRows;
+  try {
+    rawRows = source.prepare('SELECT * FROM memory_items NOT INDEXED').all();
+  } finally {
+    source.close();
+  }
+  const unique = new Map();
+  let invalidRowCount = 0;
+  for (const row of rawRows) {
+    if (!isRecoverableMemoryRow(row)) { invalidRowCount += 1; continue; }
+    const existing = unique.get(row.id);
+    if (!existing || String(row.updated_at) >= String(existing.updated_at)) unique.set(row.id, row);
+  }
+  const recoveredRows = [...unique.values()];
+  const duplicateRowCount = rawRows.length - invalidRowCount - recoveredRows.length;
+  if (before.ok && invalidRowCount === 0 && duplicateRowCount === 0) {
+    return {
+      ok: true, repaired: false, dryRun: !!options.dryRun, dbPath,
+      integrityBefore: before, scannedRowCount: rawRows.length,
+      recoveredRowCount: recoveredRows.length, invalidRowCount, duplicateRowCount,
+    };
+  }
+  if (!recoveredRows.length) {
+    throw new Error(`Refusing Work Memory repair: no valid memory rows recovered from ${dbPath}`);
+  }
+  if (options.dryRun) {
+    return {
+      ok: true, repaired: false, dryRun: true, dbPath,
+      integrityBefore: before, scannedRowCount: rawRows.length,
+      recoveredRowCount: recoveredRows.length, invalidRowCount, duplicateRowCount,
+    };
+  }
+
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const backupDir = `${dbPath}.repair-backup-${stamp}`;
+  const tempPath = `${dbPath}.repair-${process.pid}-${Date.now()}.tmp`;
+  ensureDirectory(backupDir);
+  let repairStore = null;
+  try {
+    repairStore = createStore({
+      dbPath: tempPath,
+      scope: options.scope || 'repo',
+      repoRoot: options.repoRoot || null,
+      repoId: options.repoId || null,
+      disableSemantic: true,
+    });
+    for (const row of recoveredRows) await repairStore.upsertMemory(rowToMemory(row));
+  } finally {
+    if (repairStore) repairStore.close();
+  }
+  const afterTemp = inspectDatabaseIntegrity(tempPath);
+  if (!afterTemp.ok) {
+    throw new Error(`Repaired Work Memory database failed integrity_check: ${afterTemp.messages.slice(0, 3).join('; ')}`);
+  }
+
+  const originals = backupComponentPaths(dbPath);
+  const retired = [];
+  try {
+    for (const original of originals) {
+      const target = path.join(backupDir, path.basename(original));
+      fs.renameSync(original, target);
+      retired.push({ original, target });
+    }
+    fs.renameSync(tempPath, dbPath);
+    for (const suffix of ['-wal', '-shm']) {
+      const tempComponent = `${tempPath}${suffix}`;
+      if (fs.existsSync(tempComponent)) fs.renameSync(tempComponent, `${dbPath}${suffix}`);
+    }
+  } catch (error) {
+    if (!fs.existsSync(dbPath)) {
+      for (let i = retired.length - 1; i >= 0; i--) {
+        if (fs.existsSync(retired[i].target)) fs.renameSync(retired[i].target, retired[i].original);
+      }
+    }
+    throw error;
+  }
+
+  const after = inspectDatabaseIntegrity(dbPath);
+  if (!after.ok) throw new Error(`Work Memory repair replacement is corrupt: ${after.messages.slice(0, 3).join('; ')}`);
+  let semantic = { requested: !!options.reindexSemantic, available: false, indexedCount: 0 };
+  if (options.reindexSemantic) {
+    const store = createStore({
+      dbPath,
+      scope: options.scope || 'repo',
+      repoRoot: options.repoRoot || null,
+      repoId: options.repoId || null,
+    });
+    try {
+      semantic = { requested: true, ...(await store.reindexSemantic({ force: true })) };
+    } finally {
+      store.close();
+    }
+  }
+  return {
+    ok: true, repaired: true, dryRun: false, dbPath, backupDir,
+    integrityBefore: before, integrityAfter: after,
+    scannedRowCount: rawRows.length, recoveredRowCount: recoveredRows.length,
+    invalidRowCount, duplicateRowCount, semantic,
+  };
+}
+
+function createStore(options) {
   const dbPath = path.resolve(options.dbPath);
   ensureDirectory(path.dirname(dbPath));
-  let db;
-  try {
-    db = new DatabaseSync(dbPath, { allowExtension: true });
-  } catch {
-    db = new DatabaseSync(dbPath);
+  const db = openDatabase(dbPath, { allowExtension: true });
+  const integrity = inspectOpenDatabaseIntegrity(db);
+  if (!integrity.ok) {
+    db.close();
+    const error = new Error(`WORK_MEMORY_DB_CORRUPT: ${dbPath}: ${integrity.messages.slice(0, 3).join('; ')}. Run work-memory repair --scope ${options.scope || 'repo'} --dry-run first.`);
+    error.code = 'WORK_MEMORY_DB_CORRUPT';
+    throw error;
   }
 
   function prepare(sql) {
@@ -348,6 +498,10 @@ function createStore(options) {
       dimensions: DEFAULT_EMBEDDING_DIMENSIONS,
       reason: null,
     };
+    if (options.disableSemantic) {
+      semantic.reason = 'disabled during database repair';
+      return semantic;
+    }
     if (!sqliteVec) {
       semantic.reason = 'sqlite-vec package not installed';
       return semantic;
@@ -595,11 +749,13 @@ function createStore(options) {
 
     if (text) {
       params.text = text;
-      params.fts = text
-        .split(/\s+/)
-        .filter(Boolean)
-        .map((token) => `${token.replace(/"/g, '""')}*`)
-        .join(' OR ');
+      // FTS5 treats punctuation such as `-`, `:`, `+` and parentheses as query
+      // operators. User search text is data, so tokenize it first and quote every
+      // prefix term instead of handing raw punctuation to MATCH.
+      const ftsTokens = text.match(/[\p{L}\p{N}_]+/gu) || [];
+      params.fts = ftsTokens.length
+        ? ftsTokens.map((token) => `"${token.replace(/"/g, '""')}"*`).join(' OR ')
+        : '"__work_memory_no_fts_term__"';
       where.push(`(
         f.rowid IS NOT NULL OR
         m.title LIKE '%' || $text || '%' OR
@@ -810,5 +966,7 @@ module.exports = {
   DEFAULT_CACHE_FILE_NAME,
   computeRepoId,
   ensureDirectory,
+  inspectDatabaseIntegrity,
+  repairDatabase,
   toIso,
 };

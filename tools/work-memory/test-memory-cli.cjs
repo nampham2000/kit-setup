@@ -175,6 +175,20 @@ assert.ok(queryResult.count >= 1, 'expected at least one query result');
 assert.strictEqual(queryResult.items[0].title, 'Sprite preview trap');
 assert.ok(queryResult.items.every((item) => item.matchSource !== 'repo-semantic' && item.matchSource !== 'global-semantic'), 'expected lexical query before reindex to avoid semantic results');
 
+const punctuationQueryResult = run([
+  'query',
+  '--repo-root', tempRepoRoot,
+  '--repo-db', repoDb,
+  '--global-db', globalDb,
+  '--cache-file', cacheFile,
+  '--text', 'sprite-preview',
+  '--scope', 'hybrid',
+  '--semantic', 'off',
+  '--json',
+]);
+assert.ok(punctuationQueryResult.count >= 1, 'hyphenated search text must be treated as terms, not an FTS5 NOT expression');
+assert.strictEqual(punctuationQueryResult.items[0].title, 'Sprite preview trap');
+
 const warmupResult = run([
   'warmup',
   '--repo-root', tempRepoRoot,

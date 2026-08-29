@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Prefab -> material -> shader dependency closure.
+ * Unity YAML asset -> material -> shader dependency closure.
  *
  * Porting "a prefab with a couple of materials on it" is three lookups deep:
  * the prefab references material GUIDs, each material references a shader GUID
@@ -198,7 +198,7 @@ function referencedGuids(filePath) {
  *            indexSize: number, fromCache: boolean}}
  */
 function resolveChain(prefabPath, unityAssetsRoot, options = {}) {
-  if (!fs.existsSync(prefabPath)) throw new Error(`Prefab not found: ${prefabPath}`);
+  if (!fs.existsSync(prefabPath)) throw new Error(`Unity YAML asset not found: ${prefabPath}`);
   if (!fs.existsSync(unityAssetsRoot)) throw new Error(`Unity Assets root not found: ${unityAssetsRoot}`);
 
   const { guidToFile, fromCache } = buildGuidIndex(unityAssetsRoot, options);
@@ -251,8 +251,14 @@ function resolveChain(prefabPath, unityAssetsRoot, options = {}) {
     path: p, name: path.basename(p, '.shader'), usedByMaterials: usedBy,
   }));
 
+  const sourceExtension = path.extname(prefabPath).toLowerCase();
   return {
     prefab: prefabPath,
+    sourceAsset: prefabPath,
+    sourceKind: sourceExtension === '.prefab' ? 'prefab'
+      : sourceExtension === '.asset' ? 'scriptable-object'
+        : 'unity-yaml',
+    materialSetDetected: sourceExtension === '.asset' && materials.length > 1,
     materials,
     shaders,
     textures: [...textures],

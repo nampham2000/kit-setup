@@ -400,21 +400,67 @@ function convertUnityHlslToCocosEffect(options, externalReporter) {
       throw e;
     }
   } else {
-    // 2. Unity ShaderLab / HLSL AST Transpiler
+    // 2. Unity ShaderLab canonical compiler. The legacy
+    // HlslAstTranspiler only emitted a shading-model template and used to
+    // overwrite a compile-clean effect whenever prefab/material porting ran.
+    // Keep ShaderGraph on its dedicated graph path above, and route complete
+    // .shader files through the same compiler used by `shader.convert` +
+    // `validate`. A standalone .hlsl/.cginc has no ShaderLab pass/entry-point
+    // contract; retain the honest manual-port appendix for those rather than
+    // claiming a compile-clean empty/default shader.
     try {
-      const transpiler = new HlslAstTranspiler(source, options);
-      effectText = transpiler.generateCocosEffect(shaderName);
-      properties = transpiler.properties;
-      isTransparent = transpiler.renderState.transparent;
-      reportShaderOutcome(reporter, {
-        bodyTranspiled: transpiler.bodyTranspiled === true,
-        okCode: 'HLSL_TRANSPILED',
-        srcFile,
-        outFile,
-        shadingModel: transpiler.shadingModel,
-        kind: 'ShaderLab/HLSL',
-        notes: transpiler.getManualPortNotes(effectText),
+      if (ext !== '.shader') {
+        const transpiler = new HlslAstTranspiler(source, options);
+        effectText = transpiler.generateCocosEffect(shaderName);
+        properties = transpiler.properties;
+        isTransparent = transpiler.renderState.transparent;
+        reportShaderOutcome(reporter, {
+          bodyTranspiled: transpiler.bodyTranspiled === true,
+          okCode: 'HLSL_TRANSPILED',
+          srcFile,
+          outFile,
+          shadingModel: transpiler.shadingModel,
+          kind: 'standalone HLSL',
+          notes: transpiler.getManualPortNotes(effectText),
+        });
+      } else {
+      const { transpileShaderFile } = require('./shader-compiler/unity-shader-compiler.cjs');
+      const compiled = transpileShaderFile(srcFile, '', {
+        dryRun: true,
+        report: false,
+        mode: 'auto',
+        // This wrapper is used by Unity prefab/material porting, so its meshes
+        // carry Unity UV orientation by construction.
+        unityUv: options.unityUv !== false,
       });
+      effectText = compiled.effectCode;
+      properties = (compiled.docIR.properties || []).map((prop) => {
+        const type = String(prop.type || '').toLowerCase();
+        return {
+          ...prop,
+          kind: type === 'color' ? 'color' : type === 'vector' ? 'vector' : /float|range|int/.test(type) ? 'float' : type,
+          glslName: prop.cocosName || prop.glslName || prop.name,
+        };
+      });
+      isTransparent = options.forceTransparent === true || (options.forceOpaque !== true && /\bblend:\s*true\b/.test(effectText));
+
+      if (compiled.validationResult.valid) {
+        reporter.low(
+          'HLSL_TRANSPILED',
+          srcFile,
+          outFile,
+          `Transpiled ShaderLab/HLSL body with the canonical compiler (confidence ${compiled.scoreInfo.score}/100)`,
+        );
+      } else {
+        reporter.high(
+          'SHADER_VALIDATION_FAILED',
+          srcFile,
+          outFile,
+          'Canonical shader compiler emitted an effect that failed static validation; do not bind it as port-complete.',
+          compiled.validationResult.errors.slice(0, 8).join(' | '),
+        );
+      }
+      }
     } catch (e) {
       reporter.high('HLSL_PARSE_ERROR', srcFile, outFile, `HLSL parsing error: ${e.message}`, e.stack);
       throw e;

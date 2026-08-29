@@ -94,6 +94,18 @@ function Sync-CocosMcpExtension {
         return
     }
 
+    # The editor executes dist/, not source/. Refuse a portable sync when the
+    # canonical extension was edited without publishing matching compiled JS.
+    $DistManifestScript = Join-Path $Source 'scripts\source-dist-manifest.cjs'
+    $NodeCmd = Get-Command node -ErrorAction SilentlyContinue
+    if (-not $NodeCmd -or -not (Test-Path $DistManifestScript)) {
+        throw "Cannot verify canonical Cocos MCP source/dist consistency: $DistManifestScript"
+    }
+    & $NodeCmd.Source $DistManifestScript verify
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Canonical Cocos MCP source/dist mismatch. Rebuild the project extension and publish source + dist to playable-shared-kit before opening another project.'
+    }
+
     $ExtensionsDir = Split-Path $Destination -Parent
     if (-not (Test-Path $ExtensionsDir)) { New-Item -ItemType Directory -Path $ExtensionsDir -Force | Out-Null }
 
@@ -376,10 +388,21 @@ if (Test-Path $CocosCreatorExe) {
         (Get-CocosProcessProject $_.CommandLine) -ieq $ResolvedProjectDir
     })
     $PortOwnerProcesses = @(Get-CocosMcpPortOwnerProcesses)
-    $ProcessesToRestart = @($ProjectCocosProcesses + $PortOwnerProcesses | Sort-Object ProcessId -Unique)
-    if ($ProcessesToRestart.Count -eq 0 -and $AllCocosProcesses.Count -eq 1) {
-        $ProcessesToRestart = $AllCocosProcesses
+    $ForeignOrUnknownPortOwners = @($PortOwnerProcesses | Where-Object {
+        (Get-CocosProcessProject $_.CommandLine) -ine $ResolvedProjectDir
+    })
+    if ($ForeignOrUnknownPortOwners.Count -gt 0) {
+        $Owners = ($ForeignOrUnknownPortOwners | ForEach-Object {
+            $OwnerProject = Get-CocosProcessProject $_.CommandLine
+            if (-not $OwnerProject) { $OwnerProject = '<unknown-project>' }
+            "PID $($_.ProcessId) ($OwnerProject)"
+        }) -join ', '
+        throw "Cocos MCP port $CocosMcpPort is owned by a different or unverified project: $Owners. Refusing to stop it."
     }
+    # Restart only processes whose command line proves the exact project path.
+    # Never use a single-process/global-port heuristic: it can discard unsaved
+    # work from another Cocos project when command-line metadata is missing.
+    $ProcessesToRestart = @($ProjectCocosProcesses | Sort-Object ProcessId -Unique)
     Stop-CocosProcesses $ProcessesToRestart
 
     Write-Host "==> Launching Cocos Creator 3.8.8..." -ForegroundColor Cyan

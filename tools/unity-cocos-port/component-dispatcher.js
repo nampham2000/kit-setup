@@ -45,14 +45,17 @@ function createComponentDispatcher(handlers) {
     [136, (ctx) => handlers.emitCapsuleCollider(ctx.nodeId, ctx.componentId, ctx.doc, ctx.gameObject, ctx.model, ctx.builder, ctx.reporter, ctx.options, ctx.unityDb)],
     [143, (ctx) => handlers.emitCharacterController(ctx.nodeId, ctx.componentId, ctx.doc, ctx.gameObject, ctx.model, ctx.builder)],
     [212, (ctx) => handlers.emitSpriteRenderer(ctx.nodeId, ctx.componentId, ctx.doc, ctx.builder, ctx.reporter, ctx.options, ctx.unityDb, ctx.cocosDb)],
-    // Unity ParticleSystem is class 198 and is dispatched below. Class 223 is
-    // Canvas: it has no 1:1 Cocos counterpart, since cc.Canvas owns a camera and
-    // belongs at the root of a UI tree rather than on every nested uGUI layer.
-    [223, (ctx) => ctx.reporter.medium(
-      'CANVAS_NOT_PORTED',
-      ctx.model.file,
-      ctx.gameObject.name,
-      'Unity Canvas has no direct Cocos equivalent; add cc.UITransform plus cc.Widget on the layer node, or a single cc.Canvas at the UI root',
+    // Screen-space Unity Canvas still needs an explicit Cocos camera decision,
+    // but a world-space Canvas maps directly to RenderRoot2D. Without that
+    // component Cocos does not collect the nested Sprite/Label renderers at all.
+    [223, (ctx) => handlers.emitCanvas(
+      ctx.nodeId,
+      ctx.componentId,
+      ctx.doc,
+      ctx.gameObject,
+      ctx.model,
+      ctx.builder,
+      ctx.reporter,
     )],
   ]);
 

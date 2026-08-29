@@ -8,6 +8,12 @@ const binarySerializedFile = require('./lib/unity-serialized-file.cjs');
 const { createPathBoundary, inspectContainedPath } = require('./lib/path-boundary.cjs');
 const { assertUnityPortPreflight } = require('./unity-intel/preflight.cjs');
 const {
+  ensureCocosEngineFeatures,
+  createMcpClient,
+  unwrapToolResult,
+} = require('./cocos-engine-feature-audit.cjs');
+const { collectImportFailures } = require('./verify-assets.cjs');
+const {
   ROOT_DIR,
   BUILTIN_DEFAULT_SPRITE_RENDERER_MATERIAL_UUID,
   BUILTIN_DEFAULT_MESH_MATERIAL_UUID,
@@ -251,6 +257,7 @@ const componentDispatcher = createComponentDispatcher({
   emitHingeJoint,
   emitFixedJoint,
   emitSpringJoint,
+  emitCanvas,
 });
 
 function printHelp() {
@@ -271,11 +278,15 @@ Options:
   --dry-run                 Build and validate in memory, but do not write prefab/meta.
   --recursive               Recursively inspect nested prefab/model/controller dependencies.
   --copy-assets             Copy unresolved Unity assets into the Cocos assets folder when possible.
-  --convert-fbx-fallback    If FBX has no Cocos import, try FBX2glTF/assimp to create a GLB fallback.
+  --convert-fbx-fallback    If FBX has no Cocos import, try FBX2glTF/assimp/Blender to create a GLB fallback.
   --model-import-wait-ms    Wait for Cocos to populate copied model sub-assets. Default: 10000.
   --script-mode <mode>      skip | wire-if-present | require. Default: wire-if-present.
   --no-cache                Bỏ qua cache tăng dần (.unity/port-cache.json).
   --no-import-wait          Không chờ Cocos Creator import asset (= --model-import-wait-ms 0).
+  --no-engine-feature-repair Chỉ port asset/code; không tự audit/repair Feature Cropping sau port.
+  --no-engine-feature-restart Cho phép sửa Profile/engine.json nhưng để trạng thái pending, không restart Editor.
+  --physics-backend <name>  Override có kiểm tra: physics-builtin | physics-cannon | physics-ammo | physics-physx.
+  --force-physics-backend   Chấp nhận override dù tool phát hiện mất hành vi (được ghi rõ trong report).
   --jobs <n>                Chạy song song n tiến trình con cho batch prefab.
   --quiet                   Chỉ in tổng kết (ít token hơn cho AI agent).
   --strip-private-prefix    Map Unity serialized _field to Cocos field when wiring custom scripts. Default.
@@ -414,6 +425,10 @@ function parseArgs(argv) {
     scriptMode: 'wire-if-present',
     stripPrivatePrefix: true,
     layerMap: {},
+    engineFeatureRepair: true,
+    engineFeatureRestart: true,
+    physicsBackend: '',
+    forcePhysicsBackend: false,
   };
 
   const optionStartIndex = command === 'help' && argv[0] && String(argv[0]).startsWith('-') ? 0 : 1;
@@ -487,6 +502,26 @@ function parseArgs(argv) {
     if (arg === '--no-import-wait') {
       // Tương đương --model-import-wait-ms 0: dùng khi Cocos Creator không mở.
       options.modelImportWaitMs = 0;
+      continue;
+    }
+    if (arg === '--no-engine-feature-repair') {
+      options.engineFeatureRepair = false;
+      continue;
+    }
+    if (arg === '--no-engine-feature-restart') {
+      options.engineFeatureRestart = false;
+      continue;
+    }
+    if (arg === '--physics-backend') {
+      options.physicsBackend = readValue(arg);
+      continue;
+    }
+    if (arg.startsWith('--physics-backend=')) {
+      options.physicsBackend = arg.slice('--physics-backend='.length);
+      continue;
+    }
+    if (arg === '--force-physics-backend') {
+      options.forcePhysicsBackend = true;
       continue;
     }
     if (arg === '--jobs' || arg.startsWith('--jobs=')) {
@@ -570,6 +605,9 @@ function parseArgs(argv) {
   if (!validCommands.includes(options.command)) fail(`Unknown command: ${options.command}`);
   if (!['skip', 'wire-if-present', 'require'].includes(options.scriptMode)) {
     fail('--script-mode must be skip, wire-if-present, or require');
+  }
+  if (options.physicsBackend && !['physics-builtin', 'physics-cannon', 'physics-ammo', 'physics-physx'].includes(options.physicsBackend)) {
+    fail('--physics-backend must be physics-builtin, physics-cannon, physics-ammo, or physics-physx');
   }
 
   if (options.src) options.src = path.resolve(options.src);
@@ -1114,6 +1152,18 @@ function convertPosition(value) {
   return vec3(Number(v.x || 0), Number(v.y || 0), -Number(v.z || 0));
 }
 
+function convertNodePosition(transform) {
+  const converted = convertPosition(transform?.localPosition);
+  // cc.RenderRoot2D supplies the world-space UI plane basis itself. Applying
+  // the generic Unity->Cocos Z reflection once more to the RectTransform's
+  // local plane depth moves world-space controls to the opposite side of a
+  // pitched parent (TapeJam's Unlock badge is a concrete regression case).
+  if (transform?.preserveWorldSpaceCanvasLocalZ) {
+    converted.z = Number(transform?.localPosition?.z || 0);
+  }
+  return converted;
+}
+
 function convertScale(value) {
   const v = value || {};
   return vec3(Number(v.x == null ? 1 : v.x), Number(v.y == null ? 1 : v.y), Number(v.z == null ? 1 : v.z));
@@ -1141,6 +1191,13 @@ function isUnityIdentityRotation(value) {
 }
 
 function convertTransformEuler(transform) {
+  if (transform?.cocosEuler) {
+    return vec3(
+      Number(transform.cocosEuler.x || 0),
+      Number(transform.cocosEuler.y || 0),
+      Number(transform.cocosEuler.z || 0),
+    );
+  }
   if (isUnityIdentityRotation(transform?.localRotation)) return vec3();
   return convertEuler(transform?.euler);
 }
@@ -1154,15 +1211,106 @@ function multiplyQuaternion(left, right) {
   };
 }
 
+function rotateVectorByQuaternion(value, rotation) {
+  const v = value || {};
+  const q = rotation || {};
+  const x = Number(v.x || 0);
+  const y = Number(v.y || 0);
+  const z = Number(v.z || 0);
+  const qx = Number(q.x || 0);
+  const qy = Number(q.y || 0);
+  const qz = Number(q.z || 0);
+  const qw = Number(q.w == null ? 1 : q.w);
+  const tx = 2 * (qy * z - qz * y);
+  const ty = 2 * (qz * x - qx * z);
+  const tz = 2 * (qx * y - qy * x);
+  return {
+    x: x + qw * tx + (qy * tz - qz * ty),
+    y: y + qw * ty + (qz * tx - qx * tz),
+    z: z + qw * tz + (qx * ty - qy * tx),
+  };
+}
+
+// Matches cc.Quat.toEuler (YZX order). Keeping _euler consistent with _lrot is
+// important because Cocos uses it as the editor-facing transform cache.
+function cocosQuaternionToEuler(value) {
+  const q = value || {};
+  const x = Number(q.x || 0);
+  const y = Number(q.y || 0);
+  const z = Number(q.z || 0);
+  const w = Number(q.w == null ? 1 : q.w);
+  const test = x * y + z * w;
+  const toDegrees = 180 / Math.PI;
+  let bank;
+  let heading;
+  let attitude;
+  if (test > 0.499999) {
+    bank = 0;
+    heading = 2 * Math.atan2(x, w) * toDegrees;
+    attitude = 90;
+  } else if (test < -0.499999) {
+    bank = 0;
+    heading = -2 * Math.atan2(x, w) * toDegrees;
+    attitude = -90;
+  } else {
+    const sqx = x * x;
+    const sqy = y * y;
+    const sqz = z * z;
+    bank = Math.atan2(2 * x * w - 2 * y * z, 1 - 2 * sqx - 2 * sqz) * toDegrees;
+    heading = Math.atan2(2 * y * w - 2 * x * z, 1 - 2 * sqy - 2 * sqz) * toDegrees;
+    attitude = Math.asin(Math.max(-1, Math.min(1, 2 * test))) * toDegrees;
+  }
+  const clean = (number) => Math.abs(number) < 1e-10 ? 0 : number;
+  return { x: clean(bank), y: clean(heading), z: clean(attitude) };
+}
+
+const NESTED_MODEL_FORWARD_BASIS = Object.freeze({ x: 0, y: 1, z: 0, w: 0 });
+
+function withConsistentCocosEuler(transform) {
+  const result = transform || {};
+  return {
+    ...result,
+    cocosEuler: cocosQuaternionToEuler(convertRotation(result.localRotation)),
+  };
+}
+
+// Unity and Cocos import the FBX file's forward axis differently. The linked
+// Cocos model therefore needs a local 180-degree Y basis after the regular
+// Unity -> Cocos handedness conversion. This is a MODEL basis, not an authored
+// gameplay rotation: TapeJam's authored Y180 becomes identity here because the
+// Cocos-imported mesh already contains the corresponding file-axis conversion.
 function correctNestedModelForwardAxis(transform) {
   const source = transform || {};
   const rotation = source.localRotation || { x: 0, y: 0, z: 0, w: 1 };
-  const euler = source.euler || { x: 0, y: 0, z: 0 };
-  return {
+  return withConsistentCocosEuler({
     ...source,
-    localRotation: multiplyQuaternion(rotation, { x: 0, y: 1, z: 0, w: 0 }),
-    euler: { ...euler, y: Number(euler.y || 0) + 180 },
-  };
+    localRotation: multiplyQuaternion(rotation, NESTED_MODEL_FORWARD_BASIS),
+  });
+}
+
+function hasExplicitNestedModelForwardBasisRotation(transform) {
+  const rotation = transform?.localRotation || {};
+  const epsilon = 1e-5;
+  return Math.abs(Number(rotation.x) || 0) <= epsilon
+    && Math.abs(Math.abs(Number(rotation.y) || 0) - 1) <= epsilon
+    && Math.abs(Number(rotation.z) || 0) <= epsilon
+    && Math.abs(Number(rotation.w) || 0) <= epsilon;
+}
+
+// Children added by the Unity prefab are not part of the FBX. If only the model
+// root receives the basis above, those mounted nodes inherit an extra 180-degree
+// turn (holder pegs/labels appear on the wrong side). Rebase each immediate
+// mounted child by the inverse basis so its world transform remains authored:
+//   (root * B) * (B^-1 * child) == root * child.
+// For a 180-degree Y quaternion B^-1 equals B.
+function rebaseNestedModelMountedChildTransform(transform) {
+  const source = transform || {};
+  const rotation = source.localRotation || { x: 0, y: 0, z: 0, w: 1 };
+  return withConsistentCocosEuler({
+    ...source,
+    localPosition: rotateVectorByQuaternion(source.localPosition, NESTED_MODEL_FORWARD_BASIS),
+    localRotation: multiplyQuaternion(NESTED_MODEL_FORWARD_BASIS, rotation),
+  });
 }
 
 function unityColorToCocos(value, alphaOverride = null) {
@@ -1377,16 +1525,16 @@ class CocosAssetDatabase {
     const booleanFields = new Set();
     const vectorFields = new Map();
     for (const match of source.matchAll(
-      /(?:^|[\n;{])[ \t]*(?:public |private |protected |readonly )*([A-Za-z_$][\w$]*)[ \t]*!?\??[ \t]*(?::[ \t]*boolean[ \t]*)?=[ \t]*(?:true|false)\b/g,
+      /(?:^|[\n;{])[ \t]*(?:@property(?:\([^\n)]*\))?[ \t]*(?:\r?\n[ \t]*)?)?(?:public |private |protected |readonly )*([A-Za-z_$][\w$]*)[ \t]*!?\??[ \t]*(?::[ \t]*boolean[ \t]*)?=[ \t]*(?:true|false)\b/g,
     )) booleanFields.add(match[1]);
     for (const match of source.matchAll(
-      /(?:^|[\n;{])[ \t]*(?:public |private |protected |readonly )*([A-Za-z_$][\w$]*)[ \t]*!?\??[ \t]*:[ \t]*boolean[ \t]*[;=]/g,
+      /(?:^|[\n;{])[ \t]*(?:@property(?:\([^\n)]*\))?[ \t]*(?:\r?\n[ \t]*)?)?(?:public |private |protected |readonly )*([A-Za-z_$][\w$]*)[ \t]*!?\??[ \t]*:[ \t]*boolean[ \t]*[;=]/g,
     )) booleanFields.add(match[1]);
     for (const match of source.matchAll(
-      /(?:^|[\n;{])[ \t]*(?:public |private |protected |readonly )*([A-Za-z_$][\w$]*)[ \t]*!?\??[ \t]*(?::[ \t]*(Vec2|Vec3)[ \t]*)?=[ \t]*new (Vec2|Vec3)\(/g,
+      /(?:^|[\n;{])[ \t]*(?:@property(?:\([^\n)]*\))?[ \t]*(?:\r?\n[ \t]*)?)?(?:public |private |protected |readonly )*([A-Za-z_$][\w$]*)[ \t]*!?\??[ \t]*(?::[ \t]*(Vec2|Vec3)[ \t]*)?=[ \t]*new (Vec2|Vec3)\(/g,
     )) vectorFields.set(match[1], `cc.${match[3]}`);
     for (const match of source.matchAll(
-      /(?:^|[\n;{])[ \t]*(?:public |private |protected |readonly )*([A-Za-z_$][\w$]*)[ \t]*!?\??[ \t]*:[ \t]*(Vec2|Vec3)[ \t]*[;=]/g,
+      /(?:^|[\n;{])[ \t]*(?:@property(?:\([^\n)]*\))?[ \t]*(?:\r?\n[ \t]*)?)?(?:public |private |protected |readonly )*([A-Za-z_$][\w$]*)[ \t]*!?\??[ \t]*:[ \t]*(Vec2|Vec3)[ \t]*[;=]/g,
     )) if (!vectorFields.has(match[1])) vectorFields.set(match[1], `cc.${match[2]}`);
     // Every member name the class actually declares. A MonoBehaviour is bound to
     // a Cocos class by NAME alone, so without this the porter cannot tell a real
@@ -1394,7 +1542,7 @@ class CocosAssetDatabase {
     // write Unity's fields into a class that has none of them and report success.
     const memberNames = new Set();
     for (const match of source.matchAll(
-      /(?:^|\n)[ \t]*(?:@property[^\n]*\n[ \t]*)?(?:public |private |protected |readonly |static |declare |abstract )*([A-Za-z_$][\w$]*)[ \t]*[!?]?[ \t]*[:=(]/g,
+      /(?:^|\n)[ \t]*(?:@property(?:\([^\n)]*\))?[ \t]*(?:\r?\n[ \t]*)?)?(?:public |private |protected |readonly |static |declare |abstract )*([A-Za-z_$][\w$]*)[ \t]*[!?]?[ \t]*[:=(]/g,
     )) memberNames.add(match[1]);
     for (const match of source.matchAll(/(?:^|\n)[ \t]*(?:public |private |protected |static )*(?:get|set)[ \t]+([A-Za-z_$][\w$]*)/g)) {
       memberNames.add(match[1]);
@@ -1526,6 +1674,9 @@ class CocosAssetDatabase {
           meshUuid: mesh,
           materialUuid: materials[0]?.uuid || '',
           materialUuids: materials.map((material) => material.uuid),
+          materialNames: materials.map((material) => (
+            material.subMeta.name || material.subMeta.displayName || ''
+          )),
           source: record.relativePath,
           fallbackExt: record.ext,
         };
@@ -2751,6 +2902,11 @@ const importWaitBudget = {
 
   /** Thời gian tối đa được phép chờ cho asset kế tiếp (0 = không chờ). */
   budgetFor(options) {
+    // A dry-run is a pure planning pass. It must never wait for an editor-side
+    // importer because no copied asset can appear and no output UUID can be
+    // persisted by this invocation. Keep this check ahead of every configured
+    // timeout/probe so callers do not need the redundant --no-import-wait flag.
+    if (options?.dryRun) return 0;
     const configured = Math.max(0, Number(options?.modelImportWaitMs ?? DEFAULT_MODEL_IMPORT_WAIT_MS) || 0);
     if (configured === 0) return 0;
     if (this.disabled) {
@@ -3882,7 +4038,16 @@ function transformFromPrefabOverrides(baseTransform, props) {
   return { localPosition, anchoredPosition, localRotation, localScale, euler, sizeDelta, anchorMin, anchorMax, anchor };
 }
 
-function resolveTransformLayout(transform, parentTransform) {
+function unityCanvasRenderMode(gameObject, model) {
+  for (const componentId of gameObject?.components || []) {
+    const doc = model?.componentDocs?.get(componentId);
+    if (Number(doc?.classId || 0) !== 223) continue;
+    return Number(getField(doc, 'm_RenderMode', 0) || 0);
+  }
+  return null;
+}
+
+function resolveTransformLayout(transform, parentTransform, options = {}) {
   const localPosition = {
     x: finiteNumber(transform?.localPosition?.x, 0),
     y: finiteNumber(transform?.localPosition?.y, 0),
@@ -3906,6 +4071,22 @@ function resolveTransformLayout(transform, parentTransform) {
     x: finiteNumber(transform?.anchoredPosition?.x, localPosition.x),
     y: finiteNumber(transform?.anchoredPosition?.y, localPosition.y),
   };
+  // Unity serializes a world-space Canvas as a RectTransform directly below a
+  // normal 3D Transform. Its anchored position describes the inner UI rect;
+  // the 3D placement remains in m_LocalPosition/m_LocalRotation/m_LocalScale.
+  // Treating the 3D parent as a 100x100 UI rect moved TapeJam's lock canvas by
+  // roughly (-50, -50) world units. The explicit option also covers a detached
+  // world-space Canvas root in a standalone prefab.
+  if (options.preserveLocalPosition || (parentTransform && !parentTransform.isRect)) {
+    return {
+      localPosition,
+      localRotation,
+      localScale,
+      euler,
+      sizeDelta,
+      anchor,
+    };
+  }
   const parentLayout = parentTransform?.resolvedLayout;
   if (!parentLayout?.size) {
     return {
@@ -4521,7 +4702,7 @@ class CocosPrefabBuilder {
       _active: active,
       _components: [],
       _prefab: null,
-      _lpos: convertPosition(transform?.localPosition),
+      _lpos: convertNodePosition(transform),
       _lrot: convertRotation(transform?.localRotation),
       _lscale: convertScale(transform?.localScale),
       _mobility: 0,
@@ -4577,7 +4758,7 @@ class CocosPrefabBuilder {
     };
 
     pushOverride(rootLocalId, '_name', name);
-    pushOverride(rootLocalId, '_lpos', convertPosition(transform?.localPosition));
+    pushOverride(rootLocalId, '_lpos', convertNodePosition(transform));
     pushOverride(rootLocalId, '_lrot', convertRotation(transform?.localRotation));
     pushOverride(rootLocalId, '_lscale', convertScale(transform?.localScale));
     pushOverride(rootLocalId, '_euler', convertTransformEuler(transform));
@@ -5119,6 +5300,10 @@ class CocosPrefabBuilder {
     }, unityComponentId, fileId);
   }
 
+  addRenderRoot2D(nodeId, unityComponentId, fileId) {
+    return this.addComponent(nodeId, 'cc.RenderRoot2D', {}, unityComponentId, fileId);
+  }
+
   applyPreserveAspectSize(nodeId, spriteUuid) {
     const uiTransformId = this.uiTransformByNode.get(nodeId);
     const uiTransform = uiTransformId == null ? null : this.objects[uiTransformId];
@@ -5142,12 +5327,12 @@ class CocosPrefabBuilder {
       _dstBlendFactor: 4,
       _color: unityColorToCocos(unityColor, customMaterialUuid ? 255 : null),
       _spriteFrame: spriteUuid ? cocosUuid(spriteUuid, 'cc.SpriteFrame') : null,
-      _type: 0,
-      _fillType: 0,
+      _type: Number(config.spriteType ?? 0),
+      _fillType: Number(config.fillType ?? 0),
       _sizeMode: 0,
       _fillCenter: vec2(),
-      _fillStart: 0,
-      _fillRange: 0,
+      _fillStart: Number(config.fillStart ?? 0),
+      _fillRange: Number(config.fillRange ?? 0),
       _isTrimmedMode: false,
       _useGrayscale: false,
       _atlas: null,
@@ -6031,7 +6216,7 @@ function buildLayerResolver(options, cocosDb, reporter) {
   };
 }
 
-function emitNodeRecursive(transform, parentNodeId, model, builder, layerResolver, reporter, options, unityDb, cocosDb) {
+function emitNodeRecursive(transform, parentNodeId, model, builder, layerResolver, reporter, options, unityDb, cocosDb, emissionContext = null) {
   const gameObject = model.gameObjects.get(transform.gameObjectId);
   if (!gameObject) {
     reporter.medium('TRANSFORM_WITHOUT_GAMEOBJECT', model.file, '', `Transform ${transform.fileId} has no GameObject; skipped`);
@@ -6039,7 +6224,20 @@ function emitNodeRecursive(transform, parentNodeId, model, builder, layerResolve
   }
 
   const parentTransform = transform.parentId ? model.transforms.get(transform.parentId) : null;
-  const resolvedTransform = resolveTransformLayout(transform, parentTransform);
+  const canvasRenderMode = unityCanvasRenderMode(gameObject, model);
+  let resolvedTransform = resolveTransformLayout(transform, parentTransform, {
+    preserveLocalPosition: canvasRenderMode === 2,
+  });
+  if (canvasRenderMode === 2) resolvedTransform.preserveWorldSpaceCanvasLocalZ = true;
+  if (emissionContext?.rebaseNestedModelMountedChild) {
+    resolvedTransform = rebaseNestedModelMountedChildTransform(resolvedTransform);
+    reporter.low(
+      'NESTED_MODEL_MOUNTED_CHILD_BASIS_REBASED',
+      model.file,
+      gameObject.name,
+      'Immediate child mounted onto a linked Cocos model was rebased by the inverse FBX forward-axis basis so its authored world transform is preserved',
+    );
+  }
   if (transform.isRect) {
     if (!parentTransform) {
       const designResolution = getCocosDesignResolution(options);
@@ -6127,7 +6325,7 @@ function emitNodeRecursive(transform, parentNodeId, model, builder, layerResolve
       const node = builder.objects[flattened.rootId];
       node._name = gameObject.name;
       node._active = gameObject.active;
-      node._lpos = convertPosition(resolvedTransform.localPosition);
+      node._lpos = convertNodePosition(resolvedTransform);
       node._lrot = convertRotation(resolvedTransform.localRotation || transform?.localRotation);
       node._lscale = convertScale(resolvedTransform.localScale || transform?.localScale);
       node._layer = layerValue;
@@ -6302,7 +6500,7 @@ function emitNodeRecursive(transform, parentNodeId, model, builder, layerResolve
         'NESTED_MODEL_FORWARD_AXIS_CORRECTED',
         gameObject.syntheticModelAsset.relativePath,
         gameObject.name,
-        'Linked model root was rotated 180 degrees around Y to preserve Unity +Z forward after conversion to Cocos -Z forward',
+        'Linked model root received the Unity-to-Cocos FBX forward-axis basis; immediate mounted children are inversely rebased',
       );
       for (const childId of transform.children) {
         const child = model.transforms.get(childId);
@@ -6310,7 +6508,9 @@ function emitNodeRecursive(transform, parentNodeId, model, builder, layerResolve
           reporter.medium('MISSING_CHILD_TRANSFORM', model.file, gameObject.name, `Child transform ${childId} is missing`);
           continue;
         }
-        emitNodeRecursive(child, nodeId, model, builder, layerResolver, reporter, options, unityDb, cocosDb);
+        emitNodeRecursive(child, nodeId, model, builder, layerResolver, reporter, options, unityDb, cocosDb, {
+          rebaseNestedModelMountedChild: true,
+        });
       }
       return;
     }
@@ -6499,6 +6699,28 @@ function emitSpriteRenderer(nodeId, componentId, doc, builder, reporter, options
 
 function emitLight(nodeId, componentId, doc, builder, reporter) {
   return emitLightImpl(nodeId, componentId, doc, builder, reporter);
+}
+
+function emitCanvas(nodeId, componentId, doc, gameObject, model, builder, reporter) {
+  const renderMode = Number(getField(doc, 'm_RenderMode', 0) || 0);
+  if (renderMode === 2) {
+    const result = builder.addRenderRoot2D(nodeId, componentId, `cmp-render-root-2d-${componentId}`);
+    reporter.low(
+      'WORLD_SPACE_CANVAS_PORTED',
+      model.file,
+      gameObject.name,
+      'Unity World Space Canvas was mapped to cc.RenderRoot2D, keeping its authored 3D transform and local UI-plane depth',
+    );
+    return result;
+  }
+  reporter.medium(
+    'CANVAS_NOT_PORTED',
+    model.file,
+    gameObject.name,
+    `Unity Canvas render mode ${renderMode} needs an explicit Cocos UI camera/alignment decision`,
+    'Use a project Canvas for screen-space UI; only Unity World Space Canvas is mapped automatically to cc.RenderRoot2D.',
+  );
+  return null;
 }
 
 function unityRigidBody2DTypeToCocosType(unityBodyType) {
@@ -7234,7 +7456,99 @@ function runScriptScaffold(options) {
   return results;
 }
 
-function runSmartPort(options) {
+async function finalizeEngineFeatures(options) {
+  if (options.dryRun || options.shard || options.engineFeatureRepair === false) return null;
+  log('==> [Engine Features] Auditing Cocos Feature Cropping and physics backend...');
+  const receipt = await ensureCocosEngineFeatures(options.cocosRoot, {
+    sourceEngine: 'unity-physx',
+    physicsBackend: options.physicsBackend || undefined,
+    forceBackend: !!options.forcePhysicsBackend,
+    restart: options.engineFeatureRestart !== false,
+    maxMcpAttempts: 2,
+  });
+  const decision = receipt.finalAudit?.physicsDecision;
+  const backend = decision?.backend ? `${decision.label} (${decision.backend})` : 'none';
+  log(`  [${receipt.complete ? 'ok' : 'warn'}] backend=${backend}; profile=${receipt.finalAudit?.profile?.complete ? 'ready' : 'missing'}; preview=${receipt.finalAudit?.appliedPreview?.complete ? 'ready' : 'pending'}; fallback=${receipt.fallbackUsed ? 'yes' : 'no'}`);
+  if (!receipt.complete) {
+    const error = new Error('Engine Feature Cropping remains pending after MCP/profile repair and guarded fallback. See .unity/engine-feature-report.json.');
+    error.code = 'ENGINE_FEATURE_APPLY_INCOMPLETE';
+    throw error;
+  }
+  return receipt;
+}
+
+function findPendingImporterStates(root, limit = 64) {
+  if (!root || !fs.existsSync(root)) return [];
+  const pending = [];
+  const stack = [root];
+  while (stack.length && pending.length < limit) {
+    const dir = stack.pop();
+    let entries = [];
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (_) { continue; }
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) { stack.push(full); continue; }
+      if (!entry.name.endsWith('.meta')) continue;
+      let meta;
+      try { meta = JSON.parse(fs.readFileSync(full, 'utf8')); } catch (_) { continue; }
+      for (const failure of collectImportFailures(meta).failures) {
+        pending.push({
+          asset: toPosix(path.relative(root, full.slice(0, -5))),
+          subPath: failure.subPath.join('/'),
+          importer: failure.meta?.importer || 'unknown',
+          uuid: failure.meta?.uuid || null,
+        });
+        if (pending.length >= limit) break;
+      }
+      if (pending.length >= limit) break;
+    }
+  }
+  return pending;
+}
+
+async function finalizeImportedAssets(options) {
+  if (options.dryRun || options.shard || options.modelImportWaitMs === 0) return null;
+  const importedRoot = path.join(options.cocosRoot, 'assets', 'unity_imported');
+  if (!fs.existsSync(importedRoot)) return null;
+  log('==> [Asset Import] Refreshing copied Unity dependencies through Cocos-MCP...');
+  let client = null;
+  try {
+    client = await createMcpClient(options.cocosRoot, {
+      timeoutMs: Math.max(10_000, Number(options.modelImportWaitMs) || DEFAULT_MODEL_IMPORT_WAIT_MS),
+    });
+    const response = unwrapToolResult(await client.call('project_refresh_assets', {
+      folder: 'db://assets/unity_imported',
+    }));
+    if (response?.success === false) throw new Error(response.error || response.message || 'Cocos AssetDB refresh failed');
+    const timeoutMs = Math.max(1_000, Number(options.modelImportWaitMs) || DEFAULT_MODEL_IMPORT_WAIT_MS);
+    const deadline = Date.now() + timeoutMs;
+    let pending = findPendingImporterStates(importedRoot);
+    while (pending.length && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      pending = findPendingImporterStates(importedRoot);
+    }
+    if (pending.length) {
+      const error = new Error(`Cocos AssetDB still has ${pending.length} pending importer state(s) after refresh; first=${pending[0].asset}${pending[0].subPath ? `#${pending[0].subPath}` : ''}`);
+      error.code = 'COCOS_ASSET_IMPORT_INCOMPLETE';
+      error.pending = pending;
+      throw error;
+    }
+    log('  [ok] copied Unity dependencies are imported, including nested subMetas.');
+    return { attempted: true, complete: true, pending: [] };
+  } catch (error) {
+    const pending = findPendingImporterStates(importedRoot);
+    if (!pending.length) {
+      log(`  [info] Cocos-MCP refresh unavailable, but no pending importer state is recorded: ${error.message}`);
+      return { attempted: true, complete: true, mcpUnavailable: true, warning: error.message };
+    }
+    if (!error.code) error.code = 'COCOS_ASSET_IMPORT_REFRESH_FAILED';
+    throw error;
+  } finally {
+    if (client) await client.close();
+  }
+}
+
+async function runSmartPort(options) {
   log(`==> [Smart Port] Starting automated porting pipeline for: ${options.src}`);
   const srcPath = path.resolve(options.src);
   if (!fs.existsSync(srcPath)) {
@@ -7243,7 +7557,7 @@ function runSmartPort(options) {
 
   // 1. Port Prefabs if any
   try {
-    portPrefabBatch(options);
+    await portPrefabBatch(options);
     log(`  [ok] Prefab batch porting completed.`);
   } catch (err) {
     log(`  [warn] Prefab porting: ${err.message}`);
@@ -7257,7 +7571,13 @@ function runSmartPort(options) {
     log(`  [info] Script scaffolding note: ${err.message}`);
   }
 
-  // 3. Automated Post-Port Verification
+  // 3. Feature Cropping is part of the port result: emitted Graphics/physics
+  // components are unusable until both the profile and active preview import
+  // map contain their modules. The helper is a no-op when already synchronized.
+  await finalizeImportedAssets(options);
+  await finalizeEngineFeatures(options);
+
+  // 4. Automated Post-Port Verification
   try {
     const { runVerificationSuite } = require('./headless-verifier.cjs');
     log(`==> [Verification] Running post-porting automated checks...`);
@@ -7298,10 +7618,12 @@ async function main() {
     return;
   }
   if (options.command === 'smart-port' || options.command === 'auto') {
-    runSmartPort(options);
+    await runSmartPort(options);
     return;
   }
   await portPrefabBatch(options);
+  await finalizeImportedAssets(options);
+  await finalizeEngineFeatures(options);
 }
 
 if (require.main === module) {
@@ -7315,13 +7637,27 @@ if (require.main === module) {
 }
 
 module.exports = {
+  CocosAssetDatabase,
   portPrefab,
   portPrefabBatch,
   findFiles,
   runScriptScaffold,
   runSmartPort,
+  finalizeEngineFeatures,
+  finalizeImportedAssets,
+  findPendingImporterStates,
   convertUnityPhysicsMaterialToCocos,
   resolveUnityPhysicsMaterialUuid,
+  emitCanvas,
+  resolveTransformLayout,
+  unityCanvasRenderMode,
+  convertNodePosition,
+  multiplyQuaternion,
+  correctNestedModelForwardAxis,
+  rebaseNestedModelMountedChildTransform,
+  hasExplicitNestedModelForwardBasisRotation,
+  cocosQuaternionToEuler,
+  convertRotation,
   parseArgs,
   main,
 };

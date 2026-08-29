@@ -270,19 +270,8 @@ function Resolve-McpCatalog {
         [void] $Skipped.Add("gimp-mcp (missing entry point: $GimpEntry)")
     }
 
-    # --- optional) node_repl: stdio JS sandbox from the Codex runtime.
-    $NodeRepl = Resolve-NodeReplBin
-    if ($NodeRepl) {
-        $ReplBinDir = Split-Path $NodeRepl -Parent
-        $CodexHome = Join-Path $HomeDir '.codex'
-        [void] $Catalog.Add((New-McpServer 'node_repl' 'stdio' $null $NodeRepl @() ([ordered]@{
-            NODE_REPL_NATIVE_PIPE_CONNECT_TIMEOUT_MS = '1000'
-            NODE_REPL_NODE_MODULE_DIRS               = (Join-Path $ReplBinDir 'node_modules')
-            NODE_REPL_NODE_PATH                      = (Join-Path $ReplBinDir 'node.exe')
-            NODE_REPL_TRUSTED_CODE_PATHS             = "$CodexHome;$(Join-Path $ReplBinDir 'node_modules')"
-            CODEX_HOME                               = $CodexHome
-        })))
-    }
+    # Note: node_repl is an internal runtime sandbox managed exclusively by Codex itself.
+    # We do not probe or inject node_repl into any client configs.
 
     return [pscustomobject]@{ Servers = @($Catalog); Skipped = @($Skipped) }
 }
@@ -527,11 +516,8 @@ function Invoke-McpVerification($Servers) {
 
 $Resolved = Resolve-McpCatalog
 $AllServers = $Resolved.Servers
-
-# node_repl is an internal runtime sandbox specifically for OpenAI Codex.
-# Exclude it from all standard AI providers (Claude, Antigravity/Gemini, VSCode/Copilot, JetBrains).
-$StandardServers = @($AllServers | Where-Object { $_.Name -ne 'node_repl' })
-$CodexServers = $AllServers
+$StandardServers = @($AllServers)
+$CodexServers = $StandardServers
 
 if ($VerifyOnly) {
     foreach ($Note in $Resolved.Skipped) { Write-Host "  [skip] $Note" -ForegroundColor Yellow }

@@ -31,6 +31,7 @@ const COCOS_PARTICLE_TECHNIQUE_ADD_SMOOTH = 3;
 const COCOS_PARTICLE_TECHNIQUE_PREMULTIPLY_BLEND = 4;
 const INVISIBLE_SHADOW_RECEIVER_EFFECT_TEMPLATE = path.join(__dirname, 'invisible-shadow-receiver.effect');
 const INVISIBLE_SHADOW_RECEIVER_EFFECT_PATH = path.join('assets', 'effects', 'InvisibleShadowReceiver.effect');
+const TCP2_HYBRID_SHADER_2_EFFECT_TEMPLATE = path.join(__dirname, 'tcp2-hybrid-shader-2.effect');
 const TCP2_HYBRID_SHADER_2_EFFECT_PATH = path.join('assets', 'effects', 'TCP2HybridShader2.effect');
 const TCP2_HYBRID_PARTICLE_EFFECT_TEMPLATE = path.join(__dirname, 'tcp2-hybrid-particle.effect');
 const TCP2_HYBRID_PARTICLE_EFFECT_PATH = path.join('assets', 'effects', 'TCP2HybridParticle.effect');
@@ -405,6 +406,16 @@ module.exports = function createMaterialPorter(deps) {
     });
   }
 
+  function ensureTcp2HybridShader2Effect(options, reporter) {
+    return ensureTemplateEffect(options, reporter, {
+      effectPath: TCP2_HYBRID_SHADER_2_EFFECT_PATH,
+      template: TCP2_HYBRID_SHADER_2_EFFECT_TEMPLATE,
+      cacheKey: '_tcp2HybridShader2EffectUuid',
+      reportCode: 'TCP2_HYBRID_SHADER_2_EFFECT_PREPARED',
+      message: 'Prepared the Cocos mesh port of TCP2 Hybrid Shader 2',
+    });
+  }
+
   function ensureUrpLitEffect(options, reporter) {
     return ensureTemplateEffect(options, reporter, {
       effectPath: URP_LIT_EFFECT_PATH,
@@ -497,10 +508,9 @@ module.exports = function createMaterialPorter(deps) {
     const invisibleShadowReceiver = /Invisible Shadow Receiver/i.test(shaderName);
     const tcp2HybridShader2 = TCP2_HYBRID_SHADER_2_GUIDS.has(shaderGuid)
       || /(?:Toony Colors Pro 2|TCP2).*Hybrid Shader 2/i.test(shaderName);
-    const tcp2EffectMeta = tcp2HybridShader2
-      ? readJsonIfExists(path.join(options.cocosRoot, `${TCP2_HYBRID_SHADER_2_EFFECT_PATH}.meta`))
-      : null;
-    const tcp2EffectUuid = tcp2EffectMeta?.uuid || '';
+    const tcp2EffectUuid = tcp2HybridShader2
+      ? ensureTcp2HybridShader2Effect(options, reporter)
+      : '';
     const urpLit = URP_LIT_SHADER_GUIDS.has(shaderGuid)
       || /Universal Render Pipeline\/Lit/i.test(shaderName);
     const urpUnlit = URP_UNLIT_SHADER_GUIDS.has(shaderGuid)

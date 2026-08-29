@@ -11,6 +11,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { spawnSync } = require('child_process');
 
 function getProjectRoot() {
   let curr = __dirname;
@@ -149,6 +150,92 @@ function copyDirectorySimple(src, dest) {
   }
 }
 
+function assertInside(candidate, root, label) {
+  const resolvedCandidate = path.resolve(candidate);
+  const resolvedRoot = path.resolve(root);
+  const relative = path.relative(resolvedRoot, resolvedCandidate);
+  if (!relative || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative))) {
+    return resolvedCandidate;
+  }
+  throw new Error(`[sync-shared-kit] Refusing ${label} outside ${resolvedRoot}: ${resolvedCandidate}`);
+}
+
+function removeDestinationEntry(entryPath, destinationRoot) {
+  const safeEntry = assertInside(entryPath, destinationRoot, 'extension cleanup');
+  if (safeEntry === path.resolve(destinationRoot)) {
+    throw new Error(`[sync-shared-kit] Refusing to remove extension root: ${safeEntry}`);
+  }
+  const stat = fs.lstatSync(safeEntry);
+  if (stat.isSymbolicLink()) {
+    fs.unlinkSync(safeEntry);
+    return;
+  }
+  if (stat.isDirectory()) {
+    const realRoot = fs.realpathSync(destinationRoot);
+    const realEntry = fs.realpathSync(safeEntry);
+    assertInside(realEntry, realRoot, 'resolved extension cleanup');
+    fs.rmSync(safeEntry, { recursive: true, force: true });
+    return;
+  }
+  fs.rmSync(safeEntry, { force: true });
+}
+
+/**
+ * Mirror cleanup for editor extensions. Copy-only synchronization left stale
+ * compiled tools active on other PCs after a source tool was removed/renamed.
+ * node_modules is installation-local and deliberately preserved.
+ */
+function reconcileDestinationWithSource(src, dest) {
+  const safeSource = assertInside(src, SHARED_EXTENSIONS_DIR, 'extension source');
+  const safeDestination = assertInside(dest, TARGET_EXTENSIONS_DIR, 'extension destination');
+  if (!fs.existsSync(safeDestination)) return { removed: [] };
+
+  const removed = [];
+  for (const entry of fs.readdirSync(safeDestination, { withFileTypes: true })) {
+    if (entry.name === 'node_modules') continue;
+    const sourceEntry = path.join(safeSource, entry.name);
+    const destinationEntry = path.join(safeDestination, entry.name);
+    let remove = !fs.existsSync(sourceEntry);
+    if (!remove) {
+      const sourceStat = fs.lstatSync(sourceEntry);
+      const destinationStat = fs.lstatSync(destinationEntry);
+      if (sourceStat.isSymbolicLink()) {
+        throw new Error(`[sync-shared-kit] Refusing symlink in extension source: ${sourceEntry}`);
+      }
+      remove = destinationStat.isSymbolicLink()
+        || sourceStat.isDirectory() !== destinationStat.isDirectory()
+        || sourceStat.isFile() !== destinationStat.isFile();
+      if (!remove && sourceStat.isDirectory()) {
+        const child = reconcileDestinationWithSource(sourceEntry, destinationEntry);
+        removed.push(...child.removed.map(item => `${entry.name}/${item}`));
+      }
+    }
+    if (remove) {
+      removeDestinationEntry(destinationEntry, safeDestination);
+      removed.push(path.relative(dest, destinationEntry).replace(/\\/g, '/'));
+    }
+  }
+  return { removed };
+}
+
+function runNodeGate(script, args, label) {
+  const result = spawnSync(process.execPath, [script, ...args], {
+    cwd: SHARED_KIT_ROOT,
+    encoding: 'utf8',
+  });
+  if (result.stdout) process.stdout.write(result.stdout);
+  if (result.stderr) process.stderr.write(result.stderr);
+  if (result.error || result.status !== 0) {
+    throw result.error || new Error(`[sync-shared-kit] ${label} failed with exit code ${result.status}`);
+  }
+}
+
+function prepareCocosMcpForSync() {
+  const extensionRoot = path.join(SHARED_EXTENSIONS_DIR, 'cocos-mcp');
+  runNodeGate(path.join(extensionRoot, 'scripts', 'source-dist-manifest.cjs'), ['verify'], 'Cocos MCP source/dist verification');
+  runNodeGate(path.join(SHARED_KIT_ROOT, 'tools', 'cocos-mcp-schema-refresh.cjs'), [], 'Cocos MCP offline schema refresh');
+}
+
 function syncExtensions() {
   if (!fs.existsSync(SHARED_EXTENSIONS_DIR)) return;
   if (!fs.existsSync(TARGET_EXTENSIONS_DIR)) {
@@ -156,13 +243,18 @@ function syncExtensions() {
   }
 
   console.log('[sync-shared-kit] Syncing editor extensions from shared kit -> extensions/ ...');
+  prepareCocosMcpForSync();
   const entries = fs.readdirSync(SHARED_EXTENSIONS_DIR, { withFileTypes: true });
   for (const entry of entries) {
     if (entry.isDirectory()) {
       const srcExt = path.join(SHARED_EXTENSIONS_DIR, entry.name);
       const destExt = path.join(TARGET_EXTENSIONS_DIR, entry.name);
+      const reconciliation = reconcileDestinationWithSource(srcExt, destExt);
       copyDirectorySimple(srcExt, destExt);
       console.log(`  [ok] Synced extension: ${entry.name} -> extensions/${entry.name}`);
+      if (reconciliation.removed.length) {
+        console.log(`  [ok] Removed ${reconciliation.removed.length} stale extension artifact(s)`);
+      }
     }
   }
 }
@@ -217,13 +309,26 @@ function syncPackageJson() {
     }
   }
 
+  if (tmpl.dependencies) {
+    if (!pkg.dependencies) {
+      pkg.dependencies = {};
+      modified = true;
+    }
+    for (const [key, val] of Object.entries(tmpl.dependencies)) {
+      if (!pkg.dependencies[key] && !pkg.devDependencies?.[key]) {
+        pkg.dependencies[key] = val;
+        modified = true;
+      }
+    }
+  }
+
   if (tmpl.devDependencies) {
     if (!pkg.devDependencies) {
       pkg.devDependencies = {};
       modified = true;
     }
     for (const [key, val] of Object.entries(tmpl.devDependencies)) {
-      if (!pkg.devDependencies[key]) {
+      if (!pkg.devDependencies[key] && !pkg.dependencies?.[key]) {
         pkg.devDependencies[key] = val;
         modified = true;
       }
@@ -275,4 +380,14 @@ if (require.main === module) {
   syncSharedKit({ clean });
 }
 
-module.exports = { syncSharedKit, syncExtensions, TARGET_SHARED_DIR, SHARED_KIT_ROOT, PROJECT_ROOT };
+module.exports = {
+  syncSharedKit,
+  syncExtensions,
+  reconcileDestinationWithSource,
+  prepareCocosMcpForSync,
+  TARGET_SHARED_DIR,
+  TARGET_EXTENSIONS_DIR,
+  SHARED_EXTENSIONS_DIR,
+  SHARED_KIT_ROOT,
+  PROJECT_ROOT,
+};
