@@ -1,1470 +1,2009 @@
 [
   {
-    "name": "sceneAdvanced_scene_snapshot_abort",
-    "description": "Abort scene snapshot creation",
+    "description": "Delete multiple assets in batch",
     "inputSchema": {
-      "type": "object",
-      "properties": {}
-    },
-    "outputSchema": {
-      "type": "object",
       "properties": {
-        "success": {
+        "urls": {
+          "description": "Array of asset URLs to delete",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "urls"
+      ],
+      "type": "object"
+    },
+    "name": "assetAdvanced_batch_delete_assets"
+  },
+  {
+    "description": "Import multiple assets in batch",
+    "inputSchema": {
+      "properties": {
+        "fileFilter": {
+          "default": [],
+          "description": "File extensions to include (e.g., [\".png\", \".jpg\"])",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "overwrite": {
+          "default": false,
+          "description": "Overwrite existing files",
           "type": "boolean"
         },
-        "message": {
+        "recursive": {
+          "default": false,
+          "description": "Include subdirectories",
+          "type": "boolean"
+        },
+        "sourceDirectory": {
+          "description": "Source directory path",
           "type": "string"
         },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
+        "targetDirectory": {
+          "description": "Target directory URL",
           "type": "string"
         }
       },
       "required": [
-        "success"
-      ]
+        "sourceDirectory",
+        "targetDirectory"
+      ],
+      "type": "object"
     },
-    "annotations": {
-      "readOnlyHint": false,
-      "destructiveHint": false,
-      "idempotentHint": true,
-      "openWorldHint": false
-    }
+    "name": "assetAdvanced_batch_import_assets"
   },
   {
-    "name": "sceneAdvanced_begin_undo_recording",
-    "description": "Begin recording undo data",
+    "description": "Batch compress texture assets",
     "inputSchema": {
-      "type": "object",
+      "properties": {
+        "directory": {
+          "default": "db://assets",
+          "description": "Directory containing textures",
+          "type": "string"
+        },
+        "format": {
+          "default": "auto",
+          "description": "Compression format",
+          "enum": [
+            "auto",
+            "jpg",
+            "png",
+            "webp"
+          ],
+          "type": "string"
+        },
+        "quality": {
+          "default": 0.8,
+          "description": "Compression quality (0.1-1.0)",
+          "maximum": 1,
+          "minimum": 0.1,
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "name": "assetAdvanced_compress_textures"
+  },
+  {
+    "description": "Export asset manifest/inventory",
+    "inputSchema": {
+      "properties": {
+        "directory": {
+          "default": "db://assets",
+          "description": "Directory to export manifest for",
+          "type": "string"
+        },
+        "format": {
+          "default": "json",
+          "description": "Export format",
+          "enum": [
+            "json",
+            "csv",
+            "xml"
+          ],
+          "type": "string"
+        },
+        "includeMetadata": {
+          "default": true,
+          "description": "Include asset metadata",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "name": "assetAdvanced_export_asset_manifest"
+  },
+  {
+    "description": "Generate an available URL based on input URL",
+    "inputSchema": {
+      "properties": {
+        "url": {
+          "description": "Asset URL to generate available URL for",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "type": "object"
+    },
+    "name": "assetAdvanced_generate_available_url"
+  },
+  {
+    "description": "Get asset dependency tree",
+    "inputSchema": {
+      "properties": {
+        "direction": {
+          "default": "dependencies",
+          "description": "Dependency direction",
+          "enum": [
+            "dependents",
+            "dependencies",
+            "both"
+          ],
+          "type": "string"
+        },
+        "urlOrUUID": {
+          "description": "Asset URL or UUID",
+          "type": "string"
+        }
+      },
+      "required": [
+        "urlOrUUID"
+      ],
+      "type": "object"
+    },
+    "name": "assetAdvanced_get_asset_dependencies"
+  },
+  {
+    "description": "Find unused assets in project",
+    "inputSchema": {
+      "properties": {
+        "directory": {
+          "default": "db://assets",
+          "description": "Directory to scan (default: entire project)",
+          "type": "string"
+        },
+        "excludeDirectories": {
+          "default": [],
+          "description": "Directories to exclude from scan",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "name": "assetAdvanced_get_unused_assets"
+  },
+  {
+    "description": "Open asset with external program",
+    "inputSchema": {
+      "properties": {
+        "urlOrUUID": {
+          "description": "Asset URL or UUID to open",
+          "type": "string"
+        }
+      },
+      "required": [
+        "urlOrUUID"
+      ],
+      "type": "object"
+    },
+    "name": "assetAdvanced_open_asset_external"
+  },
+  {
+    "description": "Check if asset database is ready",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "assetAdvanced_query_asset_db_ready"
+  },
+  {
+    "description": "Save asset meta information",
+    "inputSchema": {
+      "properties": {
+        "content": {
+          "description": "Asset meta serialized content string",
+          "type": "string"
+        },
+        "urlOrUUID": {
+          "description": "Asset URL or UUID",
+          "type": "string"
+        }
+      },
+      "required": [
+        "urlOrUUID",
+        "content"
+      ],
+      "type": "object"
+    },
+    "name": "assetAdvanced_save_asset_meta"
+  },
+  {
+    "description": "Validate asset references and find broken links",
+    "inputSchema": {
+      "properties": {
+        "directory": {
+          "default": "db://assets",
+          "description": "Directory to validate (default: entire project)",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "assetAdvanced_validate_asset_references"
+  },
+  {
+    "description": "Clear the broadcast messages log",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "broadcast_clear_broadcast_log"
+  },
+  {
+    "description": "Get list of active broadcast listeners",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "broadcast_get_active_listeners"
+  },
+  {
+    "description": "Get recent broadcast messages log",
+    "inputSchema": {
+      "properties": {
+        "limit": {
+          "default": 50,
+          "description": "Number of recent messages to return",
+          "type": "number"
+        },
+        "messageType": {
+          "description": "Filter by message type (optional)",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "broadcast_get_broadcast_log"
+  },
+  {
+    "description": "Start listening for specific broadcast messages",
+    "inputSchema": {
+      "properties": {
+        "messageType": {
+          "description": "Message type to listen for",
+          "type": "string"
+        }
+      },
+      "required": [
+        "messageType"
+      ],
+      "type": "object"
+    },
+    "name": "broadcast_listen_broadcast"
+  },
+  {
+    "description": "Stop listening for specific broadcast messages",
+    "inputSchema": {
+      "properties": {
+        "messageType": {
+          "description": "Message type to stop listening for",
+          "type": "string"
+        }
+      },
+      "required": [
+        "messageType"
+      ],
+      "type": "object"
+    },
+    "name": "broadcast_stop_listening"
+  },
+  {
+    "description": "Add a component to a specific node. IMPORTANT: You must provide the nodeUuid parameter to specify which node to add the component to.",
+    "inputSchema": {
+      "properties": {
+        "componentType": {
+          "description": "Component type (e.g., cc.Sprite, cc.Label, cc.Button)",
+          "type": "string"
+        },
+        "nodeUuid": {
+          "description": "Target node UUID. REQUIRED: You must specify the exact node to add the component to. Use get_all_nodes or find_node_by_name to get the UUID of the desired node.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "nodeUuid",
+        "componentType"
+      ],
+      "type": "object"
+    },
+    "name": "component_add_component"
+  },
+  {
+    "description": "Attach a script component to a node",
+    "inputSchema": {
       "properties": {
         "nodeUuid": {
-          "type": "string",
-          "description": "Node UUID to record"
+          "description": "Node UUID",
+          "type": "string"
+        },
+        "scriptPath": {
+          "description": "Script asset path (e.g., db://assets/scripts/MyScript.ts)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "nodeUuid",
+        "scriptPath"
+      ],
+      "type": "object"
+    },
+    "name": "component_attach_script"
+  },
+  {
+    "description": "Get list of available component types",
+    "inputSchema": {
+      "properties": {
+        "category": {
+          "default": "all",
+          "description": "Component category filter",
+          "enum": [
+            "all",
+            "renderer",
+            "ui",
+            "physics",
+            "animation",
+            "audio"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "component_get_available_components"
+  },
+  {
+    "description": "Get specific component information",
+    "inputSchema": {
+      "properties": {
+        "componentType": {
+          "description": "Component type to get info for",
+          "type": "string"
+        },
+        "nodeUuid": {
+          "description": "Node UUID",
+          "type": "string"
+        }
+      },
+      "required": [
+        "nodeUuid",
+        "componentType"
+      ],
+      "type": "object"
+    },
+    "name": "component_get_component_info"
+  },
+  {
+    "description": "Get all components of a node",
+    "inputSchema": {
+      "properties": {
+        "nodeUuid": {
+          "description": "Node UUID",
+          "type": "string"
         }
       },
       "required": [
         "nodeUuid"
-      ]
+      ],
+      "type": "object"
     },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "success"
-      ]
-    },
-    "annotations": {
-      "readOnlyHint": false,
-      "destructiveHint": false,
-      "idempotentHint": false,
-      "openWorldHint": false
-    }
+    "name": "component_get_components"
   },
   {
-    "name": "sceneAdvanced_end_undo_recording",
-    "description": "End recording undo data",
+    "description": "Remove a component from a node. componentType must be the component's classId (cid, i.e. the type field from getComponents), not the script name or class name. Use getComponents to get the correct cid.",
     "inputSchema": {
-      "type": "object",
       "properties": {
-        "undoId": {
-          "type": "string",
-          "description": "Undo recording ID from begin_undo_recording"
-        }
-      },
-      "required": [
-        "undoId"
-      ]
-    },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
+        "componentType": {
+          "description": "Component cid (type field from getComponents). Do NOT use script name or class name. Example: \"cc.Sprite\" or \"9b4a7ueT9xD6aRE+AlOusy1\"",
           "type": "string"
         },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
+        "nodeUuid": {
+          "description": "Node UUID",
           "type": "string"
         }
       },
       "required": [
-        "success"
-      ]
+        "nodeUuid",
+        "componentType"
+      ],
+      "type": "object"
     },
-    "annotations": {
-      "readOnlyHint": false,
-      "destructiveHint": false,
-      "idempotentHint": false,
-      "openWorldHint": false
-    }
+    "name": "component_remove_component"
   },
   {
-    "name": "sceneAdvanced_cancel_undo_recording",
-    "description": "Cancel undo recording",
+    "description": "Set component property values for UI components or custom script components. Supports setting properties of built-in UI components (e.g., cc.Label, cc.Sprite) and custom script components. Note: For node basic properties (name, active, layer, etc.), use set_node_property. For node transform properties (position, rotation, scale, etc.), use set_node_transform.",
     "inputSchema": {
-      "type": "object",
       "properties": {
-        "undoId": {
-          "type": "string",
-          "description": "Undo recording ID to cancel"
-        }
-      },
-      "required": [
-        "undoId"
-      ]
-    },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
+        "componentType": {
+          "description": "Component type - Can be built-in components (e.g., cc.Label) or custom script components (e.g., MyScript). If unsure about component type, use get_components first to retrieve all components on the node.",
           "type": "string"
         },
-        "data": {},
-        "error": {
+        "nodeUuid": {
+          "description": "Target node UUID - Must specify the node to operate on",
           "type": "string"
         },
-        "warning": {
+        "property": {
+          "description": "Property name - The property to set. Common properties include:\n• cc.Label: string (text content), fontSize (font size), color (text color)\n• cc.Sprite: spriteFrame (sprite frame), color (tint color), sizeMode (size mode)\n• cc.Button: normalColor (normal color), pressedColor (pressed color), target (target node)\n• cc.UITransform: contentSize (content size), anchorPoint (anchor point)\n• Custom Scripts: Based on properties defined in the script",
           "type": "string"
         },
-        "instruction": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "success"
-      ]
-    },
-    "annotations": {
-      "readOnlyHint": false,
-      "destructiveHint": false,
-      "idempotentHint": true,
-      "openWorldHint": false
-    }
-  },
-  {
-    "name": "sceneAdvanced_soft_reload_scene",
-    "description": "Soft reload current scene",
-    "inputSchema": {
-      "type": "object",
-      "properties": {}
-    },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "success"
-      ]
-    },
-    "annotations": {
-      "readOnlyHint": false,
-      "destructiveHint": false,
-      "idempotentHint": true,
-      "openWorldHint": false
-    }
-  },
-  {
-    "name": "sceneAdvanced_query_scene_ready",
-    "description": "Check if scene is ready",
-    "inputSchema": {
-      "type": "object",
-      "properties": {}
-    },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "success"
-      ]
-    },
-    "annotations": {
-      "readOnlyHint": true,
-      "destructiveHint": false,
-      "idempotentHint": true,
-      "openWorldHint": false
-    }
-  },
-  {
-    "name": "sceneAdvanced_query_scene_dirty",
-    "description": "Check if scene has unsaved changes",
-    "inputSchema": {
-      "type": "object",
-      "properties": {}
-    },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "success"
-      ]
-    },
-    "annotations": {
-      "readOnlyHint": true,
-      "destructiveHint": false,
-      "idempotentHint": true,
-      "openWorldHint": false
-    }
-  },
-  {
-    "name": "sceneAdvanced_query_scene_classes",
-    "description": "Query all registered classes",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "extends": {
-          "type": "string",
-          "description": "Filter classes that extend this base class"
-        }
-      }
-    },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "success"
-      ]
-    },
-    "annotations": {
-      "readOnlyHint": true,
-      "destructiveHint": false,
-      "idempotentHint": true,
-      "openWorldHint": false
-    }
-  },
-  {
-    "name": "sceneAdvanced_query_scene_components",
-    "description": "Query available scene components",
-    "inputSchema": {
-      "type": "object",
-      "properties": {}
-    },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "success"
-      ]
-    },
-    "annotations": {
-      "readOnlyHint": true,
-      "destructiveHint": false,
-      "idempotentHint": true,
-      "openWorldHint": false
-    }
-  },
-  {
-    "name": "sceneAdvanced_query_component_has_script",
-    "description": "Check if component has script",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "className": {
-          "type": "string",
-          "description": "Script class name to check"
-        }
-      },
-      "required": [
-        "className"
-      ]
-    },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "success"
-      ]
-    },
-    "annotations": {
-      "readOnlyHint": true,
-      "destructiveHint": false,
-      "idempotentHint": true,
-      "openWorldHint": false
-    }
-  },
-  {
-    "name": "sceneAdvanced_query_nodes_by_asset_uuid",
-    "description": "Find nodes that use specific asset UUID",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "assetUuid": {
-          "type": "string",
-          "description": "Asset UUID to search for"
-        }
-      },
-      "required": [
-        "assetUuid"
-      ]
-    },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "success"
-      ]
-    },
-    "annotations": {
-      "readOnlyHint": true,
-      "destructiveHint": false,
-      "idempotentHint": true,
-      "openWorldHint": false
-    }
-  },
-  {
-    "name": "sceneView_change_gizmo_tool",
-    "description": "Change Gizmo tool",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "name": {
-          "type": "string",
-          "description": "Tool name",
+        "propertyType": {
+          "description": "Property type - Optional. When omitted, the server infers it from the target property metadata. You can still specify it explicitly for ambiguous cases or to override inference.",
           "enum": [
-            "position",
-            "rotation",
-            "scale",
-            "rect"
-          ]
-        }
-      },
-      "required": [
-        "name"
-      ]
-    },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "success"
-      ]
-    },
-    "annotations": {
-      "readOnlyHint": false,
-      "destructiveHint": false,
-      "idempotentHint": false,
-      "openWorldHint": false
-    }
-  },
-  {
-    "name": "sceneView_query_gizmo_tool_name",
-    "description": "Get current Gizmo tool name",
-    "inputSchema": {
-      "type": "object",
-      "properties": {}
-    },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "success"
-      ]
-    },
-    "annotations": {
-      "readOnlyHint": true,
-      "destructiveHint": false,
-      "idempotentHint": true,
-      "openWorldHint": false
-    }
-  },
-  {
-    "name": "sceneView_change_gizmo_pivot",
-    "description": "Change transform pivot point",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "name": {
-          "type": "string",
-          "description": "Pivot point",
-          "enum": [
-            "pivot",
-            "center"
-          ]
-        }
-      },
-      "required": [
-        "name"
-      ]
-    },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "success"
-      ]
-    },
-    "annotations": {
-      "readOnlyHint": false,
-      "destructiveHint": false,
-      "idempotentHint": false,
-      "openWorldHint": false
-    }
-  },
-  {
-    "name": "sceneView_query_gizmo_pivot",
-    "description": "Get current Gizmo pivot point",
-    "inputSchema": {
-      "type": "object",
-      "properties": {}
-    },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "success"
-      ]
-    },
-    "annotations": {
-      "readOnlyHint": true,
-      "destructiveHint": false,
-      "idempotentHint": true,
-      "openWorldHint": false
-    }
-  },
-  {
-    "name": "sceneView_query_gizmo_view_mode",
-    "description": "Query view mode (view/select)",
-    "inputSchema": {
-      "type": "object",
-      "properties": {}
-    },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "success"
-      ]
-    },
-    "annotations": {
-      "readOnlyHint": true,
-      "destructiveHint": false,
-      "idempotentHint": true,
-      "openWorldHint": false
-    }
-  },
-  {
-    "name": "sceneView_change_gizmo_coordinate",
-    "description": "Change coordinate system",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "type": {
-          "type": "string",
-          "description": "Coordinate system",
-          "enum": [
-            "local",
-            "global"
-          ]
-        }
-      },
-      "required": [
-        "type"
-      ]
-    },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "success"
-      ]
-    },
-    "annotations": {
-      "readOnlyHint": false,
-      "destructiveHint": false,
-      "idempotentHint": false,
-      "openWorldHint": false
-    }
-  },
-  {
-    "name": "sceneView_query_gizmo_coordinate",
-    "description": "Get current coordinate system",
-    "inputSchema": {
-      "type": "object",
-      "properties": {}
-    },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "success"
-      ]
-    },
-    "annotations": {
-      "readOnlyHint": true,
-      "destructiveHint": false,
-      "idempotentHint": true,
-      "openWorldHint": false
-    }
-  },
-  {
-    "name": "sceneView_change_view_mode_2d_3d",
-    "description": "Change 2D/3D view mode",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "is2D": {
-          "type": "boolean",
-          "description": "2D/3D view mode (true for 2D, false for 3D)"
-        }
-      },
-      "required": [
-        "is2D"
-      ]
-    },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "success"
-      ]
-    },
-    "annotations": {
-      "readOnlyHint": false,
-      "destructiveHint": false,
-      "idempotentHint": false,
-      "openWorldHint": false
-    }
-  },
-  {
-    "name": "sceneView_query_view_mode_2d_3d",
-    "description": "Get current view mode",
-    "inputSchema": {
-      "type": "object",
-      "properties": {}
-    },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "success"
-      ]
-    },
-    "annotations": {
-      "readOnlyHint": true,
-      "destructiveHint": false,
-      "idempotentHint": true,
-      "openWorldHint": false
-    }
-  },
-  {
-    "name": "sceneView_set_grid_visible",
-    "description": "Show/hide grid",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "visible": {
-          "type": "boolean",
-          "description": "Grid visibility"
-        }
-      },
-      "required": [
-        "visible"
-      ]
-    },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "success"
-      ]
-    },
-    "annotations": {
-      "readOnlyHint": false,
-      "destructiveHint": false,
-      "idempotentHint": false,
-      "openWorldHint": false
-    }
-  },
-  {
-    "name": "sceneView_query_grid_visible",
-    "description": "Query grid visibility status",
-    "inputSchema": {
-      "type": "object",
-      "properties": {}
-    },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "success"
-      ]
-    },
-    "annotations": {
-      "readOnlyHint": true,
-      "destructiveHint": false,
-      "idempotentHint": true,
-      "openWorldHint": false
-    }
-  },
-  {
-    "name": "sceneView_set_icon_gizmo_3d",
-    "description": "Set IconGizmo to 3D or 2D mode",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "is3D": {
-          "type": "boolean",
-          "description": "3D/2D IconGizmo (true for 3D, false for 2D)"
-        }
-      },
-      "required": [
-        "is3D"
-      ]
-    },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "success"
-      ]
-    },
-    "annotations": {
-      "readOnlyHint": false,
-      "destructiveHint": false,
-      "idempotentHint": false,
-      "openWorldHint": false
-    }
-  },
-  {
-    "name": "sceneView_query_icon_gizmo_3d",
-    "description": "Query IconGizmo mode",
-    "inputSchema": {
-      "type": "object",
-      "properties": {}
-    },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "success"
-      ]
-    },
-    "annotations": {
-      "readOnlyHint": true,
-      "destructiveHint": false,
-      "idempotentHint": true,
-      "openWorldHint": false
-    }
-  },
-  {
-    "name": "sceneView_set_icon_gizmo_size",
-    "description": "Set IconGizmo size",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "size": {
-          "type": "number",
-          "description": "IconGizmo size",
-          "minimum": 10,
-          "maximum": 100
-        }
-      },
-      "required": [
-        "size"
-      ]
-    },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "success"
-      ]
-    },
-    "annotations": {
-      "readOnlyHint": false,
-      "destructiveHint": false,
-      "idempotentHint": false,
-      "openWorldHint": false
-    }
-  },
-  {
-    "name": "sceneView_query_icon_gizmo_size",
-    "description": "Query IconGizmo size",
-    "inputSchema": {
-      "type": "object",
-      "properties": {}
-    },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "success"
-      ]
-    },
-    "annotations": {
-      "readOnlyHint": true,
-      "destructiveHint": false,
-      "idempotentHint": true,
-      "openWorldHint": false
-    }
-  },
-  {
-    "name": "sceneView_focus_camera_on_nodes",
-    "description": "Focus scene camera on nodes",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "uuids": {
-          "oneOf": [
-            {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            {
-              "type": "null"
-            }
+            "string",
+            "number",
+            "boolean",
+            "integer",
+            "float",
+            "color",
+            "vec2",
+            "vec3",
+            "size",
+            "node",
+            "component",
+            "spriteFrame",
+            "prefab",
+            "asset",
+            "nodeArray",
+            "colorArray",
+            "numberArray",
+            "stringArray"
           ],
-          "description": "Node UUIDs to focus on (null for all)"
+          "type": "string"
+        },
+        "value": {
+          "description": "Property value - Use the corresponding data format based on propertyType:\n\n📝 Basic Data Types:\n• string: \"Hello World\" (text string)\n• number/integer/float: 42 or 3.14 (numeric value)\n• boolean: true or false (boolean value)\n\n🎨 Color Type:\n• color: {\"r\":255,\"g\":0,\"b\":0,\"a\":255} (RGBA values, range 0-255)\n  - Alternative: \"#FF0000\" (hexadecimal format)\n  - Transparency: a value controls opacity, 255 = fully opaque, 0 = fully transparent\n\n📐 Vector and Size Types:\n• vec2: {\"x\":100,\"y\":50} (2D vector)\n• vec3: {\"x\":1,\"y\":2,\"z\":3} (3D vector)\n• size: {\"width\":100,\"height\":50} (size dimensions)\n\n🔗 Reference Types (using UUID strings):\n• node: \"target-node-uuid\" (node reference)\n  How to get: Use get_all_nodes or find_node_by_name to get node UUIDs\n• component: \"target-node-uuid\" (component reference)\n  How it works: \n    1. Provide the UUID of the NODE that contains the target component\n    2. System auto-detects required component type from property metadata\n    3. Finds the component on target node and gets its scene __id__\n    4. Sets reference using the scene __id__ (not node UUID)\n  Example: value=\"label-node-uuid\" will find cc.Label and use its scene ID\n• spriteFrame: \"spriteframe-uuid\" (sprite frame asset)\n  How to get: Check asset database or use asset browser\n• prefab: \"prefab-uuid\" (prefab asset)\n  How to get: Check asset database or use asset browser\n• asset: \"asset-uuid\" (generic asset reference)\n  How to get: Check asset database or use asset browser\n\n📋 Array Types:\n• nodeArray: [\"uuid1\",\"uuid2\"] (array of node UUIDs)\n• colorArray: [{\"r\":255,\"g\":0,\"b\":0,\"a\":255}] (array of colors)\n• numberArray: [1,2,3,4,5] (array of numbers)\n• stringArray: [\"item1\",\"item2\"] (array of strings)"
         }
       },
       "required": [
-        "uuids"
-      ]
+        "nodeUuid",
+        "componentType",
+        "property",
+        "value"
+      ],
+      "type": "object"
     },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "success"
-      ]
-    },
-    "annotations": {
-      "readOnlyHint": false,
-      "destructiveHint": false,
-      "idempotentHint": true,
-      "openWorldHint": false
-    }
+    "name": "component_set_component_property"
   },
   {
-    "name": "sceneView_align_camera_with_view",
-    "description": "Apply scene camera position and angle to selected node",
+    "description": "Clear editor console",
     "inputSchema": {
-      "type": "object",
-      "properties": {}
+      "properties": {},
+      "type": "object"
     },
-    "outputSchema": {
-      "type": "object",
+    "name": "debug_clear_console"
+  },
+  {
+    "description": "Execute JavaScript in scene context",
+    "inputSchema": {
       "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
+        "script": {
+          "description": "JavaScript code to execute",
           "type": "string"
         }
       },
       "required": [
-        "success"
-      ]
+        "script"
+      ],
+      "type": "object"
     },
-    "annotations": {
-      "readOnlyHint": false,
-      "destructiveHint": false,
-      "idempotentHint": true,
-      "openWorldHint": false
-    }
+    "name": "debug_execute_script"
   },
   {
-    "name": "sceneView_align_view_with_node",
-    "description": "Apply selected node position and angle to current view",
+    "description": "Get editor console logs",
     "inputSchema": {
-      "type": "object",
-      "properties": {}
-    },
-    "outputSchema": {
-      "type": "object",
       "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
+        "filter": {
+          "default": "all",
+          "description": "Filter logs by type",
+          "enum": [
+            "all",
+            "log",
+            "warn",
+            "error",
+            "info"
+          ],
           "type": "string"
         },
-        "data": {},
-        "error": {
+        "limit": {
+          "default": 100,
+          "description": "Number of recent logs to retrieve",
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "name": "debug_get_console_logs"
+  },
+  {
+    "description": "Get editor and environment information",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "debug_get_editor_info"
+  },
+  {
+    "description": "Get information about the project log file",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "debug_get_log_file_info"
+  },
+  {
+    "description": "Get detailed node tree for debugging",
+    "inputSchema": {
+      "properties": {
+        "maxDepth": {
+          "default": 10,
+          "description": "Maximum tree depth",
+          "type": "number"
+        },
+        "rootUuid": {
+          "description": "Root node UUID (optional, uses scene root if not provided)",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "debug_get_node_tree"
+  },
+  {
+    "description": "Get performance statistics",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "debug_get_performance_stats"
+  },
+  {
+    "description": "Get project logs from temp/logs/project.log file",
+    "inputSchema": {
+      "properties": {
+        "filterKeyword": {
+          "description": "Filter logs containing specific keyword (optional)",
           "type": "string"
         },
-        "warning": {
-          "type": "string"
+        "lines": {
+          "default": 100,
+          "description": "Number of lines to read from the end of the log file (default: 100)",
+          "maximum": 10000,
+          "minimum": 1,
+          "type": "number"
         },
-        "instruction": {
+        "logLevel": {
+          "default": "ALL",
+          "description": "Filter by log level",
+          "enum": [
+            "ERROR",
+            "WARN",
+            "INFO",
+            "DEBUG",
+            "TRACE",
+            "ALL"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "debug_get_project_logs"
+  },
+  {
+    "description": "Search for specific patterns or errors in project logs",
+    "inputSchema": {
+      "properties": {
+        "contextLines": {
+          "default": 2,
+          "description": "Number of context lines to show around each match",
+          "maximum": 10,
+          "minimum": 0,
+          "type": "number"
+        },
+        "maxResults": {
+          "default": 20,
+          "description": "Maximum number of matching results",
+          "maximum": 100,
+          "minimum": 1,
+          "type": "number"
+        },
+        "pattern": {
+          "description": "Search pattern (supports regex)",
           "type": "string"
         }
       },
       "required": [
-        "success"
-      ]
+        "pattern"
+      ],
+      "type": "object"
     },
-    "annotations": {
-      "readOnlyHint": false,
-      "destructiveHint": false,
-      "idempotentHint": true,
-      "openWorldHint": false
-    }
+    "name": "debug_search_project_logs"
   },
   {
-    "name": "sceneView_get_scene_view_status",
-    "description": "Get comprehensive scene view status",
+    "description": "Validate current scene for issues",
     "inputSchema": {
-      "type": "object",
-      "properties": {}
-    },
-    "outputSchema": {
-      "type": "object",
       "properties": {
-        "success": {
+        "checkMissingAssets": {
+          "default": true,
+          "description": "Check for missing asset references",
           "type": "boolean"
         },
-        "message": {
+        "checkPerformance": {
+          "default": true,
+          "description": "Check for performance issues",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "name": "debug_validate_scene"
+  },
+  {
+    "description": "Soft-reload the currently open scene.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "editorRuntime_reload_current_scene"
+  },
+  {
+    "description": "Refresh assets, then reload connected preview targets through Cocos Creator 3.8.x public preview messages.",
+    "inputSchema": {
+      "properties": {
+        "assetUrl": {
+          "default": "db://assets",
+          "description": "Asset DB URL to refresh.",
           "type": "string"
         },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
+        "refreshAssets": {
+          "default": true,
+          "description": "Refresh/import assets before reloading preview.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "name": "editorRuntime_reload_preview"
+  },
+  {
+    "description": "Start the editor preview/runtime server.",
+    "inputSchema": {
+      "properties": {
+        "platform": {
+          "description": "Optional preview platform (browser, simulator).",
           "type": "string"
         }
       },
-      "required": [
-        "success"
-      ]
+      "type": "object"
     },
-    "annotations": {
-      "readOnlyHint": true,
-      "destructiveHint": false,
-      "idempotentHint": true,
-      "openWorldHint": false
-    }
+    "name": "editorRuntime_run_preview"
   },
   {
-    "name": "sceneView_reset_scene_view",
-    "description": "Reset scene view to default settings",
+    "description": "Report whether the editor exposes preview-stop control (Cocos 3.8.x does not).",
     "inputSchema": {
-      "type": "object",
-      "properties": {}
+      "properties": {},
+      "type": "object"
     },
-    "outputSchema": {
-      "type": "object",
+    "name": "editorRuntime_stop_preview"
+  },
+  {
+    "description": "Hint that the client should call resources/subscribe on runtime://logs for live streaming.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "editorRuntime_subscribe_runtime_logs"
+  },
+  {
+    "description": "Read the in-process editor runtime log ring buffer (last ~200 lines).",
+    "inputSchema": {
       "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
+        "filter": {
+          "description": "Substring filter (case-insensitive).",
           "type": "string"
         },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
-          "type": "string"
+        "limit": {
+          "default": 50,
+          "maximum": 200,
+          "minimum": 1,
+          "type": "integer"
         }
       },
-      "required": [
-        "success"
-      ]
+      "type": "object"
     },
-    "annotations": {
-      "readOnlyHint": false,
-      "destructiveHint": false,
-      "idempotentHint": true,
-      "openWorldHint": false
-    }
+    "name": "editorRuntime_tail_runtime_logs"
   },
   {
-    "name": "referenceImage_add_reference_image",
-    "description": "Add reference image(s) to scene",
+    "description": "Enable required Feature Cropping modules through Editor.Profile and rebuild the cropped engine. When data.status is restart-required, restart the exact project from an external supervisor and call get_features again; data.complete is true only after the active preview import map is verified.",
     "inputSchema": {
-      "type": "object",
       "properties": {
-        "paths": {
-          "type": "array",
+        "modules": {
+          "default": [],
+          "items": {
+            "pattern": "^[a-z0-9][a-z0-9-]*$",
+            "type": "string"
+          },
+          "maxItems": 64,
+          "type": "array"
+        },
+        "physicsBackend": {
+          "enum": [
+            "physics-builtin",
+            "physics-cannon",
+            "physics-ammo",
+            "physics-physx"
+          ],
+          "type": "string"
+        },
+        "reload": {
+          "default": true,
+          "type": "boolean"
+        },
+        "timeoutMs": {
+          "default": 240000,
+          "maximum": 300000,
+          "minimum": 1000,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "engineFeature_ensure_features"
+  },
+  {
+    "description": "Read the active Cocos Feature Cropping profile and selected physics backend.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "engineFeature_get_features"
+  },
+  {
+    "description": "Create a new node in the scene. Supports creating empty nodes, nodes with components, or instantiating from assets (prefabs, etc.). IMPORTANT: You should always provide parentUuid to specify where to create the node.",
+    "inputSchema": {
+      "properties": {
+        "assetPath": {
+          "description": "Asset path to instantiate from (e.g., \"db://assets/prefabs/MyPrefab.prefab\"). Alternative to assetUuid.",
+          "type": "string"
+        },
+        "assetUuid": {
+          "description": "Asset UUID to instantiate from (e.g., prefab UUID). When provided, creates a node instance from the asset instead of an empty node.",
+          "type": "string"
+        },
+        "components": {
+          "description": "Array of component type names to add to the new node (e.g., [\"cc.Sprite\", \"cc.Button\"])",
           "items": {
             "type": "string"
           },
-          "description": "Array of reference image absolute paths"
+          "type": "array"
+        },
+        "initialTransform": {
+          "description": "Initial transform to apply to the created node",
+          "properties": {
+            "position": {
+              "properties": {
+                "x": {
+                  "type": "number"
+                },
+                "y": {
+                  "type": "number"
+                },
+                "z": {
+                  "type": "number"
+                }
+              },
+              "type": "object"
+            },
+            "rotation": {
+              "properties": {
+                "x": {
+                  "type": "number"
+                },
+                "y": {
+                  "type": "number"
+                },
+                "z": {
+                  "type": "number"
+                }
+              },
+              "type": "object"
+            },
+            "scale": {
+              "properties": {
+                "x": {
+                  "type": "number"
+                },
+                "y": {
+                  "type": "number"
+                },
+                "z": {
+                  "type": "number"
+                }
+              },
+              "type": "object"
+            }
+          },
+          "type": "object"
+        },
+        "keepWorldTransform": {
+          "default": false,
+          "description": "Whether to keep world transform when creating the node",
+          "type": "boolean"
+        },
+        "name": {
+          "description": "Node name",
+          "type": "string"
+        },
+        "nodeType": {
+          "default": "Node",
+          "description": "Node type: Node, 2DNode, 3DNode",
+          "enum": [
+            "Node",
+            "2DNode",
+            "3DNode"
+          ],
+          "type": "string"
+        },
+        "parentUuid": {
+          "description": "Parent node UUID. STRONGLY RECOMMENDED: Always provide this parameter. Use get_current_scene or get_all_nodes to find parent UUIDs. If not provided, node will be created at scene root.",
+          "type": "string"
+        },
+        "siblingIndex": {
+          "default": -1,
+          "description": "Sibling index for ordering (-1 means append at end)",
+          "type": "number"
+        },
+        "unlinkPrefab": {
+          "default": false,
+          "description": "If true and creating from prefab, unlink from prefab to create a regular node",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "node_create_node"
+  },
+  {
+    "description": "Delete a node from scene",
+    "inputSchema": {
+      "properties": {
+        "uuid": {
+          "description": "Node UUID to delete",
+          "type": "string"
+        }
+      },
+      "required": [
+        "uuid"
+      ],
+      "type": "object"
+    },
+    "name": "node_delete_node"
+  },
+  {
+    "description": "Detect if a node is 2D or 3D based on its components and properties",
+    "inputSchema": {
+      "properties": {
+        "uuid": {
+          "description": "Node UUID to analyze",
+          "type": "string"
+        }
+      },
+      "required": [
+        "uuid"
+      ],
+      "type": "object"
+    },
+    "name": "node_detect_node_type"
+  },
+  {
+    "description": "Duplicate a node",
+    "inputSchema": {
+      "properties": {
+        "includeChildren": {
+          "default": true,
+          "description": "Include children nodes",
+          "type": "boolean"
+        },
+        "uuid": {
+          "description": "Node UUID to duplicate",
+          "type": "string"
+        }
+      },
+      "required": [
+        "uuid"
+      ],
+      "type": "object"
+    },
+    "name": "node_duplicate_node"
+  },
+  {
+    "description": "Find first node by exact name",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "Node name to find",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "node_find_node_by_name"
+  },
+  {
+    "description": "Find nodes by name pattern",
+    "inputSchema": {
+      "properties": {
+        "exactMatch": {
+          "default": false,
+          "description": "Exact match or partial match",
+          "type": "boolean"
+        },
+        "pattern": {
+          "description": "Name pattern to search",
+          "type": "string"
+        }
+      },
+      "required": [
+        "pattern"
+      ],
+      "type": "object"
+    },
+    "name": "node_find_nodes"
+  },
+  {
+    "description": "Get all nodes in the scene with their UUIDs",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "node_get_all_nodes"
+  },
+  {
+    "description": "Get node information by UUID",
+    "inputSchema": {
+      "properties": {
+        "uuid": {
+          "description": "Node UUID",
+          "type": "string"
+        }
+      },
+      "required": [
+        "uuid"
+      ],
+      "type": "object"
+    },
+    "name": "node_get_node_info"
+  },
+  {
+    "description": "Move node to new parent",
+    "inputSchema": {
+      "properties": {
+        "newParentUuid": {
+          "description": "New parent node UUID",
+          "type": "string"
+        },
+        "nodeUuid": {
+          "description": "Node UUID to move",
+          "type": "string"
+        },
+        "siblingIndex": {
+          "default": -1,
+          "description": "Sibling index in new parent",
+          "type": "number"
+        }
+      },
+      "required": [
+        "nodeUuid",
+        "newParentUuid"
+      ],
+      "type": "object"
+    },
+    "name": "node_move_node"
+  },
+  {
+    "description": "Set node property value (prefer using set_node_transform for active/layer/mobility/position/rotation/scale)",
+    "inputSchema": {
+      "properties": {
+        "property": {
+          "description": "Property name (e.g., active, name, layer)",
+          "type": "string"
+        },
+        "uuid": {
+          "description": "Node UUID",
+          "type": "string"
+        },
+        "value": {
+          "description": "Property value"
+        }
+      },
+      "required": [
+        "uuid",
+        "property",
+        "value"
+      ],
+      "type": "object"
+    },
+    "name": "node_set_node_property"
+  },
+  {
+    "description": "Set node transform properties (position, rotation, scale) with unified interface. Automatically handles 2D/3D node differences.",
+    "inputSchema": {
+      "properties": {
+        "position": {
+          "description": "Node position. For 2D nodes, only x,y are used; z is ignored. For 3D nodes, all coordinates are used.",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "z": {
+              "description": "Z coordinate (ignored for 2D nodes)",
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
+        "rotation": {
+          "description": "Node rotation in euler angles. For 2D nodes, only z rotation is used. For 3D nodes, all axes are used.",
+          "properties": {
+            "x": {
+              "description": "X rotation (ignored for 2D nodes)",
+              "type": "number"
+            },
+            "y": {
+              "description": "Y rotation (ignored for 2D nodes)",
+              "type": "number"
+            },
+            "z": {
+              "description": "Z rotation (main rotation axis for 2D nodes)",
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
+        "scale": {
+          "description": "Node scale. For 2D nodes, z is typically 1. For 3D nodes, all axes are used.",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "z": {
+              "description": "Z scale (usually 1 for 2D nodes)",
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
+        "uuid": {
+          "description": "Node UUID",
+          "type": "string"
+        }
+      },
+      "required": [
+        "uuid"
+      ],
+      "type": "object"
+    },
+    "name": "node_set_node_transform"
+  },
+  {
+    "description": "Create a prefab from a node with all children and components",
+    "inputSchema": {
+      "properties": {
+        "nodeUuid": {
+          "description": "Source node UUID",
+          "type": "string"
+        },
+        "prefabName": {
+          "description": "Prefab name",
+          "type": "string"
+        },
+        "savePath": {
+          "description": "Path to save the prefab (e.g., db://assets/prefabs/MyPrefab.prefab)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "nodeUuid",
+        "savePath",
+        "prefabName"
+      ],
+      "type": "object"
+    },
+    "name": "prefab_create_prefab"
+  },
+  {
+    "description": "Duplicate an existing prefab",
+    "inputSchema": {
+      "properties": {
+        "newPrefabName": {
+          "description": "New prefab name",
+          "type": "string"
+        },
+        "sourcePrefabPath": {
+          "description": "Source prefab path",
+          "type": "string"
+        },
+        "targetPrefabPath": {
+          "description": "Target prefab path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sourcePrefabPath",
+        "targetPrefabPath"
+      ],
+      "type": "object"
+    },
+    "name": "prefab_duplicate_prefab"
+  },
+  {
+    "description": "Get detailed prefab information",
+    "inputSchema": {
+      "properties": {
+        "prefabPath": {
+          "description": "Prefab asset path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "prefabPath"
+      ],
+      "type": "object"
+    },
+    "name": "prefab_get_prefab_info"
+  },
+  {
+    "description": "Get all prefabs in the project",
+    "inputSchema": {
+      "properties": {
+        "folder": {
+          "default": "db://assets",
+          "description": "Folder path to search (optional)",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "prefab_get_prefab_list"
+  },
+  {
+    "description": "Instantiate a prefab in the scene",
+    "inputSchema": {
+      "properties": {
+        "parentUuid": {
+          "description": "Parent node UUID (optional)",
+          "type": "string"
+        },
+        "position": {
+          "description": "Initial position",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "z": {
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
+        "prefabPath": {
+          "description": "Prefab asset path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "prefabPath"
+      ],
+      "type": "object"
+    },
+    "name": "prefab_instantiate_prefab"
+  },
+  {
+    "description": "Load a prefab by path",
+    "inputSchema": {
+      "properties": {
+        "prefabPath": {
+          "description": "Prefab asset path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "prefabPath"
+      ],
+      "type": "object"
+    },
+    "name": "prefab_load_prefab"
+  },
+  {
+    "description": "Restore prefab node using prefab asset (built-in undo record)",
+    "inputSchema": {
+      "properties": {
+        "assetUuid": {
+          "description": "Prefab asset UUID",
+          "type": "string"
+        },
+        "nodeUuid": {
+          "description": "Prefab instance node UUID",
+          "type": "string"
+        }
+      },
+      "required": [
+        "nodeUuid",
+        "assetUuid"
+      ],
+      "type": "object"
+    },
+    "name": "prefab_restore_prefab_node"
+  },
+  {
+    "description": "Revert prefab instance to original",
+    "inputSchema": {
+      "properties": {
+        "nodeUuid": {
+          "description": "Prefab instance node UUID",
+          "type": "string"
+        }
+      },
+      "required": [
+        "nodeUuid"
+      ],
+      "type": "object"
+    },
+    "name": "prefab_revert_prefab"
+  },
+  {
+    "description": "Update an existing prefab",
+    "inputSchema": {
+      "properties": {
+        "nodeUuid": {
+          "description": "Node UUID with changes",
+          "type": "string"
+        },
+        "prefabPath": {
+          "description": "Prefab asset path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "prefabPath",
+        "nodeUuid"
+      ],
+      "type": "object"
+    },
+    "name": "prefab_update_prefab"
+  },
+  {
+    "description": "Validate a prefab file format",
+    "inputSchema": {
+      "properties": {
+        "prefabPath": {
+          "description": "Prefab asset path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "prefabPath"
+      ],
+      "type": "object"
+    },
+    "name": "prefab_validate_prefab"
+  },
+  {
+    "description": "Export current preferences configuration",
+    "inputSchema": {
+      "properties": {
+        "exportPath": {
+          "description": "Path to export preferences file (optional)",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "preferences_export_preferences"
+  },
+  {
+    "description": "Get all available preferences categories",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "preferences_get_all_preferences"
+  },
+  {
+    "description": "Import preferences configuration from file",
+    "inputSchema": {
+      "properties": {
+        "importPath": {
+          "description": "Path to import preferences file from",
+          "type": "string"
+        }
+      },
+      "required": [
+        "importPath"
+      ],
+      "type": "object"
+    },
+    "name": "preferences_import_preferences"
+  },
+  {
+    "description": "Open preferences settings panel",
+    "inputSchema": {
+      "properties": {
+        "args": {
+          "description": "Additional arguments to pass to the tab",
+          "items": {},
+          "type": "array"
+        },
+        "tab": {
+          "description": "Preferences tab to open (optional)",
+          "enum": [
+            "general",
+            "external-tools",
+            "data-editor",
+            "laboratory",
+            "extensions"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "preferences_open_preferences_settings"
+  },
+  {
+    "description": "Query preferences configuration",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "default": "general",
+          "description": "Plugin or category name",
+          "type": "string"
+        },
+        "path": {
+          "description": "Configuration path (optional)",
+          "type": "string"
+        },
+        "type": {
+          "default": "global",
+          "description": "Configuration type",
+          "enum": [
+            "default",
+            "global",
+            "local"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "preferences_query_preferences_config"
+  },
+  {
+    "description": "Reset preferences to default values",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "Specific preference category to reset (optional)",
+          "type": "string"
+        },
+        "type": {
+          "default": "global",
+          "description": "Configuration type to reset",
+          "enum": [
+            "global",
+            "local"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "preferences_reset_preferences"
+  },
+  {
+    "description": "Set preferences configuration",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "Plugin name",
+          "type": "string"
+        },
+        "path": {
+          "description": "Configuration path",
+          "type": "string"
+        },
+        "type": {
+          "default": "global",
+          "description": "Configuration type",
+          "enum": [
+            "default",
+            "global",
+            "local"
+          ],
+          "type": "string"
+        },
+        "value": {
+          "description": "Configuration value"
+        }
+      },
+      "required": [
+        "name",
+        "path",
+        "value"
+      ],
+      "type": "object"
+    },
+    "name": "preferences_set_preferences_config"
+  },
+  {
+    "description": "Build the project",
+    "inputSchema": {
+      "properties": {
+        "debug": {
+          "default": true,
+          "description": "Debug build",
+          "type": "boolean"
+        },
+        "platform": {
+          "description": "Build platform",
+          "enum": [
+            "web-mobile",
+            "web-desktop",
+            "ios",
+            "android",
+            "windows",
+            "mac"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "platform"
+      ],
+      "type": "object"
+    },
+    "name": "project_build_project"
+  },
+  {
+    "description": "Check if builder worker is ready",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "project_check_builder_status"
+  },
+  {
+    "description": "Copy an asset to another location",
+    "inputSchema": {
+      "properties": {
+        "overwrite": {
+          "default": false,
+          "description": "Overwrite existing file",
+          "type": "boolean"
+        },
+        "source": {
+          "description": "Source asset URL",
+          "type": "string"
+        },
+        "target": {
+          "description": "Target location URL",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "target"
+      ],
+      "type": "object"
+    },
+    "name": "project_copy_asset"
+  },
+  {
+    "description": "Create a new asset file or folder",
+    "inputSchema": {
+      "properties": {
+        "content": {
+          "default": null,
+          "description": "File content (null for folder)",
+          "type": "string"
+        },
+        "overwrite": {
+          "default": false,
+          "description": "Overwrite existing file",
+          "type": "boolean"
+        },
+        "url": {
+          "description": "Asset URL (e.g., db://assets/newfile.json)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "type": "object"
+    },
+    "name": "project_create_asset"
+  },
+  {
+    "description": "Delete an asset",
+    "inputSchema": {
+      "properties": {
+        "url": {
+          "description": "Asset URL to delete",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "type": "object"
+    },
+    "name": "project_delete_asset"
+  },
+  {
+    "description": "Find assets by name (supports partial matching and multiple results)",
+    "inputSchema": {
+      "properties": {
+        "assetType": {
+          "default": "all",
+          "description": "Filter by asset type",
+          "enum": [
+            "all",
+            "scene",
+            "prefab",
+            "script",
+            "texture",
+            "material",
+            "mesh",
+            "audio",
+            "animation",
+            "spriteFrame"
+          ],
+          "type": "string"
+        },
+        "exactMatch": {
+          "default": false,
+          "description": "Whether to use exact name matching",
+          "type": "boolean"
+        },
+        "folder": {
+          "default": "db://assets",
+          "description": "Folder to search in",
+          "type": "string"
+        },
+        "maxResults": {
+          "default": 20,
+          "description": "Maximum number of results to return",
+          "maximum": 100,
+          "minimum": 1,
+          "type": "number"
+        },
+        "name": {
+          "description": "Asset name to search for (supports partial matching)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "project_find_asset_by_name"
+  },
+  {
+    "description": "Get detailed asset information including spriteFrame sub-assets",
+    "inputSchema": {
+      "properties": {
+        "assetPath": {
+          "description": "Asset path (db://assets/...)",
+          "type": "string"
+        },
+        "includeSubAssets": {
+          "default": true,
+          "description": "Include sub-assets like spriteFrame, texture",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "assetPath"
+      ],
+      "type": "object"
+    },
+    "name": "project_get_asset_details"
+  },
+  {
+    "description": "Get asset information",
+    "inputSchema": {
+      "properties": {
+        "assetPath": {
+          "description": "Asset path (db://assets/...)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "assetPath"
+      ],
+      "type": "object"
+    },
+    "name": "project_get_asset_info"
+  },
+  {
+    "description": "Get assets by type",
+    "inputSchema": {
+      "properties": {
+        "folder": {
+          "default": "db://assets",
+          "description": "Folder to search in",
+          "type": "string"
+        },
+        "type": {
+          "default": "all",
+          "description": "Asset type filter",
+          "enum": [
+            "all",
+            "scene",
+            "prefab",
+            "script",
+            "texture",
+            "material",
+            "mesh",
+            "audio",
+            "animation"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "project_get_assets"
+  },
+  {
+    "description": "Get build settings - shows current limitations",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "project_get_build_settings"
+  },
+  {
+    "description": "Get project information",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "project_get_project_info"
+  },
+  {
+    "description": "Get project settings",
+    "inputSchema": {
+      "properties": {
+        "category": {
+          "default": "general",
+          "description": "Settings category",
+          "enum": [
+            "general",
+            "physics",
+            "render",
+            "assets"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "project_get_project_settings"
+  },
+  {
+    "description": "Import an asset file",
+    "inputSchema": {
+      "properties": {
+        "sourcePath": {
+          "description": "Source file path",
+          "type": "string"
+        },
+        "targetFolder": {
+          "description": "Target folder in assets",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sourcePath",
+        "targetFolder"
+      ],
+      "type": "object"
+    },
+    "name": "project_import_asset"
+  },
+  {
+    "description": "Move an asset to another location",
+    "inputSchema": {
+      "properties": {
+        "overwrite": {
+          "default": false,
+          "description": "Overwrite existing file",
+          "type": "boolean"
+        },
+        "source": {
+          "description": "Source asset URL",
+          "type": "string"
+        },
+        "target": {
+          "description": "Target location URL",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "target"
+      ],
+      "type": "object"
+    },
+    "name": "project_move_asset"
+  },
+  {
+    "description": "Open the build panel in the editor",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "project_open_build_panel"
+  },
+  {
+    "description": "Get asset disk path",
+    "inputSchema": {
+      "properties": {
+        "url": {
+          "description": "Asset URL",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "type": "object"
+    },
+    "name": "project_query_asset_path"
+  },
+  {
+    "description": "Get asset URL from UUID",
+    "inputSchema": {
+      "properties": {
+        "uuid": {
+          "description": "Asset UUID",
+          "type": "string"
+        }
+      },
+      "required": [
+        "uuid"
+      ],
+      "type": "object"
+    },
+    "name": "project_query_asset_url"
+  },
+  {
+    "description": "Get asset UUID from URL",
+    "inputSchema": {
+      "properties": {
+        "url": {
+          "description": "Asset URL",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "type": "object"
+    },
+    "name": "project_query_asset_uuid"
+  },
+  {
+    "description": "Refresh asset database",
+    "inputSchema": {
+      "properties": {
+        "folder": {
+          "description": "Specific folder to refresh (optional)",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "project_refresh_assets"
+  },
+  {
+    "description": "Reimport an asset",
+    "inputSchema": {
+      "properties": {
+        "url": {
+          "description": "Asset URL to reimport",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "type": "object"
+    },
+    "name": "project_reimport_asset"
+  },
+  {
+    "description": "Run the project in preview mode",
+    "inputSchema": {
+      "properties": {
+        "platform": {
+          "default": "browser",
+          "description": "Target platform",
+          "enum": [
+            "browser",
+            "simulator",
+            "preview"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "project_run_project"
+  },
+  {
+    "description": "Save asset content",
+    "inputSchema": {
+      "properties": {
+        "content": {
+          "description": "Asset content",
+          "type": "string"
+        },
+        "url": {
+          "description": "Asset URL",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url",
+        "content"
+      ],
+      "type": "object"
+    },
+    "name": "project_save_asset"
+  },
+  {
+    "description": "Start preview server",
+    "inputSchema": {
+      "properties": {
+        "port": {
+          "default": 7456,
+          "description": "Preview server port",
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "name": "project_start_preview_server"
+  },
+  {
+    "description": "Stop preview server",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "project_stop_preview_server"
+  },
+  {
+    "description": "Add reference image(s) to scene",
+    "inputSchema": {
+      "properties": {
+        "paths": {
+          "description": "Array of reference image absolute paths",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         }
       },
       "required": [
         "paths"
-      ]
+      ],
+      "type": "object"
     },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "success"
-      ]
-    },
-    "annotations": {
-      "readOnlyHint": false,
-      "destructiveHint": false,
-      "idempotentHint": false,
-      "openWorldHint": true
-    }
+    "name": "referenceImage_add_reference_image"
   },
   {
-    "name": "referenceImage_remove_reference_image",
+    "description": "Clear all reference images",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "referenceImage_clear_all_reference_images"
+  },
+  {
+    "description": "List all available reference images",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "referenceImage_list_reference_images"
+  },
+  {
+    "description": "Query current reference image data",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "referenceImage_query_current_reference_image"
+  },
+  {
+    "description": "Query reference image configuration",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "referenceImage_query_reference_image_config"
+  },
+  {
+    "description": "Refresh reference image display",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "referenceImage_refresh_reference_image"
+  },
+  {
     "description": "Remove reference image(s)",
     "inputSchema": {
-      "type": "object",
       "properties": {
         "paths": {
-          "type": "array",
+          "description": "Array of reference image paths to remove (optional, removes current if empty)",
           "items": {
             "type": "string"
           },
-          "description": "Array of reference image paths to remove (optional, removes current if empty)"
-        }
-      }
-    },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
-          "type": "string"
+          "type": "array"
         }
       },
-      "required": [
-        "success"
-      ]
+      "type": "object"
     },
-    "annotations": {
-      "readOnlyHint": false,
-      "destructiveHint": true,
-      "idempotentHint": true,
-      "openWorldHint": true
-    }
+    "name": "referenceImage_remove_reference_image"
   },
   {
-    "name": "referenceImage_switch_reference_image",
-    "description": "Switch to specific reference image",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "path": {
-          "type": "string",
-          "description": "Reference image absolute path"
-        },
-        "sceneUUID": {
-          "type": "string",
-          "description": "Specific scene UUID (optional)"
-        }
-      },
-      "required": [
-        "path"
-      ]
-    },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "success"
-      ]
-    },
-    "annotations": {
-      "readOnlyHint": false,
-      "destructiveHint": false,
-      "idempotentHint": false,
-      "openWorldHint": true
-    }
-  },
-  {
-    "name": "referenceImage_set_reference_image_data",
     "description": "Set reference image transform and display properties",
     "inputSchema": {
-      "type": "object",
       "properties": {
         "key": {
-          "type": "string",
           "description": "Property key",
           "enum": [
             "path",
@@ -1473,7 +2012,8 @@
             "sx",
             "sy",
             "opacity"
-          ]
+          ],
+          "type": "string"
         },
         "value": {
           "description": "Property value (path: string, x/y/sx/sy: number, opacity: number 0-1)"
@@ -1482,1100 +2022,967 @@
       "required": [
         "key",
         "value"
-      ]
+      ],
+      "type": "object"
     },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "success"
-      ]
-    },
-    "annotations": {
-      "readOnlyHint": false,
-      "destructiveHint": false,
-      "idempotentHint": false,
-      "openWorldHint": true
-    }
+    "name": "referenceImage_set_reference_image_data"
   },
   {
-    "name": "referenceImage_query_reference_image_config",
-    "description": "Query reference image configuration",
+    "description": "Set reference image opacity",
     "inputSchema": {
-      "type": "object",
-      "properties": {}
-    },
-    "outputSchema": {
-      "type": "object",
       "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
-          "type": "string"
+        "opacity": {
+          "description": "Opacity (0.0 to 1.0)",
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
         }
       },
       "required": [
-        "success"
-      ]
+        "opacity"
+      ],
+      "type": "object"
     },
-    "annotations": {
-      "readOnlyHint": true,
-      "destructiveHint": false,
-      "idempotentHint": true,
-      "openWorldHint": true
-    }
+    "name": "referenceImage_set_reference_image_opacity"
   },
   {
-    "name": "referenceImage_query_current_reference_image",
-    "description": "Query current reference image data",
-    "inputSchema": {
-      "type": "object",
-      "properties": {}
-    },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "success"
-      ]
-    },
-    "annotations": {
-      "readOnlyHint": true,
-      "destructiveHint": false,
-      "idempotentHint": true,
-      "openWorldHint": true
-    }
-  },
-  {
-    "name": "referenceImage_refresh_reference_image",
-    "description": "Refresh reference image display",
-    "inputSchema": {
-      "type": "object",
-      "properties": {}
-    },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "success"
-      ]
-    },
-    "annotations": {
-      "readOnlyHint": false,
-      "destructiveHint": false,
-      "idempotentHint": false,
-      "openWorldHint": true
-    }
-  },
-  {
-    "name": "referenceImage_set_reference_image_position",
     "description": "Set reference image position",
     "inputSchema": {
-      "type": "object",
       "properties": {
         "x": {
-          "type": "number",
-          "description": "X offset"
+          "description": "X offset",
+          "type": "number"
         },
         "y": {
-          "type": "number",
-          "description": "Y offset"
+          "description": "Y offset",
+          "type": "number"
         }
       },
       "required": [
         "x",
         "y"
-      ]
+      ],
+      "type": "object"
     },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "success"
-      ]
-    },
-    "annotations": {
-      "readOnlyHint": false,
-      "destructiveHint": false,
-      "idempotentHint": false,
-      "openWorldHint": true
-    }
+    "name": "referenceImage_set_reference_image_position"
   },
   {
-    "name": "referenceImage_set_reference_image_scale",
     "description": "Set reference image scale",
     "inputSchema": {
-      "type": "object",
       "properties": {
         "sx": {
-          "type": "number",
           "description": "X scale",
+          "maximum": 10,
           "minimum": 0.1,
-          "maximum": 10
+          "type": "number"
         },
         "sy": {
-          "type": "number",
           "description": "Y scale",
+          "maximum": 10,
           "minimum": 0.1,
-          "maximum": 10
+          "type": "number"
         }
       },
       "required": [
         "sx",
         "sy"
-      ]
+      ],
+      "type": "object"
     },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "success"
-      ]
-    },
-    "annotations": {
-      "readOnlyHint": false,
-      "destructiveHint": false,
-      "idempotentHint": false,
-      "openWorldHint": true
-    }
+    "name": "referenceImage_set_reference_image_scale"
   },
   {
-    "name": "referenceImage_set_reference_image_opacity",
-    "description": "Set reference image opacity",
+    "description": "Switch to specific reference image",
     "inputSchema": {
-      "type": "object",
       "properties": {
-        "opacity": {
-          "type": "number",
-          "description": "Opacity (0.0 to 1.0)",
-          "minimum": 0,
-          "maximum": 1
-        }
-      },
-      "required": [
-        "opacity"
-      ]
-    },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
+        "path": {
+          "description": "Reference image absolute path",
           "type": "string"
         },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
+        "sceneUUID": {
+          "description": "Specific scene UUID (optional)",
           "type": "string"
         }
       },
       "required": [
-        "success"
-      ]
+        "path"
+      ],
+      "type": "object"
     },
-    "annotations": {
-      "readOnlyHint": false,
-      "destructiveHint": false,
-      "idempotentHint": false,
-      "openWorldHint": true
-    }
+    "name": "referenceImage_switch_reference_image"
   },
   {
-    "name": "referenceImage_list_reference_images",
-    "description": "List all available reference images",
+    "description": "Close current scene",
     "inputSchema": {
-      "type": "object",
-      "properties": {}
+      "properties": {},
+      "type": "object"
     },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "success"
-      ]
-    },
-    "annotations": {
-      "readOnlyHint": true,
-      "destructiveHint": false,
-      "idempotentHint": true,
-      "openWorldHint": true
-    }
+    "name": "scene_close_scene"
   },
   {
-    "name": "referenceImage_clear_all_reference_images",
-    "description": "Clear all reference images",
+    "description": "Create a new scene asset",
     "inputSchema": {
-      "type": "object",
-      "properties": {}
-    },
-    "outputSchema": {
-      "type": "object",
       "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
+        "savePath": {
+          "description": "Path to save the scene (e.g., db://assets/scenes/NewScene.scene)",
           "type": "string"
         },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
+        "sceneName": {
+          "description": "Name of the new scene",
           "type": "string"
         }
       },
       "required": [
-        "success"
-      ]
+        "sceneName",
+        "savePath"
+      ],
+      "type": "object"
     },
-    "annotations": {
-      "readOnlyHint": false,
-      "destructiveHint": true,
-      "idempotentHint": true,
-      "openWorldHint": true
-    }
+    "name": "scene_create_scene"
   },
   {
-    "name": "assetAdvanced_save_asset_meta",
-    "description": "Save asset meta information",
+    "description": "Get current scene information",
     "inputSchema": {
-      "type": "object",
-      "properties": {
-        "urlOrUUID": {
-          "type": "string",
-          "description": "Asset URL or UUID"
-        },
-        "content": {
-          "type": "string",
-          "description": "Asset meta serialized content string"
-        }
-      },
-      "required": [
-        "urlOrUUID",
-        "content"
-      ]
+      "properties": {},
+      "type": "object"
     },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "success"
-      ]
-    },
-    "annotations": {
-      "readOnlyHint": false,
-      "destructiveHint": false,
-      "idempotentHint": true,
-      "openWorldHint": true
-    }
+    "name": "scene_get_current_scene"
   },
   {
-    "name": "assetAdvanced_generate_available_url",
-    "description": "Generate an available URL based on input URL",
+    "description": "Get the complete hierarchy of current scene",
     "inputSchema": {
-      "type": "object",
       "properties": {
-        "url": {
-          "type": "string",
-          "description": "Asset URL to generate available URL for"
-        }
-      },
-      "required": [
-        "url"
-      ]
-    },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "success": {
+        "includeComponents": {
+          "default": false,
+          "description": "Include component information",
           "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
-          "type": "string"
         }
       },
-      "required": [
-        "success"
-      ]
+      "type": "object"
     },
-    "annotations": {
-      "readOnlyHint": true,
-      "destructiveHint": false,
-      "idempotentHint": true,
-      "openWorldHint": false
-    }
+    "name": "scene_get_scene_hierarchy"
   },
   {
-    "name": "assetAdvanced_query_asset_db_ready",
-    "description": "Check if asset database is ready",
+    "description": "Get all scenes in the project",
     "inputSchema": {
-      "type": "object",
-      "properties": {}
+      "properties": {},
+      "type": "object"
     },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "success"
-      ]
-    },
-    "annotations": {
-      "readOnlyHint": true,
-      "destructiveHint": false,
-      "idempotentHint": true,
-      "openWorldHint": false
-    }
+    "name": "scene_get_scene_list"
   },
   {
-    "name": "assetAdvanced_open_asset_external",
-    "description": "Open asset with external program",
+    "description": "Open a scene by path",
     "inputSchema": {
-      "type": "object",
       "properties": {
-        "urlOrUUID": {
-          "type": "string",
-          "description": "Asset URL or UUID to open"
-        }
-      },
-      "required": [
-        "urlOrUUID"
-      ]
-    },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
+        "scenePath": {
+          "description": "The scene file path",
           "type": "string"
         }
       },
       "required": [
-        "success"
-      ]
+        "scenePath"
+      ],
+      "type": "object"
     },
-    "annotations": {
-      "readOnlyHint": false,
-      "destructiveHint": false,
-      "idempotentHint": true,
-      "openWorldHint": true
-    }
+    "name": "scene_open_scene"
   },
   {
-    "name": "assetAdvanced_batch_import_assets",
-    "description": "Import multiple assets in batch",
+    "description": "Save current scene",
     "inputSchema": {
-      "type": "object",
-      "properties": {
-        "sourceDirectory": {
-          "type": "string",
-          "description": "Source directory path"
-        },
-        "targetDirectory": {
-          "type": "string",
-          "description": "Target directory URL"
-        },
-        "fileFilter": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "description": "File extensions to include (e.g., [\".png\", \".jpg\"])",
-          "default": []
-        },
-        "recursive": {
-          "type": "boolean",
-          "description": "Include subdirectories",
-          "default": false
-        },
-        "overwrite": {
-          "type": "boolean",
-          "description": "Overwrite existing files",
-          "default": false
-        }
-      },
-      "required": [
-        "sourceDirectory",
-        "targetDirectory"
-      ]
+      "properties": {},
+      "type": "object"
     },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "success"
-      ]
-    },
-    "annotations": {
-      "readOnlyHint": false,
-      "destructiveHint": false,
-      "idempotentHint": false,
-      "openWorldHint": true
-    }
+    "name": "scene_save_scene"
   },
   {
-    "name": "assetAdvanced_batch_delete_assets",
-    "description": "Delete multiple assets in batch",
+    "description": "Save scene as new file",
     "inputSchema": {
-      "type": "object",
       "properties": {
-        "urls": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "description": "Array of asset URLs to delete"
-        }
-      },
-      "required": [
-        "urls"
-      ]
-    },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
+        "path": {
+          "description": "Path to save the scene",
           "type": "string"
         }
       },
       "required": [
-        "success"
-      ]
+        "path"
+      ],
+      "type": "object"
     },
-    "annotations": {
-      "readOnlyHint": false,
-      "destructiveHint": true,
-      "idempotentHint": true,
-      "openWorldHint": false
-    }
+    "name": "scene_save_scene_as"
   },
   {
-    "name": "assetAdvanced_validate_asset_references",
-    "description": "Validate asset references and find broken links",
+    "description": "Begin recording undo data",
     "inputSchema": {
-      "type": "object",
       "properties": {
-        "directory": {
-          "type": "string",
-          "description": "Directory to validate (default: entire project)",
-          "default": "db://assets"
-        }
-      }
-    },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
+        "nodeUuid": {
+          "description": "Node UUID to record",
           "type": "string"
         }
       },
       "required": [
-        "success"
-      ]
+        "nodeUuid"
+      ],
+      "type": "object"
     },
-    "annotations": {
-      "readOnlyHint": true,
-      "destructiveHint": false,
-      "idempotentHint": true,
-      "openWorldHint": false
-    }
+    "name": "sceneAdvanced_begin_undo_recording"
   },
   {
-    "name": "assetAdvanced_get_asset_dependencies",
-    "description": "Get asset dependency tree",
+    "description": "Cancel undo recording",
     "inputSchema": {
-      "type": "object",
       "properties": {
-        "urlOrUUID": {
-          "type": "string",
-          "description": "Asset URL or UUID"
+        "undoId": {
+          "description": "Undo recording ID to cancel",
+          "type": "string"
+        }
+      },
+      "required": [
+        "undoId"
+      ],
+      "type": "object"
+    },
+    "name": "sceneAdvanced_cancel_undo_recording"
+  },
+  {
+    "description": "Copy node for later paste operation",
+    "inputSchema": {
+      "properties": {
+        "uuids": {
+          "description": "Node UUID or array of UUIDs to copy",
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          ]
+        }
+      },
+      "required": [
+        "uuids"
+      ],
+      "type": "object"
+    },
+    "name": "sceneAdvanced_copy_node"
+  },
+  {
+    "description": "Cut node (copy + mark for move)",
+    "inputSchema": {
+      "properties": {
+        "uuids": {
+          "description": "Node UUID or array of UUIDs to cut",
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          ]
+        }
+      },
+      "required": [
+        "uuids"
+      ],
+      "type": "object"
+    },
+    "name": "sceneAdvanced_cut_node"
+  },
+  {
+    "description": "End recording undo data",
+    "inputSchema": {
+      "properties": {
+        "undoId": {
+          "description": "Undo recording ID from begin_undo_recording",
+          "type": "string"
+        }
+      },
+      "required": [
+        "undoId"
+      ],
+      "type": "object"
+    },
+    "name": "sceneAdvanced_end_undo_recording"
+  },
+  {
+    "description": "Execute method on component",
+    "inputSchema": {
+      "properties": {
+        "args": {
+          "default": [],
+          "description": "Method arguments",
+          "items": {},
+          "type": "array"
         },
-        "direction": {
-          "type": "string",
-          "description": "Dependency direction",
+        "name": {
+          "description": "Method name",
+          "type": "string"
+        },
+        "uuid": {
+          "description": "Component UUID",
+          "type": "string"
+        }
+      },
+      "required": [
+        "uuid",
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "sceneAdvanced_execute_component_method"
+  },
+  {
+    "description": "Execute scene script method",
+    "inputSchema": {
+      "properties": {
+        "args": {
+          "default": [],
+          "description": "Method arguments",
+          "items": {},
+          "type": "array"
+        },
+        "method": {
+          "description": "Method name",
+          "type": "string"
+        },
+        "name": {
+          "description": "Plugin name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "method"
+      ],
+      "type": "object"
+    },
+    "name": "sceneAdvanced_execute_scene_script"
+  },
+  {
+    "description": "Move array element position",
+    "inputSchema": {
+      "properties": {
+        "offset": {
+          "description": "Offset amount (positive or negative)",
+          "type": "number"
+        },
+        "path": {
+          "description": "Array property path (e.g., __comps__)",
+          "type": "string"
+        },
+        "target": {
+          "description": "Target item original index",
+          "type": "number"
+        },
+        "uuid": {
+          "description": "Node UUID",
+          "type": "string"
+        }
+      },
+      "required": [
+        "uuid",
+        "path",
+        "target",
+        "offset"
+      ],
+      "type": "object"
+    },
+    "name": "sceneAdvanced_move_array_element"
+  },
+  {
+    "description": "Paste previously copied nodes",
+    "inputSchema": {
+      "properties": {
+        "keepWorldTransform": {
+          "default": false,
+          "description": "Keep world transform coordinates",
+          "type": "boolean"
+        },
+        "target": {
+          "description": "Target parent node UUID",
+          "type": "string"
+        },
+        "uuids": {
+          "description": "Node UUIDs to paste",
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          ]
+        }
+      },
+      "required": [
+        "target",
+        "uuids"
+      ],
+      "type": "object"
+    },
+    "name": "sceneAdvanced_paste_node"
+  },
+  {
+    "description": "Check if component has script",
+    "inputSchema": {
+      "properties": {
+        "className": {
+          "description": "Script class name to check",
+          "type": "string"
+        }
+      },
+      "required": [
+        "className"
+      ],
+      "type": "object"
+    },
+    "name": "sceneAdvanced_query_component_has_script"
+  },
+  {
+    "description": "Find nodes that use specific asset UUID",
+    "inputSchema": {
+      "properties": {
+        "assetUuid": {
+          "description": "Asset UUID to search for",
+          "type": "string"
+        }
+      },
+      "required": [
+        "assetUuid"
+      ],
+      "type": "object"
+    },
+    "name": "sceneAdvanced_query_nodes_by_asset_uuid"
+  },
+  {
+    "description": "Query all registered classes",
+    "inputSchema": {
+      "properties": {
+        "extends": {
+          "description": "Filter classes that extend this base class",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "sceneAdvanced_query_scene_classes"
+  },
+  {
+    "description": "Query available scene components",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "sceneAdvanced_query_scene_components"
+  },
+  {
+    "description": "Check if scene has unsaved changes",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "sceneAdvanced_query_scene_dirty"
+  },
+  {
+    "description": "Check if scene is ready",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "sceneAdvanced_query_scene_ready"
+  },
+  {
+    "description": "Remove array element at specific index",
+    "inputSchema": {
+      "properties": {
+        "index": {
+          "description": "Target item index to remove",
+          "type": "number"
+        },
+        "path": {
+          "description": "Array property path",
+          "type": "string"
+        },
+        "uuid": {
+          "description": "Node UUID",
+          "type": "string"
+        }
+      },
+      "required": [
+        "uuid",
+        "path",
+        "index"
+      ],
+      "type": "object"
+    },
+    "name": "sceneAdvanced_remove_array_element"
+  },
+  {
+    "description": "Reset component to default values",
+    "inputSchema": {
+      "properties": {
+        "uuid": {
+          "description": "Component UUID",
+          "type": "string"
+        }
+      },
+      "required": [
+        "uuid"
+      ],
+      "type": "object"
+    },
+    "name": "sceneAdvanced_reset_component"
+  },
+  {
+    "description": "Reset node property to default value",
+    "inputSchema": {
+      "properties": {
+        "path": {
+          "description": "Property path (e.g., position, rotation, scale)",
+          "type": "string"
+        },
+        "uuid": {
+          "description": "Node UUID",
+          "type": "string"
+        }
+      },
+      "required": [
+        "uuid",
+        "path"
+      ],
+      "type": "object"
+    },
+    "name": "sceneAdvanced_reset_node_property"
+  },
+  {
+    "description": "Reset node position, rotation and scale",
+    "inputSchema": {
+      "properties": {
+        "uuid": {
+          "description": "Node UUID",
+          "type": "string"
+        }
+      },
+      "required": [
+        "uuid"
+      ],
+      "type": "object"
+    },
+    "name": "sceneAdvanced_reset_node_transform"
+  },
+  {
+    "description": "Restore prefab instance from asset",
+    "inputSchema": {
+      "properties": {
+        "assetUuid": {
+          "description": "Prefab asset UUID",
+          "type": "string"
+        },
+        "nodeUuid": {
+          "description": "Node UUID",
+          "type": "string"
+        }
+      },
+      "required": [
+        "nodeUuid",
+        "assetUuid"
+      ],
+      "type": "object"
+    },
+    "name": "sceneAdvanced_restore_prefab"
+  },
+  {
+    "description": "Create scene state snapshot",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "sceneAdvanced_scene_snapshot"
+  },
+  {
+    "description": "Abort scene snapshot creation",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "sceneAdvanced_scene_snapshot_abort"
+  },
+  {
+    "description": "Soft reload current scene",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "sceneAdvanced_soft_reload_scene"
+  },
+  {
+    "description": "Apply scene camera position and angle to selected node",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "sceneView_align_camera_with_view"
+  },
+  {
+    "description": "Apply selected node position and angle to current view",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "sceneView_align_view_with_node"
+  },
+  {
+    "description": "Change coordinate system",
+    "inputSchema": {
+      "properties": {
+        "type": {
+          "description": "Coordinate system",
           "enum": [
-            "dependents",
-            "dependencies",
-            "both"
+            "local",
+            "global"
           ],
-          "default": "dependencies"
-        }
-      },
-      "required": [
-        "urlOrUUID"
-      ]
-    },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
           "type": "string"
         }
       },
       "required": [
-        "success"
-      ]
+        "type"
+      ],
+      "type": "object"
     },
-    "annotations": {
-      "readOnlyHint": true,
-      "destructiveHint": false,
-      "idempotentHint": true,
-      "openWorldHint": false
-    }
+    "name": "sceneView_change_gizmo_coordinate"
   },
   {
-    "name": "assetAdvanced_get_unused_assets",
-    "description": "Find unused assets in project",
+    "description": "Change transform pivot point",
     "inputSchema": {
-      "type": "object",
       "properties": {
-        "directory": {
-          "type": "string",
-          "description": "Directory to scan (default: entire project)",
-          "default": "db://assets"
-        },
-        "excludeDirectories": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "description": "Directories to exclude from scan",
-          "default": []
-        }
-      }
-    },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "success"
-      ]
-    },
-    "annotations": {
-      "readOnlyHint": true,
-      "destructiveHint": false,
-      "idempotentHint": true,
-      "openWorldHint": false
-    }
-  },
-  {
-    "name": "assetAdvanced_compress_textures",
-    "description": "Batch compress texture assets",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "directory": {
-          "type": "string",
-          "description": "Directory containing textures",
-          "default": "db://assets"
-        },
-        "format": {
-          "type": "string",
-          "description": "Compression format",
+        "name": {
+          "description": "Pivot point",
           "enum": [
-            "auto",
-            "jpg",
-            "png",
-            "webp"
+            "pivot",
+            "center"
           ],
-          "default": "auto"
-        },
-        "quality": {
-          "type": "number",
-          "description": "Compression quality (0.1-1.0)",
-          "minimum": 0.1,
-          "maximum": 1,
-          "default": 0.8
-        }
-      }
-    },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
           "type": "string"
         }
       },
       "required": [
-        "success"
-      ]
+        "name"
+      ],
+      "type": "object"
     },
-    "annotations": {
-      "readOnlyHint": false,
-      "destructiveHint": false,
-      "idempotentHint": false,
-      "openWorldHint": false
-    }
+    "name": "sceneView_change_gizmo_pivot"
   },
   {
-    "name": "assetAdvanced_export_asset_manifest",
-    "description": "Export asset manifest/inventory",
+    "description": "Change Gizmo tool",
     "inputSchema": {
-      "type": "object",
       "properties": {
-        "directory": {
-          "type": "string",
-          "description": "Directory to export manifest for",
-          "default": "db://assets"
-        },
-        "format": {
-          "type": "string",
-          "description": "Export format",
+        "name": {
+          "description": "Tool name",
           "enum": [
-            "json",
-            "csv",
-            "xml"
+            "position",
+            "rotation",
+            "scale",
+            "rect"
           ],
-          "default": "json"
-        },
-        "includeMetadata": {
-          "type": "boolean",
-          "description": "Include asset metadata",
-          "default": true
-        }
-      }
-    },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
           "type": "string"
         }
       },
       "required": [
-        "success"
-      ]
+        "name"
+      ],
+      "type": "object"
     },
-    "annotations": {
-      "readOnlyHint": false,
-      "destructiveHint": false,
-      "idempotentHint": true,
-      "openWorldHint": true
-    }
+    "name": "sceneView_change_gizmo_tool"
   },
   {
-    "name": "validation_validate_json_params",
-    "description": "Validate and fix JSON parameters before sending to other tools",
+    "description": "Change 2D/3D view mode",
     "inputSchema": {
-      "type": "object",
       "properties": {
-        "jsonString": {
-          "type": "string",
-          "description": "JSON string to validate and fix"
-        },
-        "expectedSchema": {
-          "type": "object",
-          "description": "Expected parameter schema (optional)"
-        }
-      },
-      "required": [
-        "jsonString"
-      ]
-    },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "success": {
+        "is2D": {
+          "description": "2D/3D view mode (true for 2D, false for 3D)",
           "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
-          "type": "string"
         }
       },
       "required": [
-        "success"
-      ]
+        "is2D"
+      ],
+      "type": "object"
     },
-    "annotations": {
-      "readOnlyHint": true,
-      "destructiveHint": false,
-      "idempotentHint": true,
-      "openWorldHint": false
-    }
+    "name": "sceneView_change_view_mode_2d_3d"
   },
   {
-    "name": "validation_safe_string_value",
-    "description": "Create a safe string value that won't cause JSON parsing issues",
+    "description": "Focus scene camera on nodes",
     "inputSchema": {
-      "type": "object",
       "properties": {
-        "value": {
-          "type": "string",
-          "description": "String value to make safe"
+        "uuids": {
+          "description": "Node UUIDs to focus on (null for all)",
+          "oneOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
-        "value"
-      ]
+        "uuids"
+      ],
+      "type": "object"
     },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "success"
-      ]
-    },
-    "annotations": {
-      "readOnlyHint": true,
-      "destructiveHint": false,
-      "idempotentHint": true,
-      "openWorldHint": false
-    }
+    "name": "sceneView_focus_camera_on_nodes"
   },
   {
-    "name": "validation_format_mcp_request",
+    "description": "Get comprehensive scene view status",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "sceneView_get_scene_view_status"
+  },
+  {
+    "description": "Get current coordinate system",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "sceneView_query_gizmo_coordinate"
+  },
+  {
+    "description": "Get current Gizmo pivot point",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "sceneView_query_gizmo_pivot"
+  },
+  {
+    "description": "Get current Gizmo tool name",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "sceneView_query_gizmo_tool_name"
+  },
+  {
+    "description": "Query view mode (view/select)",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "sceneView_query_gizmo_view_mode"
+  },
+  {
+    "description": "Query grid visibility status",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "sceneView_query_grid_visible"
+  },
+  {
+    "description": "Query IconGizmo mode",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "sceneView_query_icon_gizmo_3d"
+  },
+  {
+    "description": "Query IconGizmo size",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "sceneView_query_icon_gizmo_size"
+  },
+  {
+    "description": "Get current view mode",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "sceneView_query_view_mode_2d_3d"
+  },
+  {
+    "description": "Reset scene view to default settings",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "sceneView_reset_scene_view"
+  },
+  {
+    "description": "Show/hide grid",
+    "inputSchema": {
+      "properties": {
+        "visible": {
+          "description": "Grid visibility",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "visible"
+      ],
+      "type": "object"
+    },
+    "name": "sceneView_set_grid_visible"
+  },
+  {
+    "description": "Set IconGizmo to 3D or 2D mode",
+    "inputSchema": {
+      "properties": {
+        "is3D": {
+          "description": "3D/2D IconGizmo (true for 3D, false for 2D)",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "is3D"
+      ],
+      "type": "object"
+    },
+    "name": "sceneView_set_icon_gizmo_3d"
+  },
+  {
+    "description": "Set IconGizmo size",
+    "inputSchema": {
+      "properties": {
+        "size": {
+          "description": "IconGizmo size",
+          "maximum": 100,
+          "minimum": 10,
+          "type": "number"
+        }
+      },
+      "required": [
+        "size"
+      ],
+      "type": "object"
+    },
+    "name": "sceneView_set_icon_gizmo_size"
+  },
+  {
+    "description": "Check server connectivity and network status",
+    "inputSchema": {
+      "properties": {
+        "timeout": {
+          "default": 5000,
+          "description": "Timeout in milliseconds",
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "name": "server_check_server_connectivity"
+  },
+  {
+    "description": "Get available network interfaces",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "server_get_network_interfaces"
+  },
+  {
+    "description": "Get comprehensive server status information",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "server_get_server_status"
+  },
+  {
+    "description": "Query server IP list",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "server_query_server_ip_list"
+  },
+  {
+    "description": "Query editor server current port",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "server_query_server_port"
+  },
+  {
+    "description": "Get sorted server IP list",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "server_query_sorted_server_ip_list"
+  },
+  {
     "description": "Format a complete MCP request with proper JSON escaping",
     "inputSchema": {
-      "type": "object",
       "properties": {
-        "toolName": {
-          "type": "string",
-          "description": "Tool name to call"
-        },
         "arguments": {
-          "type": "object",
-          "description": "Tool arguments"
+          "description": "Tool arguments",
+          "type": "object"
+        },
+        "toolName": {
+          "description": "Tool name to call",
+          "type": "string"
         }
       },
       "required": [
         "toolName",
         "arguments"
-      ]
+      ],
+      "type": "object"
     },
-    "outputSchema": {
-      "type": "object",
+    "name": "validation_format_mcp_request"
+  },
+  {
+    "description": "Create a safe string value that won't cause JSON parsing issues",
+    "inputSchema": {
       "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "data": {},
-        "error": {
-          "type": "string"
-        },
-        "warning": {
-          "type": "string"
-        },
-        "instruction": {
+        "value": {
+          "description": "String value to make safe",
           "type": "string"
         }
       },
       "required": [
-        "success"
-      ]
+        "value"
+      ],
+      "type": "object"
     },
-    "annotations": {
-      "readOnlyHint": true,
-      "destructiveHint": false,
-      "idempotentHint": true,
-      "openWorldHint": false
-    }
+    "name": "validation_safe_string_value"
+  },
+  {
+    "description": "Validate and fix JSON parameters before sending to other tools",
+    "inputSchema": {
+      "properties": {
+        "expectedSchema": {
+          "description": "Expected parameter schema (optional)",
+          "type": "object"
+        },
+        "jsonString": {
+          "description": "JSON string to validate and fix",
+          "type": "string"
+        }
+      },
+      "required": [
+        "jsonString"
+      ],
+      "type": "object"
+    },
+    "name": "validation_validate_json_params"
   }
 ]

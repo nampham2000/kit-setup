@@ -74,8 +74,8 @@ export const DEFAULT_PLAYABLE_CONFIG: IPlayableConfig = {
   title: 'Playable Ad Config',
   version: '1.0.0',
   cta: {
-    googlePlayUrl: 'https://play.google.com/store/apps/details?id=com.playable.ad',
-    appStoreUrl: 'https://apps.apple.com/app/id123456789',
+    googlePlayUrl: '',
+    appStoreUrl: '',
     enableButtonPulse: true,
     autoRedirectDelay: 0,
     pulseScaleMultiplier: 1.08,

@@ -353,7 +353,7 @@ function cmdValidate(effectPath) {
 }
 
 /**
- * `chain` -- prefab -> materials -> shaders + textures, converted in one pass.
+ * `chain` -- prefab/ScriptableObject -> materials -> shaders + textures, converted in one pass.
  *
  * Output is deliberately terse. The point of this command is that a caller
  * (human or agent) never has to read the prefab YAML, the .mat YAML, or the
@@ -366,7 +366,7 @@ function cmdChain(options) {
   const { convertMatFile } = require('./unity-material-converter.cjs');
 
   if (!options.src) {
-    console.error('Error: --src <Prefab.prefab> is required.');
+    console.error('Error: --src <Prefab.prefab|ScriptableObject.asset> is required.');
     process.exit(2);
   }
   if (!options.unityRoot) {
@@ -431,7 +431,7 @@ function cmdChain(options) {
   }
 
   const rel = (p) => path.relative(options.unityRoot, p).replace(/\\/g, '/');
-  console.log(`\n=== Shader chain: ${path.basename(chain.prefab)} ===`);
+  console.log(`\n=== Shader chain: ${path.basename(chain.sourceAsset)} [${chain.sourceKind}] ===`);
   console.log(`guid index      ${chain.indexSize} assets${chain.fromCache ? ' (cached)' : ''}`);
   console.log(`materials       ${chain.materials.length}${chain.materials.length ? '  ' + chain.materials.map(m => m.name).join(', ') : ''}`);
 
@@ -564,7 +564,7 @@ function main() {
 UCShaderTranspiler - Unity HLSL/ShaderLab -> Cocos Creator 3.8.8 GLSL Effect Transpiler
 
 Usage:
-  node unity-shader-compiler.cjs chain --src <Prefab> --unity-root <Assets> [--out-dir <dir>] [--json] [--no-cache]
+  node unity-shader-compiler.cjs chain --src <Prefab|ScriptableObject.asset> --unity-root <Assets> [--out-dir <dir>] [--json] [--no-cache]
   node unity-shader-compiler.cjs convert --src <Shader> --out <Effect> [-m] [--mode auto|unlit|surface-pbr] [--unity-project <UnityProject>] [--unity-uv] [--report|--no-report] [--dry-run]
 
   --unity-uv  Lấy mẫu texture theo quy ước UV của Unity (gốc dưới-trái) bằng texU().
@@ -577,9 +577,9 @@ Usage:
   node unity-shader-compiler.cjs validate <Effect>
   node unity-shader-compiler.cjs doctor
 
-'chain' is the entry point for "port this prefab and whatever it renders with":
-it walks prefab -> materials -> shader + textures, converts each, and prints
-only what still needs a decision.
+'chain' is the entry point for "port this prefab/material-set config and whatever it renders with":
+it walks prefab or ScriptableObject -> materials -> shader + textures, converts
+each, and prints only what still needs a decision.
     `);
   }
 }

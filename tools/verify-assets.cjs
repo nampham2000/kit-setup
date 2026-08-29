@@ -12,7 +12,7 @@ require('./lib/auto-strip-ansi.cjs');
  *
  * tsc sạch, lint sạch, build exit 0 — playable vẫn có thể trắng màn hình vì một
  * asset bị editor từ chối. Nguồn sự thật duy nhất là cặp:
- *   1. `<asset>.meta` -> `"imported": false`
+ *   1. `<asset>.meta` hoặc một `subMetas.*` -> `"imported": false`
  *   2. dòng lỗi thật trong log của editor (KHÔNG nằm trong temp/asset-db/log/)
  *
  * Ví dụ đo được: một .effect với `#define _MainTex MainTex` bị từ chối bằng
@@ -130,6 +130,28 @@ function findLogReason (basename, logTexts) {
     return null;
 }
 
+/**
+ * Cocos can mark the root image/model meta imported while one generated texture,
+ * sprite-frame, mesh, material or animation sub-asset is still rejected. Those
+ * sub-assets are the UUIDs referenced by prefabs/materials, so root-only checks
+ * produce a false PASS and the preview fails later with a missing UUID.
+ */
+function collectImportFailures (meta, subPath = [], out = [], stats = { checked: 0 }) {
+    if (!meta || typeof meta !== 'object') return { failures: out, checked: stats.checked };
+    if ('imported' in meta) {
+        stats.checked += 1;
+        if (meta.imported !== true) {
+            out.push({ meta, subPath: [...subPath] });
+            // A failed parent already covers all of its nested importer state.
+            return { failures: out, checked: stats.checked };
+        }
+    }
+    for (const [id, subMeta] of Object.entries(meta.subMetas || {})) {
+        collectImportFailures(subMeta, [...subPath, id], out, stats);
+    }
+    return { failures: out, checked: stats.checked };
+}
+
 function run (options = {}) {
     const scanRoot = options.scanPath ? path.resolve(ROOT_DIR, options.scanPath) : ASSETS_DIR;
     const result = {
@@ -139,6 +161,7 @@ function run (options = {}) {
         warnings: [],
         details: '',
         scanned: 0,
+        importerStatesScanned: 0,
         failed: [],
         logsRead: [],
     };
@@ -160,10 +183,11 @@ function run (options = {}) {
             result.errors.push(`${path.relative(ROOT_DIR, metaFile).replace(/\\/g, '/')}: .meta hỏng, không parse được JSON (${e.message})`);
             continue;
         }
-        // Meta không có trường `imported` là dạng cũ; coi như chưa biết, bỏ qua.
-        if (!('imported' in meta)) continue;
-        if (meta.imported === true) continue;
-        notImported.push({ metaFile, meta });
+        const inspected = collectImportFailures(meta);
+        result.importerStatesScanned += inspected.checked;
+        for (const failure of inspected.failures) {
+            notImported.push({ metaFile, meta: failure.meta, subPath: failure.subPath });
+        }
     }
 
     if (notImported.length) {
@@ -171,27 +195,28 @@ function run (options = {}) {
         result.logsRead = logFiles.map((f) => path.relative(ROOT_DIR, f).replace(/\\/g, '/'));
         const logTexts = logFiles.map(readTail);
 
-        for (const { metaFile, meta } of notImported) {
+        for (const { metaFile, meta, subPath } of notImported) {
             const assetFile = metaFile.slice(0, -'.meta'.length);
             const rel = path.relative(ROOT_DIR, assetFile).replace(/\\/g, '/');
+            const subAsset = subPath.length ? `${rel}#subMeta:${subPath.join('/')}` : rel;
             const reason = findLogReason(path.basename(assetFile), logTexts);
             result.failed.push({
-                asset: rel,
+                asset: subAsset,
                 importer: meta.importer || 'unknown',
                 uuid: meta.uuid || null,
                 reason,
             });
             result.errors.push(reason
-                ? `${rel} — CHƯA IMPORT (importer: ${meta.importer || '?'}) — ${reason}`
-                : `${rel} — CHƯA IMPORT (importer: ${meta.importer || '?'}) — không tìm thấy lý do trong log; mở Cocos Creator và xem Console.`);
+                ? `${subAsset} — CHƯA IMPORT (importer: ${meta.importer || '?'}) — ${reason}`
+                : `${subAsset} — CHƯA IMPORT (importer: ${meta.importer || '?'}) — không tìm thấy lý do trong log; mở Cocos Creator và xem Console.`);
         }
         result.status = 'FAIL';
     }
 
     if (result.errors.length) result.status = 'FAIL';
     result.details = result.status === 'PASS'
-        ? `${result.scanned} asset đã import sạch.`
-        : `${result.failed.length}/${result.scanned} asset chưa import được.`;
+        ? `${result.scanned} asset / ${result.importerStatesScanned} importer state đã import sạch.`
+        : `${result.failed.length} importer state lỗi trong ${result.scanned} asset.`;
     return result;
 }
 
@@ -228,4 +253,4 @@ function main () {
 
 if (require.main === module) main();
 
-module.exports = { run };
+module.exports = { run, collectImportFailures };

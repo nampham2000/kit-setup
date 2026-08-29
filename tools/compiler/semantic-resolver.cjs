@@ -129,8 +129,11 @@ class SemanticResolver {
         const inner = args[0].ts;
         return {
           ts: `${inner.includes('|') ? `(${inner})` : inner}[]`,
-          cocos: null,
-          import: null,
+          // A serialized List<T> has the same Cocos representation as T[].
+          // Keeping this null silently dropped the decorator and therefore all
+          // prefab/scene data for List<int>, List<float>, and List<Node> fields.
+          cocos: args[0].cocos ? `[${args[0].cocos}]` : null,
+          import: args[0].import,
           defaultVal: '[]'
         };
       }

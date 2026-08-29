@@ -44,8 +44,8 @@ export class PlayableCTAController extends Component {
 
   private applyConfig(): void {
     const ctaConfig = PlayableConfigManager.instance.cta;
-    this.googlePlayUrl = ctaConfig.googlePlayUrl || 'https://play.google.com/store/apps/details?id=com.playable.ad';
-    this.appStoreUrl = ctaConfig.appStoreUrl || 'https://apps.apple.com/app/id123456789';
+    this.googlePlayUrl = ctaConfig.googlePlayUrl || '';
+    this.appStoreUrl = ctaConfig.appStoreUrl || '';
     this.enableButtonPulse = ctaConfig.enableButtonPulse ?? true;
     this.autoRedirectDelay = ctaConfig.autoRedirectDelay ?? 0;
 

@@ -261,6 +261,154 @@ Shader "Custom/UnlitWobbleDissolve" {
     }
   });
 
+  describe('Tape/URP vertex output regressions', () => {
+    test('keeps VertexPositionInputs distinct from the returned Varyings and carries TEXCOORD1', () => {
+      const source = `
+Shader "TapeJam/TapeUnlit" {
+  Properties {
+    _BaseMap ("Texture", 2D) = "white" {}
+    _BaseColor ("Color", Color) = (1,1,1,1)
+    _Transparent ("Transparent", Range(0,1)) = 0
+    _PeelDirection ("Peel Direction", Float) = 1
+  }
+  SubShader {
+    Pass {
+      HLSLPROGRAM
+      #pragma vertex vert
+      #pragma fragment frag
+      struct Attributes {
+        float4 positionOS : POSITION;
+        float2 uv : TEXCOORD0;
+        float2 uv2 : TEXCOORD1;
+      };
+      struct Varyings {
+        float4 positionCS : SV_POSITION;
+        float2 uv : TEXCOORD0;
+        float2 uv2 : TEXCOORD1;
+      };
+      Varyings vert(Attributes v) {
+        Varyings o;
+        VertexPositionInputs pos = GetVertexPositionInputs(v.positionOS.xyz);
+        o.positionCS = pos.positionCS;
+        o.uv = TRANSFORM_TEX(v.uv, _BaseMap);
+        o.uv2 = v.uv2;
+        return o;
+      }
+      half4 frag(Varyings i) : SV_Target {
+        half4 col = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, i.uv);
+        float peelProgress = (_PeelDirection > 0.5) ? i.uv2.x : (1.0 - i.uv2.x);
+        clip(peelProgress - _Transparent);
+        return col * _BaseColor;
+      }
+      ENDHLSL
+    }
+  }
+}`;
+      const docIR = parseShaderLab(source, 'TapeUnlit.shader');
+      const effect = emitCocosEffect(docIR, { unityUv: true });
+      const validation = validateCceffectStructure(effect);
+
+      assert.equal(validation.valid, true, validation.errors.join('\n'));
+      assert.match(effect, /in vec2 a_texCoord1;/);
+      assert.match(effect, /VertexPositionInputs _cc_sourcePos = GetVertexPositionInputs\(a_position\);/);
+      assert.match(effect, /pos = _cc_sourcePos\.positionCS;/);
+      assert.match(effect, /v_uv2 = a_texCoord1;/);
+      assert.match(effect, /return pos;/);
+      assert.doesNotMatch(effect, /VertexPositionInputs pos\b/);
+      assert.doesNotMatch(effect, /v_uv2\s*=\s*v_uv2/);
+      const stagePrecisions = [...effect.matchAll(/precision\s+(lowp|mediump|highp)\s+float\s*;/g)]
+        .map((match) => match[1]);
+      assert.ok(stagePrecisions.length >= 2, 'Both generated shader stages must declare float precision');
+      assert.deepEqual(
+        [...new Set(stagePrecisions)],
+        ['highp'],
+        'Linked stages that share the Constant UBO must use the same effective member precision',
+      );
+    });
+
+    test('validator rejects duplicate locals and self-initialized vertex outputs', () => {
+      const broken = `
+CCEffect %{ techniques: [{ passes: [{ vert: vs:vert, frag: fs:frag }] }] }%
+CCProgram vs %{
+  in vec3 a_position;
+  out vec2 v_uv2;
+  struct VertexPositionInputs { vec4 positionCS; };
+  vec4 vert () {
+    vec4 pos = vec4(a_position, 1.0);
+    VertexPositionInputs pos;
+    v_uv2 = v_uv2;
+    return pos;
+  }
+}%
+CCProgram fs %{
+  in vec2 v_uv2;
+  vec4 frag () { return vec4(v_uv2, 0.0, 1.0); }
+}%`;
+      const validation = validateCceffectStructure(broken);
+
+      assert.equal(validation.valid, false);
+      assert.ok(validation.errors.some(e => e.includes('GLSL_DUPLICATE_LOCAL')), validation.errors.join('\n'));
+      assert.ok(validation.errors.some(e => e.includes('GLSL_UNINITIALIZED_OUTPUT')), validation.errors.join('\n'));
+    });
+
+    test('validator rejects a shared UBO whose inherited precision differs by stage', () => {
+      const broken = `
+CCEffect %{ techniques: [{ passes: [{ vert: vs:vert, frag: fs:frag }] }] }%
+CCProgram vs %{
+  precision highp float;
+  layout(set = 2, binding = 0) uniform Constant {
+    vec4 mainTexture_ST;
+    vec4 baseColor;
+  };
+  vec4 vert () { return vec4(mainTexture_ST.xy, 0.0, 1.0); }
+}%
+CCProgram fs %{
+  precision mediump float;
+  layout(set = 2, binding = 0) uniform Constant {
+    vec4 mainTexture_ST;
+    vec4 baseColor;
+  };
+  vec4 frag () { return baseColor; }
+}%`;
+      const validation = validateCceffectStructure(broken);
+
+      assert.equal(validation.valid, false);
+      assert.ok(
+        validation.errors.some(e => e.includes('GLSL_UBO_PRECISION_MISMATCH')),
+        validation.errors.join('\n'),
+      );
+    });
+
+    test('validator resolves declarations from a locally included CCProgram chunk', () => {
+      const valid = `
+CCEffect %{
+  techniques:
+  - passes:
+    - vert: vs:vert
+      frag: fs:frag
+      properties:
+        tint: { value: [1, 1, 1, 1] }
+}%
+CCProgram material-shared %{
+  uniform SharedMaterial {
+    vec4 tint;
+  };
+}%
+CCProgram vs %{
+  #include <material-shared>
+  vec4 vert () { return vec4(tint.xy, 0.0, 1.0); }
+}%
+CCProgram fs %{
+  #include <material-shared>
+  vec4 frag () { return tint; }
+}%`;
+      const validation = validateCceffectStructure(valid);
+
+      assert.equal(validation.valid, true, validation.errors.join('\n'));
+      assert.ok(validation.errors.every(error => !error.includes('GLSL_UNDECLARED_BASE')));
+    });
+  });
+
   describe('6. Explicit Descriptor Sets & Layout Remapping', () => {
     test('emits layout(set = 2, binding = 0) on Constant UBO and layout(set = 2, binding = 1..N) on samplers', () => {
       const source = `

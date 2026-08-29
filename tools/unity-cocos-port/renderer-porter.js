@@ -19,16 +19,69 @@ module.exports = function createRendererPorter(deps) {
     unityRefGuid,
   } = deps;
 
+  function normalizeMaterialName(value) {
+    return String(value || '')
+      .trim()
+      .toLowerCase()
+      .replace(/\.material$/i, '')
+      .replace(/[^a-z0-9]+/g, '');
+  }
+
+  function orderedExternalMaterialAssets(gameObject, resolvedModel) {
+    const remaps = (gameObject.syntheticModelExternalMaterialRemaps || [])
+      .filter(entry => entry?.materialAsset);
+    if (!remaps.length) return [];
+    const materialNames = resolvedModel?.materialNames || [];
+    if (!materialNames.length) return remaps.map(entry => entry.materialAsset);
+
+    const unused = new Set(remaps.map((_, index) => index));
+    return materialNames.map(materialName => {
+      const normalizedSlot = normalizeMaterialName(materialName);
+      let matchIndex = -1;
+      for (const index of unused) {
+        const normalizedRemap = normalizeMaterialName(remaps[index].name);
+        if (normalizedRemap === normalizedSlot
+          || normalizedSlot.includes(normalizedRemap)
+          || normalizedRemap.includes(normalizedSlot)) {
+          matchIndex = index;
+          break;
+        }
+      }
+      if (matchIndex < 0 && unused.size === 1) matchIndex = unused.values().next().value;
+      if (matchIndex < 0) return null;
+      unused.delete(matchIndex);
+      return remaps[matchIndex].materialAsset;
+    }).filter(Boolean);
+  }
+
+  function resolveSyntheticMaterialOverrides(gameObject, resolvedModel, options, unityDb, cocosDb, reporter) {
+    const explicitAssets = gameObject.syntheticModelMaterialOverrideGroups?.[0]?.materialAssets || [];
+    const externalAssets = explicitAssets.length ? [] : orderedExternalMaterialAssets(gameObject, resolvedModel);
+    const assets = explicitAssets.length ? explicitAssets : externalAssets;
+    if (!assets.length) return [];
+    const uuids = resolveUnityMaterialUuids(assets, options, unityDb, cocosDb, reporter, gameObject.name);
+    if (externalAssets.length && uuids.length) {
+      reporter.low(
+        'MODEL_EXTERNAL_MATERIAL_REMAP_WIRED',
+        gameObject.syntheticModelAsset?.relativePath || '',
+        gameObject.name,
+        `Unity ModelImporter externalObjects remap replaced ${uuids.length} embedded FBX material slot(s)`,
+        externalAssets.map(asset => asset.relativePath || asset.path || asset.stem || '').join(', '),
+      );
+    }
+    return uuids;
+  }
+
   function emitSyntheticModelRenderer(gameObject, nodeId, builder, reporter, options, unityDb, cocosDb) {
     const modelAsset = gameObject.syntheticModelAsset;
     const meshNameHint = gameObject.syntheticModelName || gameObject.name;
     const componentId = `synthetic-model-${modelAsset.guid || modelAsset.uuid || gameObject.fileId}`;
     const componentFileId = `cmp-model-${sanitizeFileId(gameObject.name)}`;
     const resolved = cocosDb.resolveModelMeshByStem(modelAsset.stem, gameObject.syntheticModelName || gameObject.name);
-    const overrideMaterialUuids = gameObject.syntheticModelMaterialOverrideGroups?.[0]?.materialAssets?.length
-      ? resolveUnityMaterialUuids(gameObject.syntheticModelMaterialOverrideGroups[0].materialAssets, options, unityDb, cocosDb, reporter, gameObject.name)
-      : [];
     if (resolved?.meshUuid) {
+      const overrideMaterialUuids = resolveSyntheticMaterialOverrides(
+        gameObject, resolved, options, unityDb, cocosDb, reporter,
+      );
       builder.addMeshRenderer(
         nodeId,
         componentId,
@@ -43,6 +96,9 @@ module.exports = function createRendererPorter(deps) {
 
     const missing = handleMissingModel(modelAsset, reporter, options, { autoCopy: true, severity: 'low', meshNameHint });
     if (missing.resolved?.meshUuid) {
+      const overrideMaterialUuids = resolveSyntheticMaterialOverrides(
+        gameObject, missing.resolved, options, unityDb, cocosDb, reporter,
+      );
       builder.addMeshRenderer(
         nodeId,
         componentId,
@@ -63,6 +119,9 @@ module.exports = function createRendererPorter(deps) {
       return;
     }
     if (missing.pendingImport) {
+      const overrideMaterialUuids = resolveSyntheticMaterialOverrides(
+        gameObject, missing.resolved, options, unityDb, cocosDb, reporter,
+      );
       builder.addMeshRenderer(
         nodeId,
         componentId,

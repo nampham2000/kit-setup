@@ -10,6 +10,8 @@ const {
   DEFAULT_CACHE_FILE_NAME,
   computeRepoId,
   ensureDirectory,
+  inspectDatabaseIntegrity,
+  repairDatabase,
   toIso,
 } = require('./work-memory/store');
 const {
@@ -124,6 +126,8 @@ Commands:
   session-start     Sync sources, reindex semantics, warm cache, and print hot memories.
   watch             Run session-start once, then keep syncing changed note sources.
   reindex-semantic  Rebuild semantic vectors for existing memories.
+  doctor            Run SQLite integrity_check without mutating either database.
+  repair            Recover one corrupt database with an exact retired backup.
   stats             Print counts and scope distribution.
   inspect-cache     Show cache metadata and optionally the cached items.
 
@@ -146,6 +150,9 @@ Examples:
   node playable-shared-kit/tools/work-memory.cjs query --text particle rotation --scope repo --semantic hybrid
   node playable-shared-kit/tools/work-memory.cjs warmup --repo-limit 20 --global-limit 10
   node playable-shared-kit/tools/work-memory.cjs session-start --sync-sources true --hot-limit 8
+  node playable-shared-kit/tools/work-memory.cjs doctor --json
+  node playable-shared-kit/tools/work-memory.cjs repair --scope repo --dry-run --json
+  node playable-shared-kit/tools/work-memory.cjs repair --scope repo --reindex-semantic true --json
   node playable-shared-kit/tools/work-memory.cjs watch --poll-seconds 15
 `);
 }
@@ -1208,6 +1215,35 @@ function commandStats(options) {
   }
 }
 
+function commandDoctor(options) {
+  const paths = resolvePaths(options);
+  const repo = inspectDatabaseIntegrity(paths.repoDbPath);
+  const global = inspectDatabaseIntegrity(paths.globalDbPath);
+  printResult(options, {
+    ok: repo.ok && global.ok,
+    repoId: paths.repoId,
+    repo,
+    global,
+  });
+  if (!repo.ok || !global.ok) process.exitCode = 2;
+}
+
+async function commandRepair(options) {
+  const paths = resolvePaths(options);
+  const scope = normalizeScope(options.scope || 'repo');
+  if (scope === 'hybrid') throw new Error('repair requires --scope repo or --scope global');
+  const dbPath = scope === 'global' ? paths.globalDbPath : paths.repoDbPath;
+  const result = await repairDatabase({
+    dbPath,
+    scope,
+    repoRoot: paths.repoRoot,
+    repoId: paths.repoId,
+    dryRun: parseBoolean(options['dry-run'], false),
+    reindexSemantic: parseBoolean(options['reindex-semantic'], false),
+  });
+  printResult(options, result);
+}
+
 function commandInspectCache(options) {
   const paths = resolvePaths(options);
   const cache = loadCache(paths.cacheFile);
@@ -1236,6 +1272,8 @@ const COMMANDS = {
   'session-start': commandSessionStart,
   watch: commandWatch,
   'reindex-semantic': commandReindexSemantic,
+  doctor: commandDoctor,
+  repair: commandRepair,
   stats: commandStats,
   'inspect-cache': commandInspectCache,
 };

@@ -723,8 +723,9 @@ class MigrationRulesEngine {
         if (isHideInInspector) {
           irField.propertyOptions.visible = false;
         }
-        if (resolvedType.cocos === 'CCFloat' || resolvedType.cocos === 'CCInteger' || resolvedType.cocos === 'CCBoolean' || resolvedType.cocos === 'CCString') {
-          irUnit.addImport('cc', resolvedType.cocos);
+        const primitiveDecorator = /^\[?(CCFloat|CCInteger|CCBoolean|CCString)\]?$/.exec(resolvedType.cocos || '');
+        if (primitiveDecorator) {
+          irUnit.addImport('cc', primitiveDecorator[1]);
         }
       }
 

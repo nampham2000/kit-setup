@@ -7,7 +7,8 @@
     "editor": ">=3.8.7",
     "scripts": {
         "preinstall": "node ./scripts/preinstall.js",
-        "build": "tsc",
+        "build": "node ./scripts/source-dist-manifest.cjs clean && tsc && node ./scripts/source-dist-manifest.cjs write",
+        "verify:dist": "node ./scripts/source-dist-manifest.cjs verify",
         "watch": "tsc -w"
     },
     "description": "i18n:cocos-mcp-server.description",
@@ -16,7 +17,7 @@
         "ajv": "^8.20.0",
         "ajv-formats": "^3.0.1",
         "fs-extra": "^11.3.0",
-        "uuid": "^9.0.1",
+        "uuid": "^11.1.1",
         "vue": "^3.1.4"
     },
     "bin": {

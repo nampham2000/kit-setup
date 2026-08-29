@@ -171,6 +171,173 @@ function checkCallArity(code, program, diags) {
   }
 }
 
+function matchingBrace(code, open) {
+  let depth = 0;
+  for (let i = open; i < code.length; i++) {
+    if (code[i] === '{') depth++;
+    else if (code[i] === '}') {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+/**
+ * GLSL does not allow two locals with the same name in one function scope.
+ * This catches a generator regression that emitted both `vec4 pos` and
+ * `VertexPositionInputs pos`; the previous analyzer merged declarations into a
+ * Set and therefore reported the invalid shader as compile-clean.
+ */
+function checkDuplicateFunctionLocals(code, program, diags) {
+  const userTypes = [...code.matchAll(/\bstruct\s+([A-Za-z_]\w*)/g)].map(m => m[1]);
+  const types = [
+    'bool', 'int', 'uint', 'float', 'double',
+    'vec2', 'vec3', 'vec4', 'ivec2', 'ivec3', 'ivec4',
+    'uvec2', 'uvec3', 'uvec4', 'bvec2', 'bvec3', 'bvec4',
+    'mat2', 'mat3', 'mat4', ...userTypes,
+  ].map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+  const fnRe = /\b[A-Za-z_]\w*\s+([A-Za-z_]\w*)\s*\(([^)]*)\)\s*\{/g;
+  let fn;
+  while ((fn = fnRe.exec(code)) !== null) {
+    const open = fn.index + fn[0].lastIndexOf('{');
+    const close = matchingBrace(code, open);
+    if (close < 0) continue;
+
+    const declared = new Map();
+    for (const param of splitArgs(fn[2])) {
+      const pm = /([A-Za-z_]\w*)\s*(?:\[[^\]]*\])?\s*$/.exec(param.trim());
+      if (pm && param.trim() !== 'void') declared.set(pm[1], { type: 'parameter', line: lineAt(code, fn.index) });
+    }
+
+    const body = code.slice(open + 1, close);
+    const bodyStartLine = lineAt(code, open);
+    let depth = 0;
+    const lines = body.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (depth === 0 && !/^\s*for\s*\(/.test(line)) {
+        const dm = new RegExp(`^\\s*(?:const\\s+)?(${types})\\s+([A-Za-z_]\\w*)\\s*(?:=|;|,)`).exec(line);
+        if (dm) {
+          const previous = declared.get(dm[2]);
+          if (previous) {
+            diags.push({
+              severity: 'high', code: 'GLSL_DUPLICATE_LOCAL', program,
+              line: bodyStartLine + i,
+              message: `'${dm[2]}' is declared twice in ${fn[1]}() (${previous.type} and ${dm[1]}); GLSL cannot compile this scope.`,
+            });
+          } else {
+            declared.set(dm[2], { type: dm[1], line: bodyStartLine + i });
+          }
+        }
+      }
+      for (const ch of line) {
+        if (ch === '{') depth++;
+        else if (ch === '}') depth = Math.max(0, depth - 1);
+      }
+    }
+    fnRe.lastIndex = close + 1;
+  }
+}
+
+/** A varying that first receives itself is still undefined for every vertex. */
+function checkUninitializedOutputSelfAssignments(code, program, diags) {
+  const outputs = new Set(
+    [...code.matchAll(/^\s*out\s+(?:lowp\s+|mediump\s+|highp\s+|flat\s+)*[A-Za-z_]\w*\s+([A-Za-z_]\w*)\s*;/gm)]
+      .map(m => m[1])
+  );
+  if (!outputs.size) return;
+
+  const initialized = new Set();
+  const reported = new Set();
+  const lines = code.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    for (const name of outputs) {
+      const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const assignment = new RegExp(`(?<![<>=!])\\b${escaped}\\s*=\\s*([^;]+);`).exec(line);
+      if (!assignment) continue;
+      if (!initialized.has(name) && new RegExp(`^\\s*${escaped}\\s*$`).test(assignment[1]) && !reported.has(name)) {
+        reported.add(name);
+        diags.push({
+          severity: 'high', code: 'GLSL_UNINITIALIZED_OUTPUT', program, line: i + 1,
+          message: `'${name}' is assigned from itself before any value is written; the vertex output is undefined. Bind the corresponding attribute or compute the varying.`,
+        });
+      }
+      initialized.add(name);
+    }
+  }
+}
+
+/**
+ * A material UBO is one linked interface shared by the vertex and fragment
+ * programs. In GLSL ES, an unqualified float/vector/matrix member inherits the
+ * program's default float precision. Therefore these two visually identical
+ * blocks are ABI-incompatible and WebGL rejects the program at link time:
+ *
+ *   VS: precision highp float;   uniform Constant { vec4 color; };
+ *   FS: precision mediump float; uniform Constant { vec4 color; };
+ */
+function checkUniformBlockAbi(programs, diags) {
+  const firstByBlock = new Map();
+  const reported = new Set();
+  const floatType = /^(?:float|vec[234]|mat[234](?:x[234])?)$/;
+
+  for (const program of programs) {
+    const code = stripComments(program.code);
+    const defaultFloat = /\bprecision\s+(lowp|mediump|highp)\s+float\s*;/.exec(code)?.[1] || '';
+    const blockRe = /(?:layout\s*\([^)]*\)\s*)?uniform\s+([A-Za-z_]\w*)\s*\{([\s\S]*?)\}\s*;/g;
+    let block;
+    while ((block = blockRe.exec(code)) !== null) {
+      const members = [];
+      for (const member of block[2].matchAll(/^\s*(?:(lowp|mediump|highp)\s+)?([A-Za-z_]\w*)\s+([A-Za-z_]\w*)\s*(\[[^\]]*\])?\s*;/gm)) {
+        const type = member[2];
+        members.push({
+          name: member[3],
+          type,
+          array: member[4] || '',
+          precision: member[1] || (floatType.test(type) ? defaultFloat : ''),
+        });
+      }
+
+      const signature = { program: program.name, block: block[1], members };
+      const first = firstByBlock.get(block[1]);
+      if (!first) {
+        firstByBlock.set(block[1], signature);
+        continue;
+      }
+
+      const max = Math.max(first.members.length, members.length);
+      for (let i = 0; i < max; i++) {
+        const a = first.members[i];
+        const b = members[i];
+        if (!a || !b || a.name !== b.name || a.type !== b.type || a.array !== b.array) {
+          const key = `layout:${block[1]}:${first.program}:${program.name}`;
+          if (!reported.has(key)) {
+            reported.add(key);
+            diags.push({
+              severity: 'high', code: 'GLSL_UBO_LAYOUT_MISMATCH', program: program.name,
+              line: lineAt(code, block.index),
+              message: `Uniform block '${block[1]}' has a different member order/type in '${first.program}' and '${program.name}'. Linked stages must expose the same UBO ABI.`,
+            });
+          }
+          break;
+        }
+        if (a.precision && b.precision && a.precision !== b.precision) {
+          const key = `precision:${block[1]}:${a.name}:${first.program}:${program.name}`;
+          if (reported.has(key)) continue;
+          reported.add(key);
+          diags.push({
+            severity: 'high', code: 'GLSL_UBO_PRECISION_MISMATCH', program: program.name,
+            line: lineAt(code, block.index),
+            message: `Uniform block '${block[1]}' member '${a.name}' is ${a.precision} in '${first.program}' but ${b.precision} in '${program.name}'. WebGL cannot link stages with different UBO member precision.`,
+          });
+        }
+      }
+    }
+  }
+}
+
 /** Names declared anywhere in a program block, plus loop/param bindings. */
 function collectDeclared(code) {
   const names = new Set();
@@ -217,6 +384,28 @@ function collectDeclared(code) {
   const defRe = /#\s*define\s+([A-Za-z_]\w*)/g;
   while ((m = defRe.exec(code)) !== null) add(m[1]);
   return names;
+}
+
+/**
+ * Resolve declarations contributed by CCProgram chunks included from another
+ * CCProgram in the same .effect file. Cocos expands `#include <chunk-name>`
+ * before GLSL compilation, so analyzing each block in isolation incorrectly
+ * reports shared UBO members and helper functions as undeclared.
+ */
+function collectLocalIncludeDeclarations(program, programsByName) {
+  const declared = new Set();
+  const visited = new Set();
+  const visit = (name) => {
+    if (visited.has(name)) return;
+    visited.add(name);
+    const included = programsByName.get(name);
+    if (!included) return;
+    const code = stripComments(included.code);
+    for (const symbol of collectDeclared(code)) declared.add(symbol);
+    for (const match of code.matchAll(/^\s*#\s*include\s+<([^>]+)>/gm)) visit(match[1]);
+  };
+  for (const match of program.code.matchAll(/^\s*#\s*include\s+<([^>]+)>/gm)) visit(match[1]);
+  return declared;
 }
 
 // A trailing `.xy`/`.rgba` component selector, not a variable.
@@ -357,6 +546,7 @@ function analyzeEffect(effectText) {
   }
 
   const { programs, effectYaml } = splitEffect(effectText);
+  const programsByName = new Map(programs.map(program => [program.name, program]));
 
   // A surface-shader effect is not a set of independent programs: `standard-vs`
   // and `standard-fs` `#include` the shared-ubos / macro-remapping / surface-*
@@ -379,10 +569,15 @@ function analyzeEffect(effectText) {
 
   for (const p of programs) {
     const code = stripComments(p.code);
+    const linkedDeclarations = collectLocalIncludeDeclarations(p, programsByName);
+    if (pooled) for (const name of pooled) linkedDeclarations.add(name);
     checkBalance(code, p.name, diags);
     checkCallArity(code, p.name, diags);
-    checkResidualsAndScope(code, p.name, diags, pooled);
+    checkDuplicateFunctionLocals(code, p.name, diags);
+    checkUninitializedOutputSelfAssignments(code, p.name, diags);
+    checkResidualsAndScope(code, p.name, diags, linkedDeclarations);
   }
+  checkUniformBlockAbi(programs, diags);
   checkPropertyBinding(stripComments(effectText), effectYaml, diags);
 
   const errors = diags.filter(d => d.severity === 'high');
@@ -390,4 +585,11 @@ function analyzeEffect(effectText) {
   return { ok: errors.length === 0, errors, warnings, diagnostics: diags };
 }
 
-module.exports = { analyzeEffect, splitEffect, collectDeclared, BUILTIN_ARITY };
+module.exports = {
+  analyzeEffect,
+  splitEffect,
+  collectDeclared,
+  collectLocalIncludeDeclarations,
+  checkUniformBlockAbi,
+  BUILTIN_ARITY,
+};

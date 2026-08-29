@@ -661,8 +661,10 @@ async function runTests() {
       if (!effectText.includes('CCEffect %{')) throw new Error('Missing CCEffect YAML header');
       if (!effectText.includes('techniques:')) throw new Error('Missing techniques block');
       if (!effectText.includes('CCProgram')) throw new Error('Missing CCProgram shader stage');
-      if (!effectText.includes('vec4 vert ()') && !effectText.includes('vec4 vert()')) throw new Error('Missing vert entry');
-      if (!effectText.includes('vec4 frag ()') && !effectText.includes('vec4 frag()')) throw new Error('Missing frag entry');
+      const surfacePipeline = effectText.includes('CCProgram surface-vertex %{')
+        && effectText.includes('CCProgram surface-fragment %{');
+      if (!surfacePipeline && !effectText.includes('vec4 vert ()') && !effectText.includes('vec4 vert()')) throw new Error('Missing vert entry');
+      if (!surfacePipeline && !effectText.includes('vec4 frag ()') && !effectText.includes('vec4 frag()')) throw new Error('Missing frag entry');
 
       // 2. Verify Material Scaffold Exists & Valid JSON
       if (!fs.existsSync(outMtlPath)) throw new Error('Output .mtl material file was not created');

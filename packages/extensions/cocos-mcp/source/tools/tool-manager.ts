@@ -15,6 +15,8 @@ export class ToolManager {
         if (this.settings.configurations.length === 0) {
             console.log('[ToolManager] No configurations found, creating default configuration...');
             this.createConfiguration('Default Configuration', 'Default tool configuration created automatically');
+        } else {
+            this.reconcileConfigurations();
         }
     }
 
@@ -96,6 +98,8 @@ export class ToolManager {
             const { ReferenceImageTools } = require('./reference-image-tools');
             const { AssetAdvancedTools } = require('./asset-advanced-tools');
             const { ValidationTools } = require('./validation-tools');
+            const { EditorRuntimeTools } = require('./editor-runtime-tools');
+            const { EngineFeatureTools } = require('./engine-feature-tools');
 
             // Initialize tool instances
             const tools = {
@@ -112,7 +116,9 @@ export class ToolManager {
                 sceneView: new SceneViewTools(),
                 referenceImage: new ReferenceImageTools(),
                 assetAdvanced: new AssetAdvancedTools(),
-                validation: new ValidationTools()
+                validation: new ValidationTools(),
+                editorRuntime: new EditorRuntimeTools(),
+                engineFeature: new EngineFeatureTools()
             };
 
             // Get the tool list from each tool class
@@ -135,6 +141,40 @@ export class ToolManager {
             // If fetching fails, use the default tool list as a fallback
             this.initializeDefaultTools();
         }
+    }
+
+    /**
+     * Saved configurations used to be a closed whitelist. After an extension
+     * update, newly shipped tools therefore stayed invisible forever. Merge
+     * new definitions into every saved configuration, enabled by default,
+     * while preserving every explicit user toggle.
+     */
+    private reconcileConfigurations(): void {
+        const available = new Map(
+            this.availableTools.map((tool) => [`${tool.category}_${tool.name}`, tool])
+        );
+        let changed = false;
+
+        for (const config of this.settings.configurations) {
+            let configChanged = false;
+            const saved = new Map(config.tools.map((tool) => [`${tool.category}_${tool.name}`, tool]));
+            for (const [key, tool] of available) {
+                const existing = saved.get(key);
+                if (!existing) {
+                    config.tools.push({ ...tool, enabled: true });
+                    configChanged = true;
+                } else if (existing.description !== tool.description) {
+                    existing.description = tool.description;
+                    configChanged = true;
+                }
+            }
+            if (configChanged) {
+                config.updatedAt = new Date().toISOString();
+                changed = true;
+            }
+        }
+
+        if (changed) this.saveToolManagerSettings(this.settings);
     }
 
     private initializeDefaultTools(): void {
@@ -422,4 +462,4 @@ export class ToolManager {
         this.saveToolManagerSettings(this.settings);
         console.log(`Backend: Settings saved to file`);
     }
-} 
+}

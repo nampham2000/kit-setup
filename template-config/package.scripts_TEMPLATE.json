@@ -13,6 +13,7 @@
     "port:script": "node playable-shared-kit/tools/unity-cocos-port.cjs scaffold-script",
     "port:smart": "node playable-shared-kit/tools/unity-cocos-port.cjs smart-port",
     "port:doctor": "node playable-shared-kit/tools/unity-cocos-port.cjs doctor",
+    "engine:features": "node playable-shared-kit/tools/cocos-engine-feature-audit.cjs",
     "port:scene": "node playable-shared-kit/tools/unity-scene-port.cjs",
     "port:closure": "node playable-shared-kit/tools/port-closure.cjs",
     "port:compile": "node playable-shared-kit/tools/compiler/unity-cs-compiler.cjs",
@@ -32,6 +33,9 @@
     "mcp:verify": "powershell -NoProfile -ExecutionPolicy Bypass -File playable-shared-kit/tools/mcp-clients-sync.ps1 -VerifyOnly",
     "mcp:probe": "node playable-shared-kit/tools/mcp-probe.cjs",
     "memory:init": "node playable-shared-kit/tools/work-memory.cjs init",
+    "memory:remember": "node playable-shared-kit/tools/work-memory.cjs remember-auto",
+    "memory:doctor": "node playable-shared-kit/tools/work-memory.cjs doctor",
+    "memory:repair": "node playable-shared-kit/tools/work-memory.cjs repair",
     "memory:sync": "node playable-shared-kit/tools/work-memory.cjs sync",
     "memory:export": "node playable-shared-kit/tools/work-memory.cjs export",
     "memory:stats": "node playable-shared-kit/tools/work-memory.cjs stats",
@@ -48,8 +52,12 @@
     "ai:port:plan": "node playable-shared-kit/tools/port-plan.cjs --json",
     "ai:port:preflight": "node playable-shared-kit/tools/unity-intel-cli.cjs preflight --json",
     "port:core:init": "node playable-shared-kit/tools/core-gameplay-port.cjs init",
+    "port:core:scaffold": "node playable-shared-kit/tools/core-gameplay-port.cjs scaffold",
+    "port:core:resume": "node playable-shared-kit/tools/core-gameplay-port.cjs resume",
     "port:core:verify": "node playable-shared-kit/tools/core-gameplay-port.cjs verify",
     "ai:port:core:init": "node playable-shared-kit/tools/core-gameplay-port.cjs init --json",
+    "ai:port:core:scaffold": "node playable-shared-kit/tools/core-gameplay-port.cjs scaffold --json",
+    "ai:port:core:resume": "node playable-shared-kit/tools/core-gameplay-port.cjs resume --json",
     "ai:port:core:verify": "node playable-shared-kit/tools/core-gameplay-port.cjs verify --json",
     "ai:port:report": "node playable-shared-kit/tools/report-digest.cjs --json",
     "ai:port:closure": "node playable-shared-kit/tools/port-closure.cjs --json",
@@ -99,6 +107,9 @@
     "test:unity:intel:samples": "node playable-shared-kit/tools/unity-intel/sample-project-regression.cjs",
     "test:unity:all": "node playable-shared-kit/tools/shader-compiler/test-all-unity-projects.cjs",
     "playbook": "node -e \"const {exec}=require('child_process'); exec(process.platform==='win32'?'start docs/playbook/index.html':(process.platform==='darwin'?'open docs/playbook/index.html':'xdg-open docs/playbook/index.html'))\""
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.8.1"
   },
   "devDependencies": {
     "ffmpeg-static": "^5.3.0"

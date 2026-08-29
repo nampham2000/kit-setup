@@ -942,6 +942,26 @@ public class PropertyTester : MonoBehaviour
   assert.match(code, /public Health: number = 0;/);
 });
 
+test('serialized numeric arrays and lists use CCInteger/CCFloat array decorators', () => {
+  const source = `
+using System.Collections.Generic;
+public class NumericCollections : MonoBehaviour
+{
+  public int[] indexes;
+  [SerializeField] private List<int> counts;
+  public float[] weights;
+  [SerializeField] private List<double> thresholds;
+}
+`;
+  const { code } = compileSnippet(source, 'NumericCollections.cs');
+
+  assert.equal((code.match(/@property\(\[CCInteger\]\)/g) || []).length, 2);
+  assert.equal((code.match(/@property\(\[CCFloat\]\)/g) || []).length, 2);
+  assert.match(code, /import \{[^}]*CCInteger[^}]*\} from 'cc';/);
+  assert.match(code, /import \{[^}]*CCFloat[^}]*\} from 'cc';/);
+  assert.doesNotMatch(code, /\[Number\]/);
+});
+
 test('Namespace and module strategy generates folder-based ES module imports', () => {
   const source = `
 public class GameController : MonoBehaviour

@@ -1,0 +1,167 @@
+// Playable-friendly Cocos mesh port of Unity TCP2 "Hybrid Shader 2".
+CCEffect %{
+  temporaries:
+    p1: &p1
+      mainTexture: { value: white }
+      tilingOffset: { value: [1, 1, 0, 0] }
+      mainColor: { value: [1, 1, 1, 1], linear: true, editor: { type: color } }
+      highlightColor: { value: [1, 1, 1, 1], linear: true, editor: { type: color } }
+      shadowColor: { value: [0.2, 0.2, 0.2, 1], linear: true, editor: { type: color } }
+      rampThreshold: { value: 0.75, target: toonParams.x }
+      rampSmoothing: { value: 0.1, target: toonParams.y }
+      indirectStrength: { value: 1, target: toonParams.z }
+      shadowLightAtten: { value: 1, target: toonParams.w }
+      rimColor: { value: [0.8, 0.8, 0.8, 1], linear: true, editor: { type: color } }
+      rimMin: { value: 0.5, target: rimParams.x }
+      rimMax: { value: 1, target: rimParams.y }
+      rimLightMask: { value: 1, target: rimParams.z }
+      rimStrength: { value: 0, target: rimParams.w }
+      specularColor: { value: [0.75, 0.75, 0.75, 1], linear: true, editor: { type: color } }
+      specularRoughness: { value: 0.5, target: specularParams.x }
+      specularStrength: { value: 0, target: specularParams.y }
+      emissive: { value: [0, 0, 0, 1], linear: true, editor: { type: color } }
+      recolorStrength: { value: 0, target: recolorParams.x, editor: { range: [0, 1], step: 0.01 } }
+    d1: &d1 { depthTest: true, depthWrite: true }
+    d2: &d2 { depthTest: true, depthWrite: false }
+    r1: &r1 { cullMode: back }
+    b1: &b1
+      targets:
+      - blend: true
+        blendSrc: src_alpha
+        blendDst: one_minus_src_alpha
+        blendSrcAlpha: one
+        blendDstAlpha: one_minus_src_alpha
+
+  techniques:
+  - name: opaque
+    passes:
+    - vert: tcp2-mesh-vs:vert
+      frag: tcp2-mesh-fs:frag
+      rasterizerState: *r1
+      depthStencilState: *d1
+      properties: *p1
+    - vert: tcp2-mesh-vs:vert
+      frag: tcp2-mesh-fs:frag
+      phase: deferred-forward
+      rasterizerState: *r1
+      depthStencilState: *d1
+      propertyIndex: 0
+  - name: alpha-blend
+    passes:
+    - vert: tcp2-mesh-vs:vert
+      frag: tcp2-mesh-fs:frag
+      rasterizerState: *r1
+      depthStencilState: *d2
+      blendState: *b1
+      properties: *p1
+    - vert: tcp2-mesh-vs:vert
+      frag: tcp2-mesh-fs:frag
+      phase: deferred-forward
+      rasterizerState: *r1
+      depthStencilState: *d2
+      blendState: *b1
+      propertyIndex: 0
+}%
+
+CCProgram tcp2-mesh-shared %{
+  uniform TCP2MeshParams {
+    vec4 tilingOffset;
+    vec4 mainColor;
+    vec4 highlightColor;
+    vec4 shadowColor;
+    vec4 toonParams;
+    vec4 rimColor;
+    vec4 rimParams;
+    vec4 specularColor;
+    vec4 specularParams;
+    vec4 emissive;
+    vec4 recolorParams;
+  };
+}%
+
+CCProgram tcp2-mesh-vs %{
+  precision highp float;
+  #include <legacy/input-standard>
+  #include <builtin/uniforms/cc-global>
+  #include <legacy/decode-base>
+  #include <legacy/local-batch>
+  #include <tcp2-mesh-shared>
+
+  out highp vec3 v_worldPosition;
+  out mediump vec3 v_worldNormal;
+  out vec2 v_uv;
+
+  vec4 vert () {
+    StandardVertInput In;
+    CCVertInput(In);
+    mat4 matWorld, matWorldIT;
+    CCGetWorldMatrixFull(matWorld, matWorldIT);
+    vec4 worldPosition = matWorld * In.position;
+    v_worldPosition = worldPosition.xyz;
+    v_worldNormal = normalize((matWorldIT * vec4(In.normal, 0.0)).xyz);
+    v_uv = a_texCoord * tilingOffset.xy + tilingOffset.zw;
+    return cc_matProj * cc_matView * worldPosition;
+  }
+}%
+
+CCProgram tcp2-mesh-fs %{
+  precision highp float;
+  #include <builtin/uniforms/cc-global>
+  #include <legacy/output-standard>
+  #include <common/color/gamma>
+  #include <tcp2-mesh-shared>
+
+  in highp vec3 v_worldPosition;
+  in mediump vec3 v_worldNormal;
+  in vec2 v_uv;
+  uniform sampler2D mainTexture;
+
+  float ggxDistribution (float noH, float roughness) {
+    float alpha = max(roughness * roughness, 0.001);
+    float alpha2 = alpha * alpha;
+    float denominator = noH * noH * (alpha2 - 1.0) + 1.0;
+    return alpha2 / max(3.14159265 * denominator * denominator, 0.0001);
+  }
+
+  vec4 frag () {
+    vec4 baseColor = texture(mainTexture, v_uv);
+    // Imported Unity color atlases are sRGB textures. Cocos' sampler already
+    // returns linear RGB, so converting the sample again makes saturated TCP2
+    // paint much darker than the Unity source.
+    float authoredLuma = dot(baseColor.rgb, vec3(0.2126, 0.7152, 0.0722));
+    vec3 recolored = mainColor.rgb * mix(0.5, 1.3, clamp(authoredLuma, 0.0, 1.0));
+    // The canonical dynamic-color atlas is the red Unity variant. Select its
+    // red paint only; a generic chroma mask also recolors the blue-grey pegs.
+    float sourcePaint = baseColor.r - max(baseColor.g, baseColor.b);
+    float recolorMask = smoothstep(0.025, 0.12, sourcePaint) * recolorParams.x;
+    // Recolor only chromatic paint. Unity box atlases also contain white face
+    // panels, grey pegs and black gaps; multiplying those by mainColor turns
+    // the whole prop into a dark silhouette.
+    baseColor.rgb = mix(baseColor.rgb, recolored, recolorMask);
+    baseColor.a *= mainColor.a;
+
+    vec3 normal = normalize(v_worldNormal);
+    vec3 lightDirection = normalize(-cc_mainLitDir.xyz);
+    vec3 viewDirection = normalize(cc_cameraPos.xyz - v_worldPosition);
+    vec3 halfDirection = normalize(lightDirection + viewDirection);
+    float noL = max(dot(normal, lightDirection), 0.0);
+    float noV = max(dot(normal, viewDirection), 0.0001);
+    float noH = max(dot(normal, halfDirection), 0.0);
+    float halfLambert = dot(normal, lightDirection) * 0.5 + 0.5;
+    float halfWidth = max(toonParams.y * 0.5, 0.0001);
+    float ramp = smoothstep(toonParams.x - halfWidth, toonParams.x + halfWidth, halfLambert);
+
+    vec3 mainLight = cc_mainLitColor.rgb * cc_mainLitColor.w;
+    vec3 toonTint = mix(shadowColor.rgb, highlightColor.rgb, ramp);
+    vec3 direct = baseColor.rgb * toonTint * mix(vec3(1.0), mainLight, toonParams.w);
+    float hemisphere = normal.y * 0.5 + 0.5;
+    vec3 ambient = mix(cc_ambientGround.rgb, cc_ambientSky.rgb, hemisphere) * cc_ambientSky.w;
+    vec3 indirect = baseColor.rgb * ambient * toonParams.z;
+
+    float rim = smoothstep(rimParams.x, max(rimParams.y, rimParams.x + 0.0001), 1.0 - noV);
+    vec3 rimContribution = rimColor.rgb * rim * mix(vec3(1.0), mainLight * ramp, rimParams.z) * rimParams.w;
+    vec3 specular = ggxDistribution(noH, specularParams.x) * specularColor.rgb * mainLight * noL * specularParams.y;
+    vec3 emissionContribution = emissive.rgb * baseColor.rgb;
+    return CCFragOutput(vec4(direct + indirect + rimContribution + specular + emissionContribution, baseColor.a));
+  }
+}%

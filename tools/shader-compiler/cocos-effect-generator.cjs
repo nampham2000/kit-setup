@@ -290,6 +290,10 @@ const HLSL_TO_GLSL_TYPE = {
   int: 'int', int2: 'ivec2', int3: 'ivec3', int4: 'ivec4',
 };
 
+function escapeRegExp(text) {
+  return String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 /**
  * Fields of the vertex-output struct that no alias covers, and that therefore
  * need their own varying declared in both stages.
@@ -594,18 +598,30 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
     }
   }
 
-  // 2. Determine Vertex Attributes needed
+  // 2. Determine Vertex Attributes needed. Prefer the parsed input semantics;
+  // substring probes such as /COLOR/ mistake material names like _BaseColor for
+  // a COLOR vertex channel and cannot discover TEXCOORD1 at all.
+  const vertFunc = (programIR.functions || []).find(f => f.name === programIR.vertexEntry);
+  const vertexInputStruct = vertFunc && vertFunc.params && vertFunc.params[0]
+    ? (programIR.structs || []).find(s => s.name === vertFunc.params[0].type)
+    : null;
+  const vertexInputSemantics = new Set(
+    (vertexInputStruct && vertexInputStruct.fields || []).map(f => String(f.semantic || '').toUpperCase())
+  );
   const attributes = [
     'in vec3 a_position;',
     'in vec2 a_texCoord;',
   ];
-  if (/NORMAL|worldNormal|a_normal/i.test(rawCode) || docIR.family === 'Toon' || docIR.family === 'MatCap' || docIR.family === 'PBR') {
+  if (vertexInputSemantics.has('TEXCOORD1') || /\bTEXCOORD1\b/i.test(rawCode)) {
+    attributes.push('in vec2 a_texCoord1;');
+  }
+  if (vertexInputSemantics.has('NORMAL') || /worldNormal|\ba_normal\b/i.test(rawCode) || docIR.family === 'Toon' || docIR.family === 'MatCap' || docIR.family === 'PBR') {
     attributes.push('in vec3 a_normal;');
   }
-  if (/TANGENT|a_tangent/i.test(rawCode)) {
+  if (vertexInputSemantics.has('TANGENT') || /\ba_tangent\b/i.test(rawCode)) {
     attributes.push('in vec4 a_tangent;');
   }
-  if (/COLOR|a_color/i.test(rawCode)) {
+  if ([...vertexInputSemantics].some(s => /^COLOR\d*$/.test(s)) || /\ba_color\b/i.test(rawCode)) {
     attributes.push('in vec4 a_color;');
   }
 
@@ -736,7 +752,6 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
   }
 
   // Vertex Main Entry
-  const vertFunc = (programIR.functions || []).find(f => f.name === programIR.vertexEntry);
   vsLines.push('  vec4 vert () {');
   vsLines.push('    vec4 pos = vec4(a_position, 1.0);');
   vsLines.push('    v_uv = a_texCoord;');
@@ -756,6 +771,39 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
     // Translate custom vertex body
     let vBody = lowerHlslToGlsl(vertFunc.body, options);
     vBody = remapIdentifiers(vBody);
+
+    // The generated entry reserves `pos` for the final clip/object position.
+    // URP commonly declares `VertexPositionInputs pos`, which previously made
+    // two locals named `pos` with different types and then rewrote
+    // `o.positionCS = pos.positionCS` into the nonsensical `pos = pos`.
+    // Rename only a source local binding (not a struct field such as `o.pos`).
+    if (/\b[A-Za-z_]\w*\s+pos\s*(?:=|;)/.test(vBody)) {
+      let sourcePosName = '_cc_sourcePos';
+      let suffix = 1;
+      while (new RegExp(`\\b${escapeRegExp(sourcePosName)}\\b`).test(vBody)) {
+        sourcePosName = `_cc_sourcePos${suffix++}`;
+      }
+      vBody = vBody.replace(/(?<!\.)\bpos\b/g, sourcePosName);
+    }
+
+    // Capture the actual vertex-output variable before removing its struct
+    // declaration. All output rewrites below are scoped to this base so helper
+    // structs (`posInputs.positionCS`) keep their fields intact.
+    const outputDeclRe = vertFunc.returnType
+      ? new RegExp(`\\b${escapeRegExp(vertFunc.returnType)}\\s+([A-Za-z_]\\w*)\\s*;`)
+      : null;
+    const outputDecl = outputDeclRe ? outputDeclRe.exec(vBody) : null;
+    const outputVar = outputDecl ? outputDecl[1] : null;
+    const outputStruct = vertFunc.returnType
+      ? (programIR.structs || []).find(s => s.name === vertFunc.returnType)
+      : null;
+    const clipOutputFields = (outputStruct && outputStruct.fields || [])
+      .filter(f => /^SV_POSITION$/i.test(f.semantic || ''))
+      .map(f => f.name);
+    if (outputVar && clipOutputFields.some(field =>
+      new RegExp(`\\b${escapeRegExp(outputVar)}\\.${escapeRegExp(field)}\\s*[-+*/]?=`).test(vBody))) {
+      customVertAssignedClipPos = true;
+    }
 
     // Strip struct local var declaration like "Varyings o;" or "v2f o;" or "Vertex_Stage_Output output;"
     vBody = vBody.replace(/\b(?:Varyings|v2f|appdata|Attributes|\w+_Output|\w+_Input)\s+\w+\s*;?/g, '');
@@ -780,6 +828,17 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
       vBody = vBody.replace(new RegExp(`\\b${pName}\\.positionOS\\b`, 'g'), 'vec4(a_position, 1.0)');
       vBody = vBody.replace(new RegExp(`\\b${pName}\\.texcoord\\b`, 'g'), 'vec4(a_texCoord, 0.0, 0.0)');
       vBody = vBody.replace(new RegExp(`\\b${pName}\\.uv\\b`, 'g'), 'a_texCoord');
+      // Unity's second UV set is conventionally named uv2 but carries the
+      // TEXCOORD1 semantic. Use the parsed semantic as the authority and keep
+      // common aliases as a fallback for hand-written structs.
+      if (vertexInputStruct) {
+        for (const field of vertexInputStruct.fields || []) {
+          if (/^TEXCOORD1$/i.test(field.semantic || '')) {
+            vBody = vBody.replace(new RegExp(`\\b${pName}\\.${escapeRegExp(field.name)}\\b`, 'g'), 'a_texCoord1');
+          }
+        }
+      }
+      vBody = vBody.replace(new RegExp(`\\b${pName}\\.(?:uv1|uv2|texcoord1)\\b`, 'g'), 'a_texCoord1');
       vBody = vBody.replace(new RegExp(`\\b${pName}\\.normal\\b`, 'g'), 'a_normal');
       vBody = vBody.replace(new RegExp(`\\b${pName}\\.normalOS\\b`, 'g'), 'a_normal');
       vBody = vBody.replace(new RegExp(`\\b${pName}\\.color\\b`, 'g'), 'a_color');
@@ -799,6 +858,14 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
       customVertAssignedClipPos = true;
     }
 
+    // Remap output struct fields. When the parser found the returned local,
+    // constrain every replacement to that exact variable. The old `\w+` base
+    // also rewrote reads from URP helper structs and produced type-invalid GLSL.
+    const outputBase = outputVar ? escapeRegExp(outputVar) : '\\w+';
+    const replaceOutputField = (fieldPattern, target) => {
+      vBody = vBody.replace(new RegExp(`\\b${outputBase}\\.(?:${fieldPattern})\\b`, 'g'), target);
+    };
+
     // Remap output struct assignments.
     // Clip-space output goes by many names across URP versions and hand-written
     // shaders; any spelling we miss here survives as `OUT.<field>` in the
@@ -806,34 +873,21 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
     // `([-+*/]?=)` chứ không phải `=`: HLSL hay tinh chỉnh trường output tại chỗ
     // (`o.uv += center;` trong ROTATEUV). Chỉ khớp phép gán đơn thì dòng đó sống sót
     // nguyên văn thành `o.uv += ...`, đọc qua một biến chưa từng khai báo.
-    vBody = vBody.replace(/\b\w+\.vertex\s*([-+*/]?=)\s*/g, 'pos $1 ');
-    vBody = vBody.replace(/\b\w+\.(?:positionHCS|positionCS|posHCS|posCS|clipPos)\s*([-+*/]?=)\s*/g, 'pos $1 ');
-    vBody = vBody.replace(/\b\w+\.pos\s*([-+*/]?=)\s*/g, 'pos $1 ');
-    vBody = vBody.replace(/\b\w+\.worldPos\s*([-+*/]?=)\s*/g, 'v_worldPos $1 ');
-    vBody = vBody.replace(/\b\w+\.(?:uv0|texcoord0)\s*([-+*/]?=)\s*/g, 'v_uv $1 ');
-    vBody = vBody.replace(/\b\w+\.texcoord\s*([-+*/]?=)\s*/g, 'v_uv $1 ');
-    vBody = vBody.replace(/\b\w+\.uv\s*([-+*/]?=)\s*/g, 'v_uv $1 ');
-    vBody = vBody.replace(/\b\w+\.color\s*([-+*/]?=)\s*/g, 'v_color $1 ');
-    vBody = vBody.replace(/\b\w+\.screenPos\s*([-+*/]?=)\s*/g, 'v_screenPos $1 ');
-    vBody = vBody.replace(/\b\w+\.normalWS\s*([-+*/]?=)\s*/g, 'v_worldNormal $1 ');
+    replaceOutputField('vertex|positionHCS|positionCS|posHCS|posCS|clipPos|pos', 'pos');
+    replaceOutputField('worldPos|positionWS', 'v_worldPos');
+    replaceOutputField('uv0|texcoord0|texcoord|uv', 'v_uv');
+    replaceOutputField('color', 'v_color');
+    replaceOutputField('screenPos', 'v_screenPos');
+    replaceOutputField('normalWS', 'v_worldNormal');
     for (const e of extraVaryings) {
-      vBody = vBody.replace(new RegExp(`\\b\\w+\\.${e.field}\\b`, 'g'), e.varying);
+      replaceOutputField(escapeRegExp(e.field), e.varying);
     }
-    vBody = vBody.replace(/\b\w+\.positionWS\s*=\s*/g, 'v_worldPos = ');
-    vBody = vBody.replace(/\b\w+\.viewDirWS\s*=\s*[^;]+;?/g, '');
-    // ĐỌC trường output, ví dụ `o.uv` xuất hiện lại ở vế phải sau khi đã gán. Phần
-    // đọc của struct đầu vào đã bị thay bằng attribute ở trên, nên `X.<field>` còn
-    // đứng đây chắc chắn là output.
-    vBody = vBody.replace(/\b\w+\.(?:uv0|texcoord0|texcoord|uv)\b/g, 'v_uv');
-    vBody = vBody.replace(/\b\w+\.worldPos\b/g, 'v_worldPos');
-    vBody = vBody.replace(/\b\w+\.screenPos\b/g, 'v_screenPos');
-    vBody = vBody.replace(/\b\w+\.normalWS\b/g, 'v_worldNormal');
-    vBody = vBody.replace(/\b\w+\.(?:positionHCS|positionCS|posHCS|posCS|clipPos)\b/g, 'pos');
-    // Reads of the clip-space output, e.g. ComputeScreenPos(o.vertex). The input
-    // struct was already rewritten to attributes above, so any `X.vertex` still
-    // standing here refers to the vertex output.
-    vBody = vBody.replace(/\b\w+\.(?:vertex|pos)\b/g, 'pos');
-    vBody = vBody.replace(/\breturn\s+\w+\s*;/g, '');
+    vBody = vBody.replace(new RegExp(`\\b${outputBase}\\.viewDirWS\\s*=\\s*[^;]+;?`, 'g'), '');
+    if (outputVar) {
+      vBody = vBody.replace(new RegExp(`\\breturn\\s+${escapeRegExp(outputVar)}\\s*;`, 'g'), '');
+    } else {
+      vBody = vBody.replace(/\breturn\s+\w+\s*;/g, '');
+    }
 
     const trimmedBody = vBody.trim();
     if (trimmedBody) {
@@ -866,7 +920,12 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
 
   const fsLines = [
     'CCProgram fs %{',
-    '  precision mediump float;',
+    // Cocos links the material UBO across vertex and fragment stages. GLSL ES
+    // applies the stage's default float precision to unqualified UBO members,
+    // so using highp in VS and mediump in FS makes an otherwise identical
+    // `Constant` block fail at runtime (WebGL: precisions differ between
+    // shaders). Keep both stages highp; an optimizer may lower both together.
+    '  precision highp float;',
     ...fsIncludes,
     '',
     '  ' + fsVaryings.join('\n  '),

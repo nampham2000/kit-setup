@@ -2,7 +2,10 @@
  * Phase 5 — Editor runtime tools.
  *
  * Surface a small but useful set of editor-runtime operations as MCP tools:
- *   - run_preview / stop_preview / reload_preview — control the preview server.
+ *   - run_preview / reload_preview — use the public messages contributed by
+ *     Cocos Creator's built-in `preview` package.
+ *   - stop_preview — report the editor limitation explicitly (3.8.x exposes
+ *     no stop message; the preview HTTP service belongs to the editor).
  *   - tail_runtime_logs — read the in-process log ring buffer maintained by
  *     {@link pushRuntimeLog} (also exposed as the `runtime://logs` resource).
  *   - reload_current_scene — soft reload the active scene.
@@ -38,13 +41,19 @@ export class EditorRuntimeTools implements ToolExecutor {
             },
             {
                 name: 'stop_preview',
-                description: 'Stop the editor preview/runtime server.',
+                description: 'Report whether the editor exposes preview-stop control (Cocos 3.8.x does not).',
                 inputSchema: { type: 'object', properties: {} }
             },
             {
                 name: 'reload_preview',
-                description: 'Reload the running preview without stopping it.',
-                inputSchema: { type: 'object', properties: {} }
+                description: 'Refresh assets, then reload connected preview targets through Cocos Creator 3.8.x public preview messages.',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        refreshAssets: { type: 'boolean', default: true, description: 'Refresh/import assets before reloading preview.' },
+                        assetUrl: { type: 'string', default: 'db://assets', description: 'Asset DB URL to refresh.' }
+                    }
+                }
             },
             {
                 name: 'tail_runtime_logs',
@@ -76,28 +85,57 @@ export class EditorRuntimeTools implements ToolExecutor {
             case 'run_preview': {
                 if (!ed) return unavailable();
                 try {
-                    await ed.Message?.request?.('preview', 'start', { platform: args?.platform || 'browser' });
-                    pushRuntimeLog('info', `preview started (${args?.platform || 'browser'})`);
-                    return { success: true, message: 'preview started' };
+                    if (typeof ed.Message?.request !== 'function') return unavailable();
+                    // Cocos Creator 3.8.8 contributes `open-terminal`; there is
+                    // no `start` message in the built-in preview package.
+                    await ed.Message.request('preview', 'open-terminal');
+                    const platform = args?.platform || 'browser';
+                    pushRuntimeLog('info', `preview open requested (${platform})`);
+                    return {
+                        success: true,
+                        message: 'preview open requested through preview:open-terminal',
+                        data: { platform, message: 'preview:open-terminal' }
+                    };
                 } catch (e: any) {
                     return { success: false, error: e?.message ?? String(e) };
                 }
             }
             case 'stop_preview': {
                 if (!ed) return unavailable();
-                try {
-                    await ed.Message?.request?.('preview', 'stop');
-                    pushRuntimeLog('info', 'preview stopped');
-                    return { success: true, message: 'preview stopped' };
-                } catch (e: any) {
-                    return { success: false, error: e?.message ?? String(e) };
-                }
+                return {
+                    success: false,
+                    error: 'Cocos Creator 3.8.x does not contribute a preview stop message.',
+                    instruction: 'Close connected preview targets, or restart the exact project editor through its external supervisor when a full preview-service restart is required.'
+                };
             }
             case 'reload_preview': {
                 if (!ed) return unavailable();
                 try {
-                    await ed.Message?.request?.('preview', 'reload');
-                    return { success: true, message: 'preview reloaded' };
+                    if (typeof ed.Message?.request !== 'function') return unavailable();
+                    const steps: string[] = [];
+                    const assetUrl = typeof args?.assetUrl === 'string' && args.assetUrl
+                        ? args.assetUrl : 'db://assets';
+                    if (args?.refreshAssets !== false) {
+                        await ed.Message.request('asset-db', 'refresh-asset', assetUrl);
+                        steps.push(`asset-db:refresh-asset ${assetUrl}`);
+                    }
+                    // `reload-terminal` is the exact message declared by the
+                    // built-in preview package in Creator 3.8.8. The previous
+                    // guessed `reload` message always failed at runtime.
+                    await ed.Message.request('preview', 'reload-terminal');
+                    steps.push('preview:reload-terminal');
+                    let previewUrl: unknown = null;
+                    try {
+                        previewUrl = await ed.Message.request('preview', 'query-preview-url');
+                    } catch {
+                        // Reload is authoritative; URL discovery is optional.
+                    }
+                    pushRuntimeLog('info', `preview reload requested (${steps.join(', ')})`);
+                    return {
+                        success: true,
+                        message: 'preview reload requested through preview:reload-terminal',
+                        data: { assetUrl, previewUrl, steps }
+                    };
                 } catch (e: any) {
                     return { success: false, error: e?.message ?? String(e) };
                 }

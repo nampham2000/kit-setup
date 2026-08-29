@@ -6,6 +6,7 @@ tools/work-memory/data/cache/*.json
 tools/work-memory/data/**/*.db-shm
 tools/work-memory/data/**/*.db-wal
 tools/work-memory/data/**/*.db-journal
+tools/work-memory/data/**/*.db.repair-backup-*/
 
 # Node & Build artifacts
 node_modules/

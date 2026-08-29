@@ -18,7 +18,10 @@ function scaffoldCSharpToTypeScript(csharpCode, classNameFallback = 'ScaffoldedC
 
   // 2. Extract serialized fields
   // Matches [SerializeField] private float speed = 5f; or public float speed;
-  const fieldRegex = /(?:\[SerializeField\]\s*(?:private|protected|public)?|(?:public))\s+([A-Za-z0-9_<>[\]]+)\s+([A-Za-z0-9_]+)(?:\s*=\s*([^;]+))?;/g;
+  // but deliberately does not treat an expression-bodied property such as
+  // `public bool IsPlaying => state == State.Playing;` as a field whose default
+  // value begins with `>`. That used to emit invalid TypeScript (`= > state`).
+  const fieldRegex = /(?:\[SerializeField\]\s*(?:private|protected|public)?|(?:public))\s+([A-Za-z0-9_<>[\]]+)\s+([A-Za-z0-9_]+)(?:\s*=(?!>)\s*([^;]+))?;/g;
   const fields = [];
   let match;
 
@@ -39,6 +42,14 @@ function scaffoldCSharpToTypeScript(csharpCode, classNameFallback = 'ScaffoldedC
       tsType = 'number';
       propertyDecorator = '@property(CCInteger)';
       initValue = defaultValue || '0';
+    } else if (/^(?:float|double)\[\]$|^List<(?:float|double)>$/i.test(rawType)) {
+      tsType = 'number[]';
+      propertyDecorator = '@property([CCFloat])';
+      initValue = '[]';
+    } else if (/^(?:int|long|short|byte)\[\]$|^List<(?:int|long|short|byte)>$/i.test(rawType)) {
+      tsType = 'number[]';
+      propertyDecorator = '@property([CCInteger])';
+      initValue = '[]';
     } else if (/^bool$/i.test(rawType)) {
       tsType = 'boolean';
       propertyDecorator = '@property(CCBoolean)';

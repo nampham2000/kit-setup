@@ -7,6 +7,7 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
 const { isPathInside } = require('./lib/path-boundary.cjs');
+const { digest: digestPortReport } = require('./report-digest.cjs');
 const { runUnityPortPreflight, assertUnityPortPreflight } = require('./unity-intel/preflight.cjs');
 const { FIDELITY_CHECKPOINTS } = require('./unity-intel/core-gameplay-scope.cjs');
 
@@ -15,8 +16,16 @@ const MANIFEST_KIND = 'cc-playable-core-port-manifest';
 const EVIDENCE_SCHEMA_VERSION = 1;
 const EVIDENCE_KIND = 'cc-playable-core-checkpoint-evidence';
 const DEFAULT_MANIFEST = '.ai/port/core-gameplay.json';
+const RESUME_PACKET_SCHEMA_VERSION = 1;
+const RESUME_PACKET_KIND = 'cc-playable-port-resume-packet';
+const DEFAULT_WIRING = '.ai/port/static-scaffold.wiring.json';
+const DEFAULT_STATIC_SCAFFOLD_RECEIPT = '.ai/port/static-scaffold.receipt.json';
+const DEFAULT_RESUME_PACKET = '.ai/port/resume-packet.json';
+const STATIC_SCAFFOLD_RECEIPT_KIND = 'cc-playable-static-scaffold-receipt';
 const MAX_MANIFEST_BYTES = 64 * 1024;
 const MAX_EVIDENCE_BYTES = 256 * 1024;
+const MAX_WIRING_BYTES = 2 * 1024 * 1024;
+const MAX_PORT_REPORT_BYTES = 32 * 1024 * 1024;
 const MAX_PACKAGE_BYTES = 256 * 1024;
 const MAX_EVIDENCE_PATHS = 8;
 const MAX_PATH_CHARS = 512;
@@ -37,20 +46,27 @@ const USAGE = `Core Gameplay Port
 
 Usage:
   node playable-shared-kit/tools/core-gameplay-port.cjs init --unity-project <root> [--cocos-project <root>] [options]
+  node playable-shared-kit/tools/core-gameplay-port.cjs scaffold --unity-project <root> [--cocos-project <root>] [options]
+  node playable-shared-kit/tools/core-gameplay-port.cjs resume --unity-project <root> [--cocos-project <root>] [options]
   node playable-shared-kit/tools/core-gameplay-port.cjs verify --unity-project <root> [--cocos-project <root>] [options]
 
 Commands:
   init     Run mandatory playable-core preflight and write a compact evidence manifest.
+  scaffold Run static-first init + scene skeleton/wiring, then persist a bounded resume packet.
+  resume   Rebuild a bounded handoff/status packet without reading raw Unity source.
   verify   Run verify/lint/assets/build/runtime gates and accept only evidence-backed fidelity >=80.
 
 Options:
   --unity-project <dir>  Complete Unity project root (required).
   --cocos-project <dir>  Cocos playable root. Default: current directory.
   --manifest <file>      Relative path inside Cocos project. Default: ${DEFAULT_MANIFEST}.
+  --wiring <file>        Static scene wiring path. Default: ${DEFAULT_WIRING}.
+  --packet <file>        Resume packet path. Default: ${DEFAULT_RESUME_PACKET}.
   --provider <mode>      auto | static | unity-mcp. Default: auto.
   --bootstrap            Allow Unity-MCP package setup/reload during init.
   --force                Replace an existing manifest during init.
   --dry-run              Init without creating a directory or file.
+  --write                Persist the refreshed packet when running resume.
   --no-run-gates         Verify manifest only; result cannot be accepted as runnable.
   --json                 Compact JSON output.
   --help                 Show help.
@@ -73,10 +89,11 @@ function parseArgs(argv) {
     options.command = argv[0];
     index = 1;
   }
-  if (!['init', 'verify'].includes(options.command)) {
+  if (!['init', 'scaffold', 'resume', 'verify'].includes(options.command)) {
     if (argv.includes('--help') || argv.includes('-h')) return { ...options, help: true };
-    throw corePortError('CORE_PORT_COMMAND_INVALID', 'Command phai la init hoac verify.');
+    throw corePortError('CORE_PORT_COMMAND_INVALID', 'Command phai la init, scaffold, resume hoac verify.');
   }
+  if (options.command === 'scaffold') options.provider = 'static';
   for (; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === '--help' || argument === '-h') { options.help = true; continue; }
@@ -84,10 +101,11 @@ function parseArgs(argv) {
     if (argument === '--bootstrap') { options.bootstrap = true; continue; }
     if (argument === '--force') { options.force = true; continue; }
     if (argument === '--dry-run') { options.dryRun = true; continue; }
+    if (argument === '--write') { options.write = true; continue; }
     if (argument === '--no-run-gates') { options.runGates = false; continue; }
     const equal = /^--([a-z-]+)=(.*)$/.exec(argument);
     const name = equal ? equal[1] : argument.startsWith('--') ? argument.slice(2) : null;
-    if (!['unity-project', 'cocos-project', 'manifest', 'provider'].includes(name)) {
+    if (!['unity-project', 'cocos-project', 'manifest', 'wiring', 'packet', 'provider'].includes(name)) {
       throw corePortError('CORE_PORT_OPTION_INVALID', `Option khong ho tro: ${argument}`);
     }
     const value = equal ? equal[2] : argv[++index];
@@ -223,8 +241,25 @@ function atomicWriteJson(root, file, value, options = {}) {
     if (existed) {
       fs.renameSync(temp, file);
     } else {
-      fs.linkSync(temp, file);
-      try { fs.unlinkSync(temp); } catch (_) { /* linked target is already complete */ }
+      try {
+        fs.linkSync(temp, file);
+        try { fs.unlinkSync(temp); } catch (_) { /* linked target is already complete */ }
+      } catch (error) {
+        // exFAT on Windows has no hard links. File.Move is an atomic, same-volume
+        // publish that refuses an existing destination; renameSync would clobber it.
+        if (process.platform !== 'win32' || !['EISDIR', 'ENOTSUP', 'EPERM', 'ENOSYS'].includes(error.code)) throw error;
+        const moved = spawnSync('powershell.exe', [
+          '-NoProfile', '-NonInteractive', '-Command',
+          '$ErrorActionPreference = "Stop"; [System.IO.File]::Move($env:CORE_PORT_PUBLISH_SOURCE, $env:CORE_PORT_PUBLISH_TARGET)',
+        ], {
+          env: { ...process.env, CORE_PORT_PUBLISH_SOURCE: temp, CORE_PORT_PUBLISH_TARGET: file },
+          windowsHide: true, encoding: 'utf8', timeout: 30000, maxBuffer: 16384,
+        });
+        if (moved.error || moved.status !== 0) {
+          if (fs.existsSync(file)) throw corePortError('CORE_PORT_MANIFEST_CONCURRENT', 'Manifest thay doi trong luc publish; khong overwrite thay doi moi.');
+          throw moved.error || error;
+        }
+      }
     }
     return hashBytes(payload);
   } catch (error) {
@@ -375,6 +410,328 @@ async function initCorePort(options, dependencies = {}) {
       ? 'Run init without --dry-run.'
       : `Implement only this manifest, then run core verify; do not claim fidelity before score >=${manifest.delivery.minimumFidelity}.`,
   };
+}
+
+function summarizeWiring(cocosRoot, relative = DEFAULT_WIRING) {
+  let file;
+  try { file = resolveContained(cocosRoot, relative, { mustExist: true }); } catch (_) {
+    return { found: false, path: relative, stats: null, unresolved: {}, todo: [] };
+  }
+  let payload;
+  try { payload = readJsonBounded(file, MAX_WIRING_BYTES, 'CORE_PORT_WIRING_INVALID'); } catch (error) {
+    return { found: true, path: relative, invalid: true, code: error.code || 'CORE_PORT_WIRING_INVALID', stats: null, unresolved: {}, todo: [] };
+  }
+  const unresolved = {};
+  for (const [key, value] of Object.entries(payload.unresolved || {})) {
+    unresolved[key] = Array.isArray(value) ? value.length : 0;
+  }
+  const todo = (Array.isArray(payload.todo) ? payload.todo : []).slice(0, 8).map(item => ({
+    kind: String(item && item.kind || 'unknown').slice(0, 80),
+    label: String(item && item.label || item && item.key || 'Resolve static wiring').slice(0, 240),
+    nodeCount: Number.isFinite(item && item.nodeCount) ? item.nodeCount : 0,
+  }));
+  return {
+    found: true,
+    path: relative,
+    invalid: false,
+    stats: payload.stats && typeof payload.stats === 'object' ? {
+      nodes: Number(payload.stats.nodes || 0),
+      unresolvedTotal: Number(payload.stats.unresolvedTotal || 0),
+      distinctTasks: Number(payload.stats.distinctTasks || todo.length),
+    } : null,
+    unresolved,
+    todo,
+    todoTruncated: Math.max(0, Number(payload.stats && payload.stats.distinctTasks || todo.length) - todo.length),
+  };
+}
+
+function summarizePortReport(cocosRoot) {
+  const relative = '.unity/port-report.csv';
+  let file;
+  try { file = resolveContained(cocosRoot, relative, { mustExist: true }); } catch (_) {
+    return { found: false, path: relative, counts: { high: 0, medium: 0, low: 0 }, codes: [] };
+  }
+  const stat = fs.statSync(file);
+  if (!stat.isFile() || stat.size > MAX_PORT_REPORT_BYTES) {
+    return { found: true, path: relative, invalid: true, code: 'CORE_PORT_REPORT_TOO_LARGE', counts: { high: 0, medium: 0, low: 0 }, codes: [] };
+  }
+  let result;
+  try { result = digestPortReport(fs.readFileSync(file, 'utf8'), {}); } catch (_) {
+    return { found: true, path: relative, invalid: true, code: 'CORE_PORT_REPORT_INVALID', counts: { high: 0, medium: 0, low: 0 }, codes: [] };
+  }
+  return {
+    found: true,
+    path: relative,
+    invalid: false,
+    rows: result.total,
+    prefabs: result.prefabs,
+    counts: result.counts,
+    codes: result.byCode.filter(item => item.severity !== 'low').slice(0, 8).map(item => ({
+      code: item.code,
+      severity: item.severity,
+      count: item.count,
+      action: String(item.action || '').slice(0, 320),
+    })),
+    codesTruncated: Math.max(0, result.byCode.filter(item => item.severity !== 'low').length - 8),
+  };
+}
+
+function inspectStaticScaffoldReceipt(cocosRoot, manifest, options = {}) {
+  const relative = options.scaffoldReceipt || DEFAULT_STATIC_SCAFFOLD_RECEIPT;
+  let file;
+  try { file = resolveContained(cocosRoot, relative, { mustExist: true }); } catch (_) {
+    return { found: false, valid: false, path: relative, code: 'CORE_PORT_STATIC_RECEIPT_MISSING' };
+  }
+  let receipt;
+  try { receipt = readJsonBounded(file, MAX_MANIFEST_BYTES, 'CORE_PORT_STATIC_RECEIPT_INVALID'); } catch (error) {
+    return { found: true, valid: false, path: relative, code: error.code || 'CORE_PORT_STATIC_RECEIPT_INVALID' };
+  }
+  const expected = {
+    briefId: manifest.source.briefId,
+    stateFingerprint: manifest.source.stateFingerprint,
+    entryScene: manifest.source.entryScene,
+    targetScene: manifest.delivery.targetEntryScene,
+    wiring: options.wiring || DEFAULT_WIRING,
+  };
+  if (receipt.schemaVersion !== 1 || receipt.kind !== STATIC_SCAFFOLD_RECEIPT_KIND ||
+      !receipt.source || !receipt.outputs || Object.entries(expected).some(([key, value]) =>
+        key === 'targetScene' || key === 'wiring' ? receipt.outputs[key] !== value : receipt.source[key] !== value)) {
+    return { found: true, valid: false, path: relative, code: 'CORE_PORT_STATIC_RECEIPT_STALE' };
+  }
+  for (const key of ['targetScene', 'wiring']) {
+    let output;
+    try { output = resolveContained(cocosRoot, receipt.outputs[key], { mustExist: true }); } catch (_) {
+      return { found: true, valid: false, path: relative, code: 'CORE_PORT_STATIC_OUTPUT_MISSING' };
+    }
+    const expectedHash = receipt.hashes && receipt.hashes[key];
+    if (typeof expectedHash !== 'string' || !/^[a-f0-9]{64}$/.test(expectedHash) || hashFile(output) !== expectedHash) {
+      return { found: true, valid: false, path: relative, code: 'CORE_PORT_STATIC_OUTPUT_CHANGED' };
+    }
+  }
+  return { found: true, valid: true, path: relative, code: null, hashes: receipt.hashes };
+}
+
+function persistStaticScaffoldReceipt(cocosRoot, manifest, options = {}) {
+  const targetFile = resolveContained(cocosRoot, manifest.delivery.targetEntryScene, { mustExist: true });
+  const wiringRelative = options.wiring || DEFAULT_WIRING;
+  const wiringFile = resolveContained(cocosRoot, wiringRelative, { mustExist: true });
+  const relative = options.scaffoldReceipt || DEFAULT_STATIC_SCAFFOLD_RECEIPT;
+  const file = resolveContained(cocosRoot, relative);
+  if (fs.existsSync(file)) {
+    throw corePortError('CORE_PORT_STATIC_RECEIPT_EXISTS', 'Static scaffold receipt đã tồn tại; không overwrite provenance ngoài ý muốn.');
+  }
+  atomicWriteJson(cocosRoot, file, {
+    schemaVersion: 1,
+    kind: STATIC_SCAFFOLD_RECEIPT_KIND,
+    source: {
+      briefId: manifest.source.briefId,
+      stateFingerprint: manifest.source.stateFingerprint,
+      entryScene: manifest.source.entryScene,
+    },
+    outputs: { targetScene: manifest.delivery.targetEntryScene, wiring: wiringRelative },
+    hashes: { targetScene: hashFile(targetFile), wiring: hashFile(wiringFile) },
+  });
+  return relative;
+}
+
+function inspectSourceFreshness(unityRoot, manifest, dependencies = {}) {
+  const gate = dependencies.assertPreflight || assertUnityPortPreflight;
+  try {
+    const result = gate(path.join(unityRoot, 'Assets'), { projectRoot: unityRoot });
+    const receipt = result && result.receipt || {};
+    const fresh = receipt.receiptId === manifest.source.receiptId &&
+      receipt.briefId === manifest.source.briefId &&
+      receipt.stateFingerprint === manifest.source.stateFingerprint;
+    return { fresh, code: fresh ? null : 'CORE_PORT_MANIFEST_STALE' };
+  } catch (error) {
+    return { fresh: false, code: error.code || 'CORE_PORT_PREFLIGHT_RECEIPT_MISSING' };
+  }
+}
+
+function checkpointSummary(manifest) {
+  const summary = { total: manifest.checkpoints.length, pending: 0, pass: 0, fail: 0, outOfScope: 0, targetBound: 0, verificationBound: 0 };
+  for (const checkpoint of manifest.checkpoints) {
+    if (checkpoint.status === 'out-of-scope') summary.outOfScope += 1;
+    else if (checkpoint.status in summary) summary[checkpoint.status] += 1;
+    if (checkpoint.targetEvidence.length > 0) summary.targetBound += 1;
+    if (checkpoint.verificationEvidence.length > 0) summary.verificationBound += 1;
+  }
+  return summary;
+}
+
+function buildResumePacket(options, dependencies = {}) {
+  const unityRoot = validateUnityRoot(options.unityProject);
+  const cocosRoot = validateCocosRoot(options.cocosProject);
+  const file = manifestPath(cocosRoot, options.manifest);
+  resolveContained(cocosRoot, file, { mustExist: true });
+  const manifest = validateManifest(cocosRoot, file);
+  const freshness = inspectSourceFreshness(unityRoot, manifest, dependencies);
+  const wiringRelative = options.wiring || DEFAULT_WIRING;
+  const wiring = summarizeWiring(cocosRoot, wiringRelative);
+  const scaffoldReceipt = inspectStaticScaffoldReceipt(cocosRoot, manifest, options);
+  const report = summarizePortReport(cocosRoot);
+  const targetScene = existingContainedFile(cocosRoot, manifest.delivery.targetEntryScene);
+  const config = existingContainedFile(cocosRoot, 'assets/resources/playable-config.json');
+  const scripts = hasArtifact(path.join(cocosRoot, 'assets', 'script'), item => /\.(?:ts|js)$/i.test(item));
+  const checkpoints = checkpointSummary(manifest);
+  const staticScaffold = targetScene && wiring.found && !wiring.invalid && scaffoldReceipt.valid
+    ? 'complete'
+    : targetScene || wiring.found ? 'partial' : 'pending';
+  let phase = 'implement-core';
+  if (!freshness.fresh) phase = 'stale-source';
+  else if (staticScaffold !== 'complete') phase = 'static-scaffold';
+  else if (report.invalid || report.counts.high > 0) phase = 'repair-static-output';
+  else if (checkpoints.targetBound === checkpoints.total && checkpoints.verificationBound < checkpoints.total) phase = 'collect-evidence';
+  else if (checkpoints.verificationBound === checkpoints.total && checkpoints.pass === checkpoints.total) phase = 'ready-for-acceptance';
+
+  const nextActions = [];
+  const addAction = value => {
+    if (value && nextActions.length < 8 && !nextActions.includes(value)) nextActions.push(value);
+  };
+  if (!freshness.fresh) {
+    addAction('Unity source/receipt đã đổi: chạy lại ai:port:core:scaffold với --force trước khi tiếp tục implementation.');
+  } else if (targetScene && wiring.found && !scaffoldReceipt.valid) {
+    addAction(`Scene/wiring không có provenance hợp lệ (${scaffoldReceipt.code}); không reuse mù. Đối chiếu output rồi regenerate trên target sạch.`);
+  } else if (!targetScene && !wiring.found) {
+    addAction('Chạy ai:port:core:scaffold để sinh scene khung và wiring report bằng static parser.');
+  } else if (targetScene && !wiring.found) {
+    addAction('Target scene đã có nhưng thiếu wiring; không overwrite mù. Đối chiếu scene rồi chạy port.scene với manifest riêng hoặc khởi tạo lại trên target sạch.');
+  } else if (!targetScene && wiring.found) {
+    addAction('Wiring tồn tại nhưng target scene thiếu; kiểm tra thay đổi ngoài luồng trước khi scaffold lại.');
+  }
+  for (const item of wiring.todo) addAction(`Wiring ${item.kind} (${item.nodeCount} node): ${item.label}`);
+  for (const item of report.codes.filter(entry => entry.severity === 'high')) addAction(`${item.code} (${item.count}x): ${item.action}`);
+  for (const item of report.codes.filter(entry => entry.severity === 'medium')) addAction(`${item.code} (${item.count}x): ${item.action}`);
+  if (!config) addAction('Tạo assets/resources/playable-config.json và chuyển toàn bộ tuning/gameplay/CTA vào config.');
+  if (!scripts) addAction('Chạy port.closure + port.compile trên closure gameplay; chỉ dùng port.script khi compile không thể tạo first pass.');
+  if (freshness.fresh && staticScaffold === 'complete' && report.counts.high === 0 && checkpoints.targetBound < checkpoints.total) {
+    addAction('Refine static output, bind targetEvidence cho checkpoint, rồi chạy verify visual/runtime theo oracle nguồn.');
+  }
+  if (freshness.fresh && checkpoints.targetBound === checkpoints.total && checkpoints.verificationBound < checkpoints.total) {
+    addAction('Thu runtime/visual evidence schema v1; mandatory input/rules/win-lose phải dùng runtime evidence.');
+  }
+  if (phase === 'ready-for-acceptance') addAction('Chạy ai:port:core:verify; chỉ kết luận runnable/fidelity khi acceptance pass.');
+
+  return {
+    schemaVersion: RESUME_PACKET_SCHEMA_VERSION,
+    kind: RESUME_PACKET_KIND,
+    generatedAt: new Date().toISOString(),
+    sessionId: `port:${hashBytes(`${manifest.source.briefId}\n${manifest.source.stateFingerprint}\n${manifest.delivery.targetEntryScene}`).slice(0, 24)}`,
+    phase,
+    sourceFresh: freshness,
+    manifest: { path: relativeSlash(cocosRoot, file), sha256: hashFile(file) },
+    source: {
+      briefId: manifest.source.briefId,
+      stateFingerprint: manifest.source.stateFingerprint,
+      entryScene: manifest.source.entryScene,
+    },
+    staticFirst: {
+      status: staticScaffold,
+      targetScene: { path: manifest.delivery.targetEntryScene, exists: targetScene },
+      wiring,
+      receipt: scaffoldReceipt,
+    },
+    implementation: { scriptsPresent: scripts, configPresent: config, checkpoints },
+    reports: { port: report },
+    nextActions,
+    tokenBudgetHints: {
+      consumeFirst: [options.packet || DEFAULT_RESUME_PACKET, wiringRelative, '.unity/port-report.csv via ai:port:report'],
+      avoid: ['full Unity YAML/C# dumps', 'whole-project recursive reads', 'raw port-report.csv in chat'],
+      boundedSlices: { wiringTodo: 8, reportCodes: 8, nextActions: 8 },
+      queryRawSourceOnlyWhen: 'preflight evidenceQueries hoặc một wiring/report action cần semantic refinement',
+    },
+  };
+}
+
+function persistResumePacket(cocosRoot, relative, packet) {
+  const file = resolveContained(cocosRoot, relative || DEFAULT_RESUME_PACKET);
+  const existed = fs.existsSync(file);
+  const expectedHash = existed ? hashFile(file) : null;
+  atomicWriteJson(cocosRoot, file, packet, { force: existed, expectedHash });
+  return relativeSlash(cocosRoot, file);
+}
+
+function runStaticScenePort(unityRoot, cocosRoot, manifest, options = {}, dependencies = {}) {
+  const sceneFile = resolveContained(unityRoot, manifest.source.entryScene, { mustExist: true });
+  const outFile = resolveContained(cocosRoot, manifest.delivery.targetEntryScene);
+  const wiringFile = resolveContained(cocosRoot, options.wiring || DEFAULT_WIRING);
+  const targetExists = fs.existsSync(outFile);
+  const wiringExists = fs.existsSync(wiringFile);
+  if (targetExists || wiringExists) {
+    const receipt = inspectStaticScaffoldReceipt(cocosRoot, manifest, options);
+    return {
+      ok: targetExists && wiringExists && receipt.valid,
+      status: targetExists && wiringExists && receipt.valid ? 'reused' : 'partial-existing-output',
+      targetScene: manifest.delivery.targetEntryScene,
+      wiring: relativeSlash(cocosRoot, wiringFile),
+      receipt,
+    };
+  }
+  const run = dependencies.runStaticScene || ((request) => {
+    const child = spawnSync(process.execPath, [
+      path.join(__dirname, 'unity-scene-port.cjs'),
+      '--scene', request.sceneFile,
+      '--unity-root', request.unityAssets,
+      '--out', request.outFile,
+      '--manifest', request.wiringFile,
+      '--json',
+    ], {
+      cwd: request.cocosRoot,
+      encoding: 'utf8',
+      windowsHide: true,
+      timeout: GATE_TIMEOUT_MS,
+      maxBuffer: GATE_MAX_BUFFER_BYTES,
+      shell: false,
+    });
+    return { ok: child.status === 0 && !child.error, child };
+  });
+  const result = run({ sceneFile, unityAssets: path.join(unityRoot, 'Assets'), outFile, wiringFile, cocosRoot });
+  if (!result || result.ok !== true || !fs.existsSync(outFile) || !fs.existsSync(wiringFile)) {
+    const child = result && result.child || {};
+    throw corePortError('CORE_PORT_STATIC_SCAFFOLD_FAILED', 'Static scene scaffold không sinh đủ scene + wiring.', {
+      output: redactOutput(`${child.stdout || ''}\n${child.stderr || ''}\n${child.error || ''}`, [unityRoot, cocosRoot]),
+    });
+  }
+  const receipt = persistStaticScaffoldReceipt(cocosRoot, manifest, options);
+  return { ok: true, status: 'created', targetScene: manifest.delivery.targetEntryScene, wiring: relativeSlash(cocosRoot, wiringFile), receipt: { valid: true, path: receipt } };
+}
+
+async function scaffoldCorePort(options, dependencies = {}) {
+  const unityRoot = validateUnityRoot(options.unityProject);
+  const cocosRoot = validateCocosRoot(options.cocosProject);
+  const file = manifestPath(cocosRoot, options.manifest);
+  if (options.dryRun) {
+    const initialized = await initCorePort({ ...options, provider: options.provider || 'static', dryRun: true }, dependencies);
+    return {
+      ...initialized,
+      command: 'scaffold',
+      staticFirst: { status: 'planned', targetScene: targetScenePath(initialized.source.entryScene), wiring: options.wiring || DEFAULT_WIRING },
+      packet: { written: false, path: options.packet || DEFAULT_RESUME_PACKET },
+    };
+  }
+  if (!fs.existsSync(file) || options.force) {
+    await initCorePort({ ...options, provider: options.provider || 'static', force: !!options.force }, dependencies);
+  } else {
+    const existing = validateManifest(cocosRoot, file);
+    const freshness = inspectSourceFreshness(unityRoot, existing, dependencies);
+    if (!freshness.fresh) {
+      throw corePortError('CORE_PORT_MANIFEST_STALE', 'Manifest/receipt cũ; chạy scaffold --force để tái tạo từ static preflight mới.', freshness);
+    }
+  }
+  const manifest = validateManifest(cocosRoot, file);
+  const staticFirst = runStaticScenePort(unityRoot, cocosRoot, manifest, options, dependencies);
+  const packet = buildResumePacket({ ...options, unityProject: unityRoot, cocosProject: cocosRoot }, dependencies);
+  const packetPath = persistResumePacket(cocosRoot, options.packet || DEFAULT_RESUME_PACKET, packet);
+  return { ok: staticFirst.ok, command: 'scaffold', manifest: relativeSlash(cocosRoot, file), staticFirst, packet: { written: true, path: packetPath, phase: packet.phase }, nextActions: packet.nextActions };
+}
+
+function resumeCorePort(options, dependencies = {}) {
+  const cocosRoot = validateCocosRoot(options.cocosProject);
+  const packet = buildResumePacket(options, dependencies);
+  const packetPath = options.packet || DEFAULT_RESUME_PACKET;
+  const written = options.write === true && options.dryRun !== true;
+  if (written) persistResumePacket(cocosRoot, packetPath, packet);
+  return { ok: packet.sourceFresh.fresh && packet.staticFirst.status === 'complete' && !(packet.reports.port.invalid || packet.reports.port.counts.high > 0), command: 'resume', packet: { ...packet, persisted: written, path: packetPath } };
 }
 
 function readJsonBounded(file, maxBytes, code) {
@@ -693,6 +1050,8 @@ function verifyCorePort(options, dependencies = {}) {
 
 async function execute(options, dependencies = {}) {
   if (options.command === 'init') return initCorePort(options, dependencies);
+  if (options.command === 'scaffold') return scaffoldCorePort(options, dependencies);
+  if (options.command === 'resume') return resumeCorePort(options, dependencies);
   return verifyCorePort(options, dependencies);
 }
 
@@ -724,6 +1083,12 @@ module.exports = {
   EVIDENCE_SCHEMA_VERSION,
   EVIDENCE_KIND,
   DEFAULT_MANIFEST,
+  RESUME_PACKET_SCHEMA_VERSION,
+  RESUME_PACKET_KIND,
+  DEFAULT_WIRING,
+  DEFAULT_STATIC_SCAFFOLD_RECEIPT,
+  DEFAULT_RESUME_PACKET,
+  STATIC_SCAFFOLD_RECEIPT_KIND,
   MAX_MANIFEST_BYTES,
   MAX_EVIDENCE_BYTES,
   REQUIRED_SCRIPTS,
@@ -737,6 +1102,17 @@ module.exports = {
   createManifest,
   checkpointSourcesFromBrief,
   initCorePort,
+  summarizeWiring,
+  summarizePortReport,
+  inspectStaticScaffoldReceipt,
+  persistStaticScaffoldReceipt,
+  inspectSourceFreshness,
+  checkpointSummary,
+  buildResumePacket,
+  persistResumePacket,
+  runStaticScenePort,
+  scaffoldCorePort,
+  resumeCorePort,
   validateManifest,
   currentTargetHashes,
   checkpointEvidencePasses,

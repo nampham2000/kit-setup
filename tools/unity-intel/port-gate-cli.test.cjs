@@ -469,10 +469,15 @@ test('FBX fallback dry-run does not create metadata, launch a converter, or emit
   const result = invoke([
     'port', '--src', prefab, '--unity-root', fixture.assets,
     '--cocos-root', cocosRoot, '--out', prefabOut,
-    '--dry-run', '--no-cache', '--convert-fbx-fallback', '--no-import-wait',
+    '--dry-run', '--no-cache', '--convert-fbx-fallback', '--model-import-wait-ms', '60000',
   ], cacheDir, PREFAB_PORT, extraEnv);
 
   assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  assert.doesNotMatch(
+    `${result.stdout}\n${result.stderr}`,
+    /(?:đã chờ import|lần chờ import)/,
+    'dry-run must not wait for an editor-side model importer',
+  );
   assert.equal(fs.existsSync(path.join(assetsDir, 'unity_imported')), false);
   assert.equal(fs.existsSync(`${path.join(assetsDir, 'unity_imported')}.meta`), false);
   assert.equal(fs.existsSync(converterMarker), false);
