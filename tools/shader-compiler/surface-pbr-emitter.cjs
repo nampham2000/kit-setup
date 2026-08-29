@@ -30,6 +30,11 @@
 
 const { lowerHlslToGlsl } = require('./unity-semantic-lowering.cjs');
 const { extractPbrIntent } = require('./surface-shader-intent-extractor.cjs');
+const {
+  SRGB_SAMPLE_HELPER,
+  srgbSamplerNames,
+  lowerSrgbTextureSamples,
+} = require('./color-space-lowering.cjs');
 
 // Unity varying field -> the engine's fragment-stage input of the same meaning.
 const FS_INPUT_MAP = {
@@ -193,6 +198,9 @@ function buildSurfacePbrEffect({ docIR, passIR, yaml, ubo, samplers = [], proper
   };
   /** Lower HLSL to GLSL and bind Unity property names to Cocos uniforms. */
   const lowerAndBind = (code) => remapProps(lowerHlslToGlsl(code));
+  const colorSamplerNames = srgbSamplerNames(samplers);
+  const lowerFragmentCode = (code) =>
+    lowerSrgbTextureSamples(lowerAndBind(code), colorSamplerNames);
 
   const intent = extractPbrIntent(rawCode, programIR.fragmentEntry);
   if (!intent) {
@@ -224,6 +232,8 @@ function buildSurfacePbrEffect({ docIR, passIR, yaml, ubo, samplers = [], proper
     const ret = HLSL_TO_GLSL_TYPE[f.returnType] || f.returnType;
     return `  ${ret} ${f.name}(${params}) {\n${indent(lowerAndBind(f.body), '    ')}\n  }`;
   });
+  const loweredFragmentHelpers = loweredHelpers.map(code =>
+    lowerSrgbTextureSamples(code, colorSamplerNames));
 
   // ---- surface-vertex ----
   const vsBody = [];
@@ -260,7 +270,7 @@ function buildSurfacePbrEffect({ docIR, passIR, yaml, ubo, samplers = [], proper
   const fsBody = [];
   if (intent) {
     if (intent.preamble && intent.preamble.trim()) {
-      let pre = lowerAndBind(intent.preamble);
+      let pre = lowerFragmentCode(intent.preamble);
       pre = remapFragmentInputs(pre, fragParam, customVaryings);
       if (pre.trim()) {
         fsBody.push('    // ported from the Unity fragment body');
@@ -269,7 +279,7 @@ function buildSurfacePbrEffect({ docIR, passIR, yaml, ubo, samplers = [], proper
     }
 
     const f = intent.outputFields || {};
-    const lower = (expr) => remapFragmentInputs(lowerAndBind(String(expr)), fragParam, customVaryings).trim();
+    const lower = (expr) => remapFragmentInputs(lowerFragmentCode(String(expr)), fragParam, customVaryings).trim();
     /**
      * Assigning to a float channel. HLSL happily takes `surfaceData.occlusion = 1`,
      * but GLSL ES 300 has no implicit int->float conversion, so a bare integer
@@ -317,12 +327,14 @@ function buildSurfacePbrEffect({ docIR, passIR, yaml, ubo, samplers = [], proper
 
   const surfaceFragment = [
     'CCProgram surface-fragment %{',
+    colorSamplerNames.length ? '  #include <common/color/gamma>' : null,
     ...samplers.map(s => `  uniform ${s.type} ${s.name};`),
     samplers.length ? '' : null,
     ...customVaryings.map(cv => `  in ${cv.glslType} ${cv.varying};`),
     customVaryings.length ? '' : null,
-    ...loweredHelpers,
-    loweredHelpers.length ? '' : null,
+    colorSamplerNames.length ? SRGB_SAMPLE_HELPER : null,
+    ...loweredFragmentHelpers,
+    loweredFragmentHelpers.length ? '' : null,
     '  #include <surfaces/data-structures/standard>',
     '  #define CC_SURFACES_FRAGMENT_MODIFY_SHARED_DATA',
     '  void SurfacesFragmentModifySharedData(inout SurfacesMaterialData surfaceData) {',
