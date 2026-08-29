@@ -15,6 +15,12 @@ function sha(bytes) {
   return crypto.createHash('sha256').update(bytes).digest('hex');
 }
 
+function textBytes(file) {
+  // Git may check the same tracked text out as LF or CRLF. Bind semantic text
+  // bytes so a clean extension remains verifiable across Windows/macOS/Linux.
+  return Buffer.from(fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n'), 'utf8');
+}
+
 function collectFiles() {
   const files = [...fixedFiles];
   for (const relativeRoot of sourceRoots) {
@@ -37,7 +43,7 @@ function collectFiles() {
 function snapshot() {
   const files = collectFiles();
   const hashes = {};
-  for (const file of files) hashes[file] = sha(fs.readFileSync(path.join(root, file)));
+  for (const file of files) hashes[file] = sha(textBytes(path.join(root, file)));
   return {
     version: 1,
     aggregateSha256: sha(Buffer.from(files.map((file) => `${file}\0${hashes[file]}\n`).join(''))),
@@ -66,7 +72,7 @@ function collectOutputs() {
 function outputSnapshot() {
   const files = collectOutputs();
   const hashes = {};
-  for (const file of files) hashes[file] = sha(fs.readFileSync(path.join(root, file)));
+  for (const file of files) hashes[file] = sha(textBytes(path.join(root, file)));
   return { files, hashes };
 }
 
