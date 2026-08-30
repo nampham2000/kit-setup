@@ -37,7 +37,19 @@ Whenever you resolve a tricky bug or discover a reusable porting pattern:
    npm run memory:remember -- --memory-file .unity/work-memory-lessons.json --json
    ```
 
-## 3. Database Integrity and Portable Runtime
+## 3. Correct a Disproven Memory
+
+When runtime or visual evidence proves an existing lesson is wrong or too broad, do not append a competing lesson. Query with `--json` to obtain the exact memory id, then replace that row while preserving its scope:
+
+```bash
+npm run memory:query -- "renderer ownership transparent hold" --json
+npm run memory:correct -- --id <memory-id> --scope global --category porting-note --title "Corrected lesson" --content-file .unity/corrected-memory.txt --json
+npm run memory:doctor -- --json
+```
+
+Use `global` only for a lesson reusable by every project. The corrected content must name the disproven assumption and the evidence or regression oracle that replaces it.
+
+## 4. Database Integrity and Portable Runtime
 
 - Node 20 không có `node:sqlite`; project template phải khai báo `better-sqlite3` để keyword memory vẫn chạy.
 - Khi query/stats có count mâu thuẫn hoặc DB được copy từ máy khác, chạy read-only doctor:

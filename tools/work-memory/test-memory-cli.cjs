@@ -86,7 +86,7 @@ function run(args) {
 
 run(['init', '--repo-root', tempRepoRoot, '--repo-db', repoDb, '--global-db', globalDb, '--cache-file', cacheFile, '--json']);
 
-run([
+const rememberedSprite = run([
   'remember',
   '--repo-root', tempRepoRoot,
   '--repo-db', repoDb,
@@ -102,6 +102,41 @@ run([
   '--pinned', 'true',
   '--json',
 ]);
+
+const correctedSprite = run([
+  'remember',
+  '--repo-root', tempRepoRoot,
+  '--repo-db', repoDb,
+  '--global-db', globalDb,
+  '--cache-file', cacheFile,
+  '--id', rememberedSprite.memory.id,
+  '--scope', 'repo',
+  '--category', 'bug-fix',
+  '--title', 'Sprite preview trap',
+  '--content', 'Corrected builtin-sprite.effect semantics keep preview sprites visible.',
+  '--tags', 'cocos,sprite,effect,preview',
+  '--source-path', 'assets/effects/TestSpriteNodeShine.effect',
+  '--importance', '0.97',
+  '--pinned', 'true',
+  '--json',
+]);
+assert.strictEqual(correctedSprite.memory.id, rememberedSprite.memory.id,
+  'explicit --id should replace the exact stale memory row');
+assert.match(correctedSprite.memory.content, /^Corrected /,
+  'explicit --id should persist corrected memory content');
+assert.throws(() => run([
+  'remember',
+  '--repo-root', tempRepoRoot,
+  '--repo-db', repoDb,
+  '--global-db', globalDb,
+  '--cache-file', cacheFile,
+  '--id', 'missing-memory-id',
+  '--scope', 'repo',
+  '--title', 'Must not insert',
+  '--content', 'An exact correction must fail when the requested row is absent.',
+  '--json',
+]), /Memory id not found/,
+'explicit --id must correct an existing row instead of silently inserting a new memory');
 
 run([
   'remember',

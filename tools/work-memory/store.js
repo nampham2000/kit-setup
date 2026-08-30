@@ -711,6 +711,10 @@ function createStore(options) {
     return saved;
   }
 
+  function getMemoryById(memoryId) {
+    return rowToMemory(selectById.get(memoryId));
+  }
+
   function buildBaseWhereClauses(query, alias, params) {
     const where = [];
     if (options.scope === 'repo') {
@@ -947,6 +951,7 @@ function createStore(options) {
 
   return {
     upsertMemory,
+    getMemoryById,
     queryMemories,
     querySemanticMemories,
     getHotMemories,

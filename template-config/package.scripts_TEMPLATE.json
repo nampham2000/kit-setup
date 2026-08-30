@@ -34,6 +34,7 @@
     "mcp:probe": "node playable-shared-kit/tools/mcp-probe.cjs",
     "memory:init": "node playable-shared-kit/tools/work-memory.cjs init",
     "memory:remember": "node playable-shared-kit/tools/work-memory.cjs remember-auto",
+    "memory:correct": "node playable-shared-kit/tools/work-memory.cjs remember",
     "memory:doctor": "node playable-shared-kit/tools/work-memory.cjs doctor",
     "memory:repair": "node playable-shared-kit/tools/work-memory.cjs repair",
     "memory:sync": "node playable-shared-kit/tools/work-memory.cjs sync",

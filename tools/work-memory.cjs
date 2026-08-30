@@ -132,6 +132,7 @@ Commands:
   inspect-cache     Show cache metadata and optionally the cached items.
 
 Common options:
+  --id <memory-id>       Replace one exact existing memory row during remember.
   --repo-root <path>     Repo root. Default: current working directory.
   --repo-db <path>       Repo database path. Default: <repo-root>/playable-shared-kit/tools/work-memory/data/repo/<repo-id>.db
   --global-db <path>     Shared database path. Default: <repo-root>/playable-shared-kit/tools/work-memory/data/${DEFAULT_SHARED_DB_FILE_NAME}
@@ -290,6 +291,7 @@ function buildMemoryItem(options, paths, fallbackContent = '') {
   }
   const now = toIso(new Date());
   return {
+    id: options.id || undefined,
     scope,
     repoId: scope === 'repo' ? paths.repoId : null,
     repoRoot: scope === 'repo' ? paths.repoRoot : null,
@@ -823,6 +825,9 @@ async function commandRemember(options) {
   try {
     const item = buildMemoryItem(options, paths);
     const store = pickStoreByScope(item.scope, stores);
+    if (options.id && !store.getMemoryById(item.id)) {
+      throw new Error(`Memory id not found in ${item.scope} scope: ${item.id}`);
+    }
     const saved = await store.upsertMemory(item);
     printResult(options, { ok: true, memory: saved });
   } finally {

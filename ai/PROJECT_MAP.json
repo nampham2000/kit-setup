@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "generatedAt": "2026-08-30T08:05:47.635Z",
+    "generatedAt": "2026-08-30T08:45:38.126Z",
     "description": "Compact project manifest for AI Agents. Use this instead of scanning file trees.",
     "project": {
       "projectName": "cc_playable_framework",
@@ -265,7 +265,7 @@
     "shaderCount": 4,
     "shaders": {
       "count": 4,
-      "totalKb": 22,
+      "totalKb": 22.1,
       "sample": [
         "assets/effects/UnitySpriteRendererColor.effect",
         "assets/effects/TapeUnlit.effect",
@@ -520,6 +520,7 @@
     "ai.contract": "npm run ai:contract:verify",
     "memory.remember": "npm run memory:remember -- --memory-file <file.json>",
     "memory.doctor": "npm run memory:doctor -- --json",
+    "memory.correct": "npm run memory:correct -- --id <memory-id> --scope <repo|global> --title <title> --content-file <file>",
     "memory.repair": "npm run memory:repair -- --scope <repo|global> --dry-run --json"
   }
 }

@@ -957,6 +957,22 @@ const CAPABILITIES = [
     file: `${TOOLS}/work-memory.cjs`,
   },
   {
+    id: 'memory.correct',
+    group: 'knowledge',
+    title: 'Sửa chính xác một Work Memory đã bị evidence mới bác bỏ',
+    npm: 'npm run memory:correct -- --id <memory-id> --scope <repo|global> --title <title> --content-file <file>',
+    cmd: `node ${TOOLS}/work-memory.cjs remember`,
+    args: ['--id <memory-id>', '--scope <repo|global>', '--title <title>', '--content-file <file>'],
+    optional: ['--category <category>', '--tags <csv>', '--importance <0..1>', '--confidence <0..1>', '--pinned true', '--json'],
+    when: 'Khi runtime/visual evidence mới chứng minh một memory cũ sai hoặc quá rộng; sửa exact row thay vì thêm một note mâu thuẫn.',
+    outputs: ['Cùng memory id với nội dung đã được hiệu chỉnh'],
+    limits: ['Chỉ dùng id lấy từ query --json; giữ đúng scope; chạy memory.doctor sau khi sửa global/shared DB.'],
+    status: 'ok',
+    probe: 'static',
+    expect: ['--id <memory-id>'],
+    file: `${TOOLS}/work-memory.cjs`,
+  },
+  {
     id: 'memory.repair',
     group: 'knowledge',
     title: 'Khôi phục Work Memory corrupt với backup exact-byte',
@@ -1010,7 +1026,7 @@ const CORE_RULES = [
   },
   {
     id: 'runtime-material-swap-parity',
-    rule: 'Khi Unity thay `Renderer.material` bằng một material khác lúc hold/peek/highlight/damage, Cocos phải tạo hoặc load đúng material thay thế như một asset/state độc lập; không clone albedo/emissive map, keyword hay pipeline state từ material opaque đang hiển thị nếu source replacement không có chúng. Checkpoint gesture thật phải kiểm material/texture identity, technique, blend enable, depthWrite và việc phục hồi đúng material gốc khi kết thúc interaction; chỉ kiểm alpha/color là chưa đủ.',
+    rule: 'Khi Unity thay `Renderer.material` bằng một material khác lúc hold/peek/highlight/damage, Cocos phải tạo hoặc load đúng material thay thế như một asset/state độc lập và chỉ swap đúng renderer set có evidence từ source; không tự gán depth/tint variant cho mọi sibling. Không clone albedo/emissive map, keyword hay pipeline state từ material opaque đang hiển thị nếu source replacement không có chúng. Alpha cạnh và mức trộn side color phải là tham số riêng để màu gần đen không thay toàn bộ albedo ở góc lướt. Checkpoint gesture thật phải xoay qua ít nhất hai góc, kiểm exact material identity của renderer không được chọn, technique, blend enable, depthWrite, screenshot không có black facets và việc phục hồi đúng material gốc khi kết thúc interaction; chỉ kiểm alpha/color là chưa đủ.',
   },
   {
     id: 'visual-checkpoints',
@@ -1072,6 +1088,10 @@ const CORE_RULES = [
       sourceHighPolicy: 'full-audit-core-route-or-explicit-defer',
       completionHighPolicy: 'core-acceptance-required',
     },
+  },
+  {
+    id: 'correct-stale-memory',
+    rule: 'Khi evidence mới bác bỏ một Work Memory, phải dùng `memory.correct` cập nhật đúng memory id; không thêm note mới mâu thuẫn và để hướng dẫn sai tiếp tục được recall trên project khác.',
   },
 ];
 
