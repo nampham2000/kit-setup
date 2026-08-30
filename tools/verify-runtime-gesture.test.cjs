@@ -50,7 +50,35 @@ test('gesture scheduler compensates for CDP round-trip time', async () => {
   assert.equal(result.scheduledDurationMs, 100);
   assert.equal(result.dispatchEnqueueElapsedMs, 100);
   assert.equal(result.dispatchElapsedMs, 300);
+  assert.equal(result.holdBeforeMoveMs, 0);
   assert.equal(result.keepPressed, false);
+});
+
+test('gesture can hold at the start before moving', async () => {
+  let clock = 0;
+  const events = [];
+  const session = {
+    send(method, params) {
+      if (method === 'Runtime.evaluate') {
+        return Promise.resolve({ result: { value: JSON.stringify({ left: 0, top: 0, width: 100, height: 200 }) } });
+      }
+      if (method === 'Input.dispatchTouchEvent') events.push({ type: params.type, at: clock });
+      return Promise.resolve({});
+    },
+  };
+  const result = await dispatchTouchGesture(session, 'session', {
+    x1: 0.2, y1: 0.2, x2: 0.8, y2: 0.2,
+    durationMs: 100, steps: 2, normalized: true,
+  }, {
+    holdBeforeMoveMs: 300,
+    now: () => clock,
+    wait: async milliseconds => { clock += milliseconds; },
+  });
+
+  assert.equal(events[0].type, 'touchStart');
+  assert.deepEqual(events.filter(event => event.type === 'touchMove').map(event => event.at), [350, 400]);
+  assert.equal(result.holdBeforeMoveMs, 300);
+  assert.equal(result.scheduledDurationMs, 100);
 });
 
 test('gesture can stay pressed for a hold-state eval and screenshot', async () => {

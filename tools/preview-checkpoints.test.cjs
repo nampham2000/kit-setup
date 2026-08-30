@@ -23,7 +23,8 @@ test('validates isolated URL checkpoint cases and gestures', () => {
     cases: [
       { name: 'baseline' },
       { name: 'vertical drag', previewDevice: 'WebpageFullScreen', gesture: '0.5,0.7,0.5,0.3,400,12', postActionSeconds: 3 },
-      { name: 'hold block', gesture: '0.5,0.5,0.5,0.5,300,8', gestureKeepPressed: true },
+      { name: 'hold block', gesture: '0.5,0.5,0.7,0.5,300,8', gestureHoldBeforeMoveMs: 280,
+        gestureKeepPressed: true },
     ],
   });
   assert.equal(value.cases.length, 3);
@@ -32,6 +33,7 @@ test('validates isolated URL checkpoint cases and gestures', () => {
   assert.equal(value.cases[1].postActionSeconds, 3);
   assert.equal(value.postActionSeconds, 2);
   assert.equal(value.cases[2].gestureKeepPressed, true);
+  assert.equal(value.cases[2].gestureHoldBeforeMoveMs, 280);
   assert.equal(value.windowSize, '720,1280');
 });
 
@@ -45,6 +47,12 @@ test('fails closed on build/file targets, duplicate names and unknown options', 
   assert.throws(() => validateConfig({
     url: 'http://localhost:7456', cases: [{ name: 'a', gestureKeepPressed: true }],
   }), /cần gesture/);
+  assert.throws(() => validateConfig({
+    url: 'http://localhost:7456', cases: [{ name: 'a', gestureHoldBeforeMoveMs: 300 }],
+  }), /cần gesture/);
+  assert.throws(() => validateConfig({
+    url: 'http://localhost:7456', cases: [{ name: 'a', gesture: '0.5,0.5,0.7,0.5,300,8', gestureHoldBeforeMoveMs: 5001 }],
+  }), /0-5000/);
   assert.throws(() => validateConfig({
     url: 'http://localhost:7456', previewDevice: 42, cases: [{ name: 'a' }],
   }), /previewDevice/);

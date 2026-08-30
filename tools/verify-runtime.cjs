@@ -82,6 +82,9 @@ Options:
   --eval-before <js>   Chạy biểu thức trước gesture và trả evalBeforeResult.
   --gesture <spec>     Phát touch thật qua CDP: x1,y1,x2,y2,durationMs[,steps].
                        Tọa độ 0..1 là tỉ lệ trong canvas; số >1 là viewport px.
+  --gesture-hold-before-move <ms>
+                       Giữ touch đứng yên tại điểm bắt đầu trước khi phát các
+                       touchMove; dùng để kiểm flow hold-then-drag thật.
   --gesture-keep-pressed
                        Giữ touch sau gesture để --eval và screenshot quan sát
                        trạng thái hold; tool tự nhả touch sau khi chụp.
@@ -353,6 +356,8 @@ async function dispatchTouchGesture(session, sessionId, gesture, timing = {}) {
   const now = timing.now || Date.now;
   const waitFor = timing.wait || wait;
   const keepPressed = timing.keepPressed === true;
+  const holdBeforeMoveMs = Math.max(0, Math.min(5000,
+    Math.round(Number(timing.holdBeforeMoveMs) || 0)));
   // Headless desktop targets do not expose touch input unless emulation is
   // enabled explicitly; dispatchTouchEvent may otherwise succeed but deliver
   // nothing to the Cocos input system.
@@ -377,6 +382,7 @@ async function dispatchTouchGesture(session, sessionId, gesture, timing = {}) {
   await session.send('Input.dispatchTouchEvent', {
     type: 'touchStart', touchPoints: [touch(start)],
   }, sessionId);
+  if (holdBeforeMoveMs > 0) await waitFor(holdBeforeMoveMs);
   const stepDuration = gesture.durationMs / gesture.steps;
   // Keep the requested wall-clock duration stable. Waiting stepDuration after
   // every CDP round trip makes a 500 ms gesture take 1-2 seconds on Windows,
@@ -409,6 +415,7 @@ async function dispatchTouchGesture(session, sessionId, gesture, timing = {}) {
     scheduledDurationMs: gesture.durationMs,
     dispatchEnqueueElapsedMs,
     dispatchElapsedMs,
+    holdBeforeMoveMs,
     keepPressed,
     canvasRect: rect,
     start,
@@ -562,6 +569,7 @@ async function runOne(target, options) {
     if (options.gesture) {
       try {
         result.gesture = await dispatchTouchGesture(session, sessionId, options.gesture, {
+          holdBeforeMoveMs: options.gestureHoldBeforeMoveMs,
           keepPressed: options.gestureKeepPressed === true,
         });
         gesturePressed = result.gesture.keepPressed === true;
@@ -698,7 +706,7 @@ function parseArgs(argv) {
   const o = {
     seconds: 6, minFps: 20, all: false, json: false, noScreenshot: false,
     screenshotDir: path.join('.unity', 'runtime-shots'), help: false, evalExpression: '',
-    evalBeforeExpression: '', gesture: null, gestureKeepPressed: false,
+    evalBeforeExpression: '', gesture: null, gestureHoldBeforeMoveMs: 0, gestureKeepPressed: false,
     previewDevice: '',
     windowSize: '720,1280',
   };
@@ -728,6 +736,15 @@ function parseArgs(argv) {
     if (a.startsWith('--eval-before=')) { o.evalBeforeExpression = a.slice('--eval-before='.length); continue; }
     if (a === '--gesture') { o.gesture = parseGesture(argv[++i]); continue; }
     if (a.startsWith('--gesture=')) { o.gesture = parseGesture(a.slice('--gesture='.length)); continue; }
+    if (a === '--gesture-hold-before-move') {
+      o.gestureHoldBeforeMoveMs = Math.max(0, Math.min(5000, Math.round(Number(argv[++i]) || 0)));
+      continue;
+    }
+    if (a.startsWith('--gesture-hold-before-move=')) {
+      o.gestureHoldBeforeMoveMs = Math.max(0, Math.min(5000,
+        Math.round(Number(a.slice('--gesture-hold-before-move='.length)) || 0)));
+      continue;
+    }
     if (a === '--gesture-keep-pressed') { o.gestureKeepPressed = true; continue; }
     if (a === '--screenshot') { o.screenshotDir = argv[++i]; continue; }
     if (a.startsWith('--screenshot=')) { o.screenshotDir = a.split('=')[1]; continue; }

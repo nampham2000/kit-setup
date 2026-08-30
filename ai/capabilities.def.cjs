@@ -709,7 +709,7 @@ const CAPABILITIES = [
     npm: 'npm run ai:verify:runtime',
     cmd: `node ${TOOLS}/verify-runtime.cjs --json`,
     args: [],
-    optional: ['--file <html>', '--url <url>', '--all', '--seconds <n>', '--min-fps <n>', '--window-size <WxH>', '--preview-device <name>', '--browser <path>', '--eval <js>', '--eval-before <js>', '--gesture <x1,y1,x2,y2,durationMs[,steps]>', '--gesture-keep-pressed', '--json', '--no-screenshot'],
+    optional: ['--file <html>', '--url <url>', '--all', '--seconds <n>', '--min-fps <n>', '--window-size <WxH>', '--preview-device <name>', '--browser <path>', '--eval <js>', '--eval-before <js>', '--gesture <x1,y1,x2,y2,durationMs[,steps]>', '--gesture-hold-before-move <ms>', '--gesture-keep-pressed', '--json', '--no-screenshot'],
     when: 'Sau khi build, hoặc trỏ --url vào preview của editor khi chưa muốn build. Đây là bước duy nhất chứng minh playable CHẠY được, không chỉ compile được.',
     outputs: ['stdout (JSON khi có --json)', '.unity/runtime-shots/*.png'],
     limits: [
@@ -719,13 +719,14 @@ const CAPABILITIES = [
       'Cửa sổ mặc định 720x1280 (dọc); nguồn landscape cần --window-size 1366x768 để khung hình so sánh được.',
       'Với URL Cocos Editor preview, --window-size chỉ đổi cửa sổ Chrome chứ không đổi device giả lập đang chọn. Dùng --preview-device WebpageFullScreen hoặc field previewDevice của verify.visual để kiểm đúng aspect Game panel; tool ghi device cũ, fail-closed nếu device không tồn tại/không settle và khôi phục device cũ trước khi đóng session.',
       '`--eval-before` chụp state trước thao tác; `--gesture` bật touch emulation trước khi tải trang và phát touch thật qua CDP để kiểm tra drag/swipe, gồm cả lỗi browser scroll ở trục dọc.',
+      '`--gesture-hold-before-move` giữ touch đứng yên ở điểm đầu trước khi kéo để tái hiện đúng chuỗi hold-then-drag; field tương ứng trong verify.visual là `gestureHoldBeforeMoveMs`.',
       '`--gesture-keep-pressed` giữ touch đến sau eval/screenshot để kiểm hold/peek/fade, rồi luôn nhả touch trong cleanup.',
       'Phát hiện khung đơn sắc bằng cách so 3 vùng lấy mẫu, là suy luận theo dấu hiệu chứ không phải phân tích ảnh đầy đủ.',
     ],
     status: 'partial',
     probe: 'help',
     probeCmd: `node ${TOOLS}/verify-runtime.cjs`,
-    expect: ['--file', '--min-fps', '--preview-device', '--eval-before', '--gesture', '--gesture-keep-pressed', '--json'],
+    expect: ['--file', '--min-fps', '--preview-device', '--eval-before', '--gesture', '--gesture-hold-before-move', '--gesture-keep-pressed', '--json'],
   },
   {
     id: 'verify.visual',
@@ -1003,7 +1004,7 @@ const CORE_RULES = [
   },
   {
     id: 'camera-input-parity',
-    rule: 'Khi port camera controls, phải mang đủ chuỗi nguồn: normalized slider, min/max multiplier dùng khi reset, mapping real zoom, camera position/FOV/pitch và transform scale/rotation listener. Reset rotation phải theo source (ví dụ Quaternion.identity), không chụp một runtime rotation làm mặc định. Drag Space.World phải kiểm chứng riêng thao tác sang phải và lên bằng gesture thật; không suy dấu chỉ từ handedness.',
+    rule: 'Khi port camera controls, phải mang đủ chuỗi nguồn: normalized slider, min/max multiplier dùng khi reset, mapping real zoom, camera position/FOV/pitch và transform scale/rotation listener. Reset rotation phải theo source (ví dụ Quaternion.identity), không chụp một runtime rotation làm mặc định. Nếu Unity có handler hold/pick và handler rotate độc lập cùng đọc một pointer, Cocos phải giữ các state đó có thể đồng thời hoạt động: vượt drag threshold chỉ chặn click-release, không tự hủy hold đã active. Drag Space.World phải kiểm chứng riêng thao tác sang phải và lên bằng gesture thật; flow hold-then-drag phải dùng `gestureHoldBeforeMoveMs` và xác nhận hold vẫn active lúc rotation bắt đầu.',
   },
   {
     id: 'ordered-animation-flow-parity',

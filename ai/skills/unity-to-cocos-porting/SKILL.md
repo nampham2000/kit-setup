@@ -56,6 +56,10 @@ Khi Unity thay material qua vòng lặp `sharedMaterials`, Cocos phải thay/rec
 renderer; slot 0 không đại diện cho toàn mesh. Khi object được attach vào slot, giữ phép biến đổi tương
 đối của nguồn (`slot.worldRotation * localAttachRotation`) thay vì chỉ copy vị trí rồi để rotation identity.
 Đối với screen drag, phát gesture thật ở cả ngang và dọc; không suy dấu rotation chỉ từ đổi handedness.
+Nếu Unity có các component input độc lập cùng đọc một pointer (ví dụ hold/peek và camera rotate), đừng hạ
+chúng thành một enum state loại trừ nhau. Drag threshold chỉ chặn click-release; hold đã active phải được giữ
+đến pointer-up trong khi rotation vẫn nhận touch move. Dùng `gestureHoldBeforeMoveMs` trong verify.visual để
+phát đúng chuỗi giữ đứng yên rồi kéo, và assert hold còn active ngay tại frame drag bắt đầu.
 
 Khi Unity chọn whole material từ ScriptableObject theo state/color (ví dụ `ActiveMaterial` và
 `DisableMaterial`), không được thay bằng một texture nhúng trong FBX rồi nhân tint. Chạy `shader.chain`

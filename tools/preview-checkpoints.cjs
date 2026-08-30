@@ -47,6 +47,7 @@ Manifest:
         "name": "baseline",
         "evalBeforeFile": ".unity/checkpoints/baseline-before.js",
         "gesture": "0.3,0.6,0.7,0.6,500,20",
+        "gestureHoldBeforeMoveMs": 300,
         "gestureKeepPressed": true,
         "postActionSeconds": 3,
         "evalFile": ".unity/checkpoints/baseline-after.js",
@@ -219,6 +220,14 @@ function validateConfig(config, overrides = {}) {
     if (entry.gestureKeepPressed === true && !entry.gesture) {
       throw new Error(`cases[${index}].gestureKeepPressed cần gesture`);
     }
+    if (entry.gestureHoldBeforeMoveMs !== undefined
+      && (!Number.isFinite(Number(entry.gestureHoldBeforeMoveMs))
+        || Number(entry.gestureHoldBeforeMoveMs) < 0 || Number(entry.gestureHoldBeforeMoveMs) > 5000)) {
+      throw new Error(`cases[${index}].gestureHoldBeforeMoveMs phải nằm trong 0-5000 ms`);
+    }
+    if (Number(entry.gestureHoldBeforeMoveMs) > 0 && !entry.gesture) {
+      throw new Error(`cases[${index}].gestureHoldBeforeMoveMs cần gesture`);
+    }
     if (entry.previewDevice !== undefined
       && (typeof entry.previewDevice !== 'string' || !entry.previewDevice.trim())) {
       throw new Error(`cases[${index}].previewDevice phải là string không rỗng`);
@@ -237,6 +246,8 @@ function validateConfig(config, overrides = {}) {
       evalBeforeExpression: readExpression(entry, 'evalBefore', 'evalBeforeFile'),
       evalExpression: readExpression(entry, 'eval', 'evalFile'),
       parsedGesture: entry.gesture ? parseGesture(entry.gesture) : null,
+      gestureHoldBeforeMoveMs: entry.gestureHoldBeforeMoveMs === undefined
+        ? 0 : Number(entry.gestureHoldBeforeMoveMs),
       requiredTrace: entry.requiredTrace ? entry.requiredTrace.map(phase => phase.trim()) : [],
       postActionSeconds: entry.postActionSeconds === undefined
         ? undefined : Number(entry.postActionSeconds),
@@ -356,6 +367,7 @@ async function main() {
       evalBeforeExpression: caseEntry.evalBeforeExpression,
       evalExpression: caseEntry.evalExpression,
       gesture: caseEntry.parsedGesture,
+      gestureHoldBeforeMoveMs: caseEntry.gestureHoldBeforeMoveMs,
       gestureKeepPressed: caseEntry.gestureKeepPressed === true,
     });
     const referenceImage = copyReference(caseEntry, caseDir);
