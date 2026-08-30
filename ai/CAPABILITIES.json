@@ -40,6 +40,10 @@
       "rule": "Khi port Unity material color vào Cocos effect property có `linear: true`, phải gamma-encode RGB linear đã serialize sang sRGB `cc.Color` bytes trước khi Cocos linearize lúc upload; alpha vẫn map tuyến tính. Không nhân thẳng RGB với 255. `shader.material` phải nhận `--effect`, và visual checkpoint phải kiểm cả material/texture identity lẫn runtime color/emissive value."
     },
     {
+      "id": "runtime-material-swap-parity",
+      "rule": "Khi Unity thay `Renderer.material` bằng một material khác lúc hold/peek/highlight/damage, Cocos phải tạo hoặc load đúng material thay thế như một asset/state độc lập; không clone albedo/emissive map, keyword hay pipeline state từ material opaque đang hiển thị nếu source replacement không có chúng. Checkpoint gesture thật phải kiểm material/texture identity, technique, blend enable, depthWrite và việc phục hồi đúng material gốc khi kết thúc interaction; chỉ kiểm alpha/color là chưa đủ."
+    },
+    {
       "id": "visual-checkpoints",
       "rule": "Khi port thay đổi camera, transform, material/shader, UI layout hoặc input fidelity, phải chạy `npm run ai:verify:visual -- --config <matrix.json>` trên Cocos preview với ảnh nguồn/các checkpoint phù hợp và mở ảnh kết quả. Với hành vi có oracle, dùng `requireEvalOk: true`; runtime-clean không được diễn giải thành pixel parity."
     },
