@@ -196,6 +196,7 @@ console.log('\n📦 ROUND 4: Testing Camera Conversion (Ortho, FOV, Visibility).
 
 const {
   unityColorToCocos,
+  unityLinearColorToCocos,
 } = require('./unity-cocos-port/core-utils');
 
 // Mock CocosPrefabBuilder addCamera
@@ -266,6 +267,10 @@ assert(cocosWhite.r === 255 && cocosWhite.g === 255 && cocosWhite.b === 255 && c
 const unityHalfRed = { r: 0.5, g: 0.25, b: 0.0, a: 0.8 };
 const cocosHalfRed = unityColorToCocos(unityHalfRed);
 assert(cocosHalfRed.r === 128 && cocosHalfRed.g === 64 && cocosHalfRed.b === 0 && cocosHalfRed.a === 204, 'Partial color (0.5, 0.25, 0.0, 0.8) maps to (128, 64, 0, 204)');
+
+const unityLinearHalf = { r: 0.5, g: 0.5, b: 0.5, a: 0.5019608 };
+const cocosLinearHalf = unityLinearColorToCocos(unityLinearHalf);
+assert(cocosLinearHalf.r === 188 && cocosLinearHalf.g === 188 && cocosLinearHalf.b === 188 && cocosLinearHalf.a === 128, 'Linear material color 0.5 is gamma-encoded to sRGB 188 before Cocos linearizes it');
 
 // -------------------------------------------------------------
 // ROUND 6: High Resolution PBR Texture Packing Benchmark

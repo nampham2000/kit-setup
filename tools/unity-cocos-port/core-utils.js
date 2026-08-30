@@ -185,6 +185,31 @@ function unityColorToCocos(value, alphaOverride = null) {
   );
 }
 
+function linearChannelToSrgbByte(value) {
+  const linear = Math.max(0, Math.min(1, Number(value ?? 0)));
+  const srgb = linear <= 0.0031308
+    ? linear * 12.92
+    : 1.055 * Math.pow(linear, 1 / 2.4) - 0.055;
+  return Math.max(0, Math.min(255, Math.round(srgb * 255)));
+}
+
+/**
+ * Converts a Unity material color for a Cocos effect property declared with
+ * `linear: true`. Cocos accepts cc.Color in sRGB form and linearizes RGB while
+ * uploading the property, whereas Unity's serialized material values are the
+ * linear values that the shader must ultimately receive. Alpha stays linear.
+ */
+function unityLinearColorToCocos(value, alphaOverride = null) {
+  const source = value || {};
+  const alpha = alphaOverride == null ? source.a : alphaOverride;
+  return color(
+    linearChannelToSrgbByte(source.r ?? 1),
+    linearChannelToSrgbByte(source.g ?? 1),
+    linearChannelToSrgbByte(source.b ?? 1),
+    Math.max(0, Math.min(255, Math.round(Number(alpha ?? 1) * 255)))
+  );
+}
+
 function findFiles(root, predicate) {
   const results = [];
   const walk = (dir) => {
@@ -255,6 +280,7 @@ module.exports = {
   convertRotation,
   convertEuler,
   unityColorToCocos,
+  unityLinearColorToCocos,
   findFiles,
   unityNumber,
   finiteNumber,

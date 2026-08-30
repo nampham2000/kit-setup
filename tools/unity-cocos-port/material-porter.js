@@ -20,6 +20,7 @@ const {
   stableUuid,
   toPosix,
   unityColorToCocos,
+  unityLinearColorToCocos,
   cocosUuid,
 } = require('./core-utils');
 
@@ -582,8 +583,9 @@ module.exports = function createMaterialPorter(deps) {
     if (occlusionTextureUuid) defines.USE_OCCLUSION_MAP = true;
     if (emissiveTextureUuid) defines.USE_EMISSIVE_MAP = true;
 
+    const linearMaterialColor = customShaderEffectUuid ? unityColorToCocos : unityLinearColorToCocos;
     const props = {
-      mainColor: unityColorToCocos(mainColor),
+      mainColor: linearMaterialColor(mainColor),
       roughness,
       metallic,
     };
@@ -595,33 +597,33 @@ module.exports = function createMaterialPorter(deps) {
       props.occlusion = clamp01(firstDefinedMaterialValue(floats, ['_OcclusionStrength'], 1), 1);
     }
     if (emissionEnabled || emissiveTextureUuid || hasVisibleUnityColor(emissionColor)) {
-      props.emissive = unityColorToCocos(emissionColor);
+      props.emissive = linearMaterialColor(emissionColor);
     }
     if (emissiveTextureUuid) props.emissiveMap = { __uuid__: emissiveTextureUuid };
     if (alphaClip) props.alphaThreshold = cutoff;
 
-    const urpUnlitProps = { mainColor: unityColorToCocos(mainColor) };
+    const urpUnlitProps = { mainColor: unityLinearColorToCocos(mainColor) };
     if (mainTextureUuid) urpUnlitProps.mainTexture = { __uuid__: mainTextureUuid };
     if (mainTilingOffset) urpUnlitProps.tilingOffset = mainTilingOffset;
     if (alphaClip) urpUnlitProps.alphaThreshold = cutoff;
 
     const tcp2Props = {
-      mainColor: unityColorToCocos(mainColor),
-      highlightColor: unityColorToCocos(firstDefinedMaterialValue(colors, ['_HColor'], { r: 1, g: 1, b: 1, a: 1 })),
-      shadowColor: unityColorToCocos(firstDefinedMaterialValue(colors, ['_SColor'], { r: 0.2, g: 0.2, b: 0.2, a: 1 })),
+      mainColor: unityLinearColorToCocos(mainColor),
+      highlightColor: unityLinearColorToCocos(firstDefinedMaterialValue(colors, ['_HColor'], { r: 1, g: 1, b: 1, a: 1 })),
+      shadowColor: unityLinearColorToCocos(firstDefinedMaterialValue(colors, ['_SColor'], { r: 0.2, g: 0.2, b: 0.2, a: 1 })),
       rampThreshold: clamp01(firstDefinedMaterialValue(floats, ['_RampThreshold'], 0.75), 0.75),
       rampSmoothing: clamp01(firstDefinedMaterialValue(floats, ['_RampSmoothing'], 0.1), 0.1),
       indirectStrength: clamp01(firstDefinedMaterialValue(floats, ['_IndirectIntensity'], 1), 1),
       shadowLightAtten: clamp01(firstDefinedMaterialValue(floats, ['_ShadowColorLightAtten'], 1), 1),
-      rimColor: unityColorToCocos(firstDefinedMaterialValue(colors, ['_RimColor'], { r: 0.8, g: 0.8, b: 0.8, a: 1 })),
+      rimColor: unityLinearColorToCocos(firstDefinedMaterialValue(colors, ['_RimColor'], { r: 0.8, g: 0.8, b: 0.8, a: 1 })),
       rimMin: Number(firstDefinedMaterialValue(floats, ['_RimMin'], 0.5)),
       rimMax: Number(firstDefinedMaterialValue(floats, ['_RimMax'], 1)),
       rimLightMask: Number(firstDefinedMaterialValue(floats, ['_UseRimLightMask'], 1)),
       rimStrength: Number(firstDefinedMaterialValue(floats, ['_UseRim'], 0)) > 0 ? 1 : 0,
-      specularColor: unityColorToCocos(firstDefinedMaterialValue(colors, ['_SpecularColor'], { r: 0.75, g: 0.75, b: 0.75, a: 1 })),
+      specularColor: unityLinearColorToCocos(firstDefinedMaterialValue(colors, ['_SpecularColor'], { r: 0.75, g: 0.75, b: 0.75, a: 1 })),
       specularRoughness: clamp01(firstDefinedMaterialValue(floats, ['_SpecularRoughness'], 0.5), 0.5),
       specularStrength: Number(firstDefinedMaterialValue(floats, ['_UseSpecular'], 0)) > 0 ? 1 : 0,
-      emissive: unityColorToCocos(emissionColor),
+      emissive: unityLinearColorToCocos(emissionColor),
     };
     if (mainTextureUuid) tcp2Props.mainTexture = { __uuid__: mainTextureUuid };
     if (mainTilingOffset) tcp2Props.tilingOffset = mainTilingOffset;
@@ -799,22 +801,22 @@ module.exports = function createMaterialPorter(deps) {
       : resolveUnityParticleMaterialTechnique(materialDoc, unityDb);
 
     const props = tcp2ParticleMaterial ? {
-      mainColor: unityColorToCocos(mainColor),
-      highlightColor: unityColorToCocos(firstDefinedMaterialValue(colors, ['_HColor'], { r: 1, g: 1, b: 1, a: 1 })),
-      shadowColor: unityColorToCocos(firstDefinedMaterialValue(colors, ['_SColor'], { r: 0.2, g: 0.2, b: 0.2, a: 1 })),
+      mainColor: unityLinearColorToCocos(mainColor),
+      highlightColor: unityLinearColorToCocos(firstDefinedMaterialValue(colors, ['_HColor'], { r: 1, g: 1, b: 1, a: 1 })),
+      shadowColor: unityLinearColorToCocos(firstDefinedMaterialValue(colors, ['_SColor'], { r: 0.2, g: 0.2, b: 0.2, a: 1 })),
       rampThreshold: clamp01(firstDefinedMaterialValue(floats, ['_RampThreshold'], 0.75), 0.75),
       rampSmoothing: clamp01(firstDefinedMaterialValue(floats, ['_RampSmoothing'], 0.1), 0.1),
       indirectStrength: clamp01(firstDefinedMaterialValue(floats, ['_IndirectIntensity'], 1), 1),
       shadowLightAtten: clamp01(firstDefinedMaterialValue(floats, ['_ShadowColorLightAtten'], 1), 1),
-      rimColor: unityColorToCocos(firstDefinedMaterialValue(colors, ['_RimColor'], { r: 0.8, g: 0.8, b: 0.8, a: 1 })),
+      rimColor: unityLinearColorToCocos(firstDefinedMaterialValue(colors, ['_RimColor'], { r: 0.8, g: 0.8, b: 0.8, a: 1 })),
       rimMin: Number(firstDefinedMaterialValue(floats, ['_RimMin'], 0.5)),
       rimMax: Number(firstDefinedMaterialValue(floats, ['_RimMax'], 1)),
       rimLightMask: Number(firstDefinedMaterialValue(floats, ['_UseRimLightMask'], 1)),
       rimStrength: Number(firstDefinedMaterialValue(floats, ['_UseRim'], 0)) > 0 ? 1 : 0,
-      specularColor: unityColorToCocos(firstDefinedMaterialValue(colors, ['_SpecularColor'], { r: 0.75, g: 0.75, b: 0.75, a: 1 })),
+      specularColor: unityLinearColorToCocos(firstDefinedMaterialValue(colors, ['_SpecularColor'], { r: 0.75, g: 0.75, b: 0.75, a: 1 })),
       specularRoughness: clamp01(firstDefinedMaterialValue(floats, ['_SpecularRoughness'], 0.5), 0.5),
       specularStrength: Number(firstDefinedMaterialValue(floats, ['_UseSpecular'], 0)) > 0 ? 1 : 0,
-      emissive: unityColorToCocos(firstDefinedMaterialValue(colors, ['_EmissionColor', '_EmissiveColor'], { r: 0, g: 0, b: 0, a: 1 })),
+      emissive: unityLinearColorToCocos(firstDefinedMaterialValue(colors, ['_EmissionColor', '_EmissiveColor'], { r: 0, g: 0, b: 0, a: 1 })),
     } : {};
     if (!isDefaultParticleTilingOffset(scale, offset)) {
       props.mainTiling_Offset = [
@@ -925,7 +927,7 @@ module.exports = function createMaterialPorter(deps) {
     const mainColor = firstDefinedMaterialValue(colors, ['_BaseColor', '_Color', '_TintColor'], { r: 1, g: 1, b: 1, a: 1 });
     const mainTextureUuid = resolveUnityMaterialTextureUuid(texEnvs, UNITY_MATERIAL_BASE_TEXTURE_KEYS, unityDb, options, reporter);
     const props = {
-      mainColor: unityColorToCocos(mainColor),
+      mainColor: unityLinearColorToCocos(mainColor),
       colorScale: [1, 1, 1],
       alphaThreshold: 0.5,
     };
