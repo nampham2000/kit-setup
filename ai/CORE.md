@@ -27,9 +27,10 @@
 21. **input-concurrency-boundary** — Không dùng một global input lock bao trùm toàn bộ animation async nếu Unity source chỉ có pick cooldown ngắn và per-object busy/reservation. Phải trace riêng bốn boundary: source cooldown, object phase/busy, destination reserve/occupancy và global level transition. Reserve destination atomically trước khi animation bắt đầu. Nghiệm thu risk `input-concurrency` bằng `gestures` có ít nhất hai touch lifecycle thật, pre-action proof và metrics chứng minh action thứ hai bắt đầu trước khi action thứ nhất complete, có ít nhất hai action concurrent, reservation destination unique và collision count bằng 0.
 22. **playable-core-first** — Mặc định chỉ port core gameplay closure từ `coreGameplay`: input, luật/state, movement/physics, spawn/timing, win-lose-restart và feedback cần để đạt fidelity. Main menu, shop/IAP, meta screen, persistence dài hạn và online SDK phải defer/replace; không đưa source implementation đó vào playable. Chỉ dùng full-project khi user yêu cầu rõ.
 23. **static-first-resume** — Port mới bắt đầu bằng `ai:port:core:scaffold` (static provider mặc định); lượt tiếp tục bắt đầu bằng `ai:port:core:resume`. Agent phải đọc resume packet + wiring/report digest trước raw source, chỉ query bounded evidence cần thiết, và chạy resume `--write` trước interruption/handoff để lưu phase, blockers và nextActions.
-24. **meta-files** — Không sửa tay file `.meta`. Luôn đi qua tool hoặc Cocos editor để giữ UUID nhất quán.
-25. **unity-preflight** — Trước khi agent đọc raw Unity source hoặc chạy bất kỳ port tool có ghi output, BẮT BUỘC chạy `npm run ai:port:preflight -- --project <UnityProjectRoot>` (hoặc MCP `scanUnityProject`) và đọc `decision`, `coreGameplay`, `features`, `obligationIndex`, `coreObligationIndex`, `obligations`. Chỉ query evidence bounded khi brief yêu cầu. Hard blocker chặn implement; source high trong core/adapter phải được giải quyết, source high deferred phải có explicit out-of-scope disposition. Mutation receipt chỉ áp dụng cho Assets/package root đã khai báo; closure staging ngoài project phải có exact provenance và explicit --unity-project.
-26. **correct-stale-memory** — Khi evidence mới bác bỏ một Work Memory, phải dùng `memory.correct` cập nhật đúng memory id; không thêm note mới mâu thuẫn và để hướng dẫn sai tiếp tục được recall trên project khác.
+24. **portable-cross-pc-bootstrap** — Trạng thái dùng chung phải sống trong Git: exact `playable-shared-kit` submodule commit, `capabilities.def.cjs`, skill source, global pinned Work Memory và registry/matrix/oracle/reference/watchFiles. Sau clone trên PC khác phải chạy `git submodule update --init --recursive`, `npm ci`, `ai:portable:doctor`, `ai:sync`, `ai:contract:verify` và `memory:doctor` trước port/resume. Không dùng absolute path, temp screenshot, user-local cache, mutation receipt hoặc resume packet từ máy cũ làm handoff truth; các state local phải regenerate và bind lại source hiện tại.
+25. **meta-files** — Không sửa tay file `.meta`. Luôn đi qua tool hoặc Cocos editor để giữ UUID nhất quán.
+26. **unity-preflight** — Trước khi agent đọc raw Unity source hoặc chạy bất kỳ port tool có ghi output, BẮT BUỘC chạy `npm run ai:port:preflight -- --project <UnityProjectRoot>` (hoặc MCP `scanUnityProject`) và đọc `decision`, `coreGameplay`, `features`, `obligationIndex`, `coreObligationIndex`, `obligations`. Chỉ query evidence bounded khi brief yêu cầu. Hard blocker chặn implement; source high trong core/adapter phải được giải quyết, source high deferred phải có explicit out-of-scope disposition. Mutation receipt chỉ áp dụng cho Assets/package root đã khai báo; closure staging ngoài project phải có exact provenance và explicit --unity-project.
+27. **correct-stale-memory** — Khi evidence mới bác bỏ một Work Memory, phải dùng `memory.correct` cập nhật đúng memory id; không thêm note mới mâu thuẫn và để hướng dẫn sai tiếp tục được recall trên project khác.
 
 ## Hợp đồng lệnh
 
@@ -44,6 +45,7 @@ Chạy `npm run ai:contract:verify` để chứng minh manifest khớp với CLI
 | Bước đầu tiên của mọi task. Thay cho việc quét cây thư mục. | `npm run ai:map` | — |
 | Cần biết cấu trúc scene trước khi sửa node/component. | `npm run ai:scene -- <sceneName>` | Component script hiện UUID thô, chưa giải ra tên class. |
 | Trước khi giải một vấn đề nghe quen; sau khi giải xong thì ghi lại. | `npm run memory:query -- <keyword>` | Semantic recall cần `sqlite-vec` + `@xenova/transformers` (nặng ~283MB); thiếu thì tự động lùi về keyword. |
+| Sau clone/npm ci hoặc trước khi một agent trên PC/project khác bắt đầu port hay resume. | `npm run ai:portable:doctor` | Read-only: không init submodule, không npm install, không sync/generate, không repair database và không tạo receipt. Source/contract/skill/memory/regression input phải được Git-track; mutation receipt, cache và resume packet là state local phải regenerate/revalidate trên từng PC. |
 | Khi cần biết project có thể attach Editor đang mở hay chạy batch bằng đúng Unity version trước khi setup live scanner. | `npm run unity:intel:doctor -- --project <UnityProjectRoot>` | — |
 
 ### Port Unity → Cocos
@@ -124,6 +126,9 @@ Những tool sau **không làm được việc mà tên gọi gợi ý**. Đọc
   - Component script hiện UUID thô, chưa giải ra tên class.
 - **`memory.query`** (npm run memory:query -- <keyword>)
   - Semantic recall cần `sqlite-vec` + `@xenova/transformers` (nặng ~283MB); thiếu thì tự động lùi về keyword.
+- **`portable.workflow.doctor`** (npm run ai:portable:doctor)
+  - Read-only: không init submodule, không npm install, không sync/generate, không repair database và không tạo receipt.
+  - Source/contract/skill/memory/regression input phải được Git-track; mutation receipt, cache và resume packet là state local phải regenerate/revalidate trên từng PC.
 - **`unity.intel.setup`** (npm run unity:intel:setup -- --project <UnityProjectRoot>)
   - Có sửa `Packages/manifest.json` và `UserSettings/AI-Game-Developer-Config.json`; manifest có exact-byte backup + CAS transaction.
   - Không khởi chạy Unity instance thứ hai khi UnityLockfile đang bị giữ và không kill Editor của người dùng.

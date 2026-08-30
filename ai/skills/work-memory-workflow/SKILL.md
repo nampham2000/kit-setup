@@ -62,3 +62,15 @@ Use `global` only for a lesson reusable by every project. The corrected content 
   npm run memory:repair -- --scope repo --dry-run --json
   npm run memory:repair -- --scope repo --reindex-semantic true --json
   ```
+
+## 5. Portability Across PCs and Projects
+
+- Bài học áp dụng cho mọi game phải lưu `scope: "global"`, `pinned: true`, với nội dung đủ độc lập để agent mới
+  hiểu mà không cần chat cũ. Dùng repo scope cho level, asset UUID hoặc workaround chỉ thuộc một game.
+- Global database `playable-shared-kit/tools/work-memory/data/shared-memory.db` là portable source và phải được commit
+  trong shared-kit. WAL/SHM, semantic cache và repo DB là runtime state; không dùng chúng làm nguồn handoff.
+- Không lưu absolute `sourcePath` theo ổ đĩa của một PC. Ưu tiên `sourcePath: null` cho rule chung, hoặc ghi đường dẫn
+  project-relative trong content/evidence. Khi source path bắt buộc, nó phải tồn tại và được Git-track.
+- Khi checkout máy mới: `git submodule update --init --recursive`, `npm ci`, rồi chạy
+  `npm run ai:portable:doctor`, `npm run ai:sync`, `npm run memory:doctor -- --json` và query topic trước khi sửa code.
+- Nếu evidence mới bác bỏ một memory portable, query lấy exact id rồi `memory:correct`; không thêm một hàng mâu thuẫn.

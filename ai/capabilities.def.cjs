@@ -76,6 +76,25 @@ const CAPABILITIES = [
     file: `${TOOLS}/work-memory.cjs`,
   },
   {
+    id: 'portable.workflow.doctor',
+    group: 'onboarding',
+    title: 'Kiểm tra checkout portable trước khi port/resume trên máy khác',
+    npm: 'npm run ai:portable:doctor',
+    cmd: `node ${TOOLS}/portable-workflow-doctor.cjs --json`,
+    args: [],
+    optional: ['--project <dir>'],
+    when: 'Sau clone/npm ci hoặc trước khi một agent trên PC/project khác bắt đầu port hay resume.',
+    outputs: ['stdout JSON bounded: exact submodule, generated contract, provider skills, Work Memory integrity, tracked regression inputs và local receipt disposition'],
+    limits: [
+      'Read-only: không init submodule, không npm install, không sync/generate, không repair database và không tạo receipt.',
+      'Source/contract/skill/memory/regression input phải được Git-track; mutation receipt, cache và resume packet là state local phải regenerate/revalidate trên từng PC.',
+    ],
+    status: 'partial',
+    probe: 'help',
+    probeCmd: `node ${TOOLS}/portable-workflow-doctor.cjs`,
+    expect: ['--project', '--json', 'Read-only'],
+  },
+  {
     id: 'unity.intel.doctor',
     group: 'onboarding',
     title: 'Kiểm tra Unity Editor, project lock và Unity-MCP endpoint',
@@ -1152,6 +1171,10 @@ const CORE_RULES = [
       maximumProjectedItems: { wiringTodo: 8, reportCodes: 8, nextActions: 8 },
       liveEscalationPolicy: 'static-first-bounded-uncertainty-only',
     },
+  },
+  {
+    id: 'portable-cross-pc-bootstrap',
+    rule: 'Trạng thái dùng chung phải sống trong Git: exact `playable-shared-kit` submodule commit, `capabilities.def.cjs`, skill source, global pinned Work Memory và registry/matrix/oracle/reference/watchFiles. Sau clone trên PC khác phải chạy `git submodule update --init --recursive`, `npm ci`, `ai:portable:doctor`, `ai:sync`, `ai:contract:verify` và `memory:doctor` trước port/resume. Không dùng absolute path, temp screenshot, user-local cache, mutation receipt hoặc resume packet từ máy cũ làm handoff truth; các state local phải regenerate và bind lại source hiện tại.',
   },
   {
     id: 'meta-files',

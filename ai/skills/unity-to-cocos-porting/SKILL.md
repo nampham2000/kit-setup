@@ -10,6 +10,30 @@ This skill provides step-by-step guidance and architectural rules for converting
 
 ## 1. Automated Tooling First
 
+### Portable checkout / cross-PC bootstrap
+
+Shared kit chỉ portable khi source of truth đã được commit và checkout đúng exact submodule pointer. Trên một PC
+hoặc project clone mới, chạy chuỗi này trước khi đọc Unity source hay resume implementation:
+
+```bash
+git submodule update --init --recursive
+npm ci
+npm run ai:portable:doctor
+npm run ai:sync
+npm run ai:contract:verify
+npm run memory:doctor -- --json
+```
+
+`ai:portable:doctor` là read-only và fail-closed khi submodule lệch commit, skill/contract generated bị stale,
+Work Memory corrupt, dependency chưa cài, regression registry chưa track hoặc registry chứa absolute path theo máy.
+Sau `ai:sync`, chạy doctor lại nếu lượt đầu báo provider skill/contract stale.
+
+Phải Git-track `capabilities.def.cjs`, hai skill source, global pinned memory DB và toàn bộ regression input
+(`tools/port-regressions.json`, matrix, eval/oracle, Unity reference, watchFiles). `.ai/port` packet, mutation receipt,
+semantic cache, preview output và temp screenshot là state local; không copy chúng từ PC cũ để authorize mutation.
+Trên máy mới, chạy `ai:port:core:resume` hoặc scaffold để revalidate source và sinh lại receipt. Không ghi đường dẫn
+ổ đĩa tuyệt đối vào registry/oracle/handoff; dùng project-relative path để một checkout khác chạy lại được.
+
 Trước khi viết tay bất kỳ prefab / shader / script nào, dùng tool sẵn có.
 Với port mới, golden entry là:
 
