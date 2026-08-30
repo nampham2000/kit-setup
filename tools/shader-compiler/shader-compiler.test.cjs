@@ -19,6 +19,7 @@
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
 const { parseShaderLab } = require('./shaderlab-parser.cjs');
@@ -28,7 +29,7 @@ const { emitCocosEffect, emitSurfaceShaderEffect } = require('./cocos-effect-gen
 const { validateCceffectStructure } = require('./shader-validator.cjs');
 const { transpileShaderFile } = require('./unity-shader-compiler.cjs');
 const { UnityIncludeResolver } = require('./unity-include-resolver.cjs');
-const { convertUnityMatToCocosMtl } = require('./unity-material-converter.cjs');
+const { convertUnityMatToCocosMtl, convertMatFile } = require('./unity-material-converter.cjs');
 
 describe('UCShaderTranspiler Test Suite', () => {
 
@@ -671,6 +672,47 @@ Material:
       assert.equal(props.speed, 2.5);
       assert.deepEqual(props.baseColor, { __type__: 'cc.Color', r: 255, g: 128, b: 0, a: 255 });
       assert.equal(props.mainTexture.__uuid__, '8a7b9c1d2e3f');
+    });
+
+    test('gamma-encodes only colors declared linear by the target Cocos effect', (t) => {
+      const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'unity-mat-linear-color-'));
+      t.after(() => fs.rmSync(tempRoot, { recursive: true, force: true }));
+      const sourcePath = path.join(tempRoot, 'Tray.mat');
+      const effectPath = path.join(tempRoot, 'Tray.effect');
+      const outputPath = path.join(tempRoot, 'Tray.mtl');
+
+      fs.writeFileSync(sourcePath, `
+%YAML 1.1
+--- !u!21 &2100000
+Material:
+  m_SavedProperties:
+    m_Colors:
+      - _Color: {r: 0.5, g: 0.5, b: 0.5, a: 0}
+      - _EmissionColor: {r: 0.50980395, g: 0.50980395, b: 0.50980395, a: 1}
+`, 'utf8');
+      fs.writeFileSync(effectPath, `
+CCEffect %{
+  techniques:
+  - passes:
+    - properties:
+        baseColor: { value: [1, 1, 1, 1], editor: { type: color } }
+        emissionColor: {
+          value: [0, 0, 0, 1], linear: true, editor: { type: color }
+        }
+}%
+CCProgram test %{
+  precision highp float;
+}%
+`, 'utf8');
+
+      convertMatFile(sourcePath, outputPath, {
+        effectPath,
+        effectUuid: 'linear-effect-uuid',
+      });
+
+      const props = JSON.parse(fs.readFileSync(outputPath, 'utf8'))._props[0];
+      assert.deepEqual(props.baseColor, { __type__: 'cc.Color', r: 128, g: 128, b: 128, a: 0 });
+      assert.deepEqual(props.emissionColor, { __type__: 'cc.Color', r: 189, g: 189, b: 189, a: 255 });
     });
 
     test('generates structured material asset manifest with texture diagnostics', () => {

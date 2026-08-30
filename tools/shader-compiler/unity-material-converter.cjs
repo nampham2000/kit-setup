@@ -7,7 +7,8 @@
  * Capabilities:
  * - Parses Unity YAML material files (m_Shader, m_SavedProperties: m_TexEnvs, m_Floats, m_Colors, m_Ints, m_ShaderKeywords)
  * - Remaps property names and ST (Scale/Offset) vectors to Cocos conventions
- * - Converts Color representations (0..1 floats -> 0..255 uint8)
+ * - Converts Color representations (0..1 floats -> 0..255 uint8), including
+ *   Unity linear material colors for Cocos effect properties marked linear
  * - Emits valid Cocos Creator 3.8.8 cc.Material JSON structure
  * - Generates structured Material Asset Manifest JSON
  * - Provides texture asset diagnostics (sRGB vs linear, normal green inversion, packed maps)
@@ -185,6 +186,62 @@ function generateMaterialAssetManifest(yamlContent, options = {}) {
   };
 }
 
+function normalizedChannelToByte(value, fallback = 0) {
+  const number = Number(value);
+  const normalized = Number.isFinite(number) ? number : fallback;
+  return Math.max(0, Math.min(255, Math.round(Math.max(0, Math.min(1, normalized)) * 255)));
+}
+
+function linearChannelToSrgbByte(value) {
+  const number = Number(value);
+  const linear = Math.max(0, Math.min(1, Number.isFinite(number) ? number : 0));
+  const srgb = linear <= 0.0031308
+    ? linear * 12.92
+    : 1.055 * Math.pow(linear, 1 / 2.4) - 0.055;
+  return normalizedChannelToByte(srgb);
+}
+
+/**
+ * Reads inline property declarations from every CCEffect pass. Generated
+ * effects keep color metadata on one line, while the continuation handling
+ * also supports hand-formatted declarations with nested editor metadata.
+ */
+function extractCocosEffectPropertyMetadata(effectText) {
+  const ccEffect = /CCEffect\s*%\{([\s\S]*?)\}%/.exec(String(effectText || ''));
+  const metadata = new Map();
+  if (!ccEffect) return metadata;
+
+  const lines = ccEffect[1].split(/\r?\n/);
+  for (let index = 0; index < lines.length; index += 1) {
+    const propertiesMatch = /^(\s*)(?:-\s*)?properties\s*:\s*(?:&[A-Za-z_]\w*)?\s*$/.exec(lines[index]);
+    if (!propertiesMatch) continue;
+    const blockIndent = propertiesMatch[1].length;
+
+    for (index += 1; index < lines.length; index += 1) {
+      const line = lines[index];
+      if (!line.trim() || /^\s*#/.test(line)) continue;
+      const indent = /^\s*/.exec(line)[0].length;
+      if (indent <= blockIndent) {
+        index -= 1;
+        break;
+      }
+
+      const entry = /^\s+([A-Za-z_]\w*)\s*:\s*(\{.*)$/.exec(line);
+      if (!entry) continue;
+      let declaration = entry[2];
+      let braceDepth = (declaration.match(/\{/g) || []).length - (declaration.match(/\}/g) || []).length;
+      while (braceDepth > 0 && index + 1 < lines.length) {
+        declaration += `\n${lines[++index]}`;
+        braceDepth += (lines[index].match(/\{/g) || []).length - (lines[index].match(/\}/g) || []).length;
+      }
+      metadata.set(entry[1], {
+        linear: /(?:^|[,\s])linear\s*:\s*true(?:[,\s}]|$)/i.test(declaration),
+      });
+    }
+  }
+  return metadata;
+}
+
 /**
  * Converts Unity .mat to Cocos .mtl JSON string
  */
@@ -192,6 +249,9 @@ function convertUnityMatToCocosMtl(yamlContent, options = {}) {
   const { properties, keywords } = parseUnityMatYaml(yamlContent);
   const materialName = options.materialName || 'ConvertedMaterial';
   const effectUuid = options.effectUuid || options.effectAsset || '';
+  const linearColorProperties = options.linearColorProperties instanceof Set
+    ? options.linearColorProperties
+    : new Set(options.linearColorProperties || []);
 
   const defines = {};
   for (const kw of keywords) {
@@ -203,12 +263,15 @@ function convertUnityMatToCocosMtl(yamlContent, options = {}) {
   // Convert Colors
   for (const [uName, val] of Object.entries(properties.colors)) {
     const cName = toCocosPropertyName(uName);
+    const convertRgb = linearColorProperties.has(cName)
+      ? linearChannelToSrgbByte
+      : normalizedChannelToByte;
     propsObj[cName] = {
       __type__: 'cc.Color',
-      r: Math.round((val[0] || 0) * 255),
-      g: Math.round((val[1] || 0) * 255),
-      b: Math.round((val[2] || 0) * 255),
-      a: Math.round((val[3] || 1) * 255),
+      r: convertRgb(val[0]),
+      g: convertRgb(val[1]),
+      b: convertRgb(val[2]),
+      a: normalizedChannelToByte(val[3], 1),
     };
   }
 
@@ -292,7 +355,8 @@ function convertMaterialDirectory(unityMatDir, cocosMtlDir, options = {}) {
  *
  * @param {string} srcPath  Unity .mat path
  * @param {string} outPath  Cocos .mtl path to write
- * @param {{effectUuid?: string, effectAsset?: string, techIdx?: number}} [options]
+ * @param {{effectUuid?: string, effectAsset?: string, effectPath?: string,
+ *          techIdx?: number, dryRun?: boolean}} [options]
  * @returns {{outPath: string, materialName: string, propertyCount: number,
  *            effectUuid: string, warnings: string[]}}
  */
@@ -307,9 +371,23 @@ function convertMatFile(srcPath, outPath, options = {}) {
   const yamlContent = fs.readFileSync(srcPath, 'utf8');
   const materialName = options.materialName || path.basename(srcPath, path.extname(srcPath));
   const effectUuid = options.effectUuid || options.effectAsset || '';
+  const effectText = options.effectPath && fs.existsSync(options.effectPath)
+    ? fs.readFileSync(options.effectPath, 'utf8')
+    : '';
+  const effectProperties = extractCocosEffectPropertyMetadata(effectText);
+  const linearColorProperties = new Set(
+    [...effectProperties.entries()]
+      .filter(([, metadata]) => metadata.linear)
+      .map(([name]) => name),
+  );
 
   // convertUnityMatToCocosMtl returns serialized JSON, not an object.
-  const mtlJson = convertUnityMatToCocosMtl(yamlContent, { ...options, materialName, effectUuid });
+  const mtlJson = convertUnityMatToCocosMtl(yamlContent, {
+    ...options,
+    materialName,
+    effectUuid,
+    linearColorProperties,
+  });
   const mtl = JSON.parse(mtlJson);
 
   const warnings = [];
@@ -319,13 +397,9 @@ function convertMatFile(srcPath, outPath, options = {}) {
   // ~50 (workflowMode, srcBlend, queueControl, ...). Writing them all makes
   // Cocos log an unknown-property warning per entry at material load. When the
   // target effect is known, keep only what it actually declares.
-  if (options.effectPath && fs.existsSync(options.effectPath)) {
-    const effectText = fs.readFileSync(options.effectPath, 'utf8');
-    const ccEffect = /CCEffect\s*%\{([\s\S]*?)\n\}%/.exec(effectText);
-    if (ccEffect) {
-      const declared = new Set(
-        [...ccEffect[1].matchAll(/^\s+([A-Za-z_]\w*):\s*\{/gm)].map(x => x[1])
-      );
+  if (effectText) {
+    if (effectProperties.size) {
+      const declared = new Set(effectProperties.keys());
       const props = mtl._props[0] || {};
       const dropped = [];
       for (const key of Object.keys(props)) {
@@ -368,6 +442,7 @@ module.exports = {
   convertUnityMatToCocosMtl,
   convertMatFile,
   convertMaterialDirectory,
+  extractCocosEffectPropertyMetadata,
   performTextureAssetDiagnostics,
   generateMaterialAssetManifest,
 };

@@ -36,6 +36,10 @@
       "rule": "Khi port text, phải ưu tiên font asset thật theo chuỗi: TTF/webfont trực tiếp -> dependency của TMP/Unity Font -> `font.convert` cho định dạng lạ -> system font cuối cùng. Font copy/convert phải được wire thành `cc.TTFFont` và qua `ai:verify:assets`. Chỉ fallback system font sau khi các bước trên thất bại; fallback phải giữ family cùng Bold/Italic/Underline/Shadow/Outline/alignment/wrapping/spacing của Unity và report `high` nếu không phải Unity built-in system font tương đương."
     },
     {
+      "id": "material-color-space-parity",
+      "rule": "Khi port Unity material color vào Cocos effect property có `linear: true`, phải gamma-encode RGB linear đã serialize sang sRGB `cc.Color` bytes trước khi Cocos linearize lúc upload; alpha vẫn map tuyến tính. Không nhân thẳng RGB với 255. `shader.material` phải nhận `--effect`, và visual checkpoint phải kiểm cả material/texture identity lẫn runtime color/emissive value."
+    },
+    {
       "id": "visual-checkpoints",
       "rule": "Khi port thay đổi camera, transform, material/shader, UI layout hoặc input fidelity, phải chạy `npm run ai:verify:visual -- --config <matrix.json>` trên Cocos preview với ảnh nguồn/các checkpoint phù hợp và mở ảnh kết quả. Với hành vi có oracle, dùng `requireEvalOk: true`; runtime-clean không được diễn giải thành pixel parity."
     },
@@ -759,7 +763,7 @@
         ],
         "limits": [
           "Thiếu --effect-uuid thì `_effectAsset` rỗng và material rơi về effect mặc định — trông như port hỏng.",
-          "Thiếu --effect thì GHI HẾT property Unity từng gán (URP Lit có ~50 cái), Cocos sẽ log unknown-property. Luôn truyền --effect để lọc."
+          "Thiếu --effect thì GHI HẾT property Unity từng gán (URP Lit có ~50 cái), Cocos sẽ log unknown-property và tool không biết property color nào được khai báo `linear: true`. Luôn truyền --effect để lọc và chuyển Unity linear RGB sang Cocos sRGB bytes đúng cách."
         ],
         "verify": null,
         "status": "broken"
