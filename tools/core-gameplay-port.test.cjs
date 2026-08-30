@@ -377,6 +377,24 @@ test('gate runner bounds failures and redacts project paths and credentials', t 
   assert.equal(result[0].output.includes('alsosecret'), false);
 });
 
+test('gate runner invokes npm.cmd through cmd.exe on Windows without enabling shell mode', t => {
+  const fixture = projectFixture(t);
+  const invocations = [];
+  const result = runRequiredGates(fixture.cocos, {
+    platform: 'win32',
+    comspec: 'C:\\Windows\\System32\\cmd.exe',
+    spawnSync: (executable, args, options) => {
+      invocations.push({ executable, args, options });
+      return { status: 0, stdout: '', stderr: '' };
+    },
+  });
+  assert.equal(result.length, REQUIRED_SCRIPTS.length);
+  assert.equal(result.every(item => item.ok), true);
+  assert.equal(invocations[0].executable, 'C:\\Windows\\System32\\cmd.exe');
+  assert.deepEqual(invocations[0].args, ['/d', '/s', '/c', 'npm.cmd', 'run', 'ai:verify']);
+  assert.equal(invocations[0].options.shell, false);
+});
+
 test('manifest and evidence paths fail closed on traversal', t => {
   const fixture = projectFixture(t);
   assert.throws(() => resolveContained(fixture.cocos, '../outside.json'), error => error.code === 'CORE_PORT_PATH_ESCAPE');

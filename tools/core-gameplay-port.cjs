@@ -927,14 +927,22 @@ function runRequiredGates(cocosRoot, options = {}) {
   if (!scripts || typeof scripts !== 'object' || Array.isArray(scripts)) {
     throw corePortError('CORE_PORT_PACKAGE_INVALID', 'package.json scripts khong hop le.');
   }
-  const executable = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+  const platform = options.platform || process.platform;
+  // Node cannot execute Windows .cmd shims directly with shell:false on every
+  // supported runtime (Node 22 returns EINVAL). Invoke npm.cmd through the
+  // platform command processor while keeping the fixed gate/script arguments
+  // separate and shell:false. Gate names come only from REQUIRED_SCRIPTS.
+  const executable = platform === 'win32'
+    ? (options.comspec || process.env.ComSpec || 'cmd.exe')
+    : 'npm';
+  const prefixArgs = platform === 'win32' ? ['/d', '/s', '/c', 'npm.cmd'] : [];
   const results = [];
   for (const gate of REQUIRED_SCRIPTS) {
     if (typeof scripts[gate.script] !== 'string' || !scripts[gate.script].trim()) {
       results.push({ id: gate.id, ok: false, code: 'script-missing', script: gate.script });
       break;
     }
-    const child = (options.spawnSync || spawnSync)(executable, ['run', gate.script], {
+    const child = (options.spawnSync || spawnSync)(executable, [...prefixArgs, 'run', gate.script], {
       cwd: cocosRoot,
       encoding: 'utf8',
       windowsHide: true,
