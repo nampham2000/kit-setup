@@ -958,6 +958,10 @@ const CORE_RULES = [
     rule: 'Khi port thay đổi camera, transform, material/shader, UI layout hoặc input fidelity, phải chạy `npm run ai:verify:visual -- --config <matrix.json>` trên Cocos preview với ảnh nguồn/các checkpoint phù hợp và mở ảnh kết quả. Với hành vi có oracle, dùng `requireEvalOk: true`; runtime-clean không được diễn giải thành pixel parity.',
   },
   {
+    id: 'interactive-affordance-parity',
+    rule: 'Mọi control nhìn có thể bấm/vuốt trong Cocos phải truy được về handler và state outcome của Unity source, rồi kiểm bằng gesture thật với `requireEvalOk: true`. Không được dựng button/icon visual-only. Nếu closure của control bị defer/replace trong playable-core (settings, shop, meta...), phải bỏ control khỏi HUD; chỉ cho xuất hiện lại sau khi port đủ hành vi.',
+  },
+  {
     id: 'camera-input-parity',
     rule: 'Khi port camera controls, phải mang đủ chuỗi nguồn: normalized slider, min/max multiplier dùng khi reset, mapping real zoom, camera position/FOV/pitch và transform scale/rotation listener. Reset rotation phải theo source (ví dụ Quaternion.identity), không chụp một runtime rotation làm mặc định. Drag Space.World phải kiểm chứng riêng thao tác sang phải và lên bằng gesture thật; không suy dấu chỉ từ handedness.',
   },

@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "generatedAt": "2026-08-29T15:07:24.799Z",
+    "generatedAt": "2026-08-30T01:34:17.747Z",
     "description": "Compact project manifest for AI Agents. Use this instead of scanning file trees.",
     "project": {
       "projectName": "cc_playable_framework",
@@ -22,7 +22,7 @@
     {
       "name": "Gameplay",
       "path": "assets/Gameplay.scene",
-      "sizeKb": 11.1
+      "sizeKb": 11.9
     },
     {
       "name": "GameplayScene",
@@ -230,7 +230,7 @@
         ]
       },
       {
-        "dir": "assets/scripts",
+        "dir": "assets/script",
         "names": [
           "UnityParticleHierarchyTransformSync",
           "UnityParticleRateOverDistanceEmitter",
@@ -265,7 +265,7 @@
     "shaderCount": 4,
     "shaders": {
       "count": 4,
-      "totalKb": 20.3,
+      "totalKb": 20.7,
       "sample": [
         "assets/effects/UnitySpriteRendererColor.effect",
         "assets/effects/TapeUnlit.effect",
