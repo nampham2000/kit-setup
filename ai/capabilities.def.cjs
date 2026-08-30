@@ -424,6 +424,7 @@ const CAPABILITIES = [
       'Nếu Cocos Creator không mở, UUID sub-asset của sprite/model chưa nối được: report ghi rõ, mở editor rồi chạy lại.',
       'Cache theo phạm vi --src: sửa MỘT file trong phạm vi sẽ khiến cả phạm vi port lại (đổi lấy việc không bao giờ trả output cũ sai).',
       'Font không được mặc định rơi về system font: porter lần theo TTF/webfont qua TMP hoặc Unity Font dependency, copy + wire UUID; font không được Cocos nạp trực tiếp sẽ qua font.convert. Chỉ fallback system font sau khi resolver/converter thất bại, giữ Bold/Italic/Underline/Shadow/Outline/alignment/wrapping và ghi `high` vào report.',
+      'Stripped Transform của nested PrefabInstance chỉ chứa link + m_Modifications. Mọi field transform/name/layer/active không được override phải kế thừa source prefab thật; không dùng identity/default parser làm base vì sẽ âm thầm reset scale/position/rotation của VFX/model con.',
       'Sau khi ghi asset, porter yêu cầu Cocos-MCP refresh `db://assets/unity_imported`, rồi kiểm tra cả importer state ở root và mọi `subMetas`; còn trạng thái `imported: false` thì fail thay vì để preview dùng asset hỏng. `--no-import-wait` chỉ dùng khi chủ ý tách bước import/finalize.',
       'Sau khi ghi output, porter tự chạy engine.features một lần cho cả batch: Profile API trước, guarded engine.json fallback sau; chỉ complete khi preview import map đã apply. Dùng --no-engine-feature-repair chỉ khi chủ ý tách bước này.',
     ],
@@ -802,6 +803,7 @@ const CAPABILITIES = [
       'Với input/camera/reset có oracle định lượng, đặt `requireEvalOk: true`; eval cuối phải trả `true` hoặc JSON `{ok:true}`. Ảnh đẹp nhưng hướng drag, normalized zoom hoặc reset quaternion sai sẽ làm checkpoint fail.',
       'Với animation/callback nhiều phase, khai báo `requiredTrace` (2-32 milestone unique) cùng `requireEvalOk: true`. Eval phải trả `{ok:true, animationTrace:[{phase,atMs}]}`; tool fail nếu thiếu phase, sai thứ tự hoặc timestamp không monotonic.',
       'Với VFX/particle hoặc trạng thái visual có thể active/isPlaying nhưng bị camera, depth, layer hay material che mất, khai báo `screenshotRegion` normalized cùng `requiredScreenshotMetrics` (`meanLuminance`, `brightPixelRatio`, `meanRed/Green/Blue`). Tool đọc pixel PNG bằng Sharp và fail nếu vùng ảnh không đạt range; dùng cả min/max khi cần loại đồng thời VFX vô hình và VFX quá dày/che gameplay. State component không được dùng thay bằng chứng visible pixels.',
+      'Khi visual được tách khỏi hierarchy Unity để pool/reuse, phải kiểm cả render ownership ngoài world transform: parent-driven active state, lid/cover depth occlusion, sorting/layer và clip. Chụp đúng frame cover đã landed nhưng transition chưa kết thúc; oracle phải chứng minh visual đáng lẽ bị che có zero active renderer/node hoặc quan hệ occlusion tương đương.',
       'Nếu evalBefore/gesture khởi động animation hoặc gameplay async, đặt `postActionSeconds` ở manifest/case (0-60 giây) đủ dài để flow kết thúc trước eval cuối. `seconds` chỉ là thời gian boot/settle trước action, không thay thế post-action wait.',
       'Runtime sạch và ảnh được chụp chỉ là evidence để agent/người dùng mở đối chiếu; tool không tự chứng minh pixel parity hoặc tự chọn candidate đẹp nhất.',
     ],
@@ -1081,6 +1083,14 @@ const CORE_RULES = [
   {
     id: 'material-color-space-parity',
     rule: 'Khi port Unity material color vào Cocos effect property có `linear: true`, phải gamma-encode RGB linear đã serialize sang sRGB `cc.Color` bytes trước khi Cocos linearize lúc upload; alpha vẫn map tuyến tính. Không nhân thẳng RGB với 255. `shader.material` phải nhận `--effect`, và visual checkpoint phải kiểm cả material/texture identity lẫn runtime color/emissive value.',
+  },
+  {
+    id: 'nested-prefab-source-defaults',
+    rule: 'Khi Unity PrefabInstance chỉ serialize một phần m_Modifications, effective Cocos instance phải merge override lên source prefab Transform/GameObject thật. Identity placeholder của stripped Transform không phải authored value. Regression porter phải có ca source scale/position/rotation khác default nhưng owner chỉ override một trục/position, và output phải giữ mọi source field còn lại.',
+  },
+  {
+    id: 'particle-source-oracle-parity',
+    rule: 'Không sửa VFX particle bằng cách đoán root scale/alpha/depth để làm ảnh trông gần đúng. Phải đọc prefab instance override + source particle prefab + material/texture + renderer state + camera layer/depth + animation event time; lưu SHA-256 và effective values vào oracle. Runtime giữ authored local transform nếu source không có adapter riêng, rồi regression kiểm start size/lifetime/simulation speed/capacity/curve, local transform, active particle và bounded visible pixels ở đúng thời điểm.',
   },
   {
     id: 'runtime-material-swap-parity',

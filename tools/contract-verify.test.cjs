@@ -77,6 +77,11 @@ test('shared-kit package template distributes every Unity intelligence and prefl
   assert.match(template.scripts['test:unity:intel'], /tools\/core-gameplay-port\.test\.cjs/);
   assert.match(template.scripts['test:unity:intel'], /tools\/port-regression-gate\.test\.cjs/);
   assert.match(template.scripts['test:unity:intel'], /unity-intel\/diagnostics\.test\.cjs/);
+  assert.match(
+    template.scripts['test:port'],
+    /unity-cocos-port-nested-prefab-transform\.test\.cjs/,
+    'portable test:port must protect nested prefab source transform inheritance',
+  );
   assert.equal(
     template.scripts['test:unity:intel:samples'],
     'node playable-shared-kit/tools/unity-intel/sample-project-regression.cjs',

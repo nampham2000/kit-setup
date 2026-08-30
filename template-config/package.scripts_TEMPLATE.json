@@ -102,7 +102,7 @@
     "stats:html": "node playable-shared-kit/tools/resource-stats.cjs --html",
     "stats:json": "node playable-shared-kit/tools/resource-stats.cjs --json",
     "stats:doctor": "node playable-shared-kit/tools/resource-stats.cjs --doctor",
-    "test:port": "node playable-shared-kit/tools/test-phase2.cjs",
+    "test:port": "node playable-shared-kit/tools/test-phase2.cjs && node --test playable-shared-kit/tools/unity-cocos-port-nested-prefab-transform.test.cjs",
     "test:port:phase3": "node playable-shared-kit/tools/test-phase3.cjs",
     "test:physics": "node playable-shared-kit/tools/test-physics-porter.cjs",
     "test:shader": "node playable-shared-kit/tools/test-shader-porter.cjs",

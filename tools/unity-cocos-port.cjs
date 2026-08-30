@@ -3566,9 +3566,17 @@ function materializeStrippedTransforms(context) {
     const props = instanceInfo ? prefabOverrideProps(instanceInfo, correspondingSourceObject) : {};
     const sourceGuid = unityRefGuid(instanceInfo?.sourcePrefab);
     const sourceAsset = unityDb.get(sourceGuid);
+    const nestedPrefab = sourceAsset?.ext === '.prefab' && options.recursive
+      ? queueNestedPrefabAsset(options, sourceAsset, unityDb, reporter, recursionDepth + 1)
+      : null;
+    const sourceTransformId = unityRefFileId(correspondingSourceObject);
+    const sourceTransform = nestedPrefab?.model?.transforms?.get(sourceTransformId) || null;
+    const sourceGameObject = sourceTransform
+      ? nestedPrefab.model.gameObjects.get(sourceTransform.gameObjectId)
+      : null;
     const rootGameObjectId = sourceGameObjectIdForTransform(
       sourceAsset,
-      unityRefFileId(correspondingSourceObject),
+      sourceTransformId,
     );
     const rootGameObjectProps = prefabOverridePropsByFileId(instanceInfo, sourceGuid, rootGameObjectId);
     const gameObjectProps = Object.keys(rootGameObjectProps).length
@@ -3576,9 +3584,9 @@ function materializeStrippedTransforms(context) {
       : firstGameObjectOverrideProps(instanceInfo, sourceGuid);
     const syntheticGameObjectId = `${instanceId}:go`;
     const sourceName = sourceAsset ? path.basename(sourceAsset.path, path.extname(sourceAsset.path)) : 'NestedPrefab';
-    const name = String(gameObjectProps.m_Name || props.m_Name || sourceName);
+    const name = String(gameObjectProps.m_Name || props.m_Name || sourceGameObject?.name || sourceName);
 
-    const overridden = transformFromPrefabOverrides(transform, props);
+    const overridden = resolveNestedPrefabEffectiveTransform(transform, sourceTransform, props);
     transform.localPosition = overridden.localPosition;
     transform.anchoredPosition = overridden.anchoredPosition;
     transform.localRotation = overridden.localRotation;
@@ -3588,15 +3596,16 @@ function materializeStrippedTransforms(context) {
     transform.anchorMin = overridden.anchorMin;
     transform.anchorMax = overridden.anchorMax;
     transform.anchor = overridden.anchor;
+    if (sourceTransform) transform.isRect = sourceTransform.isRect;
     transform.parentId = instanceInfo?.parentTransformId || transform.parentId;
     transform.gameObjectId = syntheticGameObjectId;
 
     gameObjects.set(syntheticGameObjectId, {
       fileId: syntheticGameObjectId,
       name,
-      layer: Number(gameObjectProps.m_Layer ?? props.m_Layer ?? 0),
+      layer: Number(gameObjectProps.m_Layer ?? props.m_Layer ?? sourceGameObject?.layer ?? 0),
       active: (gameObjectProps.m_IsActive ?? props.m_IsActive) == null
-        ? true
+        ? (sourceGameObject?.active ?? true)
         : Number(gameObjectProps.m_IsActive ?? props.m_IsActive) !== 0,
       components: [],
       transformId: transform.fileId,
@@ -3608,7 +3617,6 @@ function materializeStrippedTransforms(context) {
     }
 
     if (sourceAsset?.ext === '.prefab' && options.recursive) {
-      const nestedPrefab = queueNestedPrefabAsset(options, sourceAsset, unityDb, reporter, recursionDepth + 1);
       if (nestedPrefab?.rootLocalId && nestedPrefab?.prefabUuid) {
         const gameObject = gameObjects.get(syntheticGameObjectId);
         gameObject.nestedPrefab = {
@@ -4054,6 +4062,15 @@ function transformFromPrefabOverrides(baseTransform, props) {
     y: Number(props['m_Pivot.y'] ?? baseTransform.anchor?.y ?? 0.5),
   };
   return { localPosition, anchoredPosition, localRotation, localScale, euler, sizeDelta, anchorMin, anchorMax, anchor };
+}
+
+// A stripped Transform inside a Unity PrefabInstance only stores the link back
+// to the source prefab. Fields which are not listed in m_Modifications must be
+// inherited from that source Transform, not from the parser's identity
+// defaults. Using the stripped placeholder as the base silently reset authored
+// nested-prefab scale/position/rotation (for example TapeTap_Circle 1.25 -> 1).
+function resolveNestedPrefabEffectiveTransform(strippedTransform, sourceTransform, props) {
+  return transformFromPrefabOverrides(sourceTransform || strippedTransform, props || {});
 }
 
 function unityCanvasRenderMode(gameObject, model) {
@@ -7695,6 +7712,7 @@ module.exports = {
   resolveUnityPhysicsMaterialUuid,
   emitCanvas,
   resolveTransformLayout,
+  resolveNestedPrefabEffectiveTransform,
   unityCanvasRenderMode,
   convertNodePosition,
   multiplyQuaternion,
