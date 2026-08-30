@@ -40,6 +40,10 @@
       "rule": "Mọi control nhìn có thể bấm/vuốt trong Cocos phải truy được về handler và state outcome của Unity source, rồi kiểm bằng gesture thật với `requireEvalOk: true`. Không được dựng button/icon visual-only. Nếu closure của control bị defer/replace trong playable-core (settings, shop, meta...), phải bỏ control khỏi HUD; chỉ cho xuất hiện lại sau khi port đủ hành vi."
     },
     {
+      "id": "raycast-first-hit-parity",
+      "rule": "Khi port raycast selection, phải mang đủ selectable và occluder layer/collider của source rồi quyết định theo hit gần camera nhất; không được raycast chỉ danh sách selectable vì tia có thể xuyên nắp/thân để chọn object phía sau. Nếu source có fallback overlap, chỉ chạy quanh first-hit point và giữ đúng radius/layer/filter. Nghiệm thu bằng gesture thật cho cả visible target dương tính và vùng trống/bị che âm tính với `requireEvalOk: true`."
+    },
+    {
       "id": "camera-input-parity",
       "rule": "Khi port camera controls, phải mang đủ chuỗi nguồn: normalized slider, min/max multiplier dùng khi reset, mapping real zoom, camera position/FOV/pitch và transform scale/rotation listener. Reset rotation phải theo source (ví dụ Quaternion.identity), không chụp một runtime rotation làm mặc định. Drag Space.World phải kiểm chứng riêng thao tác sang phải và lên bằng gesture thật; không suy dấu chỉ từ handedness."
     },
