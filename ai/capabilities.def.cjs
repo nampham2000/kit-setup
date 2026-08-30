@@ -328,6 +328,31 @@ const CAPABILITIES = [
     expect: ['--scene', '--unity-root', '--out', '--manifest'],
   },
   {
+    id: 'port.animation.oracle',
+    group: 'port',
+    title: 'Trích oracle curve AnimationClip Unity để khóa parity khi thay Animator bằng tween Cocos',
+    npm: 'npm run ai:port:animation:oracle -- --src <UnityAnimOrDirectory> --unity-root <UnityProjectRoot> --out <oracle.json>',
+    cmd: `node ${TOOLS}/unity-animation-oracle.cjs`,
+    args: ['--src <UnityAnimOrDirectory> (repeatable)'],
+    optional: ['--unity-root <UnityProjectRoot>', '--out <oracle.json>', '--max-clips <n>', '--compact'],
+    when: 'BẮT BUỘC trước khi tắt/thay Animator hoặc AnimationController Unity bằng tween/state machine Cocos. Commit oracle cùng regression matrix để agent khác/máy khác không phải đoán lại keyframe.',
+    outputs: [
+      'JSON deterministic: clip SHA-256, duration/loop, node path, property, animated axis, key time/value và Hermite tangent trong Cocos target space',
+      'Completeness + bounded diagnostic; unsupported quaternion/PPtr/event/float mapping làm oracle partial và CLI fail-closed',
+      'Receipt compact khi có --out',
+    ],
+    limits: [
+      'Phải chạy port.preflight trước khi dùng source evidence; tool không tự authorize mutation.',
+      'Oracle chứng minh dữ liệu clip tĩnh, không chứng minh runtime đã drive đúng node. Phải ghép risk animation-curve-fidelity với Unity reference, requiredTrace và metric bounds.',
+      'Source phải nằm trong --unity-root, không đi qua symlink; mặc định fail khi vượt 128 clip để tránh dump/token không giới hạn.',
+      'Oracle partial vẫn được ghi để review nhưng trả exit code khác 0 và không thể qua regression gate; phải bổ sung mapping hoặc disposition/evidence riêng.',
+    ],
+    status: 'ok',
+    probe: 'help',
+    probeCmd: `node ${TOOLS}/unity-animation-oracle.cjs`,
+    expect: ['--src', '--unity-root', '--out', '--max-clips', '--compact'],
+  },
+  {
     id: 'mesh.path.audit',
     group: 'port',
     title: 'Đo phép đổi hệ tọa độ giữa Unity runtime path và Cocos mesh',
@@ -1087,6 +1112,10 @@ const CORE_RULES = [
   {
     id: 'ordered-animation-flow-parity',
     rule: 'Khi source nối tween/Animator/particle bằng callback hoặc animation event, phải port callback graph theo từng phase (prepare/roll, pre-attach, snap, feedback, close, exit, replacement) cùng duration/easing/VFX/SFX/haptic và điều kiện chuyển state; không được gộp thành một tween rồi mutate state cuối ngay. Mỗi phase async phải có generation/model guard và pending counter. Nghiệm thu bằng `verify.visual` với `requiredTrace` để chứng minh phase không thiếu, đúng thứ tự và replacement chỉ bắt đầu sau exit.',
+  },
+  {
+    id: 'animation-curve-oracle-parity',
+    rule: 'Nếu Cocos tắt hoặc thay Animator/AnimationController/clip Unity bằng tween hay state machine thủ công, trước khi implement phải chạy `port.animation.oracle` cho mọi clip nguồn liên quan và commit oracle. Implementation phải giữ node path/property, đúng animated channel (không biến Y squash thành X scale), key time/value, Hermite tangent/easing, active-state, loop/one-shot và handedness. Nghiệm thu bằng risk `animation-curve-fidelity`: Unity reference + ordered trace + runtime metrics khóa cross-axis, extrema curve, timing, số lần phase và số clip oracle; nhìn một screenshot hoặc chỉ đúng callback order không đủ.',
   },
   {
     id: 'async-lifecycle',

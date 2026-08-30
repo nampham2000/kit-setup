@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "generatedAt": "2026-08-30T10:50:45.986Z",
+    "generatedAt": "2026-08-30T12:18:02.319Z",
     "description": "Compact project manifest for AI Agents. Use this instead of scanning file trees.",
     "project": {
       "projectName": "cc_playable_framework",
@@ -488,6 +488,7 @@
     "unity.intel.query": "npm run ai:unity:query -- --project <UnityProjectRoot> --section <name>",
     "port.plan": "npm run ai:port:plan -- --project <UnityProjectRoot>",
     "port.scene": "npm run port:scene -- --scene <file.unity> --unity-root <UnityAssetsFolder> --out assets/<Name>.scene",
+    "port.animation.oracle": "npm run ai:port:animation:oracle -- --src <UnityAnimOrDirectory> --unity-root <UnityProjectRoot> --out <oracle.json>",
     "mesh.path.audit": "node playable-shared-kit/tools/runtime-mesh-path-audit.cjs --config <audit.json>",
     "port.report": "npm run ai:port:report",
     "port.prefab": "node playable-shared-kit/tools/unity-cocos-port.cjs port --src <unity_prefab_or_dir> --out <cocos_prefab_or_dir>",

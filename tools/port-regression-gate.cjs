@@ -43,6 +43,7 @@ const RISKS = Object.freeze([
   'material-color-lighting',
   'transparent-hold-state',
   'animation-callback-flow',
+  'animation-curve-fidelity',
   'runtime-mesh-animation',
   'attachment-layout',
   'font-ui-layout',
@@ -54,6 +55,7 @@ const VISUAL_REFERENCE_RISKS = new Set([
   'camera-transform',
   'material-color-lighting',
   'transparent-hold-state',
+  'animation-curve-fidelity',
   'runtime-mesh-animation',
   'attachment-layout',
   'font-ui-layout',
@@ -250,6 +252,41 @@ function caseHasRuntimeMeshOracle(entry) {
     && metricBoundAtMost(entry.requiredEvalMetrics, 'thicknessError', 0.02);
 }
 
+function validateAnimationCurveOracle(file, label) {
+  const oracle = readJsonBounded(file, MAX_MATRIX_BYTES, 'REGRESSION_ANIMATION_ORACLE_INVALID');
+  if (!oracle || oracle.schemaVersion !== 1 || oracle.kind !== 'unity-animation-curve-oracle'
+      || oracle.completeness !== 'complete'
+      || !Array.isArray(oracle.clips) || oracle.clips.length < 1
+      || Number(oracle.clipCount ?? oracle.clips.length) !== oracle.clips.length
+      || (oracle.diagnostics || []).some(item => item?.severity === 'high')) {
+    throw regressionError('REGRESSION_ANIMATION_ORACLE_INVALID',
+      `${label}: animationOracle phải complete, không có high diagnostic và có clipCount khớp clips.`);
+  }
+  for (const [index, clip] of oracle.clips.entries()) {
+    const source = String(clip?.source || '');
+    if (!/^(Assets|Packages)\//.test(source) || source.split('/').includes('..')
+        || path.isAbsolute(source) || path.win32.isAbsolute(source)
+        || !/^[a-f0-9]{64}$/.test(String(clip?.sha256 || ''))
+        || !Number.isFinite(Number(clip?.duration)) || Number(clip.duration) <= 0
+        || typeof clip?.loop !== 'boolean' || clip?.completeness !== 'complete'
+        || !Array.isArray(clip?.tracks) || clip.tracks.length < 1) {
+      throw regressionError('REGRESSION_ANIMATION_ORACLE_INVALID',
+        `${label}: clips[${index}] cần source portable, sha256, duration, loop và tracks.`);
+    }
+  }
+  return oracle;
+}
+
+function caseHasAnimationCurveOracle(entry, validatedCases) {
+  return validatedCases.has(entry) && caseHasEval(entry) && !!entry.referenceImage
+    && Array.isArray(entry.requiredTrace) && entry.requiredTrace.length >= 2
+    && metricBoundAtMost(entry.requiredEvalMetrics, 'crossAxisMaxError', 0.02)
+    && metricBoundAtMost(entry.requiredEvalMetrics, 'curveExtremaMaxError', 0.1)
+    && metricBoundAtMost(entry.requiredEvalMetrics, 'singleShotPhaseCountError', 0)
+    && metricBoundAtMost(entry.requiredEvalMetrics, 'timingMaxErrorMs', 100)
+    && metricBoundAtLeast(entry.requiredEvalMetrics, 'oracleClipCount', 1);
+}
+
 function validateMatrixPolicy(projectRoot, suite, matrix, matrixFile) {
   if (!matrix || typeof matrix !== 'object' || !Array.isArray(matrix.cases) || matrix.cases.length < 1) {
     throw regressionError('REGRESSION_MATRIX_INVALID', `${suite.id}: matrix cần ít nhất một case.`);
@@ -259,6 +296,7 @@ function validateMatrixPolicy(projectRoot, suite, matrix, matrixFile) {
   }
   const names = new Set();
   const tags = new Set();
+  const animationOracleCases = new Set();
   const dependencyMap = new Map();
   const addDependency = (value, label) => {
     const file = resolveContained(projectRoot, value, label, { mustExist: true });
@@ -281,6 +319,13 @@ function validateMatrixPolicy(projectRoot, suite, matrix, matrixFile) {
     if (entry.evalFile) addDependency(entry.evalFile, `${suite.id}.evalFile`);
     if (entry.evalBeforeFile) addDependency(entry.evalBeforeFile, `${suite.id}.evalBeforeFile`);
     if (entry.referenceImage) addDependency(entry.referenceImage, `${suite.id}.referenceImage`);
+    if (entry.animationOracle) {
+      const oracleFile = resolveContained(projectRoot, entry.animationOracle,
+        `${suite.id}.animationOracle`, { mustExist: true });
+      validateAnimationCurveOracle(oracleFile, `${suite.id}/${name}`);
+      addDependency(entry.animationOracle, `${suite.id}.animationOracle`);
+      animationOracleCases.add(entry);
+    }
     if (entry.regressionTags !== undefined && (!Array.isArray(entry.regressionTags) ||
         entry.regressionTags.some(tag => typeof tag !== 'string' || !tag.trim()))) {
       throw regressionError('REGRESSION_MATRIX_INVALID', `${suite.id}/${name}: regressionTags phải là string array.`);
@@ -312,6 +357,12 @@ function validateMatrixPolicy(projectRoot, suite, matrix, matrixFile) {
     if (risk === 'animation-callback-flow' && !matrix.cases.some(entry =>
       Array.isArray(entry.requiredTrace) && entry.requiredTrace.length >= 2 && caseHasEval(entry))) {
       throw regressionError('REGRESSION_ANIMATION_TRACE_MISSING', `${suite.id}: animation flow cần requiredTrace có thứ tự.`);
+    }
+    if (risk === 'animation-curve-fidelity' && !matrix.cases.some(entry =>
+      caseHasAnimationCurveOracle(entry, animationOracleCases))) {
+      throw regressionError('REGRESSION_ANIMATION_CURVE_ORACLE_MISSING',
+        `${suite.id}: animation-curve-fidelity cần animationOracle + Unity reference + ordered trace và metric bounds `
+        + 'cho cross-axis, curve extrema, one-shot phase count, timing và oracle clip count.');
     }
     if (risk === 'runtime-mesh-animation') {
       const missingPathCases = ['linear-path', 'curved-path'].filter(tag => !matrix.cases.some(entry =>

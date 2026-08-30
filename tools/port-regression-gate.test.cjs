@@ -33,6 +33,20 @@ function fixture(t) {
   fs.writeFileSync(path.join(root, 'assets', 'effects', 'Tape.effect'), 'CCEffect %{}\n');
   fs.writeFileSync(path.join(root, 'assets', 'prefabs', 'Roll.prefab'), '[]\n');
   fs.writeFileSync(path.join(root, 'docs', 'references', 'unity.png'), 'png');
+  fs.writeFileSync(path.join(root, 'docs', 'references', 'animation-oracle.json'), JSON.stringify({
+    schemaVersion: 1,
+    kind: 'unity-animation-curve-oracle',
+    completeness: 'complete',
+    clipCount: 1,
+    clips: [{
+      source: 'Assets/Animations/Holder.anim',
+      sha256: 'a'.repeat(64),
+      duration: 0.5,
+      loop: false,
+      completeness: 'complete',
+      tracks: [{ path: 'Holder', property: 'scale', animatedChannels: ['y'], channels: {} }],
+    }],
+  }, null, 2));
   return root;
 }
 
@@ -136,6 +150,58 @@ test('visual and ordered animation risks fail closed without source reference or
   }], ['animation-callback-flow']);
   assert.throws(() => validateRegistry(root, animation, { configFile: file }),
     error => error.code === 'REGRESSION_ANIMATION_TRACE_MISSING');
+});
+
+test('animation curve fidelity requires a portable source oracle and bounded runtime curve metrics', t => {
+  const root = fixture(t);
+  const matrix = 'tools/qa/animation-curves.json';
+  const curveCase = {
+    name: 'holder curve',
+    eval: 'true',
+    requireEvalOk: true,
+    requiredTrace: ['snap-start', 'snap-complete'],
+    referenceImage: 'docs/references/unity.png',
+    animationOracle: 'docs/references/animation-oracle.json',
+    requiredEvalMetrics: {
+      crossAxisMaxError: { max: 0.001 },
+      curveExtremaMaxError: { max: 0.02 },
+      singleShotPhaseCountError: { max: 0 },
+      timingMaxErrorMs: { max: 80 },
+      oracleClipCount: { min: 1 },
+    },
+  };
+  writeMatrix(root, matrix, [curveCase]);
+  const source = registry([{
+    id: 'holder-curves',
+    risks: ['animation-curve-fidelity'],
+    matrix,
+    watchFiles: ['assets/script/Game.ts'],
+  }], ['animation-curve-fidelity']);
+  const file = writeRegistry(root, source);
+  const valid = validateRegistry(root, source, { configFile: file });
+  assert.equal(valid.suites[0].matrixEvidence.dependencies.some(item =>
+    item.relative === 'docs/references/animation-oracle.json'), true);
+
+  delete curveCase.requiredEvalMetrics.curveExtremaMaxError;
+  writeMatrix(root, matrix, [curveCase]);
+  assert.throws(() => validateRegistry(root, source, { configFile: file }),
+    error => error.code === 'REGRESSION_ANIMATION_CURVE_ORACLE_MISSING');
+
+  curveCase.requiredEvalMetrics.curveExtremaMaxError = { max: 0.02 };
+  curveCase.animationOracle = 'docs/references/unity.png';
+  writeMatrix(root, matrix, [curveCase]);
+  assert.throws(() => validateRegistry(root, source, { configFile: file }),
+    error => error.code === 'REGRESSION_ANIMATION_ORACLE_INVALID');
+
+  curveCase.animationOracle = 'docs/references/animation-oracle.json';
+  const partial = JSON.parse(fs.readFileSync(path.join(root, curveCase.animationOracle), 'utf8'));
+  partial.completeness = 'partial';
+  partial.clips[0].completeness = 'partial';
+  partial.diagnostics = [{ severity: 'high', code: 'ANIMATION_EVENT_SKIPPED' }];
+  fs.writeFileSync(path.join(root, curveCase.animationOracle), JSON.stringify(partial));
+  writeMatrix(root, matrix, [curveCase]);
+  assert.throws(() => validateRegistry(root, source, { configFile: file }),
+    error => error.code === 'REGRESSION_ANIMATION_ORACLE_INVALID');
 });
 
 test('runtime mesh animation requires linear and curved metric oracles plus watched render assets', t => {

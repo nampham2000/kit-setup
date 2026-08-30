@@ -196,7 +196,10 @@ const { emitParticleSystem: emitParticleSystemImpl } = createParticlePorter({
   unityRefFileId,
 });
 const { emitLight: emitLightImpl } = createLightPorter({ getField });
-const { emitAnimator: emitAnimatorImpl } = createAnimationPorter({
+const {
+  emitAnimator: emitAnimatorImpl,
+  parseUnityAnimationClip: parseUnityAnimationClipForOracle,
+} = createAnimationPorter({
   parseUnityYaml,
   getField,
   parseUnityScalar,
@@ -7702,5 +7705,6 @@ module.exports = {
   cocosQuaternionToEuler,
   convertRotation,
   parseArgs,
+  parseUnityAnimationClipForOracle,
   main,
 };
