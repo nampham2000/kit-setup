@@ -67,6 +67,19 @@ attribute tương ứng; trước đó đo vertex FBX và serialized path trong 
 Không tái sử dụng quy tắc flip của scene porter cho một FBX custom nếu chưa có số đo. Thêm fail-fast kiểm path/mesh
 alignment và progress span để sai hệ tọa độ không biến thành animation hẹp ngang nhưng vẫn runtime-clean.
 
+Với runtime path/mesh, tạo manifest audit có ít nhất hai case không đối xứng, trong đó có một path cong hoặc lệch
+tâm, rồi chạy:
+
+```bash
+node playable-shared-kit/tools/runtime-mesh-path-audit.cjs --config docs/porting/mesh-path-audit.json --out docs/porting/mesh-path-audit.report.json --json
+```
+
+Tool thử đủ 48 signed-axis permutation. Chỉ `decision=accepted` mới cho phép ghi phép đổi trục vào extractor hoặc
+regenerate config/path; `ambiguous` và `rejected` là blocker. `--mesh` + `--path` một case chỉ dùng chẩn đoán,
+không đủ để authorize mapping. Commit manifest, point samples và report vì report có `inputDigest`; khi input đổi,
+chạy lại thay vì copy mapping cũ. Tool không chứng minh scale/translation, hierarchy, skinning hay world/local parent,
+vì vậy phải normalize samples về cùng local frame hoặc bổ sung runtime oracle cho các biến đổi đó.
+
 Với visual chạy dọc mesh/path (peel, zipper, rope, trail), giữ đúng hierarchy của nguồn: root ở parent/path space,
 root không bị scale nếu Unity chỉ tween child, child thickness lấy từ ribbon width, và rotation dựng từ tangent +
 normal với endpoint reversal đúng source. Registry phải dùng risk `runtime-mesh-animation`, có real gesture cho cả

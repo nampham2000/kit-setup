@@ -328,6 +328,37 @@ const CAPABILITIES = [
     expect: ['--scene', '--unity-root', '--out', '--manifest'],
   },
   {
+    id: 'mesh.path.audit',
+    group: 'port',
+    title: 'Đo phép đổi hệ tọa độ giữa Unity runtime path và Cocos mesh',
+    npm: null,
+    cmd: `node ${TOOLS}/runtime-mesh-path-audit.cjs`,
+    args: ['--config <audit.json>'],
+    optional: [
+      '--mesh <mesh.json>', '--path <path.json>', '--out <report.json>', '--sample-limit <n>',
+      '--min-progress-span <n>', '--max-normalized-median <n>', '--min-separation-ratio <n>',
+      '--top <n>', '--json',
+    ],
+    when: 'BẮT BUỘC trước khi hardcode phép flip/permutation cho Unity runtime path, UV bake, rope/trail/zipper/peel hoặc trước khi regenerate config/path data phụ thuộc mesh import.',
+    outputs: [
+      'stdout JSON: accepted/ambiguous/rejected, signed-axis mapping, determinant, per-case deviation/progress span, inputDigest',
+      '<report.json> khi có --out; commit report cùng input audit để resume/máy khác kiểm lại được',
+    ],
+    limits: [
+      'Acceptance cần ít nhất hai case không đối xứng, gồm một path cong hoặc lệch tâm; direct --mesh/--path chỉ để chẩn đoán và không authorize mapping.',
+      'Tool thử đủ 48 signed-axis permutation và fail-closed khi runner-up quá gần, progress span thấp hoặc mesh/path lệch quá ngưỡng. `ambiguous`/`rejected` chặn extractor/config regeneration.',
+      'Tool không suy scale/translation, hierarchy, skinning hay world/local parent. Nếu pipeline có các biến đổi đó, normalize về cùng local frame hoặc thêm runtime evidence riêng.',
+      'Report bind SHA-256 của dữ liệu point thực dùng; thay đổi input phải chạy lại, không copy mapping cũ bằng tay.',
+    ],
+    status: 'partial',
+    probe: 'help',
+    probeCmd: `node ${TOOLS}/runtime-mesh-path-audit.cjs`,
+    expect: [
+      '--config', '--mesh', '--path', '--out', '--sample-limit', '--min-progress-span',
+      '--max-normalized-median', '--min-separation-ratio', '--top', '--json',
+    ],
+  },
+  {
     id: 'port.report',
     group: 'port',
     title: 'Nén port-report.csv thành digest có hành động',
@@ -1031,7 +1062,7 @@ const CORE_RULES = [
   },
   {
     id: 'runtime-mesh-animation-parity',
-    rule: 'Mọi Unity code mutate mesh runtime (`mesh`, `vertices`, `uv/uv2`, colors, tangents, vertex buffer) là gameplay/render behavior, không phải chi tiết import. Phải port cả bước clone/rebuild mesh và bake đúng attribute mà shader đọc, sau khi đo phép đổi hệ tọa độ giữa serialized path và vertex FBX/Cocos; không áp dụng handedness theo suy đoán. Giữ topology transform của visual chuyển động: root theo path ở đúng local/world parent, chỉ scale child mà source scale, thickness theo mesh, rotation theo tangent+normal và đảo endpoint đúng source. Nghiệm thu bằng risk `runtime-mesh-animation` với gesture thật trên linear-path lẫn curved-path, Unity reference, ordered trace, pre/post metric chứng minh action chưa chạy trước gesture rồi đã chạy sau gesture, và metrics cho UV span/error, position, direction, root scale, thickness.',
+    rule: 'Mọi Unity code mutate mesh runtime (`mesh`, `vertices`, `uv/uv2`, colors, tangents, vertex buffer) là gameplay/render behavior, không phải chi tiết import. Phải port cả bước clone/rebuild mesh và bake đúng attribute mà shader đọc. Trước khi hardcode phép đổi trục hoặc regenerate path/config, chạy `mesh.path.audit` trên ít nhất hai case không đối xứng (có path cong/lệch tâm), commit input + digest-bound report và chỉ đi tiếp khi `decision=accepted`; không áp dụng handedness theo suy đoán hoặc dùng kết quả `ambiguous`. Giữ topology transform của visual chuyển động: root theo path ở đúng local/world parent, chỉ scale child mà source scale, thickness theo mesh, rotation theo tangent+normal và đảo endpoint đúng source. Nghiệm thu bằng risk `runtime-mesh-animation` với gesture thật trên linear-path lẫn curved-path, Unity reference, ordered trace, pre/post metric chứng minh action chưa chạy trước gesture rồi đã chạy sau gesture, và metrics cho UV span/error, position, direction, root scale, thickness.',
   },
   {
     id: 'visual-checkpoints',
