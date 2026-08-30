@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "generatedAt": "2026-08-30T05:52:12.518Z",
+    "generatedAt": "2026-08-30T08:05:47.635Z",
     "description": "Compact project manifest for AI Agents. Use this instead of scanning file trees.",
     "project": {
       "projectName": "cc_playable_framework",
@@ -265,7 +265,7 @@
     "shaderCount": 4,
     "shaders": {
       "count": 4,
-      "totalKb": 20.7,
+      "totalKb": 22,
       "sample": [
         "assets/effects/UnitySpriteRendererColor.effect",
         "assets/effects/TapeUnlit.effect",
@@ -508,6 +508,7 @@
     "verify.assets": "npm run ai:verify:assets",
     "verify.runtime": "npm run ai:verify:runtime",
     "verify.visual": "npm run ai:verify:visual -- --config <matrix.json>",
+    "verify.regressions": "npm run ai:verify:regressions",
     "verify.gc": "npm run ai:lint",
     "audio.optimize": "npm run sound:optimize",
     "assets.cleanup": "npm run cleanup:unused",

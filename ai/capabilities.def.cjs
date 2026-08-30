@@ -168,7 +168,8 @@ const CAPABILITIES = [
     limits: [
       'Chỉ tạo manifest; không tự tuyên bố đã port gameplay. Refuse khi hard blocker hoặc gameplay entry còn mơ hồ.',
       '`--dry-run` dừng trước mkdir/write. Không overwrite manifest nếu thiếu `--force`; force dùng lock + compare-and-swap và giữ nguyên concurrent edit.',
-      'Manifest schema v2 khóa exact gameplay entry output, 9 checkpoint/weight/mandatory, gate 80/90 và evidence contract; agent không thể tự hạ rubric.',
+      'Manifest schema v3 khóa exact gameplay entry output, 9 checkpoint/weight/mandatory, gate 80/90, evidence contract và portable regression gate; agent không thể tự hạ rubric.',
+      'Init/scaffold tự tạo `tools/port-regressions.json` nếu chưa có, suy requiredRisks nền từ feature nguồn nhưng để suites rỗng có chủ ý; agent phải thêm matrix/oracle/watchFiles trước core verify.',
     ],
     status: 'partial',
     probe: 'help',
@@ -639,12 +640,12 @@ const CAPABILITIES = [
     cmd: `node ${TOOLS}/core-gameplay-port.cjs verify --json`,
     args: ['--unity-project <UnityProjectRoot>', '--cocos-project <CocosProjectRoot>'],
     optional: ['--manifest <file>', '--no-run-gates', '--json'],
-    when: 'Cổng kết thúc port core. Tự chạy verify/lint/assets/build/runtime và chỉ accept khi score >=80, mọi mandatory behavior checkpoint có evidence.',
+    when: 'Cổng kết thúc port core. Tự chạy verify/lint/assets/regressions/build/runtime và chỉ accept khi score >=80, mọi mandatory behavior checkpoint có evidence.',
     outputs: ['stdout JSON compact: runnable gates, artifact presence, fidelity score/checkpoints, nextActions'],
     limits: [
       'Score là rubric parity có evidence, không phải pixel-perfect hoặc semantic proof tự động; target 90 và minimum accept 80.',
       'Compiler confidence, status boolean hoặc file tồn tại đơn lẻ không được tính điểm. Evidence schema v1 phải bind current brief/state/checkpoint và SHA-256 của từng Cocos target; target đổi làm evidence stale. Mandatory input/rules/win-lose chỉ nhận runtime, không nhận visual-only.',
-      'Mặc định chạy tuần tự `ai:verify`, `ai:lint`, `ai:verify:assets`, `build`, `ai:verify:runtime`; dừng ở gate đầu thất bại, timeout/output bounded và redacted. `--no-run-gates` không thể trả accepted/runnable.',
+      'Mặc định chạy tuần tự `ai:verify`, `ai:lint`, `ai:verify:assets`, `ai:verify:regressions`, `build`, `ai:verify:runtime`; dừng ở gate đầu thất bại, timeout/output bounded và redacted. Regression gate buộc registry/matrix/oracle/watchFiles đã nằm trong Git và receipt khớp hash hiện tại. `--no-run-gates` không thể trả accepted/runnable.',
     ],
     status: 'partial',
     probe: 'help',
@@ -751,6 +752,27 @@ const CAPABILITIES = [
     probe: 'help',
     probeCmd: `node ${TOOLS}/preview-checkpoints.cjs`,
     expect: ['--config', '--output', '--case', '--url'],
+  },
+  {
+    id: 'verify.regressions',
+    group: 'verify',
+    title: 'Chạy registry regression portable và khóa PASS theo hash code/matrix/oracle',
+    npm: 'npm run ai:verify:regressions',
+    cmd: `node ${TOOLS}/port-regression-gate.cjs run --json`,
+    args: [],
+    optional: ['--project <dir>', '--config <file>', '--receipt <file>', '--output <dir>', '--no-refresh', '--json'],
+    when: 'Sau khi port/fix một behavior hoặc visual đã từng sai, và bắt buộc trong port.core.verify. Khởi tạo một lần bằng `npm run ai:verify:regressions:init -- --risk <id>` rồi commit registry, matrix, oracle và reference.',
+    outputs: ['.ai/port/regression-receipt.json', '.unity/port-regressions/<suite>/run-*/manifest.json'],
+    limits: [
+      'Registry mặc định là `tools/port-regressions.json` và phải nằm trong Git cùng matrix, eval/oracle, Unity reference và mọi watchFiles; file chỉ có trên máy hiện tại làm gate fail.',
+      'Mỗi risk có contract riêng: input cần real gesture + semantic eval; hold-drag cần gestureHoldBeforeMoveMs; transparent hold cần gestureKeepPressed; raycast cần positive+negative gesture tags; animation cần requiredTrace; visual cần Unity reference; level-lifecycle cần win tag và chạy ít nhất 2 rounds.',
+      'Trước run, tool gọi Cocos `editorRuntime_reload_preview` với refreshAssets=true để tránh test bundle TypeScript cũ. `--no-refresh` chỉ dùng khi chủ ý và được ghi rõ trong receipt.',
+      'Receipt bind SHA-256 của registry, matrix, eval/reference và watchFiles; thay đổi byte sau PASS làm `check` fail stale. Tool không tự đánh giá pixel parity ngoài oracle/reference contract.',
+    ],
+    status: 'partial',
+    probe: 'help',
+    probeCmd: `node ${TOOLS}/port-regression-gate.cjs --help`,
+    expect: ['init', 'run', 'check', '--risk', '--no-refresh'],
   },
   {
     id: 'verify.gc',
@@ -993,6 +1015,10 @@ const CORE_RULES = [
   {
     id: 'visual-checkpoints',
     rule: 'Khi port thay đổi camera, transform, material/shader, UI layout hoặc input fidelity, phải chạy `npm run ai:verify:visual -- --config <matrix.json>` trên Cocos preview với ảnh nguồn/các checkpoint phù hợp và mở ảnh kết quả. Với hành vi có oracle, dùng `requireEvalOk: true`; runtime-clean không được diễn giải thành pixel parity.',
+  },
+  {
+    id: 'portable-regression-registry',
+    rule: 'Mọi port phải có `tools/port-regressions.json` được commit, khai báo requiredRisks từ Unity preflight/bug history và mandatory suite cho từng risk. Matrix, eval/oracle, ảnh Unity reference và watchFiles phải cùng nằm trong Git. Sau mỗi fix hoặc thay đổi watched target, chạy `npm run ai:verify:regressions`; không reuse PASS cũ vì receipt bị khóa SHA-256. Risk input dùng gesture thật + semantic oracle, hold-drag dùng `gestureHoldBeforeMoveMs`, raycast có ca positive/negative, callback flow có `requiredTrace`, lifecycle chạy ít nhất 2 rounds.',
   },
   {
     id: 'interactive-affordance-parity',

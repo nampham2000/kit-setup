@@ -119,9 +119,12 @@ test('init dry-run is write-free and real init writes a compact manifest inside 
   assert.equal(fs.existsSync(manifestFile), true);
   const manifest = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
   assert.equal(manifest.checkpoints.length, 9);
-  assert.equal(manifest.schemaVersion, 2);
+  assert.equal(manifest.schemaVersion, 3);
   assert.equal(manifest.delivery.targetEntryScene, 'assets/Gameplay.scene');
   assert.equal(manifest.checkpoints.find(item => item.id === 'input-response').sourceEvidence[0], 'Assets/Game/Gameplay.cs');
+  const regressionFile = path.join(fixture.cocos, 'tools', 'port-regressions.json');
+  assert.equal(fs.existsSync(regressionFile), true);
+  assert.deepEqual(JSON.parse(fs.readFileSync(regressionFile, 'utf8')).requiredRisks, ['input-response', 'level-lifecycle']);
 });
 
 test('fidelity score counts only checkpoints grounded by source, target and checkpoint JSON', t => {

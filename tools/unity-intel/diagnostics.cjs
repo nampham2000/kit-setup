@@ -99,6 +99,16 @@ const BLOCKER_RULES = Object.freeze([
     impact: 'Cocos không có coroutine Unity; bỏ sót sẽ làm mất timing hoặc hành vi.',
     action: 'Chuyển sang async/await, scheduleOnce hoặc cc.tween theo semantics gốc.',
   },
+  {
+    id: 'pointer-input-flow',
+    code: 'UNITY_POINTER_INPUT_FLOW',
+    severity: SEVERITIES.HIGH,
+    label: 'Stateful pointer/touch input flow',
+    test: (file, text) => file.toLowerCase().endsWith('.cs') &&
+      /(?:Input\.(?:GetMouseButton|GetTouch|touchCount)|(?:I|On)(?:Pointer|BeginDrag|Drag|EndDrag|MouseDown|MouseUp|MouseDrag)|EnhancedTouch|Touchscreen\.current)/.test(text),
+    impact: 'Nhiều component có thể đọc cùng pointer song song; port thành một state loại trừ nhau dễ làm mất hold, drag, pick hoặc release callback.',
+    action: 'Dựng input responsibility graph cho mọi evidence hit, giữ state có thể đồng thời hoạt động, rồi đăng ký regression gesture có semantic oracle; hold-then-drag phải dùng gestureHoldBeforeMoveMs.',
+  },
 ]);
 
 const RULE_BY_ID = new Map(BLOCKER_RULES.map(rule => [rule.id, rule]));

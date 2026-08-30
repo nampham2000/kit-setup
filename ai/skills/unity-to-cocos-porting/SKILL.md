@@ -52,6 +52,14 @@ Khi sửa camera, transform, shader/material, UI hoặc input, tạo ma trận
 aspect rộng/hẹp dễ làm lộ lỗi framing. Mỗi case có hành vi phải kèm `requireEvalOk: true`; ảnh sạch
 không thay thế oracle drag/reset/pick.
 
+Ngay sau preflight/scaffold, khởi tạo registry regression portable bằng
+`npm run ai:verify:regressions:init -- --risk <risk>` và commit
+`tools/port-regressions.json` cùng mọi matrix, eval/oracle, ảnh Unity reference và watchFiles. Chọn risk từ
+obligation/feature nguồn và bug history, không chỉ từ phần đang sửa. Mỗi bug đã gặp phải trở thành mandatory suite;
+đừng giữ checkpoint quan trọng chỉ trong `.unity/` vì máy khác sẽ không nhận được. Trước khi kết luận hoặc handoff,
+chạy `npm run ai:verify:regressions`: tool refresh AssetDB/reload preview, chạy đủ rounds, và ghi receipt gắn hash
+code/config/effect/font/matrix hiện tại. Nếu `check` báo stale thì phải chạy lại, không được dùng ảnh PASS cũ.
+
 Khi Unity thay material qua vòng lặp `sharedMaterials`, Cocos phải thay/recolor mọi material slot của
 renderer; slot 0 không đại diện cho toàn mesh. Khi object được attach vào slot, giữ phép biến đổi tương
 đối của nguồn (`slot.worldRotation * localAttachRotation`) thay vì chỉ copy vị trí rồi để rotation identity.

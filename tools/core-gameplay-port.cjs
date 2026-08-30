@@ -8,10 +8,15 @@ const { spawnSync } = require('node:child_process');
 
 const { isPathInside } = require('./lib/path-boundary.cjs');
 const { digest: digestPortReport } = require('./report-digest.cjs');
+const {
+  DEFAULT_CONFIG: DEFAULT_REGRESSION_REGISTRY,
+  initRegistry,
+  mergeRegistryRequiredRisks,
+} = require('./port-regression-gate.cjs');
 const { runUnityPortPreflight, assertUnityPortPreflight } = require('./unity-intel/preflight.cjs');
 const { FIDELITY_CHECKPOINTS } = require('./unity-intel/core-gameplay-scope.cjs');
 
-const MANIFEST_SCHEMA_VERSION = 2;
+const MANIFEST_SCHEMA_VERSION = 3;
 const MANIFEST_KIND = 'cc-playable-core-port-manifest';
 const EVIDENCE_SCHEMA_VERSION = 1;
 const EVIDENCE_KIND = 'cc-playable-core-checkpoint-evidence';
@@ -38,6 +43,7 @@ const REQUIRED_SCRIPTS = Object.freeze([
   Object.freeze({ id: 'verify.all', script: 'ai:verify' }),
   Object.freeze({ id: 'verify.gc', script: 'ai:lint' }),
   Object.freeze({ id: 'verify.assets', script: 'ai:verify:assets' }),
+  Object.freeze({ id: 'verify.regressions', script: 'ai:verify:regressions' }),
   Object.freeze({ id: 'build.playable', script: 'build' }),
   Object.freeze({ id: 'verify.runtime', script: 'ai:verify:runtime' }),
 ]);
@@ -54,7 +60,7 @@ Commands:
   init     Run mandatory playable-core preflight and write a compact evidence manifest.
   scaffold Run static-first init + scene skeleton/wiring, then persist a bounded resume packet.
   resume   Rebuild a bounded handoff/status packet without reading raw Unity source.
-  verify   Run verify/lint/assets/build/runtime gates and accept only evidence-backed fidelity >=80.
+  verify   Run verify/lint/assets/regressions/build/runtime gates and accept only evidence-backed fidelity >=80.
 
 Options:
   --unity-project <dir>  Complete Unity project root (required).
@@ -357,6 +363,32 @@ function checkpointSourcesFromBrief(brief) {
   return evidence;
 }
 
+function regressionRisksFromBrief(brief) {
+  const features = new Set((brief.features || []).map(feature => feature.id));
+  const risks = new Set(['input-response', 'level-lifecycle']);
+  if (features.has('camera')) risks.add('camera-transform');
+  if (features.has('ui')) risks.add('font-ui-layout');
+  if (features.has('animation') || features.has('particles-vfx') || features.has('tweening') || features.has('timing-coroutines')) {
+    risks.add('animation-callback-flow');
+  }
+  if (features.has('rendering-shaders')) risks.add('material-color-lighting');
+  return [...risks];
+}
+
+function ensureRegressionRegistry(cocosRoot, brief, dependencies = {}) {
+  const relative = DEFAULT_REGRESSION_REGISTRY;
+  const file = resolveContained(cocosRoot, relative);
+  const risks = regressionRisksFromBrief(brief);
+  if (fs.existsSync(file)) {
+    const merge = dependencies.mergeRegressionRisks || mergeRegistryRequiredRisks;
+    const result = merge({ project: cocosRoot, config: relative, risks });
+    return { status: result.status, path: result.registry, requiredRisks: result.requiredRisks };
+  }
+  const create = dependencies.initRegistry || initRegistry;
+  const result = create({ project: cocosRoot, config: relative, risks });
+  return { status: 'created', path: result.registry, requiredRisks: result.requiredRisks };
+}
+
 async function initCorePort(options, dependencies = {}) {
   const unityRoot = validateUnityRoot(options.unityProject);
   const cocosRoot = validateCocosRoot(options.cocosProject);
@@ -388,10 +420,14 @@ async function initCorePort(options, dependencies = {}) {
   }
   brief.coreGameplayCheckpointEvidence = checkpointSourcesFromBrief(brief);
   const manifest = createManifest(brief);
+  let regressions = { status: 'planned', path: DEFAULT_REGRESSION_REGISTRY, requiredRisks: regressionRisksFromBrief(brief) };
   if (!options.dryRun) {
     progress({ stage: 'manifest', status: 'start' });
     atomicWriteJson(cocosRoot, file, manifest, { force: !!options.force, expectedHash });
     progress({ stage: 'manifest', status: 'complete' });
+    progress({ stage: 'regressions', status: 'start' });
+    regressions = ensureRegressionRegistry(cocosRoot, brief, dependencies);
+    progress({ stage: 'regressions', status: 'complete' });
   }
   return {
     ok: true,
@@ -406,6 +442,7 @@ async function initCorePort(options, dependencies = {}) {
       deferred: brief.coreGameplay.excluded.map(item => [item.id, item.count]),
     },
     acceptance: brief.coreGameplay.acceptance,
+    regressions,
     next: options.dryRun
       ? 'Run init without --dry-run.'
       : `Implement only this manifest, then run core verify; do not claim fidelity before score >=${manifest.delivery.minimumFidelity}.`,
@@ -1109,6 +1146,8 @@ module.exports = {
   targetScenePath,
   createManifest,
   checkpointSourcesFromBrief,
+  regressionRisksFromBrief,
+  ensureRegressionRegistry,
   initCorePort,
   summarizeWiring,
   summarizePortReport,

@@ -56,6 +56,9 @@ test('shared-kit package template distributes every Unity intelligence and prefl
     'port:core:verify': 'node playable-shared-kit/tools/core-gameplay-port.cjs verify',
     'ai:port:core:init': 'node playable-shared-kit/tools/core-gameplay-port.cjs init --json',
     'ai:port:core:verify': 'node playable-shared-kit/tools/core-gameplay-port.cjs verify --json',
+    'ai:verify:regressions': 'node playable-shared-kit/tools/port-regression-gate.cjs run --json',
+    'ai:verify:regressions:init': 'node playable-shared-kit/tools/port-regression-gate.cjs init --json',
+    'ai:verify:regressions:check': 'node playable-shared-kit/tools/port-regression-gate.cjs check --json',
     'unity:intel:doctor': 'node playable-shared-kit/tools/unity-intel-cli.cjs doctor',
     'unity:intel:setup': 'node playable-shared-kit/tools/unity-intel-cli.cjs setup',
     'unity:intel:scan': 'node playable-shared-kit/tools/unity-intel-cli.cjs scan',
@@ -72,6 +75,8 @@ test('shared-kit package template distributes every Unity intelligence and prefl
   assert.match(template.scripts['test:unity:intel'], /unity-intel\/preflight\.test\.cjs/);
   assert.match(template.scripts['test:unity:intel'], /unity-intel\/core-gameplay-scope\.test\.cjs/);
   assert.match(template.scripts['test:unity:intel'], /tools\/core-gameplay-port\.test\.cjs/);
+  assert.match(template.scripts['test:unity:intel'], /tools\/port-regression-gate\.test\.cjs/);
+  assert.match(template.scripts['test:unity:intel'], /unity-intel\/diagnostics\.test\.cjs/);
   assert.equal(
     template.scripts['test:unity:intel:samples'],
     'node playable-shared-kit/tools/unity-intel/sample-project-regression.cjs',

@@ -101,6 +101,10 @@ const DIAGNOSTIC_ROUTES = Object.freeze({
     class: 'timing', gate: 'completion', capabilities: ['port.closure', 'port.compile'],
     verify: ['verify.all', 'verify.runtime'],
   },
+  UNITY_POINTER_INPUT_FLOW: {
+    class: 'input-composition', gate: 'completion', capabilities: ['port.closure', 'port.compile'],
+    verify: ['verify.runtime', 'verify.visual', 'verify.regressions'],
+  },
   UNITY_SHADER_GRAPH: {
     class: 'visual', gate: 'completion', capabilities: ['shader.chain', 'shader.convert'],
     verify: ['shader.validate', 'verify.assets', 'verify.runtime'],
@@ -122,7 +126,7 @@ const COMPACT_OBLIGATION_ROUTE = Object.freeze({
 });
 
 const FEATURE_ROUTES = Object.freeze({
-  input: ['port.compile', 'verify.runtime'],
+  input: ['port.compile', 'verify.runtime', 'verify.visual', 'verify.regressions'],
   'physics-2d': ['port.prefab', 'port.compile', 'verify.runtime'],
   'physics-3d': ['port.prefab', 'port.compile', 'verify.runtime'],
   ui: ['port.prefab', 'verify.runtime'],
@@ -144,6 +148,7 @@ const DIAGNOSTIC_FEATURES = Object.freeze({
   UNITY_ANIMATOR_STATE_MACHINE: 'animation',
   UNITY_COROUTINE: 'timing-coroutines',
   UNITY_DOTWEEN: 'tweening',
+  UNITY_POINTER_INPUT_FLOW: 'input',
   UNITY_SHADER_GRAPH: 'rendering-shaders',
   UNITY_SHADERLAB: 'rendering-shaders',
 });
