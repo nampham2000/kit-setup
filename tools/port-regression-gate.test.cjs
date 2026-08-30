@@ -339,6 +339,47 @@ test('mandatory suite failure writes evidence but keeps the gate red', async t =
     error => error.code === 'REGRESSION_RECEIPT_STALE');
 });
 
+test('input concurrency requires distinct real gestures, overlap ordering and collision-free reservations', t => {
+  const root = fixture(t);
+  const matrix = 'tools/qa/input-concurrency.json';
+  writeMatrix(root, matrix, [{
+    name: 'two rapid taps',
+    gestures: ['0.2,0.5,0.2,0.5,30,1', '0.8,0.5,0.8,0.5,30,1'],
+    gestureGapMs: 50,
+    evalBefore: '({ok:true,actionStarted:0})',
+    requireEvalBeforeOk: true,
+    requiredEvalBeforeMetrics: { actionStarted: { min: 0, max: 0 } },
+    eval: '({ok:true})',
+    requireEvalOk: true,
+    requiredEvalMetrics: {
+      actionStarted: { min: 2 },
+      concurrentActions: { min: 2 },
+      secondStartsBeforeFirstCompletes: { min: 1 },
+      uniqueReservedDestinationCount: { min: 2 },
+      reservationCollisionCount: { max: 0 },
+    },
+  }]);
+  const source = registry([{
+    id: 'rapid-input', risks: ['input-concurrency'], matrix, watchFiles: ['assets/script/Game.ts'],
+  }], ['input-concurrency']);
+  const file = writeRegistry(root, source);
+  assert.doesNotThrow(() => validateRegistry(root, source, { configFile: file }));
+
+  const broken = JSON.parse(JSON.stringify(source));
+  const brokenMatrix = 'tools/qa/input-concurrency-broken.json';
+  broken.suites[0].matrix = brokenMatrix;
+  writeMatrix(root, brokenMatrix, [{
+    name: 'serialized taps',
+    gestures: ['0.2,0.5,0.2,0.5,30,1', '0.8,0.5,0.8,0.5,30,1'],
+    evalBefore: '({ok:true})', requireEvalBeforeOk: true,
+    requiredEvalBeforeMetrics: { actionStarted: { min: 0, max: 0 } },
+    eval: '({ok:true})', requireEvalOk: true,
+    requiredEvalMetrics: { actionStarted: { min: 2 } },
+  }]);
+  assert.throws(() => validateRegistry(root, broken, { configFile: file }),
+    error => error.code === 'REGRESSION_INPUT_CONCURRENCY_ORACLE_MISSING');
+});
+
 test('registry paths fail closed on traversal and missing watched files', t => {
   const root = fixture(t);
   const source = registry([{

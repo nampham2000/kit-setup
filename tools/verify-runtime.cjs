@@ -356,6 +356,8 @@ async function dispatchTouchGesture(session, sessionId, gesture, timing = {}) {
   const now = timing.now || Date.now;
   const waitFor = timing.wait || wait;
   const keepPressed = timing.keepPressed === true;
+  const postGestureWaitMs = timing.postGestureWaitMs === undefined ? 100
+    : Math.max(0, Math.min(5000, Math.round(Number(timing.postGestureWaitMs) || 0)));
   const holdBeforeMoveMs = Math.max(0, Math.min(5000,
     Math.round(Number(timing.holdBeforeMoveMs) || 0)));
   // Headless desktop targets do not expose touch input unless emulation is
@@ -409,7 +411,7 @@ async function dispatchTouchGesture(session, sessionId, gesture, timing = {}) {
   const dispatchEnqueueElapsedMs = Math.max(0, now() - startedAt);
   await Promise.all(endAck ? [...moveAcks, endAck] : moveAcks);
   const dispatchElapsedMs = Math.max(0, now() - startedAt);
-  await waitFor(100);
+  if (postGestureWaitMs > 0) await waitFor(postGestureWaitMs);
   return {
     ...gesture,
     scheduledDurationMs: gesture.durationMs,
@@ -417,10 +419,33 @@ async function dispatchTouchGesture(session, sessionId, gesture, timing = {}) {
     dispatchElapsedMs,
     holdBeforeMoveMs,
     keepPressed,
+    postGestureWaitMs,
     canvasRect: rect,
     start,
     end,
   };
+}
+
+async function dispatchTouchGestureSequence(session, sessionId, gestures, timing = {}) {
+  if (!Array.isArray(gestures) || gestures.length < 1 || gestures.length > 8) {
+    throw new Error('gesture sequence phải có 1-8 gesture');
+  }
+  const waitFor = timing.wait || wait;
+  const gapMs = Math.max(0, Math.min(5000, Math.round(Number(timing.gapMs) || 0)));
+  const results = [];
+  for (let index = 0; index < gestures.length; index += 1) {
+    results.push(await dispatchTouchGesture(session, sessionId, gestures[index], {
+      now: timing.now,
+      wait: waitFor,
+      holdBeforeMoveMs: gestures.length === 1 ? timing.holdBeforeMoveMs : 0,
+      keepPressed: gestures.length === 1 && timing.keepPressed === true,
+      // Inter-gesture timing is governed only by gapMs. Keep the historical
+      // 100 ms settle after the final lifecycle, immediately before eval.
+      postGestureWaitMs: index + 1 < gestures.length ? 0 : timing.postGestureWaitMs,
+    }));
+    if (index + 1 < gestures.length && gapMs > 0) await waitFor(gapMs);
+  }
+  return { gapMs, gestures: results };
 }
 
 /**
@@ -537,7 +562,7 @@ async function runOne(target, options) {
     await session.send('Log.enable', {}, sessionId);
     await session.send('Page.enable', {}, sessionId);
     await session.send('Page.addScriptToEvaluateOnNewDocument', { source: FRAME_COUNTER }, sessionId);
-    if (options.gesture) {
+    if (options.gesture || options.gestures?.length) {
       // Enable before navigation so Cocos detects touch capability while its
       // browser input sources are being constructed.
       await session.send('Emulation.setTouchEmulationEnabled', {
@@ -566,13 +591,20 @@ async function runOne(target, options) {
         result.evalBeforeError = error.message;
       }
     }
-    if (options.gesture) {
+    const gestureSequence = options.gestures?.length ? options.gestures
+      : (options.gesture ? [options.gesture] : []);
+    if (gestureSequence.length) {
       try {
-        result.gesture = await dispatchTouchGesture(session, sessionId, options.gesture, {
+        const sequence = await dispatchTouchGestureSequence(session, sessionId, gestureSequence, {
+          gapMs: options.gestureGapMs,
           holdBeforeMoveMs: options.gestureHoldBeforeMoveMs,
           keepPressed: options.gestureKeepPressed === true,
         });
-        gesturePressed = result.gesture.keepPressed === true;
+        result.gestures = sequence.gestures;
+        result.gestureGapMs = sequence.gapMs;
+        result.gesture = sequence.gestures[0] || null;
+        gesturePressed = sequence.gestures.length === 1
+          && sequence.gestures[0].keepPressed === true;
       } catch (error) {
         result.gestureError = error.message;
         result.eventCounts.exceptions += 1;
@@ -823,5 +855,5 @@ if (require.main === module) {
 
 module.exports = {
   runOne, findBuiltHtml, findBrowser, ensureWebSocketRuntime,
-  parseGesture, dispatchTouchGesture, selectCocosPreviewDevice,
+  parseGesture, dispatchTouchGesture, dispatchTouchGestureSequence, selectCocosPreviewDevice,
 };

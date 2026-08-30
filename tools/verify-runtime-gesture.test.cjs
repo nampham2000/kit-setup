@@ -2,7 +2,9 @@
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { parseGesture, dispatchTouchGesture, selectCocosPreviewDevice } = require('./verify-runtime.cjs');
+const {
+  parseGesture, dispatchTouchGesture, dispatchTouchGestureSequence, selectCocosPreviewDevice,
+} = require('./verify-runtime.cjs');
 
 test('gesture coordinates in 0..1 use normalized canvas space', () => {
   assert.deepEqual(parseGesture('0.5,0.6,0.8,0.6,320,12'), {
@@ -101,6 +103,34 @@ test('gesture can stay pressed for a hold-state eval and screenshot', async () =
   assert.equal(events.includes('touchStart'), true);
   assert.equal(events.includes('touchMove'), true);
   assert.equal(events.includes('touchEnd'), false);
+});
+
+test('gesture sequence emits distinct touch lifecycles with a bounded inter-gesture gap', async () => {
+  let clock = 0;
+  const events = [];
+  const session = {
+    send(method, params) {
+      if (method === 'Runtime.evaluate') {
+        return Promise.resolve({ result: { value: JSON.stringify({ left: 0, top: 0, width: 100, height: 200 }) } });
+      }
+      if (method === 'Input.dispatchTouchEvent') events.push({ type: params.type, at: clock });
+      return Promise.resolve({});
+    },
+  };
+  const taps = [parseGesture('0.2,0.4,0.2,0.4,30,1'), parseGesture('0.8,0.5,0.8,0.5,30,1')];
+  const result = await dispatchTouchGestureSequence(session, 'session', taps, {
+    gapMs: 50,
+    now: () => clock,
+    wait: async milliseconds => { clock += milliseconds; },
+  });
+
+  assert.deepEqual(events.map(event => event.type),
+    ['touchStart', 'touchMove', 'touchEnd', 'touchStart', 'touchMove', 'touchEnd']);
+  assert.equal(result.gestures.length, 2);
+  assert.equal(result.gapMs, 50);
+  assert.equal(events[3].at - events[2].at, 50);
+  assert.equal(result.gestures[0].postGestureWaitMs, 0);
+  assert.equal(result.gestures[1].postGestureWaitMs, 100);
 });
 
 test('Cocos preview device selection waits for resize and returns settled canvas', async () => {

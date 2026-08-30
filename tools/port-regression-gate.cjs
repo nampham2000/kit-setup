@@ -37,6 +37,7 @@ const RUN_MAX_BUFFER_BYTES = 2 * 1024 * 1024;
 
 const RISKS = Object.freeze([
   'input-response',
+  'input-concurrency',
   'hold-drag-composition',
   'raycast-occlusion',
   'camera-transform',
@@ -63,6 +64,7 @@ const VISUAL_REFERENCE_RISKS = new Set([
 ]);
 const SEMANTIC_RISKS = new Set([
   'input-response',
+  'input-concurrency',
   'hold-drag-composition',
   'raycast-occlusion',
   'camera-transform',
@@ -227,6 +229,10 @@ function caseHasEval(entry) {
   return entry.requireEvalOk === true && !!(entry.eval || entry.evalFile);
 }
 
+function caseHasInputGesture(entry) {
+  return !!entry.gesture || (Array.isArray(entry.gestures) && entry.gestures.length > 0);
+}
+
 function metricBoundAtLeast(contract, metric, bound) {
   const value = Number(contract?.[metric]?.min);
   return Number.isFinite(value) && value >= bound;
@@ -250,6 +256,18 @@ function caseHasRuntimeMeshOracle(entry) {
     && metricBoundAtLeast(entry.requiredEvalMetrics, 'directionDot', 0.9)
     && metricBoundAtMost(entry.requiredEvalMetrics, 'rootScaleError', 0.02)
     && metricBoundAtMost(entry.requiredEvalMetrics, 'thicknessError', 0.02);
+}
+
+function caseHasInputConcurrencyOracle(entry) {
+  return Array.isArray(entry.gestures) && entry.gestures.length >= 2 && caseHasEval(entry)
+    && entry.requireEvalBeforeOk === true && !!(entry.evalBefore || entry.evalBeforeFile)
+    && metricBoundAtLeast(entry.requiredEvalBeforeMetrics, 'actionStarted', 0)
+    && metricBoundAtMost(entry.requiredEvalBeforeMetrics, 'actionStarted', 0)
+    && metricBoundAtLeast(entry.requiredEvalMetrics, 'actionStarted', 2)
+    && metricBoundAtLeast(entry.requiredEvalMetrics, 'concurrentActions', 2)
+    && metricBoundAtLeast(entry.requiredEvalMetrics, 'secondStartsBeforeFirstCompletes', 1)
+    && metricBoundAtLeast(entry.requiredEvalMetrics, 'uniqueReservedDestinationCount', 2)
+    && metricBoundAtMost(entry.requiredEvalMetrics, 'reservationCollisionCount', 0);
 }
 
 function validateAnimationCurveOracle(file, label) {
@@ -310,7 +328,7 @@ function validateMatrixPolicy(projectRoot, suite, matrix, matrixFile) {
     const name = String(entry.name).trim();
     if (names.has(name)) throw regressionError('REGRESSION_MATRIX_INVALID', `${suite.id}: case name bị trùng: ${name}`);
     names.add(name);
-    if (entry.gesture && !caseHasEval(entry)) {
+    if (caseHasInputGesture(entry) && !caseHasEval(entry)) {
       throw regressionError('REGRESSION_ORACLE_REQUIRED', `${suite.id}/${name}: gesture cần eval/evalFile + requireEvalOk=true.`);
     }
     if (entry.requiredTrace && (!Array.isArray(entry.requiredTrace) || entry.requiredTrace.length < 2 || !caseHasEval(entry))) {
@@ -339,8 +357,13 @@ function validateMatrixPolicy(projectRoot, suite, matrix, matrixFile) {
     if (VISUAL_REFERENCE_RISKS.has(risk) && !matrix.cases.some(entry => !!entry.referenceImage)) {
       throw regressionError('REGRESSION_REFERENCE_MISSING', `${suite.id}: risk ${risk} cần ảnh Unity reference.`);
     }
-    if (risk === 'input-response' && !matrix.cases.some(entry => entry.gesture && caseHasEval(entry))) {
+    if (risk === 'input-response' && !matrix.cases.some(entry => caseHasInputGesture(entry) && caseHasEval(entry))) {
       throw regressionError('REGRESSION_INPUT_GESTURE_MISSING', `${suite.id}: input-response cần real gesture và semantic eval.`);
+    }
+    if (risk === 'input-concurrency' && !matrix.cases.some(caseHasInputConcurrencyOracle)) {
+      throw regressionError('REGRESSION_INPUT_CONCURRENCY_ORACLE_MISSING',
+        `${suite.id}: input-concurrency cần >=2 real gestures, pre-action proof và bounded metrics `
+        + 'cho concurrent action, ordering và destination reservation uniqueness.');
     }
     if (risk === 'hold-drag-composition' && !matrix.cases.some(entry =>
       entry.gesture && Number(entry.gestureHoldBeforeMoveMs) > 0 && caseHasEval(entry))) {

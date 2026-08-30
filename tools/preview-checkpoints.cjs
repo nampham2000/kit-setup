@@ -420,6 +420,14 @@ function validateConfig(config, overrides = {}) {
     if (entry.gestureKeepPressed !== undefined && typeof entry.gestureKeepPressed !== 'boolean') {
       throw new Error(`cases[${index}].gestureKeepPressed phải là boolean`);
     }
+    if (entry.gestures !== undefined
+      && (!Array.isArray(entry.gestures) || entry.gestures.length < 2 || entry.gestures.length > 8
+        || entry.gestures.some(gesture => typeof gesture !== 'string' || !gesture.trim()))) {
+      throw new Error(`cases[${index}].gestures phải có 2-8 gesture string`);
+    }
+    if (entry.gesture && entry.gestures) {
+      throw new Error(`cases[${index}] không được dùng đồng thời gesture và gestures`);
+    }
     if (entry.gestureKeepPressed === true && !entry.gesture) {
       throw new Error(`cases[${index}].gestureKeepPressed cần gesture`);
     }
@@ -430,6 +438,14 @@ function validateConfig(config, overrides = {}) {
     }
     if (Number(entry.gestureHoldBeforeMoveMs) > 0 && !entry.gesture) {
       throw new Error(`cases[${index}].gestureHoldBeforeMoveMs cần gesture`);
+    }
+    if (entry.gestureGapMs !== undefined
+      && (!Number.isFinite(Number(entry.gestureGapMs))
+        || Number(entry.gestureGapMs) < 0 || Number(entry.gestureGapMs) > 5000)) {
+      throw new Error(`cases[${index}].gestureGapMs phải nằm trong 0-5000 ms`);
+    }
+    if (entry.gestureGapMs !== undefined && !entry.gestures) {
+      throw new Error(`cases[${index}].gestureGapMs cần gestures`);
     }
     if (entry.previewDevice !== undefined
       && (typeof entry.previewDevice !== 'string' || !entry.previewDevice.trim())) {
@@ -449,6 +465,8 @@ function validateConfig(config, overrides = {}) {
       evalBeforeExpression: readExpression(entry, 'evalBefore', 'evalBeforeFile'),
       evalExpression: readExpression(entry, 'eval', 'evalFile'),
       parsedGesture: entry.gesture ? parseGesture(entry.gesture) : null,
+      parsedGestures: entry.gestures ? entry.gestures.map(gesture => parseGesture(gesture)) : [],
+      gestureGapMs: entry.gestureGapMs === undefined ? 0 : Number(entry.gestureGapMs),
       gestureHoldBeforeMoveMs: entry.gestureHoldBeforeMoveMs === undefined
         ? 0 : Number(entry.gestureHoldBeforeMoveMs),
       requiredTrace: entry.requiredTrace ? entry.requiredTrace.map(phase => phase.trim()) : [],
@@ -575,6 +593,8 @@ async function main() {
       evalBeforeExpression: caseEntry.evalBeforeExpression,
       evalExpression: caseEntry.evalExpression,
       gesture: caseEntry.parsedGesture,
+      gestures: caseEntry.parsedGestures,
+      gestureGapMs: caseEntry.gestureGapMs,
       gestureHoldBeforeMoveMs: caseEntry.gestureHoldBeforeMoveMs,
       gestureKeepPressed: caseEntry.gestureKeepPressed === true,
     });
@@ -615,6 +635,8 @@ async function main() {
         consoleWarnings: runtime.consoleWarnings,
         evalBeforeResult: runtime.evalBeforeResult,
         gesture: runtime.gesture,
+        gestures: runtime.gestures,
+        gestureGapMs: runtime.gestureGapMs,
         evalResult: runtime.evalResult,
         evalBeforeError: runtime.evalBeforeError,
         gestureError: runtime.gestureError,
