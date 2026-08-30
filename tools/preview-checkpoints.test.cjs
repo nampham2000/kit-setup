@@ -6,7 +6,7 @@ const path = require('node:path');
 const test = require('node:test');
 const {
   slugify, normalizeWindowSize, resolveInsideProject, validateConfig, parseArgs, evaluateEvalAssertion,
-  evaluateTraceAssertion,
+  evaluateTraceAssertion, evaluateMetricAssertion,
 } = require('./preview-checkpoints.cjs');
 
 test('normalizes names and window size deterministically', () => {
@@ -83,6 +83,48 @@ test('ordered phase trace fails closed on missing, malformed or reordered animat
   assert.match(evaluateTraceAssertion(required, { ok: true, trace: trace.slice(0, -1) }).reason, /close/);
   assert.match(evaluateTraceAssertion(required, { ok: true, trace: [{ phase: 'roll' }] }).reason, /atMs/);
   assert.deepEqual(evaluateTraceAssertion([], undefined), { required: false, ok: true });
+});
+
+test('required eval metrics enforce finite bounded semantic evidence', () => {
+  const contract = {
+    longitudinalUvSpan: { min: 0.9 },
+    directionDot: { min: 0.97 },
+    positionError: { max: 0.02 },
+  };
+  const valid = validateConfig({
+    url: 'http://localhost:7456',
+    cases: [{
+      name: 'mesh peel',
+      evalBefore: 'true',
+      requireEvalBeforeOk: true,
+      requiredEvalBeforeMetrics: { actionStarted: { min: 0, max: 0 } },
+      eval: 'true',
+      requireEvalOk: true,
+      requiredEvalMetrics: contract,
+    }],
+  });
+  assert.deepEqual(valid.cases[0].requiredEvalMetrics, contract);
+  assert.deepEqual(valid.cases[0].requiredEvalBeforeMetrics, { actionStarted: { min: 0, max: 0 } });
+  assert.equal(evaluateMetricAssertion(contract,
+    '{"ok":true,"longitudinalUvSpan":1,"directionDot":0.999,"positionError":0}').ok, true);
+  assert.match(evaluateMetricAssertion(contract,
+    '{"ok":true,"longitudinalUvSpan":0.1,"directionDot":1,"positionError":0}').reason, /below min/);
+  assert.match(evaluateMetricAssertion(contract,
+    '{"ok":true,"longitudinalUvSpan":1,"directionDot":1}').reason, /positionError/);
+  assert.match(evaluateMetricAssertion(contract,
+    '{"ok":true,"longitudinalUvSpan":1,"directionDot":1,"positionError":null}').reason, /non-finite/);
+  assert.match(evaluateMetricAssertion(contract,
+    '{"ok":true,"longitudinalUvSpan":1,"directionDot":1,"positionError":"0"}').reason, /non-finite/);
+  assert.throws(() => validateConfig({
+    url: 'http://localhost:7456',
+    cases: [{ name: 'bad metric', eval: 'true', requireEvalOk: true,
+      requiredEvalMetrics: { positionError: { min: 1, max: 0 } } }],
+  }), /range/);
+  assert.throws(() => validateConfig({
+    url: 'http://localhost:7456',
+    cases: [{ name: 'missing precondition', requireEvalBeforeOk: true,
+      requiredEvalBeforeMetrics: { actionStarted: { max: 0 } } }],
+  }), /evalBefore/);
 });
 
 test('output/reference paths reject an intermediate symlink or junction', t => {

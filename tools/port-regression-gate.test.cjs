@@ -24,10 +24,14 @@ function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'port-regressions-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   fs.mkdirSync(path.join(root, 'assets', 'script'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'assets', 'effects'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'assets', 'prefabs'), { recursive: true });
   fs.mkdirSync(path.join(root, 'tools', 'qa'), { recursive: true });
   fs.mkdirSync(path.join(root, 'docs', 'references'), { recursive: true });
   fs.writeFileSync(path.join(root, 'package.json'), '{}\n');
   fs.writeFileSync(path.join(root, 'assets', 'script', 'Game.ts'), 'export class Game {}\n');
+  fs.writeFileSync(path.join(root, 'assets', 'effects', 'Tape.effect'), 'CCEffect %{}\n');
+  fs.writeFileSync(path.join(root, 'assets', 'prefabs', 'Roll.prefab'), '[]\n');
   fs.writeFileSync(path.join(root, 'docs', 'references', 'unity.png'), 'png');
   return root;
 }
@@ -132,6 +136,54 @@ test('visual and ordered animation risks fail closed without source reference or
   }], ['animation-callback-flow']);
   assert.throws(() => validateRegistry(root, animation, { configFile: file }),
     error => error.code === 'REGRESSION_ANIMATION_TRACE_MISSING');
+});
+
+test('runtime mesh animation requires linear and curved metric oracles plus watched render assets', t => {
+  const root = fixture(t);
+  const matrix = 'tools/qa/runtime-mesh.json';
+  const requiredEvalMetrics = {
+    actionStarted: { min: 1 },
+    longitudinalUvSpan: { min: 0.9 },
+    longitudinalUvMaxError: { max: 0.0001 },
+    positionError: { max: 0.02 },
+    directionDot: { min: 0.97 },
+    rootScaleError: { max: 0.001 },
+    thicknessError: { max: 0.001 },
+  };
+  const meshCase = (name, tag) => ({
+    name,
+    gesture: '0.5,0.5,0.5,0.5,100,1',
+    evalBefore: 'true',
+    requireEvalBeforeOk: true,
+    requiredEvalBeforeMetrics: { actionStarted: { min: 0, max: 0 } },
+    eval: 'true',
+    requireEvalOk: true,
+    requiredTrace: ['roll-start', 'roll-volume-ready'],
+    requiredEvalMetrics,
+    referenceImage: 'docs/references/unity.png',
+    regressionTags: [tag],
+  });
+  writeMatrix(root, matrix, [meshCase('linear ribbon', 'linear-path'), meshCase('curved ribbon', 'curved-path')]);
+  const source = registry([{
+    id: 'mesh-peel',
+    risks: ['runtime-mesh-animation'],
+    matrix,
+    watchFiles: ['assets/script/Game.ts', 'assets/effects/Tape.effect', 'assets/prefabs/Roll.prefab'],
+  }], ['runtime-mesh-animation']);
+  const file = writeRegistry(root, source);
+  assert.equal(validateRegistry(root, source, { configFile: file }).suites[0].risks[0], 'runtime-mesh-animation');
+
+  const invalidMatrix = JSON.parse(fs.readFileSync(path.join(root, ...matrix.split('/')), 'utf8'));
+  delete invalidMatrix.cases[1].requiredEvalMetrics.directionDot;
+  writeMatrix(root, matrix, invalidMatrix.cases);
+  assert.throws(() => validateRegistry(root, source, { configFile: file }),
+    error => error.code === 'REGRESSION_RUNTIME_MESH_ORACLE_MISSING');
+
+  const directActionMatrix = [meshCase('linear ribbon', 'linear-path'), meshCase('curved ribbon', 'curved-path')];
+  delete directActionMatrix[0].requiredEvalBeforeMetrics;
+  writeMatrix(root, matrix, directActionMatrix);
+  assert.throws(() => validateRegistry(root, source, { configFile: file }),
+    error => error.code === 'REGRESSION_RUNTIME_MESH_ORACLE_MISSING');
 });
 
 test('transparent hold risk requires a live held gesture, not a baseline screenshot', t => {

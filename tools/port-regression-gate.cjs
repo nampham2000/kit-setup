@@ -43,6 +43,7 @@ const RISKS = Object.freeze([
   'material-color-lighting',
   'transparent-hold-state',
   'animation-callback-flow',
+  'runtime-mesh-animation',
   'attachment-layout',
   'font-ui-layout',
   'progress-ui-state',
@@ -53,6 +54,7 @@ const VISUAL_REFERENCE_RISKS = new Set([
   'camera-transform',
   'material-color-lighting',
   'transparent-hold-state',
+  'runtime-mesh-animation',
   'attachment-layout',
   'font-ui-layout',
   'progress-ui-state',
@@ -64,6 +66,7 @@ const SEMANTIC_RISKS = new Set([
   'camera-transform',
   'attachment-layout',
   'transparent-hold-state',
+  'runtime-mesh-animation',
   'progress-ui-state',
   'level-lifecycle',
 ]);
@@ -222,6 +225,31 @@ function caseHasEval(entry) {
   return entry.requireEvalOk === true && !!(entry.eval || entry.evalFile);
 }
 
+function metricBoundAtLeast(contract, metric, bound) {
+  const value = Number(contract?.[metric]?.min);
+  return Number.isFinite(value) && value >= bound;
+}
+
+function metricBoundAtMost(contract, metric, bound) {
+  const value = Number(contract?.[metric]?.max);
+  return Number.isFinite(value) && value <= bound;
+}
+
+function caseHasRuntimeMeshOracle(entry) {
+  return !!entry.gesture && caseHasEval(entry) && !!entry.referenceImage
+    && entry.requireEvalBeforeOk === true && !!(entry.evalBefore || entry.evalBeforeFile)
+    && Array.isArray(entry.requiredTrace) && entry.requiredTrace.length >= 2
+    && metricBoundAtLeast(entry.requiredEvalBeforeMetrics, 'actionStarted', 0)
+    && metricBoundAtMost(entry.requiredEvalBeforeMetrics, 'actionStarted', 0)
+    && metricBoundAtLeast(entry.requiredEvalMetrics, 'actionStarted', 1)
+    && metricBoundAtLeast(entry.requiredEvalMetrics, 'longitudinalUvSpan', 0.85)
+    && metricBoundAtMost(entry.requiredEvalMetrics, 'longitudinalUvMaxError', 0.001)
+    && metricBoundAtMost(entry.requiredEvalMetrics, 'positionError', 0.05)
+    && metricBoundAtLeast(entry.requiredEvalMetrics, 'directionDot', 0.9)
+    && metricBoundAtMost(entry.requiredEvalMetrics, 'rootScaleError', 0.02)
+    && metricBoundAtMost(entry.requiredEvalMetrics, 'thicknessError', 0.02);
+}
+
 function validateMatrixPolicy(projectRoot, suite, matrix, matrixFile) {
   if (!matrix || typeof matrix !== 'object' || !Array.isArray(matrix.cases) || matrix.cases.length < 1) {
     throw regressionError('REGRESSION_MATRIX_INVALID', `${suite.id}: matrix cần ít nhất một case.`);
@@ -284,6 +312,24 @@ function validateMatrixPolicy(projectRoot, suite, matrix, matrixFile) {
     if (risk === 'animation-callback-flow' && !matrix.cases.some(entry =>
       Array.isArray(entry.requiredTrace) && entry.requiredTrace.length >= 2 && caseHasEval(entry))) {
       throw regressionError('REGRESSION_ANIMATION_TRACE_MISSING', `${suite.id}: animation flow cần requiredTrace có thứ tự.`);
+    }
+    if (risk === 'runtime-mesh-animation') {
+      const missingPathCases = ['linear-path', 'curved-path'].filter(tag => !matrix.cases.some(entry =>
+        (entry.regressionTags || []).includes(tag) && caseHasRuntimeMeshOracle(entry)));
+      if (missingPathCases.length) {
+        throw regressionError('REGRESSION_RUNTIME_MESH_ORACLE_MISSING',
+          `${suite.id}: runtime-mesh-animation cần real-gesture linear-path + curved-path, Unity reference, `
+          + 'pre/post action proof, ordered trace và metric bounds cho UV span/error, position, direction, root scale, thickness.',
+        { missingPathCases });
+      }
+      const watchedExtensions = new Set(suite.watchFiles.map(file => path.extname(file).toLowerCase()));
+      const watchesCode = watchedExtensions.has('.ts') || watchedExtensions.has('.js');
+      const watchesRenderAsset = ['.effect', '.prefab', '.fbx', '.mesh', '.mtl']
+        .some(extension => watchedExtensions.has(extension));
+      if (!watchesCode || !watchesRenderAsset) {
+        throw regressionError('REGRESSION_RUNTIME_MESH_WATCH_MISSING',
+          `${suite.id}: runtime-mesh-animation phải watch code và ít nhất một render asset/effect/prefab.`);
+      }
     }
     if (risk === 'level-lifecycle' && suite.runs < 2) {
       throw regressionError('REGRESSION_ROUNDS_REQUIRED', `${suite.id}: level-lifecycle phải chạy ít nhất 2 rounds.`);

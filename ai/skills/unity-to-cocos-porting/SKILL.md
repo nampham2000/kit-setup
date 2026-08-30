@@ -60,6 +60,23 @@ obligation/feature nguồn và bug history, không chỉ từ phần đang sửa
 chạy `npm run ai:verify:regressions`: tool refresh AssetDB/reload preview, chạy đủ rounds, và ghi receipt gắn hash
 code/config/effect/font/matrix hiện tại. Nếu `check` báo stale thì phải chạy lại, không được dùng ảnh PASS cũ.
 
+Đừng xem mesh import là kết quả cuối nếu Unity source gọi `meshFilter.mesh`, gán `vertices`, `uv/uv2`,
+`colors`, `tangents`, hoặc ghi vertex buffer ở runtime. Truy theo chuỗi producer-consumer: code bake attribute nào,
+shader đọc semantic nào, và animation dùng path/normals nào. Ở Cocos phải clone/rebuild runtime mesh rồi bake
+attribute tương ứng; trước đó đo vertex FBX và serialized path trong cùng local frame để xác nhận phép đổi trục.
+Không tái sử dụng quy tắc flip của scene porter cho một FBX custom nếu chưa có số đo. Thêm fail-fast kiểm path/mesh
+alignment và progress span để sai hệ tọa độ không biến thành animation hẹp ngang nhưng vẫn runtime-clean.
+
+Với visual chạy dọc mesh/path (peel, zipper, rope, trail), giữ đúng hierarchy của nguồn: root ở parent/path space,
+root không bị scale nếu Unity chỉ tween child, child thickness lấy từ ribbon width, và rotation dựng từ tangent +
+normal với endpoint reversal đúng source. Registry phải dùng risk `runtime-mesh-animation`, có real gesture cho cả
+`linear-path` và `curved-path`, ảnh Unity, `requiredTrace`, cùng `requiredEvalMetrics` tối thiểu cho
+`longitudinalUvSpan`, `longitudinalUvMaxError`, `positionError`, `directionDot`, `rootScaleError`,
+`thicknessError`. `evalBefore` chỉ được chuẩn bị scene, tuyệt đối không gọi action đang test. Bắt buộc thêm
+`requireEvalBeforeOk` + `requiredEvalBeforeMetrics` để chứng minh `actionStarted=0` trước gesture và metric
+`actionStarted>=1` sau gesture; nếu không, matrix có gesture vẫn có thể pass giả do direct API call. Mở ảnh giữa
+animation; ảnh trước/sau không phát hiện được cuộn sai hướng hoặc scale sai node.
+
 Khi Unity thay material qua vòng lặp `sharedMaterials`, Cocos phải thay/recolor mọi material slot của
 renderer; slot 0 không đại diện cho toàn mesh. Khi object được attach vào slot, giữ phép biến đổi tương
 đối của nguồn (`slot.worldRotation * localAttachRotation`) thay vì chỉ copy vị trí rồi để rotation identity.

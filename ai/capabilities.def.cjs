@@ -765,7 +765,8 @@ const CAPABILITIES = [
     outputs: ['.ai/port/regression-receipt.json', '.unity/port-regressions/<suite>/run-*/manifest.json'],
     limits: [
       'Registry mặc định là `tools/port-regressions.json` và phải nằm trong Git cùng matrix, eval/oracle, Unity reference và mọi watchFiles; file chỉ có trên máy hiện tại làm gate fail.',
-      'Mỗi risk có contract riêng: input cần real gesture + semantic eval; hold-drag cần gestureHoldBeforeMoveMs; transparent hold cần gestureKeepPressed; raycast cần positive+negative gesture tags; animation cần requiredTrace; visual cần Unity reference; level-lifecycle cần win tag và chạy ít nhất 2 rounds.',
+      'Mỗi risk có contract riêng: input cần real gesture + semantic eval; hold-drag cần gestureHoldBeforeMoveMs; transparent hold cần gestureKeepPressed; raycast cần positive+negative gesture tags; animation cần requiredTrace; runtime-mesh-animation cần linear-path + curved-path, Unity reference, ordered trace và bounded metrics; visual cần Unity reference; level-lifecycle cần win tag và chạy ít nhất 2 rounds.',
+      '`requiredEvalMetrics`/`requiredEvalBeforeMetrics` fail-closed nếu eval thiếu metric, không finite hoặc vượt min/max. Runtime mesh animation phải chứng minh actionStarted=0 trước gesture và >=1 sau gesture; evalBefore không được tự gọi action đang test. Dùng metric cho UV span/error, position, direction dot, root scale và thickness; `{ok:true}` đơn lẻ không đủ.',
       'Trước run, tool gọi Cocos `editorRuntime_reload_preview` với refreshAssets=true để tránh test bundle TypeScript cũ. `--no-refresh` chỉ dùng khi chủ ý và được ghi rõ trong receipt.',
       'Receipt bind SHA-256 của registry, matrix, eval/reference và watchFiles; thay đổi byte sau PASS làm `check` fail stale. Tool không tự đánh giá pixel parity ngoài oracle/reference contract.',
     ],
@@ -1029,12 +1030,16 @@ const CORE_RULES = [
     rule: 'Khi Unity thay `Renderer.material` bằng một material khác lúc hold/peek/highlight/damage, Cocos phải tạo hoặc load đúng material thay thế như một asset/state độc lập và chỉ swap đúng renderer set có evidence từ source; không tự gán depth/tint variant cho mọi sibling. Không clone albedo/emissive map, keyword hay pipeline state từ material opaque đang hiển thị nếu source replacement không có chúng. Alpha cạnh và mức trộn side color phải là tham số riêng để màu gần đen không thay toàn bộ albedo ở góc lướt. Checkpoint gesture thật phải xoay qua ít nhất hai góc, kiểm exact material identity của renderer không được chọn, technique, blend enable, depthWrite, screenshot không có black facets và việc phục hồi đúng material gốc khi kết thúc interaction; chỉ kiểm alpha/color là chưa đủ.',
   },
   {
+    id: 'runtime-mesh-animation-parity',
+    rule: 'Mọi Unity code mutate mesh runtime (`mesh`, `vertices`, `uv/uv2`, colors, tangents, vertex buffer) là gameplay/render behavior, không phải chi tiết import. Phải port cả bước clone/rebuild mesh và bake đúng attribute mà shader đọc, sau khi đo phép đổi hệ tọa độ giữa serialized path và vertex FBX/Cocos; không áp dụng handedness theo suy đoán. Giữ topology transform của visual chuyển động: root theo path ở đúng local/world parent, chỉ scale child mà source scale, thickness theo mesh, rotation theo tangent+normal và đảo endpoint đúng source. Nghiệm thu bằng risk `runtime-mesh-animation` với gesture thật trên linear-path lẫn curved-path, Unity reference, ordered trace, pre/post metric chứng minh action chưa chạy trước gesture rồi đã chạy sau gesture, và metrics cho UV span/error, position, direction, root scale, thickness.',
+  },
+  {
     id: 'visual-checkpoints',
     rule: 'Khi port thay đổi camera, transform, material/shader, UI layout hoặc input fidelity, phải chạy `npm run ai:verify:visual -- --config <matrix.json>` trên Cocos preview với ảnh nguồn/các checkpoint phù hợp và mở ảnh kết quả. Với hành vi có oracle, dùng `requireEvalOk: true`; runtime-clean không được diễn giải thành pixel parity.',
   },
   {
     id: 'portable-regression-registry',
-    rule: 'Mọi port phải có `tools/port-regressions.json` được commit, khai báo requiredRisks từ Unity preflight/bug history và mandatory suite cho từng risk. Matrix, eval/oracle, ảnh Unity reference và watchFiles phải cùng nằm trong Git. Sau mỗi fix hoặc thay đổi watched target, chạy `npm run ai:verify:regressions`; không reuse PASS cũ vì receipt bị khóa SHA-256. Risk input dùng gesture thật + semantic oracle, hold-drag dùng `gestureHoldBeforeMoveMs`, raycast có ca positive/negative, callback flow có `requiredTrace`, lifecycle chạy ít nhất 2 rounds.',
+    rule: 'Mọi port phải có `tools/port-regressions.json` được commit, khai báo requiredRisks từ Unity preflight/bug history và mandatory suite cho từng risk. Matrix, eval/oracle, ảnh Unity reference và watchFiles phải cùng nằm trong Git. Sau mỗi fix hoặc thay đổi watched target, chạy `npm run ai:verify:regressions`; không reuse PASS cũ vì receipt bị khóa SHA-256. Risk input dùng gesture thật + semantic oracle, hold-drag dùng `gestureHoldBeforeMoveMs`, raycast có ca positive/negative, callback flow có `requiredTrace`, runtime mesh có linear+curved cases cùng bounded metrics, lifecycle chạy ít nhất 2 rounds.',
   },
   {
     id: 'interactive-affordance-parity',

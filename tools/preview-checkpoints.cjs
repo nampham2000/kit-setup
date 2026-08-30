@@ -50,9 +50,17 @@ Manifest:
         "gestureHoldBeforeMoveMs": 300,
         "gestureKeepPressed": true,
         "postActionSeconds": 3,
+        "requireEvalBeforeOk": true,
+        "requiredEvalBeforeMetrics": {
+          "actionStarted": { "min": 0, "max": 0 }
+        },
         "evalFile": ".unity/checkpoints/baseline-after.js",
         "requireEvalOk": true,
         "requiredTrace": ["roll", "pre-attach", "snap", "feedback"],
+        "requiredEvalMetrics": {
+          "positionError": { "max": 0.02 },
+          "directionDot": { "min": 0.97 }
+        },
         "referenceImage": ".unity/references/unity.png"
       }
     ]
@@ -135,6 +143,70 @@ function parseEvalPayload(value) {
   try { return JSON.parse(value); } catch (_) { return null; }
 }
 
+function normalizeEvalMetricContract(value, label = 'requiredEvalMetrics') {
+  if (value === undefined) return {};
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`${label} phải là object metric -> {min|max}`);
+  }
+  const entries = Object.entries(value);
+  if (entries.length < 1 || entries.length > 32) throw new Error(`${label} phải có 1-32 metric`);
+  const normalized = {};
+  for (const [metric, raw] of entries) {
+    if (!/^[A-Za-z][A-Za-z0-9_.-]{0,79}$/.test(metric)
+      || metric.split('.').some(part => ['__proto__', 'prototype', 'constructor'].includes(part))) {
+      throw new Error(`${label} có metric path không hợp lệ: ${metric}`);
+    }
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      throw new Error(`${label}.${metric} phải là {min|max}`);
+    }
+    const hasMin = raw.min !== undefined;
+    const hasMax = raw.max !== undefined;
+    if (!hasMin && !hasMax) throw new Error(`${label}.${metric} cần min hoặc max`);
+    const min = hasMin ? Number(raw.min) : undefined;
+    const max = hasMax ? Number(raw.max) : undefined;
+    if ((hasMin && !Number.isFinite(min)) || (hasMax && !Number.isFinite(max))
+      || (hasMin && hasMax && min > max)) {
+      throw new Error(`${label}.${metric} có range không hợp lệ`);
+    }
+    normalized[metric] = { ...(hasMin ? { min } : {}), ...(hasMax ? { max } : {}) };
+  }
+  return normalized;
+}
+
+function readEvalMetric(payload, metric) {
+  let value = payload;
+  for (const part of metric.split('.')) {
+    if (!value || typeof value !== 'object' || !Object.prototype.hasOwnProperty.call(value, part)) return undefined;
+    value = value[part];
+  }
+  return value;
+}
+
+/** Verify declared numeric oracle output instead of trusting a bare {ok:true}. */
+function evaluateMetricAssertion(requiredMetrics, value) {
+  const entries = Object.entries(requiredMetrics || {});
+  if (entries.length === 0) return { required: false, ok: true };
+  const payload = parseEvalPayload(value);
+  if (!payload || typeof payload !== 'object') {
+    return { required: true, ok: false, reason: 'eval result must be an object containing required metrics' };
+  }
+  const metrics = [];
+  for (const [metric, range] of entries) {
+    const actual = readEvalMetric(payload, metric);
+    if (typeof actual !== 'number' || !Number.isFinite(actual)) {
+      return { required: true, ok: false, reason: `missing or non-finite eval metric: ${metric}`, metrics };
+    }
+    if (range.min !== undefined && actual < range.min) {
+      return { required: true, ok: false, reason: `${metric}=${actual} is below min ${range.min}`, metrics };
+    }
+    if (range.max !== undefined && actual > range.max) {
+      return { required: true, ok: false, reason: `${metric}=${actual} exceeds max ${range.max}`, metrics };
+    }
+    metrics.push({ metric, actual, ...range });
+  }
+  return { required: true, ok: true, metrics };
+}
+
 /**
  * Verify an ordered runtime animation/callback trace as a subsequence. Extra
  * diagnostic phases are allowed, but every required milestone must appear in
@@ -204,6 +276,12 @@ function validateConfig(config, overrides = {}) {
     if (entry.requireEvalOk !== undefined && typeof entry.requireEvalOk !== 'boolean') {
       throw new Error(`cases[${index}].requireEvalOk phải là boolean`);
     }
+    if (entry.requireEvalBeforeOk !== undefined && typeof entry.requireEvalBeforeOk !== 'boolean') {
+      throw new Error(`cases[${index}].requireEvalBeforeOk phải là boolean`);
+    }
+    if (entry.requireEvalBeforeOk === true && !entry.evalBefore && !entry.evalBeforeFile) {
+      throw new Error(`cases[${index}].requireEvalBeforeOk cần evalBefore/evalBeforeFile`);
+    }
     if (entry.requiredTrace !== undefined) {
       if (!Array.isArray(entry.requiredTrace) || entry.requiredTrace.length < 2 || entry.requiredTrace.length > 32
         || entry.requiredTrace.some(phase => typeof phase !== 'string' || !phase.trim())
@@ -213,6 +291,18 @@ function validateConfig(config, overrides = {}) {
       if (entry.requireEvalOk !== true || (!entry.eval && !entry.evalFile)) {
         throw new Error(`cases[${index}].requiredTrace cần requireEvalOk=true và eval/evalFile`);
       }
+    }
+    const requiredEvalMetrics = normalizeEvalMetricContract(entry.requiredEvalMetrics,
+      `cases[${index}].requiredEvalMetrics`);
+    if (Object.keys(requiredEvalMetrics).length > 0
+      && (entry.requireEvalOk !== true || (!entry.eval && !entry.evalFile))) {
+      throw new Error(`cases[${index}].requiredEvalMetrics cần requireEvalOk=true và eval/evalFile`);
+    }
+    const requiredEvalBeforeMetrics = normalizeEvalMetricContract(entry.requiredEvalBeforeMetrics,
+      `cases[${index}].requiredEvalBeforeMetrics`);
+    if (Object.keys(requiredEvalBeforeMetrics).length > 0
+      && (entry.requireEvalBeforeOk !== true || (!entry.evalBefore && !entry.evalBeforeFile))) {
+      throw new Error(`cases[${index}].requiredEvalBeforeMetrics cần requireEvalBeforeOk=true và evalBefore/evalBeforeFile`);
     }
     if (entry.gestureKeepPressed !== undefined && typeof entry.gestureKeepPressed !== 'boolean') {
       throw new Error(`cases[${index}].gestureKeepPressed phải là boolean`);
@@ -249,6 +339,8 @@ function validateConfig(config, overrides = {}) {
       gestureHoldBeforeMoveMs: entry.gestureHoldBeforeMoveMs === undefined
         ? 0 : Number(entry.gestureHoldBeforeMoveMs),
       requiredTrace: entry.requiredTrace ? entry.requiredTrace.map(phase => phase.trim()) : [],
+      requiredEvalMetrics,
+      requiredEvalBeforeMetrics,
       postActionSeconds: entry.postActionSeconds === undefined
         ? undefined : Number(entry.postActionSeconds),
     };
@@ -371,8 +463,13 @@ async function main() {
       gestureKeepPressed: caseEntry.gestureKeepPressed === true,
     });
     const referenceImage = copyReference(caseEntry, caseDir);
+    const evalBeforeAssertion = evaluateEvalAssertion(caseEntry.requireEvalBeforeOk === true,
+      runtime.evalBeforeResult);
+    const metricBeforeAssertion = evaluateMetricAssertion(caseEntry.requiredEvalBeforeMetrics,
+      runtime.evalBeforeResult);
     const evalAssertion = evaluateEvalAssertion(caseEntry.requireEvalOk === true, runtime.evalResult);
     const traceAssertion = evaluateTraceAssertion(caseEntry.requiredTrace, runtime.evalResult);
+    const metricAssertion = evaluateMetricAssertion(caseEntry.requiredEvalMetrics, runtime.evalResult);
     results.push({
       name: caseEntry.name,
       slug: caseEntry.slug,
@@ -381,7 +478,8 @@ async function main() {
       referenceImage,
       ok: runtime.ok && !!runtime.screenshot && !runtime.evalBeforeError && !runtime.evalError
         && !runtime.previewDeviceError && !runtime.previewDeviceRestoreError
-        && !runtime.gestureError && evalAssertion.ok && traceAssertion.ok,
+        && !runtime.gestureError && evalBeforeAssertion.ok && metricBeforeAssertion.ok
+        && evalAssertion.ok && traceAssertion.ok && metricAssertion.ok,
       evidence: {
         fps: runtime.fps,
         frames: runtime.frames,
@@ -402,8 +500,11 @@ async function main() {
         evalBeforeError: runtime.evalBeforeError,
         gestureError: runtime.gestureError,
         evalError: runtime.evalError,
+        evalBeforeAssertion,
+        metricBeforeAssertion,
         evalAssertion,
         traceAssertion,
+        metricAssertion,
       },
     });
   }
@@ -456,4 +557,6 @@ module.exports = {
   readExpression,
   evaluateEvalAssertion,
   evaluateTraceAssertion,
+  normalizeEvalMetricContract,
+  evaluateMetricAssertion,
 };
