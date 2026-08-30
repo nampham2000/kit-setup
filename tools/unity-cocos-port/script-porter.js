@@ -1,6 +1,5 @@
 'use strict';
 
-const fs = require('fs');
 const path = require('path');
 const { cocosRef } = require('./core-utils');
 const { SCRIPT_SHAPE_MATCH_THRESHOLD } = require('./constants');
@@ -14,10 +13,9 @@ module.exports = function createScriptPorter(deps) {
     unityRefGuid,
     resolveUnitySpriteFrame,
     reportResolvedUnitySprite,
-    importedUnityAssetPath,
-    copyUnityAssetToCocos,
-    resolveCurrentFontUuid,
     resolveUnitySpineSkeletonDataUuid,
+    resolveUnityLabelConfig,
+    isUnityTextEffect,
   } = deps;
 
   function cocosUuid(uuid, expectedType) {
@@ -45,77 +43,28 @@ module.exports = function createScriptPorter(deps) {
   }
 
   function resolveUnityLabelSizing(doc) {
-    const autoSizing = Number(getField(doc, 'm_enableAutoSizing', 0) || 0) !== 0;
-    const requested = finiteNumber(getField(doc, 'm_fontSize', 22), 22);
-    const sourceBase = finiteNumber(getField(doc, 'm_fontSizeBase', requested), requested);
-    const max = finiteNumber(getField(doc, 'm_fontSizeMax', NaN), NaN);
+    const fontData = getField(doc, 'm_FontData', {}) || {};
+    const isTmp = hasField(doc, 'm_fontSize') || hasField(doc, 'm_fontAsset');
+    const autoSizing = isTmp
+      ? Number(getField(doc, 'm_enableAutoSizing', 0) || 0) !== 0
+      : Number(fontData.m_BestFit || 0) !== 0;
+    const requested = isTmp
+      ? finiteNumber(getField(doc, 'm_fontSize', 22), 22)
+      : finiteNumber(fontData.m_FontSize, finiteNumber(getField(doc, 'm_FontSize', 22), 22));
+    const sourceBase = isTmp ? finiteNumber(getField(doc, 'm_fontSizeBase', requested), requested) : requested;
+    const max = isTmp
+      ? finiteNumber(getField(doc, 'm_fontSizeMax', NaN), NaN)
+      : finiteNumber(fontData.m_BestFitMaxSize, NaN);
     const fontSize = autoSizing && Number.isFinite(max) ? max : requested;
+    const lineHeight = isTmp
+      ? fontSize + finiteNumber(getField(doc, 'm_lineSpacing', 0), 0)
+      : fontSize * Math.max(0.01, finiteNumber(fontData.m_LineSpacing, 1));
     return {
       autoSizing,
       fontSize: Math.max(1, Number.isFinite(fontSize) ? fontSize : sourceBase),
-      lineHeight: Math.max(1, Number.isFinite(fontSize) ? fontSize : sourceBase),
+      lineHeight: Math.max(1, Number.isFinite(lineHeight) ? lineHeight : sourceBase),
       overflow: autoSizing ? 2 : undefined,
     };
-  }
-
-  function normalizeFontStem(stem) {
-    return String(stem || '')
-      .replace(/\s+SDF(?:[_ -].*)?$/i, '')
-      .replace(/[_ -]+SDF(?:[_ -].*)?$/i, '')
-      .trim();
-  }
-
-  function readSourceFontGuid(tmpFontAsset) {
-    if (!tmpFontAsset?.path || !fs.existsSync(tmpFontAsset.path)) return '';
-    const text = fs.readFileSync(tmpFontAsset.path, 'utf8');
-    return /m_SourceFontFileGUID:\s*([a-fA-F0-9]+)/.exec(text)?.[1]
-      || /sourceFontFileGUID:\s*([a-fA-F0-9]+)/.exec(text)?.[1]
-      || '';
-  }
-
-  function fontAssetCandidates(unityDb) {
-    return [...(unityDb.byGuid?.values?.() || [])].filter((asset) => ['.ttf', '.otf'].includes(asset.ext));
-  }
-
-  function resolveTmpSourceFontAsset(tmpFontAsset, unityDb) {
-    if (!tmpFontAsset) return null;
-    const sourceGuid = readSourceFontGuid(tmpFontAsset);
-    const sourceByGuid = unityDb.get(sourceGuid);
-    if (sourceByGuid && ['.ttf', '.otf'].includes(sourceByGuid.ext)) return sourceByGuid;
-
-    const wantedStem = normalizeFontStem(tmpFontAsset?.stem);
-    const wantedKey = wantedStem.toLowerCase().replace(/[^a-z0-9]+/g, '');
-    const sameDir = tmpFontAsset?.path ? path.dirname(tmpFontAsset.path) : '';
-    const candidates = fontAssetCandidates(unityDb);
-    const match = candidates.find((asset) => (
-      path.dirname(asset.path) === sameDir &&
-      asset.stem.toLowerCase().replace(/[^a-z0-9]+/g, '') === wantedKey
-    )) || candidates.find((asset) => asset.stem.toLowerCase().replace(/[^a-z0-9]+/g, '') === wantedKey);
-    return match || null;
-  }
-
-  function resolveUnityTmpFontUuid(tmpFontRef, options, unityDb, cocosDb, reporter) {
-    const tmpFontAsset = unityDb.get(unityRefGuid(tmpFontRef));
-    if (!tmpFontAsset) return '';
-    const sourceFontAsset = resolveTmpSourceFontAsset(tmpFontAsset, unityDb);
-    if (!sourceFontAsset) {
-      reporter.low('TMP_FONT_SOURCE_UNRESOLVED', tmpFontAsset.relativePath, '', 'TextMeshPro font asset source TTF/OTF could not be resolved');
-      return '';
-    }
-
-    const importedDest = importedUnityAssetPath(sourceFontAsset, options);
-    let fontUuid = importedDest && fs.existsSync(importedDest)
-      ? resolveCurrentFontUuid(importedDest, options)
-      : '';
-    if (!fontUuid) fontUuid = cocosDb.resolveFontByStem(sourceFontAsset.stem);
-    if (!fontUuid) {
-      const copiedDest = copyUnityAssetToCocos(sourceFontAsset, options, reporter, 'font', 'low', { deferNeedsImportReport: true });
-      fontUuid = resolveCurrentFontUuid(copiedDest, options);
-      if (fontUuid && copiedDest) {
-        reporter.low('FONT_ASSET_PREPARED', sourceFontAsset.relativePath, path.relative(options.cocosRoot, copiedDest).replace(/\\/g, '/'), 'Unity font copied to Cocos and wired to Label');
-      }
-    }
-    return fontUuid || '';
   }
 
   /**
@@ -192,7 +141,12 @@ module.exports = function createScriptPorter(deps) {
     reporter.low('SPINE_SKELETON_MAPPED', model.file, '', 'Unity SkeletonGraphic was mapped to Cocos sp.Skeleton');
   }
 
-  function emitMonoBehaviour(nodeId, componentId, doc, model, builder, reporter, options, unityDb, cocosDb) {
+  function emitMonoBehaviour(nodeId, componentId, doc, model, builder, reporter, options, unityDb, cocosDb, gameObject) {
+    if (isUnityTextEffect(doc, unityDb)) {
+      reporter.low('UNITY_TEXT_EFFECT_MERGED', model.file, gameObject?.name || '',
+        'Unity UI Shadow/Outline was merged into the sibling Cocos Label');
+      return;
+    }
     if (hasField(doc, 'm_OnClick') || hasField(doc, 'm_Interactable')) {
       builder.addButton(nodeId, componentId, `cmp-button-${componentId}`);
       return;
@@ -200,17 +154,13 @@ module.exports = function createScriptPorter(deps) {
     if (hasField(doc, 'm_Text') || hasField(doc, 'm_text')) {
       const text = getField(doc, 'm_Text', getField(doc, 'm_text', ''));
       const labelSizing = resolveUnityLabelSizing(doc);
-      const fontRef = getField(doc, 'm_fontAsset');
-      const tmpFontAsset = unityDb.get(unityRefGuid(fontRef));
-      const sourceFontAsset = resolveTmpSourceFontAsset(tmpFontAsset, unityDb);
-      const fontUuid = resolveUnityTmpFontUuid(fontRef, options, unityDb, cocosDb, reporter);
+      const fontConfig = resolveUnityLabelConfig(doc, gameObject, model, options, unityDb, cocosDb, reporter);
       builder.addLabel(nodeId, componentId, text, `cmp-label-${componentId}`, {
         color: getField(doc, 'm_fontColor', getField(doc, 'm_Color', { r: 1, g: 1, b: 1, a: 1 })),
         fontSize: labelSizing.fontSize,
         lineHeight: labelSizing.lineHeight,
         overflow: labelSizing.overflow,
-        fontUuid,
-        fontFamily: sourceFontAsset?.stem || 'Arial',
+        ...fontConfig,
       });
       return;
     }

@@ -4,7 +4,7 @@
     "source": "playable-shared-kit/ai/capabilities.def.cjs",
     "generatedBy": "npm run ai:sync",
     "contractCheck": "npm run ai:contract:verify",
-    "count": 44
+    "count": 45
   },
   "coreRules": [
     {
@@ -30,6 +30,10 @@
     {
       "id": "trust-but-verify",
       "rule": "Tool báo thành công KHÔNG đồng nghĩa kết quả đúng. Luôn mở ít nhất một file sinh ra để đối chiếu với nguồn trước khi kết luận."
+    },
+    {
+      "id": "font-asset-parity",
+      "rule": "Khi port text, phải ưu tiên font asset thật theo chuỗi: TTF/webfont trực tiếp -> dependency của TMP/Unity Font -> `font.convert` cho định dạng lạ -> system font cuối cùng. Font copy/convert phải được wire thành `cc.TTFFont` và qua `ai:verify:assets`. Chỉ fallback system font sau khi các bước trên thất bại; fallback phải giữ family cùng Bold/Italic/Underline/Shadow/Outline/alignment/wrapping/spacing của Unity và report `high` nếu không phải Unity built-in system font tương đương."
     },
     {
       "id": "visual-checkpoints",
@@ -522,10 +526,32 @@
           "Luôn đọc report và xử lý mọi dòng `high` trước khi coi là xong.",
           "Nếu Cocos Creator không mở, UUID sub-asset của sprite/model chưa nối được: report ghi rõ, mở editor rồi chạy lại.",
           "Cache theo phạm vi --src: sửa MỘT file trong phạm vi sẽ khiến cả phạm vi port lại (đổi lấy việc không bao giờ trả output cũ sai).",
+          "Font không được mặc định rơi về system font: porter lần theo TTF/webfont qua TMP hoặc Unity Font dependency, copy + wire UUID; font không được Cocos nạp trực tiếp sẽ qua font.convert. Chỉ fallback system font sau khi resolver/converter thất bại, giữ Bold/Italic/Underline/Shadow/Outline/alignment/wrapping và ghi `high` vào report.",
           "Sau khi ghi asset, porter yêu cầu Cocos-MCP refresh `db://assets/unity_imported`, rồi kiểm tra cả importer state ở root và mọi `subMetas`; còn trạng thái `imported: false` thì fail thay vì để preview dùng asset hỏng. `--no-import-wait` chỉ dùng khi chủ ý tách bước import/finalize.",
           "Sau khi ghi output, porter tự chạy engine.features một lần cho cả batch: Profile API trước, guarded engine.json fallback sau; chỉ complete khi preview import map đã apply. Dùng --no-engine-feature-repair chỉ khi chủ ý tách bước này."
         ],
         "verify": "npm run ai:verify",
+        "status": "partial"
+      },
+      {
+        "id": "font.convert",
+        "title": "Chuyển font Unity/webfont lạ sang TTF Cocos có thể import",
+        "run": "node playable-shared-kit/tools/font-converter.cjs --src <font> --out <assets/.../font.ttf>",
+        "command": "node playable-shared-kit/tools/font-converter.cjs --src <font> --out <assets/.../font.ttf>",
+        "optional": [
+          "--json"
+        ],
+        "when": "Khi font Unity không thuộc định dạng Cocos Creator 3.8.8 nạp trực tiếp. `port.prefab` tự gọi chuỗi này; dùng CLI riêng để chẩn đoán hoặc chuyển một font.",
+        "outputs": [
+          "<out>.ttf",
+          "stdout conversion receipt/backend"
+        ],
+        "limits": [
+          "WOFF1 và EOT có converter Node tích hợp; SFNT TrueType được copy; OpenType/CFF được giữ nguyên outline và đóng gói dưới suffix `.ttf` mà Cocos/browser nạp được.",
+          "WOFF2 và font vendor lạ cần `woff2_decompress`, Python fontTools hoặc FontForge. Nếu không backend nào nhận font, tool fail-closed và port.prefab ghi `high` trước khi dùng system font.",
+          "Output TTF tồn tại chưa chứng minh Cocos đã import; phải chạy `ai:verify:assets` sau khi Editor quét asset."
+        ],
+        "verify": "npm run ai:verify:assets",
         "status": "partial"
       },
       {

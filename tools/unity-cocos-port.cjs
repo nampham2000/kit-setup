@@ -60,6 +60,7 @@ const createRendererPorter = require('./unity-cocos-port/renderer-porter');
 const createParticlePorter = require('./unity-cocos-port/particle-porter');
 const createLightPorter = require('./unity-cocos-port/light-porter');
 const createAnimationPorter = require('./unity-cocos-port/animation-porter');
+const createFontPorter = require('./unity-cocos-port/font-porter');
 const createScriptPorter = require('./unity-cocos-port/script-porter');
 const { PortCache } = require('./unity-cocos-port/port-cache');
 const createUiSpriteAlphaPorter = require('./unity-cocos-port/ui-sprite-alpha-porter');
@@ -204,6 +205,16 @@ const { emitAnimator: emitAnimatorImpl } = createAnimationPorter({
   ensureDirectoryMetas,
   getNestedList,
 });
+const fontPorter = createFontPorter({
+  getField,
+  hasField,
+  unityRefGuid,
+  importedUnityAssetPath: importedUnityAssetPathImpl,
+  copyUnityAssetToCocos: copyUnityAssetToCocosImpl,
+  resolveCurrentFontUuid,
+  ensureDirectoryMetas,
+  ensureAssetMeta: ensureAssetMetaImpl,
+});
 const {
   translateUnitySerializedValue: translateUnitySerializedValueImpl,
   emitMonoBehaviour: emitMonoBehaviourImpl,
@@ -219,6 +230,8 @@ const {
   copyUnityAssetToCocos: copyUnityAssetToCocosImpl,
   resolveCurrentFontUuid,
   resolveUnitySpineSkeletonDataUuid,
+  resolveUnityLabelConfig: fontPorter.resolveLabelConfig,
+  isUnityTextEffect: fontPorter.isTextEffect,
 });
 
 const {
@@ -1607,7 +1620,8 @@ class CocosAssetDatabase {
   resolveFontByStem(stem) {
     const records = this.findByStem(stem);
     for (const record of records) {
-      if (record.importer === 'ttf-font' || ['.ttf', '.otf'].includes(record.ext)) return record.uuid;
+      if (record.importer === 'ttf-font'
+        || ['.font', '.eot', '.ttf', '.woff', '.svg', '.ttc'].includes(record.ext)) return record.uuid;
     }
     return '';
   }
@@ -2590,7 +2604,8 @@ function ensureFontAssetMeta(assetFile) {
     importer: existing.importer || 'ttf-font',
     imported: existing.imported ?? true,
     uuid: existing.uuid || randomUuid(),
-    files: Array.isArray(existing.files) ? existing.files : [],
+    files: Array.isArray(existing.files) && existing.files.length
+      ? existing.files : ['.json', path.basename(assetFile)],
     subMetas: {},
     userData: { ...(existing.userData || {}) },
   };
@@ -4338,6 +4353,30 @@ function buildNestedPrefabPropertyOverrides(gameObject, transform, sourceModel) 
         value: unityColorToCocos(mergeUnityColorOverride(baseColor, props, 'm_fontColor', 'm_fontColor32.rgba')),
       });
     }
+
+    const isTmpLabel = hasField(sourceDoc, 'm_fontAsset') || hasField(sourceDoc, 'm_fontStyle');
+    if (isTmpLabel && (
+      hasPrefabOverrideKey(props, 'm_fontStyle') || hasPrefabOverrideKey(props, 'm_fontWeight')
+    )) {
+      const style = finiteNumber(props.m_fontStyle, finiteNumber(getField(sourceDoc, 'm_fontStyle', 0), 0));
+      const weight = finiteNumber(props.m_fontWeight, finiteNumber(getField(sourceDoc, 'm_fontWeight', 400), 400));
+      overrides.push(
+        { localId, propertyPath: '_isBold', value: (style & 1) !== 0 || weight >= 700 },
+        { localId, propertyPath: '_isItalic', value: (style & 2) !== 0 },
+        { localId, propertyPath: '_isUnderline', value: (style & 4) !== 0 },
+      );
+    }
+
+    const legacyStyleKey = Object.prototype.hasOwnProperty.call(props || {}, 'm_FontData.m_FontStyle')
+      ? 'm_FontData.m_FontStyle'
+      : (Object.prototype.hasOwnProperty.call(props || {}, 'm_FontStyle') ? 'm_FontStyle' : '');
+    if (!isTmpLabel && legacyStyleKey) {
+      const style = finiteNumber(props[legacyStyleKey], 0);
+      overrides.push(
+        { localId, propertyPath: '_isBold', value: style === 1 || style === 3 },
+        { localId, propertyPath: '_isItalic', value: style === 2 || style === 3 },
+      );
+    }
   }
 
   return overrides;
@@ -5350,29 +5389,32 @@ class CocosPrefabBuilder {
       _dstBlendFactor: 4,
       _color: unityColorToCocos(config.color || { r: 1, g: 1, b: 1, a: 1 }),
       _string: String(text || ''),
-      _horizontalAlign: 1,
-      _verticalAlign: 1,
+      _horizontalAlign: Math.max(0, Math.min(2, finiteNumber(config.horizontalAlign, 1))),
+      _verticalAlign: Math.max(0, Math.min(2, finiteNumber(config.verticalAlign, 1))),
       _actualFontSize: fontSize,
       _fontSize: fontSize,
       _fontFamily: config.fontFamily || 'Arial',
       _lineHeight: lineHeight,
       _overflow: overflow,
-      _enableWrapText: false,
+      _enableWrapText: Boolean(config.enableWrapText),
       _font: fontUuid ? cocosUuid(fontUuid, 'cc.TTFFont') : null,
       _isSystemFontUsed: !fontUuid,
-      _spacingX: 0,
-      _isItalic: false,
-      _isBold: false,
-      _isUnderline: false,
-      _underlineHeight: 2,
+      _spacingX: finiteNumber(config.spacingX, 0),
+      _isItalic: Boolean(config.isItalic),
+      _isBold: Boolean(config.isBold),
+      _isUnderline: Boolean(config.isUnderline),
+      _underlineHeight: Math.max(1, finiteNumber(config.underlineHeight, 2)),
       _cacheMode: 0,
-      _enableOutline: false,
-      _outlineColor: color(0, 0, 0, 255),
-      _outlineWidth: 2,
-      _enableShadow: false,
-      _shadowColor: color(0, 0, 0, 255),
-      _shadowOffset: vec2(2, -2),
-      _shadowBlur: 2,
+      _enableOutline: Boolean(config.enableOutline),
+      _outlineColor: unityColorToCocos(config.outlineColor || { r: 0, g: 0, b: 0, a: 1 }),
+      _outlineWidth: Math.max(0, finiteNumber(config.outlineWidth, 2)),
+      _enableShadow: Boolean(config.enableShadow),
+      _shadowColor: unityColorToCocos(config.shadowColor || { r: 0, g: 0, b: 0, a: 1 }),
+      _shadowOffset: vec2(
+        finiteNumber(config.shadowOffset?.x, 2),
+        finiteNumber(config.shadowOffset?.y, -2),
+      ),
+      _shadowBlur: Math.max(0, finiteNumber(config.shadowBlur, 2)),
     }, unityComponentId, fileId);
   }
 
@@ -7341,8 +7383,8 @@ function emitAnimator(nodeId, componentId, doc, builder, reporter, options, unit
   return emitAnimatorImpl(nodeId, componentId, doc, builder, reporter, options, unityDb, cocosDb, gameObject, model);
 }
 
-function emitMonoBehaviour(nodeId, componentId, doc, model, builder, reporter, options, unityDb, cocosDb) {
-  return emitMonoBehaviourImpl(nodeId, componentId, doc, model, builder, reporter, options, unityDb, cocosDb);
+function emitMonoBehaviour(nodeId, componentId, doc, model, builder, reporter, options, unityDb, cocosDb, gameObject) {
+  return emitMonoBehaviourImpl(nodeId, componentId, doc, model, builder, reporter, options, unityDb, cocosDb, gameObject);
 }
 
 function translateUnitySerializedValue(value, builder, reporter, source, fieldName) {
@@ -7654,6 +7696,7 @@ module.exports = {
   convertNodePosition,
   multiplyQuaternion,
   correctNestedModelForwardAxis,
+  buildNestedPrefabPropertyOverrides,
   rebaseNestedModelMountedChildTransform,
   hasExplicitNestedModelForwardBasisRotation,
   cocosQuaternionToEuler,
