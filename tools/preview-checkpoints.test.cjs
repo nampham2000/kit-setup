@@ -6,6 +6,7 @@ const path = require('node:path');
 const test = require('node:test');
 const {
   slugify, normalizeWindowSize, resolveInsideProject, validateConfig, parseArgs, evaluateEvalAssertion,
+  evaluateTraceAssertion,
 } = require('./preview-checkpoints.cjs');
 
 test('normalizes names and window size deterministically', () => {
@@ -18,15 +19,18 @@ test('validates isolated URL checkpoint cases and gestures', () => {
   const value = validateConfig({
     url: 'http://127.0.0.1:7456/',
     outputDir: '.unity/preview-checkpoints/test',
+    postActionSeconds: 2,
     cases: [
       { name: 'baseline' },
-      { name: 'vertical drag', previewDevice: 'WebpageFullScreen', gesture: '0.5,0.7,0.5,0.3,400,12' },
+      { name: 'vertical drag', previewDevice: 'WebpageFullScreen', gesture: '0.5,0.7,0.5,0.3,400,12', postActionSeconds: 3 },
       { name: 'hold block', gesture: '0.5,0.5,0.5,0.5,300,8', gestureKeepPressed: true },
     ],
   });
   assert.equal(value.cases.length, 3);
   assert.equal(value.cases[1].parsedGesture.steps, 12);
   assert.equal(value.cases[1].previewDevice, 'WebpageFullScreen');
+  assert.equal(value.cases[1].postActionSeconds, 3);
+  assert.equal(value.postActionSeconds, 2);
   assert.equal(value.cases[2].gestureKeepPressed, true);
   assert.equal(value.windowSize, '720,1280');
 });
@@ -47,6 +51,12 @@ test('fails closed on build/file targets, duplicate names and unknown options', 
   assert.throws(() => validateConfig({
     url: 'http://localhost:7456', cases: [{ name: 'a', previewDevice: '' }],
   }), /previewDevice/);
+  assert.throws(() => validateConfig({
+    url: 'http://localhost:7456', cases: [{ name: 'a', postActionSeconds: 61 }],
+  }), /postActionSeconds/);
+  assert.throws(() => validateConfig({
+    url: 'http://localhost:7456', postActionSeconds: -1, cases: [{ name: 'a' }],
+  }), /postActionSeconds/);
 });
 
 test('optional semantic eval assertion fails closed on a bad oracle', () => {
@@ -55,6 +65,16 @@ test('optional semantic eval assertion fails closed on a bad oracle', () => {
   assert.equal(evaluateEvalAssertion(true, true).ok, true);
   assert.equal(evaluateEvalAssertion(true, '{"ok":false,"reason":"wrong direction"}').ok, false);
   assert.match(evaluateEvalAssertion(true, 'not-json').reason, /not JSON/);
+});
+
+test('ordered phase trace fails closed on missing, malformed or reordered animation phases', () => {
+  const required = ['roll', 'pre-attach', 'snap', 'feedback', 'close'];
+  const trace = required.map((phase, index) => ({ phase, atMs: index * 20 }));
+  assert.equal(evaluateTraceAssertion(required, { ok: true, animationTrace: trace }).ok, true);
+  assert.equal(evaluateTraceAssertion(required, { ok: true, trace: [trace[0], trace[2], trace[1], ...trace.slice(3)] }).ok, false);
+  assert.match(evaluateTraceAssertion(required, { ok: true, trace: trace.slice(0, -1) }).reason, /close/);
+  assert.match(evaluateTraceAssertion(required, { ok: true, trace: [{ phase: 'roll' }] }).reason, /atMs/);
+  assert.deepEqual(evaluateTraceAssertion([], undefined), { required: false, ok: true });
 });
 
 test('output/reference paths reject an intermediate symlink or junction', t => {

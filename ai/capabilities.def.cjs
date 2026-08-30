@@ -720,6 +720,8 @@ const CAPABILITIES = [
       'Mỗi case có thể dùng evalBefore/eval/gesture; ưu tiên evalBeforeFile/evalFile trong manifest để tránh lỗi shell quoting và lưu lại đúng phép thử.',
       'Đặt previewDevice ở manifest hoặc từng case khi cần khóa device/aspect của Cocos preview. Đừng dùng windowSize như bằng chứng rằng canvas đã đổi aspect; evidence ghi device/canvas đã settle và receipt khôi phục device trước đó để case không làm bẩn Editor/case sau.',
       'Với input/camera/reset có oracle định lượng, đặt `requireEvalOk: true`; eval cuối phải trả `true` hoặc JSON `{ok:true}`. Ảnh đẹp nhưng hướng drag, normalized zoom hoặc reset quaternion sai sẽ làm checkpoint fail.',
+      'Với animation/callback nhiều phase, khai báo `requiredTrace` (2-32 milestone unique) cùng `requireEvalOk: true`. Eval phải trả `{ok:true, animationTrace:[{phase,atMs}]}`; tool fail nếu thiếu phase, sai thứ tự hoặc timestamp không monotonic.',
+      'Nếu evalBefore/gesture khởi động animation hoặc gameplay async, đặt `postActionSeconds` ở manifest/case (0-60 giây) đủ dài để flow kết thúc trước eval cuối. `seconds` chỉ là thời gian boot/settle trước action, không thay thế post-action wait.',
       'Runtime sạch và ảnh được chụp chỉ là evidence để agent/người dùng mở đối chiếu; tool không tự chứng minh pixel parity hoặc tự chọn candidate đẹp nhất.',
     ],
     status: 'partial',
@@ -970,8 +972,12 @@ const CORE_RULES = [
     rule: 'Khi port camera controls, phải mang đủ chuỗi nguồn: normalized slider, min/max multiplier dùng khi reset, mapping real zoom, camera position/FOV/pitch và transform scale/rotation listener. Reset rotation phải theo source (ví dụ Quaternion.identity), không chụp một runtime rotation làm mặc định. Drag Space.World phải kiểm chứng riêng thao tác sang phải và lên bằng gesture thật; không suy dấu chỉ từ handedness.',
   },
   {
+    id: 'ordered-animation-flow-parity',
+    rule: 'Khi source nối tween/Animator/particle bằng callback hoặc animation event, phải port callback graph theo từng phase (prepare/roll, pre-attach, snap, feedback, close, exit, replacement) cùng duration/easing/VFX/SFX/haptic và điều kiện chuyển state; không được gộp thành một tween rồi mutate state cuối ngay. Mỗi phase async phải có generation/model guard và pending counter. Nghiệm thu bằng `verify.visual` với `requiredTrace` để chứng minh phase không thiếu, đúng thứ tự và replacement chỉ bắt đầu sau exit.',
+  },
+  {
     id: 'async-lifecycle',
-    rule: 'Tween/schedule/async callback phải giữ transition generation và đúng model instance; callback cũ không được mutate level mới. Sau `Node.destroy()` phải xóa reference sở hữu ngay vì Cocos destroy cuối frame. Input/QA auto-driver phải theo dõi và serialize mọi pending phase liên quan (peel, flight, close, appear), rồi nghiệm thu nhiều lượt bằng receipt win bất biến theo pass/level thay vì suy từ snapshot lúc loading.',
+    rule: 'Tween/schedule/async callback phải giữ transition generation và đúng model instance; callback cũ không được mutate level mới. Sau `Node.destroy()` phải xóa reference sở hữu ngay vì Cocos destroy cuối frame. Input/QA auto-driver phải theo dõi và serialize mọi pending phase liên quan (peel, flight, attach feedback, close, exit, replacement), rồi nghiệm thu nhiều lượt bằng receipt win bất biến theo pass/level thay vì suy từ snapshot lúc loading.',
   },
   {
     id: 'playable-core-first',

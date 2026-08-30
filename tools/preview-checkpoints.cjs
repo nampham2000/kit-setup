@@ -39,6 +39,7 @@ Manifest:
     "url": "http://127.0.0.1:7456/",
     "outputDir": ".unity/preview-checkpoints/box-axis",
     "seconds": 4,
+    "postActionSeconds": 2,
     "windowSize": "720x1280",
     "previewDevice": "WebpageFullScreen",
     "cases": [
@@ -47,8 +48,10 @@ Manifest:
         "evalBeforeFile": ".unity/checkpoints/baseline-before.js",
         "gesture": "0.3,0.6,0.7,0.6,500,20",
         "gestureKeepPressed": true,
+        "postActionSeconds": 3,
         "evalFile": ".unity/checkpoints/baseline-after.js",
         "requireEvalOk": true,
+        "requiredTrace": ["roll", "pre-attach", "snap", "feedback"],
         "referenceImage": ".unity/references/unity.png"
       }
     ]
@@ -125,6 +128,57 @@ function evaluateEvalAssertion(required, value) {
   return { required: true, ok, reason };
 }
 
+function parseEvalPayload(value) {
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value !== 'string') return value;
+  try { return JSON.parse(value); } catch (_) { return null; }
+}
+
+/**
+ * Verify an ordered runtime animation/callback trace as a subsequence. Extra
+ * diagnostic phases are allowed, but every required milestone must appear in
+ * source order and carry a finite monotonic timestamp.
+ */
+function evaluateTraceAssertion(requiredTrace, value) {
+  if (!requiredTrace || requiredTrace.length === 0) return { required: false, ok: true };
+  const payload = parseEvalPayload(value);
+  const trace = payload && typeof payload === 'object'
+    ? (Array.isArray(payload.trace) ? payload.trace : payload.animationTrace) : null;
+  if (!Array.isArray(trace)) {
+    return { required: true, ok: false, reason: 'eval result must contain trace[] or animationTrace[]' };
+  }
+  const normalized = [];
+  for (let index = 0; index < trace.length; index++) {
+    const entry = trace[index];
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)
+      || typeof entry.phase !== 'string' || !entry.phase.trim()
+      || !Number.isFinite(entry.atMs)) {
+      return { required: true, ok: false, reason: `trace[${index}] must contain phase and finite atMs` };
+    }
+    normalized.push({ phase: entry.phase.trim(), atMs: Number(entry.atMs) });
+  }
+  let cursor = -1;
+  let previousTime = -Infinity;
+  const matched = [];
+  for (const phase of requiredTrace) {
+    let found = -1;
+    for (let index = cursor + 1; index < normalized.length; index++) {
+      if (normalized[index].phase === phase) { found = index; break; }
+    }
+    if (found < 0) {
+      return { required: true, ok: false, reason: `missing or out-of-order phase: ${phase}`, matched };
+    }
+    const entry = normalized[found];
+    if (entry.atMs < previousTime) {
+      return { required: true, ok: false, reason: `non-monotonic timestamp at phase: ${phase}`, matched };
+    }
+    cursor = found;
+    previousTime = entry.atMs;
+    matched.push({ phase, atMs: entry.atMs });
+  }
+  return { required: true, ok: true, matched };
+}
+
 function validateConfig(config, overrides = {}) {
   if (!config || typeof config !== 'object' || Array.isArray(config)) throw new Error('Manifest phải là JSON object');
   const url = overrides.url || config.url;
@@ -136,6 +190,11 @@ function validateConfig(config, overrides = {}) {
     && (typeof config.previewDevice !== 'string' || !config.previewDevice.trim())) {
     throw new Error('previewDevice phải là string không rỗng');
   }
+  if (config.postActionSeconds !== undefined
+    && (!Number.isFinite(Number(config.postActionSeconds))
+      || Number(config.postActionSeconds) < 0 || Number(config.postActionSeconds) > 60)) {
+    throw new Error('postActionSeconds phải nằm trong 0-60 giây');
+  }
   const seen = new Set();
   const cases = config.cases.map((entry, index) => {
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) throw new Error(`cases[${index}] phải là object`);
@@ -143,6 +202,16 @@ function validateConfig(config, overrides = {}) {
     const slug = slugify(name);
     if (entry.requireEvalOk !== undefined && typeof entry.requireEvalOk !== 'boolean') {
       throw new Error(`cases[${index}].requireEvalOk phải là boolean`);
+    }
+    if (entry.requiredTrace !== undefined) {
+      if (!Array.isArray(entry.requiredTrace) || entry.requiredTrace.length < 2 || entry.requiredTrace.length > 32
+        || entry.requiredTrace.some(phase => typeof phase !== 'string' || !phase.trim())
+        || new Set(entry.requiredTrace.map(phase => phase.trim())).size !== entry.requiredTrace.length) {
+        throw new Error(`cases[${index}].requiredTrace phải có 2-32 phase string unique`);
+      }
+      if (entry.requireEvalOk !== true || (!entry.eval && !entry.evalFile)) {
+        throw new Error(`cases[${index}].requiredTrace cần requireEvalOk=true và eval/evalFile`);
+      }
     }
     if (entry.gestureKeepPressed !== undefined && typeof entry.gestureKeepPressed !== 'boolean') {
       throw new Error(`cases[${index}].gestureKeepPressed phải là boolean`);
@@ -154,6 +223,11 @@ function validateConfig(config, overrides = {}) {
       && (typeof entry.previewDevice !== 'string' || !entry.previewDevice.trim())) {
       throw new Error(`cases[${index}].previewDevice phải là string không rỗng`);
     }
+    if (entry.postActionSeconds !== undefined
+      && (!Number.isFinite(Number(entry.postActionSeconds))
+        || Number(entry.postActionSeconds) < 0 || Number(entry.postActionSeconds) > 60)) {
+      throw new Error(`cases[${index}].postActionSeconds phải nằm trong 0-60 giây`);
+    }
     if (seen.has(slug)) throw new Error(`Checkpoint trùng tên sau normalize: ${name}`);
     seen.add(slug);
     return {
@@ -163,6 +237,9 @@ function validateConfig(config, overrides = {}) {
       evalBeforeExpression: readExpression(entry, 'evalBefore', 'evalBeforeFile'),
       evalExpression: readExpression(entry, 'eval', 'evalFile'),
       parsedGesture: entry.gesture ? parseGesture(entry.gesture) : null,
+      requiredTrace: entry.requiredTrace ? entry.requiredTrace.map(phase => phase.trim()) : [],
+      postActionSeconds: entry.postActionSeconds === undefined
+        ? undefined : Number(entry.postActionSeconds),
     };
   });
   const requested = new Set(overrides.cases || []);
@@ -178,6 +255,7 @@ function validateConfig(config, overrides = {}) {
     url: String(url),
     outputDir: overrides.output || config.outputDir || '.unity/preview-checkpoints/latest',
     seconds: Math.max(1, Number(config.seconds) || 4),
+    postActionSeconds: Math.max(0, Math.min(60, Number(config.postActionSeconds) || 0)),
     minFps: Math.max(0, Number(config.minFps) || 20),
     windowSize: normalizeWindowSize(config.windowSize || '720x1280'),
     previewDevice: typeof config.previewDevice === 'string' ? config.previewDevice.trim() : '',
@@ -268,6 +346,8 @@ async function main() {
     const runtime = await runOne(config.url, {
       browser: config.browser,
       seconds: Number(caseEntry.seconds) || config.seconds,
+      postActionSeconds: caseEntry.postActionSeconds === undefined
+        ? config.postActionSeconds : caseEntry.postActionSeconds,
       minFps: Number(caseEntry.minFps) || config.minFps,
       windowSize: normalizeWindowSize(caseEntry.windowSize || config.windowSize),
       previewDevice: caseEntry.previewDevice || config.previewDevice,
@@ -280,6 +360,7 @@ async function main() {
     });
     const referenceImage = copyReference(caseEntry, caseDir);
     const evalAssertion = evaluateEvalAssertion(caseEntry.requireEvalOk === true, runtime.evalResult);
+    const traceAssertion = evaluateTraceAssertion(caseEntry.requiredTrace, runtime.evalResult);
     results.push({
       name: caseEntry.name,
       slug: caseEntry.slug,
@@ -288,10 +369,13 @@ async function main() {
       referenceImage,
       ok: runtime.ok && !!runtime.screenshot && !runtime.evalBeforeError && !runtime.evalError
         && !runtime.previewDeviceError && !runtime.previewDeviceRestoreError
-        && !runtime.gestureError && evalAssertion.ok,
+        && !runtime.gestureError && evalAssertion.ok && traceAssertion.ok,
       evidence: {
         fps: runtime.fps,
         frames: runtime.frames,
+        observationSeconds: runtime.observationSeconds,
+        postActionSeconds: caseEntry.postActionSeconds === undefined
+          ? config.postActionSeconds : caseEntry.postActionSeconds,
         canvasSize: runtime.canvasSize,
         previewDevice: runtime.previewDevice,
         previewDeviceError: runtime.previewDeviceError,
@@ -307,6 +391,7 @@ async function main() {
         gestureError: runtime.gestureError,
         evalError: runtime.evalError,
         evalAssertion,
+        traceAssertion,
       },
     });
   }
@@ -358,4 +443,5 @@ module.exports = {
   parseArgs,
   readExpression,
   evaluateEvalAssertion,
+  evaluateTraceAssertion,
 };

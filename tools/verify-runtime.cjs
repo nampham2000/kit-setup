@@ -571,6 +571,8 @@ async function runOne(target, options) {
         pushUniqueBounded(result.exceptions, `[gesture] ${error.message}`, 50);
       }
     }
+    const postActionSeconds = Math.max(0, Math.min(60, Number(options.postActionSeconds) || 0));
+    if (postActionSeconds > 0) await wait(postActionSeconds * 1000);
 
     const probe = await session.send('Runtime.evaluate', {
       expression: PROBE, returnByValue: true, awaitPromise: false,
@@ -585,7 +587,13 @@ async function runOne(target, options) {
       canvasSize: `${data.canvasWidth || 0}x${data.canvasHeight || 0}`,
       title: data.title || '',
     });
-    result.fps = Math.round((result.frames / Math.max(1, options.seconds)) * 10) / 10;
+    // FRAME_COUNTER is reinstalled on every navigation/reload, so measuring
+    // from its first frame keeps FPS tied to the current preview document even
+    // when selecting a Cocos preview device reloads the page.
+    result.observationSeconds = data.firstFrameAt > 0
+      ? Math.max(0.001, (Date.now() - data.firstFrameAt) / 1000)
+      : Math.max(1, Number(options.seconds) || 1);
+    result.fps = Math.round((result.frames / result.observationSeconds) * 10) / 10;
 
     // KHUNG ĐƠN SẮC — kiểm tra này ra đời từ một ca thật: bản build của chính
     // repo này boot được, báo 55 FPS, WebGL bật, scene "đang chạy", nhưng màn
