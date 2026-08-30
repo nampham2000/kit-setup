@@ -801,6 +801,7 @@ const CAPABILITIES = [
       'Đặt previewDevice ở manifest hoặc từng case khi cần khóa device/aspect của Cocos preview. Đừng dùng windowSize như bằng chứng rằng canvas đã đổi aspect; evidence ghi device/canvas đã settle và receipt khôi phục device trước đó để case không làm bẩn Editor/case sau.',
       'Với input/camera/reset có oracle định lượng, đặt `requireEvalOk: true`; eval cuối phải trả `true` hoặc JSON `{ok:true}`. Ảnh đẹp nhưng hướng drag, normalized zoom hoặc reset quaternion sai sẽ làm checkpoint fail.',
       'Với animation/callback nhiều phase, khai báo `requiredTrace` (2-32 milestone unique) cùng `requireEvalOk: true`. Eval phải trả `{ok:true, animationTrace:[{phase,atMs}]}`; tool fail nếu thiếu phase, sai thứ tự hoặc timestamp không monotonic.',
+      'Với VFX/particle hoặc trạng thái visual có thể active/isPlaying nhưng bị camera, depth, layer hay material che mất, khai báo `screenshotRegion` normalized cùng `requiredScreenshotMetrics` (`meanLuminance`, `brightPixelRatio`, `meanRed/Green/Blue`). Tool đọc pixel PNG bằng Sharp và fail nếu vùng ảnh không đạt range; dùng cả min/max khi cần loại đồng thời VFX vô hình và VFX quá dày/che gameplay. State component không được dùng thay bằng chứng visible pixels.',
       'Nếu evalBefore/gesture khởi động animation hoặc gameplay async, đặt `postActionSeconds` ở manifest/case (0-60 giây) đủ dài để flow kết thúc trước eval cuối. `seconds` chỉ là thời gian boot/settle trước action, không thay thế post-action wait.',
       'Runtime sạch và ảnh được chụp chỉ là evidence để agent/người dùng mở đối chiếu; tool không tự chứng minh pixel parity hoặc tự chọn candidate đẹp nhất.',
     ],
@@ -1091,11 +1092,11 @@ const CORE_RULES = [
   },
   {
     id: 'visual-checkpoints',
-    rule: 'Khi port thay đổi camera, transform, material/shader, UI layout hoặc input fidelity, phải chạy `npm run ai:verify:visual -- --config <matrix.json>` trên Cocos preview với ảnh nguồn/các checkpoint phù hợp và mở ảnh kết quả. Với hành vi có oracle, dùng `requireEvalOk: true`; runtime-clean không được diễn giải thành pixel parity.',
+    rule: 'Khi port thay đổi camera, transform, material/shader, UI layout hoặc input fidelity, phải chạy `npm run ai:verify:visual -- --config <matrix.json>` trên Cocos preview với ảnh nguồn/các checkpoint phù hợp và mở ảnh kết quả. Với hành vi có oracle, dùng `requireEvalOk: true`; VFX/particle phải có `screenshotRegion` + `requiredScreenshotMetrics` với bounded min/max phù hợp để chứng minh visible pixels và chặn cả vô hình lẫn quá dày, vì active/isPlaying không chứng minh camera render. Runtime-clean không được diễn giải thành pixel parity.',
   },
   {
     id: 'portable-regression-registry',
-    rule: 'Mọi port phải có `tools/port-regressions.json` được commit, khai báo requiredRisks từ Unity preflight/bug history và mandatory suite cho từng risk. Matrix, eval/oracle, ảnh Unity reference và watchFiles phải cùng nằm trong Git. Sau mỗi fix hoặc thay đổi watched target, chạy `npm run ai:verify:regressions`; không reuse PASS cũ vì receipt bị khóa SHA-256. Risk input dùng gesture thật + semantic oracle, hold-drag dùng `gestureHoldBeforeMoveMs`, raycast có ca positive/negative, callback flow có `requiredTrace`, runtime mesh có linear+curved cases cùng bounded metrics, lifecycle chạy ít nhất 2 rounds.',
+    rule: 'Mọi port phải có `tools/port-regressions.json` được commit, khai báo requiredRisks từ Unity preflight/bug history và mandatory suite cho từng risk. Matrix, eval/oracle, ảnh Unity reference và watchFiles phải cùng nằm trong Git. Sau mỗi fix hoặc thay đổi watched target, chạy `npm run ai:verify:regressions`; không reuse PASS cũ vì receipt bị khóa SHA-256. Risk input dùng gesture thật + semantic oracle, hold-drag dùng `gestureHoldBeforeMoveMs`, raycast có ca positive/negative, callback flow có `requiredTrace`, VFX có bounded visible-pixel screenshot metrics, runtime mesh có linear+curved cases cùng bounded metrics, lifecycle chạy ít nhất 2 rounds.',
   },
   {
     id: 'interactive-affordance-parity',

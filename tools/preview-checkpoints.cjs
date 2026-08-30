@@ -61,6 +61,11 @@ Manifest:
           "positionError": { "max": 0.02 },
           "directionDot": { "min": 0.97 }
         },
+        "screenshotRegion": { "x": 0.45, "y": 0.1, "width": 0.1, "height": 0.08 },
+        "screenshotMetricOptions": { "brightLuminanceThreshold": 210 },
+        "requiredScreenshotMetrics": {
+          "brightPixelRatio": { "min": 0.16, "max": 0.32 }
+        },
         "referenceImage": ".unity/references/unity.png"
       }
     ]
@@ -207,6 +212,92 @@ function evaluateMetricAssertion(requiredMetrics, value) {
   return { required: true, ok: true, metrics };
 }
 
+const SUPPORTED_SCREENSHOT_METRICS = new Set([
+  'meanLuminance', 'brightPixelRatio', 'meanRed', 'meanGreen', 'meanBlue',
+]);
+
+function normalizeScreenshotRegion(value, label = 'screenshotRegion') {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`${label} phải là object normalized {x,y,width,height}`);
+  }
+  const region = Object.fromEntries(['x', 'y', 'width', 'height']
+    .map(key => [key, Number(value[key])]));
+  if (Object.values(region).some(number => !Number.isFinite(number))
+    || region.x < 0 || region.y < 0 || region.width <= 0 || region.height <= 0
+    || region.x + region.width > 1 || region.y + region.height > 1) {
+    throw new Error(`${label} phải nằm trọn trong normalized image bounds 0-1`);
+  }
+  return region;
+}
+
+function calculateScreenshotMetrics(data, channels, brightLuminanceThreshold = 220) {
+  if (!data || !Number.isInteger(channels) || channels < 3 || data.length < channels
+    || data.length % channels !== 0) {
+    throw new Error('raw screenshot pixels/channels không hợp lệ');
+  }
+  const count = data.length / channels;
+  let red = 0;
+  let green = 0;
+  let blue = 0;
+  let luminance = 0;
+  let bright = 0;
+  for (let offset = 0; offset < data.length; offset += channels) {
+    const r = data[offset];
+    const g = data[offset + 1];
+    const b = data[offset + 2];
+    const y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    red += r;
+    green += g;
+    blue += b;
+    luminance += y;
+    if (y >= brightLuminanceThreshold) bright++;
+  }
+  return {
+    meanLuminance: luminance / count,
+    brightPixelRatio: bright / count,
+    meanRed: red / count,
+    meanGreen: green / count,
+    meanBlue: blue / count,
+  };
+}
+
+async function evaluateScreenshotMetricAssertion(requiredMetrics, screenshot, region, options = {}) {
+  if (!requiredMetrics || Object.keys(requiredMetrics).length === 0) {
+    return { required: false, ok: true };
+  }
+  if (!screenshot) return { required: true, ok: false, reason: 'screenshot missing' };
+  let sharp;
+  try { sharp = require('sharp'); } catch (_) {
+    return { required: true, ok: false, reason: 'sharp is required for screenshot metric assertions' };
+  }
+  const screenshotFile = resolveInsideProject(screenshot, 'screenshot');
+  if (!fs.existsSync(screenshotFile)) {
+    return { required: true, ok: false, reason: `screenshot not found: ${screenshot}` };
+  }
+  try {
+    const metadata = await sharp(screenshotFile).metadata();
+    if (!metadata.width || !metadata.height) throw new Error('missing image dimensions');
+    const left = Math.min(metadata.width - 1, Math.round(metadata.width * region.x));
+    const top = Math.min(metadata.height - 1, Math.round(metadata.height * region.y));
+    const width = Math.max(1, Math.min(metadata.width - left, Math.round(metadata.width * region.width)));
+    const height = Math.max(1, Math.min(metadata.height - top, Math.round(metadata.height * region.height)));
+    const threshold = options.brightLuminanceThreshold;
+    const raw = await sharp(screenshotFile).extract({ left, top, width, height })
+      .removeAlpha().raw().toBuffer({ resolveWithObject: true });
+    const measured = calculateScreenshotMetrics(raw.data, raw.info.channels, threshold);
+    const assertion = evaluateMetricAssertion(requiredMetrics, measured);
+    return {
+      ...assertion,
+      measured,
+      region: { normalized: region, pixels: { left, top, width, height } },
+      brightLuminanceThreshold: threshold,
+      imageSize: { width: metadata.width, height: metadata.height },
+    };
+  } catch (error) {
+    return { required: true, ok: false, reason: `screenshot metric failed: ${error.message}` };
+  }
+}
+
 /**
  * Verify an ordered runtime animation/callback trace as a subsequence. Extra
  * diagnostic phases are allowed, but every required milestone must appear in
@@ -304,6 +395,28 @@ function validateConfig(config, overrides = {}) {
       && (entry.requireEvalBeforeOk !== true || (!entry.evalBefore && !entry.evalBeforeFile))) {
       throw new Error(`cases[${index}].requiredEvalBeforeMetrics cần requireEvalBeforeOk=true và evalBefore/evalBeforeFile`);
     }
+    const requiredScreenshotMetrics = normalizeEvalMetricContract(entry.requiredScreenshotMetrics,
+      `cases[${index}].requiredScreenshotMetrics`);
+    for (const metric of Object.keys(requiredScreenshotMetrics)) {
+      if (!SUPPORTED_SCREENSHOT_METRICS.has(metric)) {
+        throw new Error(`cases[${index}].requiredScreenshotMetrics không hỗ trợ metric: ${metric}`);
+      }
+    }
+    const hasScreenshotMetrics = Object.keys(requiredScreenshotMetrics).length > 0;
+    if (hasScreenshotMetrics && entry.screenshotRegion === undefined) {
+      throw new Error(`cases[${index}].requiredScreenshotMetrics cần screenshotRegion`);
+    }
+    if (!hasScreenshotMetrics && entry.screenshotRegion !== undefined) {
+      throw new Error(`cases[${index}].screenshotRegion cần requiredScreenshotMetrics`);
+    }
+    const screenshotRegion = hasScreenshotMetrics
+      ? normalizeScreenshotRegion(entry.screenshotRegion, `cases[${index}].screenshotRegion`) : null;
+    const brightLuminanceThreshold = entry.screenshotMetricOptions?.brightLuminanceThreshold === undefined
+      ? 220 : Number(entry.screenshotMetricOptions.brightLuminanceThreshold);
+    if (!Number.isFinite(brightLuminanceThreshold)
+      || brightLuminanceThreshold < 0 || brightLuminanceThreshold > 255) {
+      throw new Error(`cases[${index}].screenshotMetricOptions.brightLuminanceThreshold phải nằm trong 0-255`);
+    }
     if (entry.gestureKeepPressed !== undefined && typeof entry.gestureKeepPressed !== 'boolean') {
       throw new Error(`cases[${index}].gestureKeepPressed phải là boolean`);
     }
@@ -341,6 +454,9 @@ function validateConfig(config, overrides = {}) {
       requiredTrace: entry.requiredTrace ? entry.requiredTrace.map(phase => phase.trim()) : [],
       requiredEvalMetrics,
       requiredEvalBeforeMetrics,
+      requiredScreenshotMetrics,
+      screenshotRegion,
+      screenshotMetricOptions: { brightLuminanceThreshold },
       postActionSeconds: entry.postActionSeconds === undefined
         ? undefined : Number(entry.postActionSeconds),
     };
@@ -470,6 +586,9 @@ async function main() {
     const evalAssertion = evaluateEvalAssertion(caseEntry.requireEvalOk === true, runtime.evalResult);
     const traceAssertion = evaluateTraceAssertion(caseEntry.requiredTrace, runtime.evalResult);
     const metricAssertion = evaluateMetricAssertion(caseEntry.requiredEvalMetrics, runtime.evalResult);
+    const screenshotMetricAssertion = await evaluateScreenshotMetricAssertion(
+      caseEntry.requiredScreenshotMetrics, runtime.screenshot, caseEntry.screenshotRegion,
+      caseEntry.screenshotMetricOptions);
     results.push({
       name: caseEntry.name,
       slug: caseEntry.slug,
@@ -479,7 +598,7 @@ async function main() {
       ok: runtime.ok && !!runtime.screenshot && !runtime.evalBeforeError && !runtime.evalError
         && !runtime.previewDeviceError && !runtime.previewDeviceRestoreError
         && !runtime.gestureError && evalBeforeAssertion.ok && metricBeforeAssertion.ok
-        && evalAssertion.ok && traceAssertion.ok && metricAssertion.ok,
+        && evalAssertion.ok && traceAssertion.ok && metricAssertion.ok && screenshotMetricAssertion.ok,
       evidence: {
         fps: runtime.fps,
         frames: runtime.frames,
@@ -505,6 +624,7 @@ async function main() {
         evalAssertion,
         traceAssertion,
         metricAssertion,
+        screenshotMetricAssertion,
       },
     });
   }
@@ -559,4 +679,7 @@ module.exports = {
   evaluateTraceAssertion,
   normalizeEvalMetricContract,
   evaluateMetricAssertion,
+  normalizeScreenshotRegion,
+  calculateScreenshotMetrics,
+  evaluateScreenshotMetricAssertion,
 };

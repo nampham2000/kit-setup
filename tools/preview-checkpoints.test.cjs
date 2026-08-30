@@ -6,7 +6,7 @@ const path = require('node:path');
 const test = require('node:test');
 const {
   slugify, normalizeWindowSize, resolveInsideProject, validateConfig, parseArgs, evaluateEvalAssertion,
-  evaluateTraceAssertion, evaluateMetricAssertion,
+  evaluateTraceAssertion, evaluateMetricAssertion, calculateScreenshotMetrics,
 } = require('./preview-checkpoints.cjs');
 
 test('normalizes names and window size deterministically', () => {
@@ -125,6 +125,45 @@ test('required eval metrics enforce finite bounded semantic evidence', () => {
     cases: [{ name: 'missing precondition', requireEvalBeforeOk: true,
       requiredEvalBeforeMetrics: { actionStarted: { max: 0 } } }],
   }), /evalBefore/);
+});
+
+test('screenshot metrics require a bounded normalized ROI and measure visible pixels', () => {
+  const valid = validateConfig({
+    url: 'http://localhost:7456',
+    cases: [{
+      name: 'visible vfx',
+      screenshotRegion: { x: 0.5, y: 0.2, width: 0.1, height: 0.05 },
+      screenshotMetricOptions: { brightLuminanceThreshold: 210 },
+      requiredScreenshotMetrics: { brightPixelRatio: { min: 0.16, max: 0.32 } },
+    }],
+  });
+  assert.deepEqual(valid.cases[0].screenshotRegion,
+    { x: 0.5, y: 0.2, width: 0.1, height: 0.05 });
+  assert.deepEqual(valid.cases[0].requiredScreenshotMetrics.brightPixelRatio,
+    { min: 0.16, max: 0.32 });
+  const pixels = Buffer.from([
+    255, 255, 255,
+    0, 0, 0,
+    220, 220, 220,
+    100, 50, 0,
+  ]);
+  const measured = calculateScreenshotMetrics(pixels, 3, 210);
+  assert.equal(measured.brightPixelRatio, 0.5);
+  assert.ok(measured.meanLuminance > 100 && measured.meanLuminance < 180);
+  assert.throws(() => validateConfig({
+    url: 'http://localhost:7456',
+    cases: [{ name: 'missing roi', requiredScreenshotMetrics: { brightPixelRatio: { min: 0.2 } } }],
+  }), /screenshotRegion/);
+  assert.throws(() => validateConfig({
+    url: 'http://localhost:7456',
+    cases: [{ name: 'bad roi', screenshotRegion: { x: 0.95, y: 0, width: 0.1, height: 1 },
+      requiredScreenshotMetrics: { meanLuminance: { min: 1 } } }],
+  }), /bounds/);
+  assert.throws(() => validateConfig({
+    url: 'http://localhost:7456',
+    cases: [{ name: 'unknown pixel metric', screenshotRegion: { x: 0, y: 0, width: 1, height: 1 },
+      requiredScreenshotMetrics: { magicPixels: { min: 1 } } }],
+  }), /không hỗ trợ metric/);
 });
 
 test('output/reference paths reject an intermediate symlink or junction', t => {
