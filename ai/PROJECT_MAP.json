@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "generatedAt": "2026-08-31T07:14:57.179Z",
+    "generatedAt": "2026-08-31T08:19:50.260Z",
     "description": "Compact project manifest for AI Agents. Use this instead of scanning file trees.",
     "project": {
       "projectName": "cc_playable_framework",
@@ -321,12 +321,19 @@
     ]
   },
   "assetsSummary": {
-    "audioCount": 0,
+    "audioCount": 9,
     "audio": {
-      "count": 0,
-      "totalKb": 0,
-      "sample": [],
-      "truncated": 0
+      "count": 9,
+      "totalKb": 1245.4,
+      "sample": [
+        "assets/resources/sound/tapejam/sfx_box_appear.mp3",
+        "assets/resources/sound/tapejam/sfx_box_close.mp3",
+        "assets/resources/sound/tapejam/sfx_box_disappear.mp3",
+        "assets/resources/sound/tapejam/sfx_button.mp3",
+        "assets/resources/sound/tapejam/sfx_fail.mp3",
+        "assets/resources/sound/tapejam/sfx_tape_attach.mp3"
+      ],
+      "truncated": 3
     },
     "modelCount": 33,
     "models": {
@@ -465,13 +472,13 @@
         "pulseDuration": 0.6
       },
       "audio": {
-        "autoPlayBgm": false,
-        "bgmVolume": 0.6,
+        "autoPlayBgm": true,
+        "bgmVolume": 1,
         "sfxVolume": 1,
-        "bgmSoundPath": "",
-        "clickSoundPath": "",
-        "successSoundPath": "",
-        "winSoundPath": ""
+        "bgmSoundPath": "sound/tapejam/bgm_default",
+        "clickSoundPath": "sound/tapejam/sfx_button",
+        "successSoundPath": "sound/tapejam/sfx_tape_attach",
+        "winSoundPath": "sound/tapejam/sfx_win"
       },
       "gameplay": {
         "targetTaps": 0,

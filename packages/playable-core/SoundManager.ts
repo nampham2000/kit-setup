@@ -5,6 +5,11 @@ const { ccclass } = _decorator;
 const DEFAULT_BGM_VOLUME = 0.8;
 const DEFAULT_SFX_VOLUME = 1.0;
 
+interface LoopingSfxPlayback {
+  source: AudioSource;
+  volume: number;
+}
+
 @ccclass('PlayableCoreSoundManager')
 export class SoundManager extends Component {
   private _bgmVolume: number = DEFAULT_BGM_VOLUME;
@@ -19,6 +24,8 @@ export class SoundManager extends Component {
 
   private _audioCache: Map<string, AudioClip> = new Map();
   private _audioLoading: Map<string, Promise<AudioClip>> = new Map();
+  private _loopingSfx: Map<number, LoopingSfxPlayback | null> = new Map();
+  private _nextLoopingSfxId: number = 1;
 
   public static get instance(): SoundManager | null {
     return this._instance;
@@ -124,6 +131,10 @@ export class SoundManager extends Component {
     }
   }
 
+  public isBGMPlaying(): boolean {
+    return this._bgmAudioSource?.playing ?? false;
+  }
+
   public playSFX(pathOrClip: string | AudioClip, volume: number = 1.0, loop: boolean = false): void {
     if (!pathOrClip || !this._sfxAudioSource || this._sfxMuted) return;
 
@@ -147,6 +158,70 @@ export class SoundManager extends Component {
     }
 
     this._sfxAudioSource.playOneShot(clip, this._sfxVolume * volume);
+  }
+
+  /**
+   * Starts an independently stoppable looping SFX channel.
+   *
+   * A dedicated AudioSource is required for each loop. Reusing the one-shot
+   * source would make a second concurrent loop stop the first one, which is a
+   * common mismatch when Unity gameplay stores and stops playback IDs per
+   * object (for example, two tape rolls peeling at the same time).
+   */
+  public playLoopingSFX(pathOrClip: string | AudioClip, volume: number = 1.0): number {
+    if (!pathOrClip) return 0;
+
+    const id = this._nextLoopingSfxId++;
+    this._loopingSfx.set(id, null);
+
+    if (typeof pathOrClip === 'string') {
+      this.preload(pathOrClip)
+        .then((clip) => {
+          if (!this._loopingSfx.has(id)) return;
+          this.startLoopingSFX(id, clip, volume);
+        })
+        .catch(() => this._loopingSfx.delete(id));
+      return id;
+    }
+
+    this.startLoopingSFX(id, pathOrClip, volume);
+    return id;
+  }
+
+  public stopLoopingSFX(id: number): void {
+    if (!id || !this._loopingSfx.has(id)) return;
+    const playback = this._loopingSfx.get(id);
+    this._loopingSfx.delete(id);
+    if (!playback) return;
+    playback.source.stop();
+    playback.source.node.destroy();
+  }
+
+  public stopAllLoopingSFX(): void {
+    for (const playback of this._loopingSfx.values()) {
+      if (!playback) continue;
+      playback.source.stop();
+      playback.source.node.destroy();
+    }
+    this._loopingSfx.clear();
+  }
+
+  public getActiveLoopingSFXCount(): number {
+    return this._loopingSfx.size;
+  }
+
+  private startLoopingSFX(id: number, clip: AudioClip, volume: number): void {
+    if (!this._loopingSfx.has(id) || !this.node?.isValid) return;
+    const node = new Node(`Looping SFX ${id}`);
+    node.parent = this.node;
+    const source = node.addComponent(AudioSource);
+    const normalizedVolume = Math.max(0, volume);
+    source.clip = clip;
+    source.loop = true;
+    source.playOnAwake = false;
+    source.volume = this._sfxMuted ? 0 : this._sfxVolume * normalizedVolume;
+    this._loopingSfx.set(id, { source, volume: normalizedVolume });
+    source.play();
   }
 
   public release(path: string): void {
@@ -176,6 +251,9 @@ export class SoundManager extends Component {
     if (this._sfxAudioSource) {
       this._sfxAudioSource.volume = this._sfxVolume;
     }
+    for (const playback of this._loopingSfx.values()) {
+      if (playback) playback.source.volume = this._sfxMuted ? 0 : this._sfxVolume * playback.volume;
+    }
   }
 
   public getBGMVolume(): number {
@@ -195,6 +273,9 @@ export class SoundManager extends Component {
 
   public muteSFX(mute: boolean): void {
     this._sfxMuted = mute;
+    for (const playback of this._loopingSfx.values()) {
+      if (playback) playback.source.volume = mute ? 0 : this._sfxVolume * playback.volume;
+    }
   }
 
   public isBGMMuted(): boolean {
@@ -206,6 +287,7 @@ export class SoundManager extends Component {
   }
 
   onDestroy() {
+    this.stopAllLoopingSFX();
     this.releaseAll();
     if (SoundManager._instance === this) {
       SoundManager._instance = null;
