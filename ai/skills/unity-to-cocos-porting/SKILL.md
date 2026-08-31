@@ -148,6 +148,15 @@ Auto-driver dùng để nghiệm thu nhiều lượt phải serialize qua các l
 theo `pass:level`; đừng suy level đã thắng từ một snapshot trong loading transition. Chọn deadline từ một lượt đo
 thực tế rồi cộng headroom, và chỉ coi pass khi đủ receipt mong đợi, modal cuối đúng, cùng console/runtime sạch.
 
+Với asset đánh số (`level_1`, `level_10`, `level_20`), mọi lookup định danh FBX/model/prefab phải so exact stem
+sau normalize; fuzzy prefix chỉ được dùng cho tìm kiếm gợi ý, không được chọn asset để link hoặc overwrite.
+Sau batch port, hash từng FBX nguồn/đích và assert report `NESTED_MODEL_PREFAB_LINKED` trỏ đúng exact level.
+Unity còn có thể override `m_Name` của một child trong model instance trong khi Cocos giữ tên gốc khi import FBX;
+extractor phải lưu cả tên instance và tên source do `PrefabUtility.GetCorrespondingObjectFromSource` trả về,
+rồi runtime resolve exact theo hai identity đó. Không suy source name bằng cách cắt hậu tố như `_Multi` hay `.001`.
+Regression bắt buộc gồm một cặp prefix nguy hiểm (`level_2`/`level_20`) và một child bị rename, sau đó chạy full
+level inventory tới final win với receipt không thiếu/trùng và mọi pending lifecycle counter bằng 0.
+
 Bảng lệnh dưới đây được **sinh tự động** từ `playable-shared-kit/ai/capabilities.def.cjs`
 và được `npm run ai:contract:verify` đối chiếu với CLI thật.
 

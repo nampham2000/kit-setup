@@ -3,12 +3,24 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const {
+  CocosAssetDatabase,
   convertRotation,
   multiplyQuaternion,
   correctNestedModelForwardAxis,
   rebaseNestedModelMountedChildTransform,
   hasExplicitNestedModelForwardBasisRotation,
 } = require('./unity-cocos-port.cjs');
+
+test('model lookup never fuzzy-matches numeric level-name prefixes', () => {
+  const database = new CocosAssetDatabase(process.cwd());
+  const level2 = { ext: '.fbx', stem: 'level_2' };
+  const level20 = { ext: '.fbx', stem: 'level_20' };
+  database.byStem.set('level2', [level2]);
+  assert.deepEqual(database.findModelRecordsByStem('level_20'), []);
+  assert.deepEqual(database.findModelRecordsByStem('level_1'), []);
+  database.byStem.set('level20', [level20]);
+  assert.deepEqual(database.findModelRecordsByStem('level_20'), [level20]);
+});
 
 function near(actual, expected, epsilon = 1e-6) {
   assert.ok(Math.abs(actual - expected) <= epsilon, `${actual} != ${expected}`);

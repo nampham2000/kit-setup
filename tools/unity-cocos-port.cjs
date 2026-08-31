@@ -1607,6 +1607,18 @@ class CocosAssetDatabase {
     return fuzzy;
   }
 
+  findModelRecordsByStem(stem) {
+    // Model files are source-identity-bearing dependencies. A fuzzy prefix
+    // match is unsafe here: `level_20.fbx` must never reuse and overwrite the
+    // already imported `level_2.fbx`, and `level_1.fbx` must not bind
+    // `level_10.fbx`. Asset copying preserves the source basename, so a model
+    // resolver must require the exact normalized stem and let the missing-model
+    // path create/import that exact file when it is absent.
+    const key = normalizeKey(stem);
+    return (this.byStem.get(key) || [])
+      .filter((record) => ['.fbx', '.gltf', '.glb'].includes(record.ext));
+  }
+
   findScriptClass(className) {
     return this.scriptsByClass.get(className) || null;
   }
@@ -1640,8 +1652,7 @@ class CocosAssetDatabase {
   }
 
   resolveModelMaterialUuidsByStem(stem, materialNameHints = []) {
-    const records = this.findByStem(stem);
-    const candidates = records.filter((record) => ['.fbx', '.gltf', '.glb'].includes(record.ext));
+    const candidates = this.findModelRecordsByStem(stem);
     const hints = materialNameHints.map((hint) => String(hint || ''));
     for (const record of candidates) {
       const materials = subMetaRecords(record.uuid, record.subMetas, 'gltf-material');
@@ -1680,8 +1691,7 @@ class CocosAssetDatabase {
   }
 
   resolveModelMeshByStem(stem, meshNameHint = '') {
-    const records = this.findByStem(stem);
-    const candidates = records.filter((record) => ['.fbx', '.gltf', '.glb'].includes(record.ext));
+    const candidates = this.findModelRecordsByStem(stem);
     for (const record of candidates) {
       const meshRecord = firstImportedSubMetaRecord(record.uuid, record.subMetas, 'gltf-mesh', meshNameHint);
       const mesh = meshRecord?.uuid || '';
@@ -1703,11 +1713,9 @@ class CocosAssetDatabase {
   }
 
   resolveModelPrefabByStem(stem, preferredUnityRelativePath = '') {
-    const records = this.findByStem(stem);
+    const records = this.findModelRecordsByStem(stem);
     const preferredSuffix = toPosix(preferredUnityRelativePath).toLowerCase();
-    const candidates = records
-      .filter((record) => ['.fbx', '.gltf', '.glb'].includes(record.ext))
-      .sort((left, right) => {
+    const candidates = records.sort((left, right) => {
         if (!preferredSuffix) return 0;
         const leftPreferred = toPosix(left.relativePath).toLowerCase().endsWith(preferredSuffix);
         const rightPreferred = toPosix(right.relativePath).toLowerCase().endsWith(preferredSuffix);
@@ -1766,8 +1774,7 @@ class CocosAssetDatabase {
   resolveModelAnimationByStem(stem, animationNameHint = '') {
     const normalizedHint = normalizeKey(animationNameHint);
     const shortHint = normalizeKey(String(animationNameHint || '').split('|').pop());
-    const records = this.findByStem(stem);
-    const candidates = records.filter((record) => ['.fbx', '.gltf', '.glb'].includes(record.ext));
+    const candidates = this.findModelRecordsByStem(stem);
     for (const record of candidates) {
       const animations = subMetaRecords(record.uuid, record.subMetas, 'gltf-animation');
       const match = animations.find(({ subMeta }) => {

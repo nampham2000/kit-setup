@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "generatedAt": "2026-08-31T04:32:55.694Z",
+    "generatedAt": "2026-08-31T07:14:57.179Z",
     "description": "Compact project manifest for AI Agents. Use this instead of scanning file trees.",
     "project": {
       "projectName": "cc_playable_framework",
@@ -32,16 +32,6 @@
   ],
   "prefabs": [
     {
-      "name": "Level_2",
-      "path": "assets/resources/tapejam/levels/Level_2.prefab",
-      "sizeKb": 256.6
-    },
-    {
-      "name": "Level_3",
-      "path": "assets/resources/tapejam/levels/Level_3.prefab",
-      "sizeKb": 603.8
-    },
-    {
       "name": "Level_4",
       "path": "assets/resources/tapejam/levels/Level_4.prefab",
       "sizeKb": 697.7
@@ -72,11 +62,6 @@
       "sizeKb": 662.1
     },
     {
-      "name": "Level_10",
-      "path": "assets/resources/tapejam/levels/Level_10.prefab",
-      "sizeKb": 587.9
-    },
-    {
       "name": "Level_11",
       "path": "assets/resources/tapejam/levels/Level_11.prefab",
       "sizeKb": 640.3
@@ -100,6 +85,101 @@
       "name": "Level_15",
       "path": "assets/resources/tapejam/levels/Level_15.prefab",
       "sizeKb": 662.4
+    },
+    {
+      "name": "Level_1",
+      "path": "assets/resources/tapejam/levels/Level_1.prefab",
+      "sizeKb": 94.2
+    },
+    {
+      "name": "Level_16",
+      "path": "assets/resources/tapejam/levels/Level_16.prefab",
+      "sizeKb": 609
+    },
+    {
+      "name": "Level_17",
+      "path": "assets/resources/tapejam/levels/Level_17.prefab",
+      "sizeKb": 582.8
+    },
+    {
+      "name": "Level_18",
+      "path": "assets/resources/tapejam/levels/Level_18.prefab",
+      "sizeKb": 454.9
+    },
+    {
+      "name": "Level_19",
+      "path": "assets/resources/tapejam/levels/Level_19.prefab",
+      "sizeKb": 791
+    },
+    {
+      "name": "Level_20",
+      "path": "assets/resources/tapejam/levels/Level_20.prefab",
+      "sizeKb": 865
+    },
+    {
+      "name": "Level_21",
+      "path": "assets/resources/tapejam/levels/Level_21.prefab",
+      "sizeKb": 691.3
+    },
+    {
+      "name": "Level_22",
+      "path": "assets/resources/tapejam/levels/Level_22.prefab",
+      "sizeKb": 598
+    },
+    {
+      "name": "Level_23",
+      "path": "assets/resources/tapejam/levels/Level_23.prefab",
+      "sizeKb": 543.3
+    },
+    {
+      "name": "Level_24",
+      "path": "assets/resources/tapejam/levels/Level_24.prefab",
+      "sizeKb": 573.9
+    },
+    {
+      "name": "Level_25",
+      "path": "assets/resources/tapejam/levels/Level_25.prefab",
+      "sizeKb": 531
+    },
+    {
+      "name": "Level_26",
+      "path": "assets/resources/tapejam/levels/Level_26.prefab",
+      "sizeKb": 801.9
+    },
+    {
+      "name": "Level_27",
+      "path": "assets/resources/tapejam/levels/Level_27.prefab",
+      "sizeKb": 602.7
+    },
+    {
+      "name": "Level_28",
+      "path": "assets/resources/tapejam/levels/Level_28.prefab",
+      "sizeKb": 716.5
+    },
+    {
+      "name": "Level_29",
+      "path": "assets/resources/tapejam/levels/Level_29.prefab",
+      "sizeKb": 982.3
+    },
+    {
+      "name": "Level_30",
+      "path": "assets/resources/tapejam/levels/Level_30.prefab",
+      "sizeKb": 819.6
+    },
+    {
+      "name": "Level_10",
+      "path": "assets/resources/tapejam/levels/Level_10.prefab",
+      "sizeKb": 621.8
+    },
+    {
+      "name": "Level_2",
+      "path": "assets/resources/tapejam/levels/Level_2.prefab",
+      "sizeKb": 271
+    },
+    {
+      "name": "Level_3",
+      "path": "assets/resources/tapejam/levels/Level_3.prefab",
+      "sizeKb": 638.9
     },
     {
       "name": "Box",
@@ -248,10 +328,10 @@
       "sample": [],
       "truncated": 0
     },
-    "modelCount": 17,
+    "modelCount": 33,
     "models": {
-      "count": 17,
-      "totalKb": 6642.9,
+      "count": 33,
+      "totalKb": 14216,
       "sample": [
         "assets/unity_imported/_Game/3DAssets/Level FBX/level_2.fbx",
         "assets/unity_imported/_Game/3DAssets/Level FBX/level_3.fbx",
@@ -260,23 +340,23 @@
         "assets/unity_imported/_Game/3DAssets/Level FBX/level_6.fbx",
         "assets/unity_imported/_Game/3DAssets/Level FBX/level_7.fbx"
       ],
-      "truncated": 11
+      "truncated": 27
     },
     "shaderCount": 4,
     "shaders": {
       "count": 4,
-      "totalKb": 31,
+      "totalKb": 31.2,
       "sample": [
         "assets/effects/UnitySpriteRendererColor.effect",
+        "assets/effects/TCP2HybridShader2.effect",
         "assets/effects/TapeUnlit.effect",
-        "assets/effects/URPLit.effect",
-        "assets/effects/TCP2HybridShader2.effect"
+        "assets/effects/URPLit.effect"
       ],
       "truncated": 0
     },
     "materials": {
       "count": 17,
-      "totalKb": 19.5,
+      "totalKb": 19.6,
       "sample": [
         "assets/materials/UnitySpriteRendererColor.mtl",
         "assets/materials/UnitySpriteRendererColorOpaque.mtl",
@@ -314,23 +394,23 @@
       "truncated": 2
     },
     "prefabsInAssets": {
-      "count": 23,
-      "totalKb": 8706.5,
+      "count": 39,
+      "totalKb": 19047.3,
       "sample": [
-        "assets/resources/tapejam/levels/Level_2.prefab",
-        "assets/resources/tapejam/levels/Level_3.prefab",
         "assets/resources/tapejam/levels/Level_4.prefab",
         "assets/resources/tapejam/levels/Level_5.prefab",
         "assets/resources/tapejam/levels/Level_6.prefab",
-        "assets/resources/tapejam/levels/Level_7.prefab"
+        "assets/resources/tapejam/levels/Level_7.prefab",
+        "assets/resources/tapejam/levels/Level_8.prefab",
+        "assets/resources/tapejam/levels/Level_9.prefab"
       ],
-      "truncated": 17
+      "truncated": 33
     },
     "unityImported": {
       "exists": true,
       "root": "assets/unity_imported",
-      "count": 51,
-      "totalKb": 8671.8,
+      "count": 67,
+      "totalKb": 16245,
       "sample": [
         "assets/unity_imported/_Game/3DAssets/Level FBX/level_2.fbx",
         "assets/unity_imported/_Game/3DAssets/Level FBX/materials/mtl_carton.mtl",
@@ -339,7 +419,7 @@
         "assets/unity_imported/_Game/3DAssets/Level FBX/level_5.fbx",
         "assets/unity_imported/_Game/3DAssets/Level FBX/level_6.fbx"
       ],
-      "truncated": 45
+      "truncated": 61
     }
   },
   "configSummary": {
