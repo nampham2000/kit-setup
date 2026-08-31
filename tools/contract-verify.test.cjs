@@ -51,6 +51,7 @@ test('shared-kit package template distributes every Unity intelligence and prefl
   const template = JSON.parse(fs.readFileSync(templatePath, 'utf8'));
   const rootPackage = JSON.parse(fs.readFileSync(path.resolve(__dirname, '..', '..', 'package.json'), 'utf8'));
   const expected = {
+    'ai:portable:doctor': 'node playable-shared-kit/tools/portable-workflow-doctor.cjs --json',
     'ai:port:preflight': 'node playable-shared-kit/tools/unity-intel-cli.cjs preflight --json',
     'port:core:init': 'node playable-shared-kit/tools/core-gameplay-port.cjs init',
     'port:core:verify': 'node playable-shared-kit/tools/core-gameplay-port.cjs verify',
@@ -59,6 +60,7 @@ test('shared-kit package template distributes every Unity intelligence and prefl
     'ai:verify:regressions': 'node playable-shared-kit/tools/port-regression-gate.cjs run --json',
     'ai:verify:regressions:init': 'node playable-shared-kit/tools/port-regression-gate.cjs init --json',
     'ai:verify:regressions:check': 'node playable-shared-kit/tools/port-regression-gate.cjs check --json',
+    'ai:verify:visual': 'node playable-shared-kit/tools/preview-checkpoints.cjs --json',
     'unity:intel:doctor': 'node playable-shared-kit/tools/unity-intel-cli.cjs doctor',
     'unity:intel:setup': 'node playable-shared-kit/tools/unity-intel-cli.cjs setup',
     'unity:intel:scan': 'node playable-shared-kit/tools/unity-intel-cli.cjs scan',
