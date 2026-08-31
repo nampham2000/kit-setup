@@ -208,6 +208,15 @@ function srgbChannelToLinearByte(value) {
   return normalizedChannelToByte(linear);
 }
 
+function linearChannelToSrgbByte(value) {
+  const number = Number(value);
+  const linear = Math.max(0, Math.min(1, Number.isFinite(number) ? number : 0));
+  const srgb = linear <= 0.0031308
+    ? linear * 12.92
+    : 1.055 * Math.pow(linear, 1 / 2.4) - 0.055;
+  return normalizedChannelToByte(srgb);
+}
+
 /**
  * Reads inline property declarations from every CCEffect pass. Generated
  * effects keep color metadata on one line, while the continuation handling
@@ -300,6 +309,9 @@ function convertUnityMatToCocosMtl(yamlContent, options = {}) {
   const linearColorProperties = options.linearColorProperties instanceof Set
     ? options.linearColorProperties
     : new Set(options.linearColorProperties || []);
+  const sourceLinearColorProperties = options.sourceLinearColorProperties instanceof Set
+    ? options.sourceLinearColorProperties
+    : new Set(options.sourceLinearColorProperties || []);
   const effectPropertyNames = options.effectPropertyNames instanceof Set
     ? options.effectPropertyNames
     : new Set(options.effectPropertyNames || []);
@@ -324,8 +336,10 @@ function convertUnityMatToCocosMtl(yamlContent, options = {}) {
     // and specular colors (0.51 became 0.74) and washes warm textures yellow.
     // A known non-linear/raw Cocos property receives the Unity shader-linear
     // value instead. With no effect metadata, preserve the authored value.
-    const convertRgb = linearColorProperties.has(cName)
-      ? normalizedChannelToByte
+    const convertRgb = sourceLinearColorProperties.has(cName)
+      ? linearChannelToSrgbByte
+      : linearColorProperties.has(cName)
+        ? normalizedChannelToByte
       : effectPropertyNames.has(cName)
         ? srgbChannelToLinearByte
         : normalizedChannelToByte;
@@ -450,6 +464,14 @@ function convertMatFile(srcPath, outPath, options = {}) {
       .filter(([, metadata]) => metadata.linear)
       .map(([name]) => name),
   );
+  const sourceLinearColorProperties = new Set(options.sourceLinearColorProperties || []);
+  // URP/Lit declares only _EmissionColor as [HDR]. _BaseColor and _SpecColor
+  // are regular Color properties even though all three target Cocos uniforms
+  // are marked `linear: true`. The source property class, not the target UBO
+  // metadata alone, decides whether the serialized value needs gamma encoding.
+  if (/\burp[-_ ]?lit\b/i.test(effectText) || /URPLit\.effect$/i.test(options.effectPath || '')) {
+    sourceLinearColorProperties.add('emissive');
+  }
   let textureRemap = options.textureRemap || {};
   if (options.textureRemapPath) {
     const remapText = fs.readFileSync(options.textureRemapPath, 'utf8');
@@ -462,6 +484,7 @@ function convertMatFile(srcPath, outPath, options = {}) {
     materialName,
     effectUuid,
     linearColorProperties,
+    sourceLinearColorProperties,
     effectPropertyNames: new Set(effectProperties.keys()),
     textureRemap,
   });

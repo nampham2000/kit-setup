@@ -220,6 +220,22 @@ CCProgram urp-lit-fs %{
     return ambient * unityAmbientParams.x;
   }
 
+  // Unity cameras can render HDR while leaving post processing disabled. In
+  // that case URP converts linear output to sRGB without a tone-mapping pass.
+  // Cocos' HDR output-standard path applies ACES, so keep an explicit opt-in
+  // for camera layers whose source camera has no post processing. Do not turn
+  // this on from a standalone material conversion: it requires camera trace.
+  vec4 unityUrpFragOutput (vec4 color) {
+    #if USE_UNITY_UNTONEMAPPED_OUTPUT
+      #if !CC_USE_FLOAT_OUTPUT
+        color.rgb = LinearToSRGB(color.rgb);
+      #endif
+      return color;
+    #else
+      return CCFragOutput(color);
+    #endif
+  }
+
   vec4 frag () {
     vec4 baseColor = texture(mainTexture, v_uv);
     baseColor.rgb = SRGBToLinear(baseColor.rgb);
@@ -285,7 +301,7 @@ CCProgram urp-lit-fs %{
     // visual-oracle-measured per-channel scale after all authored material and
     // light values are present. The neutral default keeps this path lossless.
     vec3 finalColor = (direct + ambient + emissionContribution) * unityOutputColorScale.rgb;
-    return CCFragOutput(vec4(finalColor, baseColor.a));
+    return unityUrpFragOutput(vec4(finalColor, baseColor.a));
   }
 }%
 

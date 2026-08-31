@@ -555,6 +555,7 @@ module.exports = function createMaterialPorter(deps) {
     const floats = parseUnitySerializedScalarMap(materialDoc, 'm_Floats');
     const colors = parseUnitySerializedScalarMap(materialDoc, 'm_Colors');
     const texEnvs = parseUnityTextureEnvMap(materialDoc);
+    const materialKeywords = getUnityMaterialKeywords(materialDoc);
 
     const mainColor = firstDefinedMaterialValue(colors, ['_BaseColor', '_Color'], { r: 1, g: 1, b: 1, a: 1 });
     const emissionColor = firstDefinedMaterialValue(colors, ['_EmissionColor', '_EmissiveColor'], { r: 0, g: 0, b: 0, a: 1 });
@@ -568,7 +569,8 @@ module.exports = function createMaterialPorter(deps) {
     const roughness = clamp01(firstDefinedMaterialValue(floats, ['_SpecularRoughness'], 1 - smoothness), 1 - smoothness);
     const metallic = clamp01(firstDefinedMaterialValue(floats, ['_Metallic'], 0), 0);
     const doubleSided = Number(firstDefinedMaterialValue(floats, ['_Cull'], 2) || 2) === 0;
-    const emissionEnabled = Number(firstDefinedMaterialValue(floats, ['_UseEmission'], 0) || 0) > 0;
+    const emissionEnabled = Number(firstDefinedMaterialValue(floats, ['_UseEmission'], 0) || 0) > 0
+      || (urpLit && materialKeywords.has('_EMISSION'));
 
     const mainTextureUuid = resolveUnityMaterialTextureUuid(texEnvs, UNITY_MATERIAL_BASE_TEXTURE_KEYS, unityDb, options, reporter);
     const mainTilingOffset = unityMaterialTilingOffset(texEnvs, UNITY_MATERIAL_BASE_TEXTURE_KEYS);
@@ -582,13 +584,26 @@ module.exports = function createMaterialPorter(deps) {
     if (normalTextureUuid) defines.USE_NORMAL_MAP = true;
     if (occlusionTextureUuid) defines.USE_OCCLUSION_MAP = true;
     if (emissiveTextureUuid) defines.USE_EMISSIVE_MAP = true;
+    if (urpLit && materialKeywords.has('_SPECULAR_SETUP')) defines.USE_SPECULAR_WORKFLOW = true;
 
-    const linearMaterialColor = customShaderEffectUuid ? unityColorToCocos : unityLinearColorToCocos;
+    // URP Lit declares _BaseColor and _SpecColor as ordinary ShaderLab Color
+    // properties, but _EmissionColor as [HDR] Color. Unity serializes the
+    // former as authored sRGB values and the latter in shader-linear space.
+    // A single conversion for every color made emission 0.51 upload as 0.22
+    // and recreated dim, matte-looking materials after every prefab re-port.
+    const surfaceColor = (customShaderEffectUuid || urpLit)
+      ? unityColorToCocos
+      : unityLinearColorToCocos;
     const props = {
-      mainColor: linearMaterialColor(mainColor),
+      mainColor: surfaceColor(mainColor),
       roughness,
       metallic,
     };
+    if (urpLit) {
+      props.specularColor = unityColorToCocos(firstDefinedMaterialValue(
+        colors, ['_SpecColor'], { r: 0.04, g: 0.04, b: 0.04, a: 1 },
+      ));
+    }
     if (mainTextureUuid) props.mainTexture = { __uuid__: mainTextureUuid };
     if (mainTilingOffset) props.tilingOffset = mainTilingOffset;
     if (normalTextureUuid) props.normalMap = { __uuid__: normalTextureUuid };
@@ -597,12 +612,14 @@ module.exports = function createMaterialPorter(deps) {
       props.occlusion = clamp01(firstDefinedMaterialValue(floats, ['_OcclusionStrength'], 1), 1);
     }
     if (emissionEnabled || emissiveTextureUuid || hasVisibleUnityColor(emissionColor)) {
-      props.emissive = linearMaterialColor(emissionColor);
+      props.emissive = urpLit
+        ? unityLinearColorToCocos(emissionColor)
+        : surfaceColor(emissionColor);
     }
     if (emissiveTextureUuid) props.emissiveMap = { __uuid__: emissiveTextureUuid };
     if (alphaClip) props.alphaThreshold = cutoff;
 
-    const urpUnlitProps = { mainColor: unityLinearColorToCocos(mainColor) };
+    const urpUnlitProps = { mainColor: unityColorToCocos(mainColor) };
     if (mainTextureUuid) urpUnlitProps.mainTexture = { __uuid__: mainTextureUuid };
     if (mainTilingOffset) urpUnlitProps.tilingOffset = mainTilingOffset;
     if (alphaClip) urpUnlitProps.alphaThreshold = cutoff;

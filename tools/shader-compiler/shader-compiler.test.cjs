@@ -775,7 +775,7 @@ CCProgram test %{ precision highp float; }%
       assert.deepEqual(Object.keys(props).sort(), [
         'emissive', 'emissiveMap', 'mainColor', 'mainTexture', 'roughness', 'specularColor',
       ]);
-      assert.deepEqual(props.emissive, { __type__: 'cc.Color', r: 130, g: 130, b: 130, a: 255 });
+      assert.deepEqual(props.emissive, { __type__: 'cc.Color', r: 189, g: 189, b: 189, a: 255 });
       assert.deepEqual(props.specularColor, { __type__: 'cc.Color', r: 51, g: 51, b: 51, a: 255 });
       assert.equal(props.roughness, 0.5);
       assert.equal(props.mainTexture.__uuid__, 'cocos-carton-texture-uuid');
