@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "generatedAt": "2026-08-31T08:19:50.260Z",
+    "generatedAt": "2026-08-31T10:08:04.664Z",
     "description": "Compact project manifest for AI Agents. Use this instead of scanning file trees.",
     "project": {
       "projectName": "cc_playable_framework",
@@ -222,6 +222,11 @@
       "sizeKb": 86
     },
     {
+      "name": "TapeTap_Blink",
+      "path": "assets/resources/tapejam/gameplay/TapeTap_Blink.prefab",
+      "sizeKb": 60.9
+    },
+    {
       "name": "ZoomProgress",
       "path": "assets/resources/tapejam/ui/ZoomProgress.prefab",
       "sizeKb": 12.4
@@ -401,8 +406,8 @@
       "truncated": 2
     },
     "prefabsInAssets": {
-      "count": 39,
-      "totalKb": 19047.3,
+      "count": 40,
+      "totalKb": 19108.2,
       "sample": [
         "assets/resources/tapejam/levels/Level_4.prefab",
         "assets/resources/tapejam/levels/Level_5.prefab",
@@ -411,7 +416,7 @@
         "assets/resources/tapejam/levels/Level_8.prefab",
         "assets/resources/tapejam/levels/Level_9.prefab"
       ],
-      "truncated": 33
+      "truncated": 34
     },
     "unityImported": {
       "exists": true,

@@ -126,13 +126,20 @@ export class SoundManager extends Component {
   }
 
   public resumeBGM(): void {
-    if (this._bgmAudioSource) {
+    // AudioSource.play() restarts the current clip on Cocos web backends. Input
+    // unlock handlers may call resume on every pointer, so only play when the
+    // source is actually paused/stopped.
+    if (this._bgmAudioSource && !this._bgmAudioSource.playing) {
       this._bgmAudioSource.play();
     }
   }
 
   public isBGMPlaying(): boolean {
     return this._bgmAudioSource?.playing ?? false;
+  }
+
+  public getBGMCurrentTime(): number {
+    return this._bgmAudioSource?.currentTime ?? 0;
   }
 
   public playSFX(pathOrClip: string | AudioClip, volume: number = 1.0, loop: boolean = false): void {

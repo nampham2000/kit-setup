@@ -144,6 +144,12 @@ model instance đã sinh ra nó; chỉ kiểm tra `this.model != null` có thể
 (`this.board = null`) trước mọi `update()`/await. Nếu input có nhiều pha peel/flight/box-close/box-appear,
 theo dõi từng pending phase; callback của một pha không được bật input trong khi pha khác còn chạy.
 
+Web Audio unlock thường được gọi từ mọi pointer để đáp ứng autoplay policy, nhưng `AudioSource.play()` của
+Cocos Web sẽ đưa clip đang phát về đầu. Vì vậy `resumeBGM()` phải idempotent: chỉ gọi `play()` khi source thực
+sự paused/stopped, còn source đang `playing` phải được giữ nguyên. Regression phải phát ít nhất ba touch
+lifecycle thật trong cùng một browser session và assert `currentTime` tăng nghiêm ngặt qua từng tap; một tap
+mỗi lần reload không thể phát hiện lỗi restart này. Kiểm tra pause/resume thật bằng một case riêng.
+
 Auto-driver dùng để nghiệm thu nhiều lượt phải serialize qua các lifecycle phase này và ghi receipt win bất biến
 theo `pass:level`; đừng suy level đã thắng từ một snapshot trong loading transition. Chọn deadline từ một lượt đo
 thực tế rồi cộng headroom, và chỉ coi pass khi đủ receipt mong đợi, modal cuối đúng, cùng console/runtime sạch.

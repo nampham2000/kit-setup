@@ -3,8 +3,20 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const {
-  parseGesture, dispatchTouchGesture, dispatchTouchGestureSequence, selectCocosPreviewDevice,
+  parseArgs, parseGesture, dispatchTouchGesture, dispatchTouchGestureSequence, selectCocosPreviewDevice,
 } = require('./verify-runtime.cjs');
+
+test('CLI preserves repeated gestures and their inter-tap wait', () => {
+  const options = parseArgs([
+    '--gesture', '0.2,0.4,0.2,0.4,30,1',
+    '--gesture=0.8,0.5,0.8,0.5,30,1',
+    '--gesture-gap', '650',
+    '--post-action-seconds=1.5',
+  ]);
+  assert.equal(options.gestures.length, 2);
+  assert.equal(options.gestureGapMs, 650);
+  assert.equal(options.postActionSeconds, 1.5);
+});
 
 test('gesture coordinates in 0..1 use normalized canvas space', () => {
   assert.deepEqual(parseGesture('0.5,0.6,0.8,0.6,320,12'), {

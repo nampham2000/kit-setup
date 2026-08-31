@@ -793,7 +793,7 @@ const CAPABILITIES = [
     npm: 'npm run ai:verify:runtime',
     cmd: `node ${TOOLS}/verify-runtime.cjs --json`,
     args: [],
-    optional: ['--file <html>', '--url <url>', '--all', '--seconds <n>', '--min-fps <n>', '--window-size <WxH>', '--preview-device <name>', '--browser <path>', '--eval <js>', '--eval-before <js>', '--gesture <x1,y1,x2,y2,durationMs[,steps]>', '--gesture-hold-before-move <ms>', '--gesture-keep-pressed', '--json', '--no-screenshot'],
+    optional: ['--file <html>', '--url <url>', '--all', '--seconds <n>', '--min-fps <n>', '--window-size <WxH>', '--preview-device <name>', '--browser <path>', '--eval <js>', '--eval-before <js>', '--gesture <x1,y1,x2,y2,durationMs[,steps]>', '--gesture-gap <ms>', '--gesture-hold-before-move <ms>', '--gesture-keep-pressed', '--post-action-seconds <n>', '--json', '--no-screenshot'],
     when: 'Sau khi build, hoặc trỏ --url vào preview của editor khi chưa muốn build. Đây là bước duy nhất chứng minh playable CHẠY được, không chỉ compile được.',
     outputs: ['stdout (JSON khi có --json)', '.unity/runtime-shots/*.png'],
     limits: [
@@ -803,14 +803,16 @@ const CAPABILITIES = [
       'Cửa sổ mặc định 720x1280 (dọc); nguồn landscape cần --window-size 1366x768 để khung hình so sánh được.',
       'Với URL Cocos Editor preview, --window-size chỉ đổi cửa sổ Chrome chứ không đổi device giả lập đang chọn. Dùng --preview-device WebpageFullScreen hoặc field previewDevice của verify.visual để kiểm đúng aspect Game panel; tool ghi device cũ, fail-closed nếu device không tồn tại/không settle và khôi phục device cũ trước khi đóng session.',
       '`--eval-before` chụp state trước thao tác; `--gesture` bật touch emulation trước khi tải trang và phát touch thật qua CDP để kiểm tra drag/swipe, gồm cả lỗi browser scroll ở trục dọc.',
+      'Lặp `--gesture` 2-8 lần cùng `--gesture-gap` để phát nhiều touch lifecycle trong cùng session; dùng cho rapid tap và kiểm BGM không restart sau input unlock.',
       '`--gesture-hold-before-move` giữ touch đứng yên ở điểm đầu trước khi kéo để tái hiện đúng chuỗi hold-then-drag; field tương ứng trong verify.visual là `gestureHoldBeforeMoveMs`.',
       '`--gesture-keep-pressed` giữ touch đến sau eval/screenshot để kiểm hold/peek/fade, rồi luôn nhả touch trong cleanup.',
+      '`--post-action-seconds` chờ tối đa 60 giây sau gesture trước eval/screenshot để quan sát state tiến triển theo thời gian.',
       'Phát hiện khung đơn sắc bằng cách so 3 vùng lấy mẫu, là suy luận theo dấu hiệu chứ không phải phân tích ảnh đầy đủ.',
     ],
     status: 'partial',
     probe: 'help',
     probeCmd: `node ${TOOLS}/verify-runtime.cjs`,
-    expect: ['--file', '--min-fps', '--preview-device', '--eval-before', '--gesture', '--gesture-hold-before-move', '--gesture-keep-pressed', '--json'],
+    expect: ['--file', '--min-fps', '--preview-device', '--eval-before', '--gesture', '--gesture-gap', '--gesture-hold-before-move', '--gesture-keep-pressed', '--post-action-seconds', '--json'],
   },
   {
     id: 'verify.visual',
@@ -1196,6 +1198,10 @@ const CORE_RULES = [
   {
     id: 'input-concurrency-boundary',
     rule: 'Không dùng một global input lock bao trùm toàn bộ animation async nếu Unity source chỉ có pick cooldown ngắn và per-object busy/reservation. Phải trace riêng bốn boundary: source cooldown, object phase/busy, destination reserve/occupancy và global level transition. Reserve destination atomically trước khi animation bắt đầu. Nghiệm thu risk `input-concurrency` bằng `gestures` có ít nhất hai touch lifecycle thật, pre-action proof và metrics chứng minh action thứ hai bắt đầu trước khi action thứ nhất complete, có ít nhất hai action concurrent, reservation destination unique và collision count bằng 0.',
+  },
+  {
+    id: 'audio-unlock-idempotence',
+    rule: 'Web Audio unlock có thể chạy trên mọi pointer, nhưng Cocos Web `AudioSource.play()` sẽ restart clip đang phát. Mọi `resumeBGM()`/unlock handler phải idempotent: chỉ gọi `play()` khi source paused/stopped và giữ nguyên `currentTime` khi `playing`. Nghiệm thu bằng ít nhất ba gesture touch độc lập trong cùng browser session với khoảng nghỉ đo được, assert BGM vẫn playing và `currentTime` tăng nghiêm ngặt qua từng tap; một gesture trên mỗi page reload không đủ phát hiện regression.',
   },
   {
     id: 'playable-core-first',

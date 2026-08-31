@@ -81,6 +81,8 @@ Options:
                        playable boot được nhưng vẽ sai.
   --eval-before <js>   Chạy biểu thức trước gesture và trả evalBeforeResult.
   --gesture <spec>     Phát touch thật qua CDP: x1,y1,x2,y2,durationMs[,steps].
+                       Lặp option này 2-8 lần để kiểm nhiều tap trong cùng session.
+  --gesture-gap <ms>   Khoảng nghỉ giữa các gesture lặp. Default: 0.
                        Tọa độ 0..1 là tỉ lệ trong canvas; số >1 là viewport px.
   --gesture-hold-before-move <ms>
                        Giữ touch đứng yên tại điểm bắt đầu trước khi phát các
@@ -88,6 +90,8 @@ Options:
   --gesture-keep-pressed
                        Giữ touch sau gesture để --eval và screenshot quan sát
                        trạng thái hold; tool tự nhả touch sau khi chụp.
+  --post-action-seconds <n>
+                       Chờ thêm sau gesture trước khi eval/screenshot. Max: 60.
   --json               Xuất JSON (dùng cho AI agent / CI).
   --help               Hiện trợ giúp và thoát.
 
@@ -738,7 +742,8 @@ function parseArgs(argv) {
   const o = {
     seconds: 6, minFps: 20, all: false, json: false, noScreenshot: false,
     screenshotDir: path.join('.unity', 'runtime-shots'), help: false, evalExpression: '',
-    evalBeforeExpression: '', gesture: null, gestureHoldBeforeMoveMs: 0, gestureKeepPressed: false,
+    evalBeforeExpression: '', gesture: null, gestures: [], gestureGapMs: 0,
+    gestureHoldBeforeMoveMs: 0, gestureKeepPressed: false, postActionSeconds: 0,
     previewDevice: '',
     windowSize: '720,1280',
   };
@@ -766,8 +771,22 @@ function parseArgs(argv) {
     if (a.startsWith('--eval=')) { o.evalExpression = a.slice('--eval='.length); continue; }
     if (a === '--eval-before') { o.evalBeforeExpression = argv[++i]; continue; }
     if (a.startsWith('--eval-before=')) { o.evalBeforeExpression = a.slice('--eval-before='.length); continue; }
-    if (a === '--gesture') { o.gesture = parseGesture(argv[++i]); continue; }
-    if (a.startsWith('--gesture=')) { o.gesture = parseGesture(a.slice('--gesture='.length)); continue; }
+    if (a === '--gesture' || a.startsWith('--gesture=')) {
+      const raw = a === '--gesture' ? argv[++i] : a.slice('--gesture='.length);
+      const parsed = parseGesture(raw);
+      o.gestures.push(parsed);
+      o.gesture = parsed;
+      continue;
+    }
+    if (a === '--gesture-gap') {
+      o.gestureGapMs = Math.max(0, Math.min(5000, Math.round(Number(argv[++i]) || 0)));
+      continue;
+    }
+    if (a.startsWith('--gesture-gap=')) {
+      o.gestureGapMs = Math.max(0, Math.min(5000,
+        Math.round(Number(a.slice('--gesture-gap='.length)) || 0)));
+      continue;
+    }
     if (a === '--gesture-hold-before-move') {
       o.gestureHoldBeforeMoveMs = Math.max(0, Math.min(5000, Math.round(Number(argv[++i]) || 0)));
       continue;
@@ -778,6 +797,15 @@ function parseArgs(argv) {
       continue;
     }
     if (a === '--gesture-keep-pressed') { o.gestureKeepPressed = true; continue; }
+    if (a === '--post-action-seconds') {
+      o.postActionSeconds = Math.max(0, Math.min(60, Number(argv[++i]) || 0));
+      continue;
+    }
+    if (a.startsWith('--post-action-seconds=')) {
+      o.postActionSeconds = Math.max(0, Math.min(60,
+        Number(a.slice('--post-action-seconds='.length)) || 0));
+      continue;
+    }
     if (a === '--screenshot') { o.screenshotDir = argv[++i]; continue; }
     if (a.startsWith('--screenshot=')) { o.screenshotDir = a.split('=')[1]; continue; }
   }
@@ -855,5 +883,5 @@ if (require.main === module) {
 
 module.exports = {
   runOne, findBuiltHtml, findBrowser, ensureWebSocketRuntime,
-  parseGesture, dispatchTouchGesture, dispatchTouchGestureSequence, selectCocosPreviewDevice,
+  parseArgs, parseGesture, dispatchTouchGesture, dispatchTouchGestureSequence, selectCocosPreviewDevice,
 };
