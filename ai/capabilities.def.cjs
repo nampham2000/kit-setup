@@ -101,9 +101,13 @@ const CAPABILITIES = [
     npm: 'npm run unity:intel:doctor -- --project <UnityProjectRoot>',
     cmd: `node ${TOOLS}/unity-intel-cli.cjs doctor`,
     args: ['--project <UnityProjectRoot>'],
-    optional: ['--unity <file>', '--mcp-url <url>', '--json'],
+    optional: ['--unity <file>', '--mcp-url <url>', '--timeout-ms <n>', '--json'],
     when: 'Khi cần biết project có thể attach Editor đang mở hay chạy batch bằng đúng Unity version trước khi setup live scanner.',
-    outputs: ['stdout JSON compact: declared Unity version, exact Editor readiness, lock state và loopback MCP config'],
+    outputs: ['stdout JSON compact: declared Unity version, exact Editor readiness, lock state, loopback config và authenticated playable-port-scan tool probe'],
+    limits: [
+      '`canAttach` chỉ nói có thể attach Unity Editor đang mở; chỉ `canUseLiveMcp=true` chứng minh tool `playable-port-scan` đã trả payload đúng deadline.',
+      'Ping/config có thể thành công trong khi Unity main-thread tool treo; trường hợp này trả `UNITY_MCP_TOOL_UNRESPONSIVE`, không được tuyên bố live MCP ready.',
+    ],
     status: 'ok',
     probe: 'help',
     probeCmd: `node ${TOOLS}/unity-intel-cli.cjs doctor`,
@@ -129,6 +133,7 @@ const CAPABILITIES = [
       'Không khởi chạy Unity instance thứ hai khi UnityLockfile đang bị giữ và không kill Editor của người dùng.',
       'Project đóng chỉ được batch-launch khi có đúng Unity version khai báo; không âm thầm dùng version gần nhất.',
       'Compile error có sẵn trong Unity project có thể chặn package import/executeMethod; setup đọc bounded Editor.log tail theo đúng WorkingDir và trả UNITY_PROJECT_COMPILE_ERRORS với evidence gọn, không nạp toàn bộ log. Tool chỉ coi marker JSON hợp lệ là thành công, không tin exit code 0.',
+      'Nếu Unity Package Manager không tải được upstream MCP vì TLS certificate (`Curl error 35`/UnityTls 7), setup trả `UNITY_PACKAGE_TLS_CERTIFICATE_ERROR` từ bounded project-owned Editor.log thay vì báo timeout chung hoặc giả vờ live scanner đã sẵn sàng.',
       'Bootstrap scan đầu chỉ xác nhận import/domain reload. Tool rebuild static baseline rồi bắt buộc scan xác nhận lần hai; marker đầu không bao giờ authorize implement.',
       'Khi manifest/config đổi và Editor Windows đang mở, setup đọc EditorInstance.json rồi kiểm tra lại PID + exact -projectPath trước khi tự gửi Assets > Refresh; không gửi phím nếu metadata stale/mismatch. Platform không hỗ trợ vẫn dùng file watcher/readiness fail-closed.',
       'Editor đang mở có thể vẫn trả scanner cũ hoặc HTTP 502/503/504 trong lúc domain reload; readiness call không gửi field candidate mới, retry transient/version/capability mismatch đến deadline và chỉ chấp nhận đúng package 0.3.0, protocol 1, cùng candidateDisposition khi request có candidate.',
@@ -565,14 +570,15 @@ const CAPABILITIES = [
     npm: null,
     cmd: `node ${TOOLS}/shader-compiler/unity-shader-compiler.cjs chain`,
     args: ['--src <file.prefab|file.asset>', '--unity-root <UnityAssetsFolder>'],
-    optional: ['--out-dir <assets/>', '--json', '--no-cache'],
+    optional: ['--out-dir <assets/>', '--json', '--no-cache', '--max-closure-assets <n>', '--max-closure-depth <n>'],
     when: 'DÙNG ĐẦU TIÊN khi cần port một prefab hoặc ScriptableObject chứa material-set active/disabled. Tự đi hết chuỗi asset -> material -> shader -> texture, transpile luôn, và chỉ in ra phần cần quyết định. Đừng tự đọc YAML của prefab/.asset/.mat.',
     outputs: ['<out-dir>/effects/*.effect', '<out-dir>/materials/*.mtl', 'user-local incremental GUID cache'],
     limits: [
       'Không ghi Unity/Cocos project nếu thiếu --out-dir; mặc định chỉ đọc source, liệt kê và có thể cập nhật user-local incremental cache.',
+      'Dependency closure duyệt bounded nested prefab/ScriptableObject, FBX model-importer external material remap, Assets và exact selected package roots. Hỗ trợ cả ShaderLab sinh bởi tool với đuôi `.tcp2shader`; closure incomplete là BLOCKING.',
       'Texture và mesh CHỈ được liệt kê, không tự import — phải tự đưa vào Cocos rồi mới bind được UUID.',
       '`_effectAsset` của .mtl để rỗng: UUID chỉ tồn tại sau khi Cocos import .effect. Chạy lại `shader.material` với --effect-uuid để bind.',
-      'Material dùng shader built-in/package của Unity (không có file .shader) chỉ được BÁO TÊN — phải tự viết lại hoặc map sang effect built-in của Cocos.',
+      'Material dùng true built-in Unity shader không có source trong Assets/package chỉ được BÁO TÊN — phải tự viết lại hoặc map sang effect built-in của Cocos.',
       'Index GUID được cache; thêm/xoá asset trong Unity thì chạy --no-cache.',
       'Cột `mode` của mỗi shader cho biết backend đã chạy (`unlit` hay `surface-pbr/urp|legacy`). Shader PBR tự chọn surface-pbr — xem thêm giới hạn ở `shader.convert`.',
       'Exit code 5 khi còn dòng BLOCKING.',
@@ -594,7 +600,7 @@ const CAPABILITIES = [
     when: 'Cần dịch một shader Unity cụ thể sang .effect. Thân HLSL ĐƯỢC dịch sang GLSL, không phải template.',
     outputs: ['<out>', '<out>.report.json', '<out>.report.md', '<out>.ucst-ai.json', '<out>.patch.json'],
     limits: [
-      'Grade/score chỉ nói code SINH RA compile được, KHÔNG xác nhận đúng hình ảnh như Unity. Vẫn phải mở effect đối chiếu.',
+      'Grade/score chỉ là static conversion confidence. Nó KHÔNG chứng minh Cocos importer, runtime variant hay visual fidelity so với Unity; report luôn ghi ba trạng thái đó là `unverified` cho tới khi gate riêng pass.',
       '`--unity-uv` MẶC ĐỊNH TẮT. Gốc texture của Unity ở dưới-trái, của Cocos ở trên-trái; bật cờ này thì texture được lấy mẫu qua texU() theo quy ước Unity. Bật khi shader chạy trên hình học mang UV từ Unity. KHÔNG lật UV của mesh để thay thế: cách đó làm ảnh đúng nhưng lặng lẽ đảo ngược mọi cách dùng uv.y thủ tục (gradient, gió cỏ, sọc hologram, UV clipping).',
       'Toán tử `%` trên float và fmod() được hạ thành hmod() (HLSL cắt về 0, GLSL mod() làm tròn xuống — lệch nhau khi toán hạng âm). Constructor ma trận được chuyển vị vì HLSL nhận theo hàng còn GLSL theo cột. Các helper này nằm trong lớp tương thích được inline sẵn vào effect.',
       'Shader PBR (URP `SurfaceData` + `UniversalFragmentPBR`, hoặc `#pragma surface` cũ) tự động chuyển sang `--mode surface-pbr`: sinh CCProgram surface-vertex/surface-fragment + include shading-entry của engine. In dòng `Mode:` để biết backend nào đã chạy.',
@@ -621,7 +627,7 @@ const CAPABILITIES = [
     outputs: ['<out-dir>/**/*.effect', '<out-dir>/**/*.report.json'],
     limits: [
       'Cùng giới hạn với `shader.convert`.',
-      'In `[v]` cho mọi file GHI ĐƯỢC — KHÔNG phải mọi file đều compile-clean. Phải chạy `shader.validate` trên từng output.',
+      'In `[v]` cho mọi file GHI ĐƯỢC — KHÔNG phải Cocos đã compile. Phải chạy `shader.validate`, reimport qua Cocos AssetDB, kiểm log/runtime variant và visual checkpoint.',
     ],
     status: 'ready',
     probe: 'help',
@@ -650,7 +656,7 @@ const CAPABILITIES = [
   {
     id: 'shader.validate',
     group: 'verify',
-    title: 'Kiểm tra .effect sinh ra có compile được không',
+    title: 'Phân tích tĩnh cấu trúc/ABI của .effect sinh ra',
     npm: null,
     cmd: `node ${TOOLS}/shader-compiler/unity-shader-compiler.cjs validate`,
     args: ['<assets/effects/X.effect>'],
@@ -659,6 +665,7 @@ const CAPABILITIES = [
     outputs: [],
     limits: [
       'Phân tích tĩnh, không chạy GLSL compiler thật: chứng minh được là SAI, không chứng minh được là ĐÚNG hình ảnh.',
+      'PASS vẫn phải reimport effect/material qua Cocos MCP, xác nhận `cc.EffectAsset`/`cc.Material`, kiểm project log + runtime preview, rồi mới chạy reference visual metrics.',
       'Exit code 5 khi FAIL.',
     ],
     status: 'ready',
@@ -1127,6 +1134,10 @@ const CORE_RULES = [
     rule: 'Không áp một phép gamma chung cho mọi material value. Phải đọc khai báo ShaderLab và active keyword/toggle: `Color` thường được Unity serialize sRGB rồi linearize khi upload nên map trực tiếp sang `cc.Color` của Cocos `linear: true`; `[HDR] Color` được Unity lưu linear nên encode linear->sRGB đúng một lần trước khi gán. Alpha luôn tuyến tính. Semantic color texture (Base/Albedo/Diffuse/Emission) trong custom effect phải `SRGBToLinear` như builtin-standard Cocos 3.8.8; normal/mask/metallic/roughness giữ raw. Saved `_EmissionColor` không được tạo contribution khi `_UseEmission=0`; tương tự rim/spec và keyword. Khi renderer có nhiều material slot/profile (ví dụ TCP2 roll core/shell), giữ ownership từng slot thay vì flatten. `shader.material` phải nhận `--effect`; checkpoint phải kiểm mọi material slot, texture identity, feature strength, AssetDB reload và tight screenshot ROI.',
   },
   {
+    id: 'shader-source-live-acceptance',
+    rule: 'Port shader/material phải bắt đầu bằng `shader.chain` trên full bounded rendering closure: nested prefab/ScriptableObject, FBX external material remap, Assets + selected package roots và `.shader`/`.tcp2shader`. Trước khi claim fidelity, `unity.intel.doctor` phải có `canUseLiveMcp=true` và Unity live evidence phải khóa shader/material properties + active keywords + renderer slots + camera/light/render settings; static fallback chỉ cho phép phân tích, không đủ để claim 90-95%. `shader.validate` và Grade A/100 chỉ là static confidence. Sau khi ghi output phải dùng Cocos MCP reimport effect/material, xác nhận asset type/importer, kiểm shader/project log và runtime preview. Material/shader checkpoint phải có Unity `referenceImage`, tight `screenshotRegion` và `requiredReferenceMetrics`; với object crop dùng auto-trim + `foregroundRgbSimilarity >= 0.90` và `foregroundIou`, target 0.95 khi source/viewport align đủ. Không thêm output color scale từ screenshot như workaround nếu thiếu source rig oracle + hash + regression.',
+  },
+  {
     id: 'urp-lit-camera-light-parity',
     rule: 'Với Unity URP/Lit, không được suy metallic/smoothness từ cảm giác bóng của screenshot. Phải trace tuần tự material/prefab -> texture -> ShaderLab property class và active keyword -> renderer layer -> camera culling/HDR/post-processing/AA -> từng light culling mask, transform, color, intensity, shadow -> RenderSettings ambient/reflection. `_BaseColor` và `_SpecColor` của URP Lit là Color thường; `[HDR] _EmissionColor` là linear. Texture đã bake highlight + HDR emission + directional light riêng theo layer có thể tạo vẻ bạc dù metallic=0, specular đen và roughness=1. Chỉ bật `USE_UNITY_UNTONEMAPPED_OUTPUT` khi camera nguồn HDR nhưng post-processing/tone mapper tắt; standalone material conversion không đủ evidence. Mọi output calibration phải làm sau khi bind exact source semantics, lưu oracle/hash và khóa bằng runtime assertion + tight screenshot ROI.',
   },
@@ -1152,7 +1163,7 @@ const CORE_RULES = [
   },
   {
     id: 'visual-checkpoints',
-    rule: 'Khi port thay đổi camera, transform, material/shader, UI layout hoặc input fidelity, phải chạy `npm run ai:verify:visual -- --config <matrix.json>` trên Cocos preview với ảnh nguồn/các checkpoint phù hợp và mở ảnh kết quả. Với hành vi có oracle, dùng `requireEvalOk: true`; VFX/particle phải có `screenshotRegion` + `requiredScreenshotMetrics` với bounded min/max phù hợp để chứng minh visible pixels và chặn cả vô hình lẫn quá dày, vì active/isPlaying không chứng minh camera render. Runtime-clean không được diễn giải thành pixel parity.',
+    rule: 'Khi port thay đổi camera, transform, material/shader, UI layout hoặc input fidelity, phải chạy `npm run ai:verify:visual -- --config <matrix.json>` trên Cocos preview với ảnh nguồn/các checkpoint phù hợp và mở ảnh kết quả. Với hành vi có oracle, dùng `requireEvalOk: true`; VFX/particle phải có `screenshotRegion` + `requiredScreenshotMetrics` với bounded min/max phù hợp để chứng minh visible pixels và chặn cả vô hình lẫn quá dày. Material/shader cần thêm `referenceImage` + `requiredReferenceMetrics` để đo candidate với Unity reference trên ROI đã align. Runtime-clean hoặc contact sheet không có metric contract không được diễn giải thành pixel parity.',
   },
   {
     id: 'portable-regression-registry',

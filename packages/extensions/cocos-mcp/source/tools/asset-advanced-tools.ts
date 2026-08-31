@@ -217,6 +217,26 @@ export class AssetAdvancedTools implements ToolExecutor {
                 }
             },
             {
+                name: 'validate_effect_import',
+                description: 'Reimport a Cocos effect and its materials, verify exact AssetDB types/importers, and fail on new shader/effect syntax errors',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        effectUrl: {
+                            type: 'string',
+                            description: 'Effect asset URL (db://assets/.../*.effect)'
+                        },
+                        materialUrls: {
+                            type: 'array',
+                            maxItems: 32,
+                            items: { type: 'string' },
+                            description: 'Bounded material asset URLs to reimport and verify'
+                        }
+                    },
+                    required: ['effectUrl']
+                }
+            },
+            {
                 name: 'export_asset_manifest',
                 description: 'Export asset manifest/inventory',
                 inputSchema: {
@@ -268,6 +288,8 @@ export class AssetAdvancedTools implements ToolExecutor {
                 return await this.enforceTextureCompressionPolicy(args || {});
             case 'enforce_texture_compression_policy':
                 return await this.enforceTextureCompressionPolicy(args || {});
+            case 'validate_effect_import':
+                return await this.validateEffectImport(args || {});
             case 'export_asset_manifest':
                 return await this.exportAssetManifest(args.directory, args.format, args.includeMetadata);
             default:
@@ -555,6 +577,99 @@ export class AssetAdvancedTools implements ToolExecutor {
         } catch (error: any) {
             return { success: false, error: error?.message || String(error) };
         }
+    }
+
+    private async validateEffectImport(args: any): Promise<ToolResponse> {
+        const effectUrl = String(args.effectUrl || '');
+        const materialUrls = Array.isArray(args.materialUrls)
+            ? args.materialUrls.map((url: unknown) => String(url)) : [];
+        if (!/^db:\/\/assets\/.+\.effect$/i.test(effectUrl)) {
+            return { success: false, error: 'effectUrl must be a db://assets/*.effect URL' };
+        }
+        if (materialUrls.length > 32 || materialUrls.some((url: string) => !/^db:\/\/assets\/.+\.mtl$/i.test(url))) {
+            return { success: false, error: 'materialUrls must contain at most 32 db://assets/*.mtl URLs' };
+        }
+
+        const fs = require('fs');
+        const path = require('path');
+        const projectPath = (Editor as any)?.Project?.path || process.cwd();
+        const logPath = path.join(projectPath, 'temp', 'logs', 'project.log');
+        let logOffset = 0;
+        try { logOffset = fs.statSync(logPath).size; } catch (_) { /* log is optional evidence */ }
+
+        const targets = [
+            { url: effectUrl, expectedType: 'cc.EffectAsset', expectedImporter: 'effect' },
+            ...materialUrls.map((url: string) => ({
+                url, expectedType: 'cc.Material', expectedImporter: 'material',
+            })),
+        ];
+        const assets: any[] = [];
+        for (const target of targets) {
+            try {
+                await Editor.Message.request('asset-db', 'reimport-asset', target.url);
+                const info: any = await Editor.Message.request('asset-db', 'query-asset-info', target.url);
+                const type = String(info?.type || '');
+                const importer = String(info?.meta?.importer || '');
+                const typeOk = type === target.expectedType;
+                const importerOk = importer === target.expectedImporter;
+                assets.push({
+                    url: target.url,
+                    uuid: info?.uuid || null,
+                    type,
+                    importer,
+                    typeOk,
+                    importerOk,
+                    ok: Boolean(info && typeOk && importerOk),
+                });
+            } catch (error: any) {
+                assets.push({ url: target.url, ok: false, error: error?.message || String(error) });
+            }
+        }
+
+        const shaderErrors: string[] = [];
+        try {
+            const currentSize = fs.statSync(logPath).size;
+            const start = currentSize >= logOffset ? logOffset : 0;
+            const length = Math.min(Math.max(0, currentSize - start), 256 * 1024);
+            if (length > 0) {
+                const buffer = Buffer.alloc(length);
+                const descriptor = fs.openSync(logPath, 'r');
+                try { fs.readSync(descriptor, buffer, 0, length, start); }
+                finally { fs.closeSync(descriptor); }
+                const relevant = /(?:effect|shader|glsl|ccprogram|efx\d*)/i;
+                const failure = /(?:error|failed?|invalid|syntax|undeclared|does not exist)/i;
+                for (const line of buffer.toString('utf8').split(/\r?\n/)) {
+                    if (relevant.test(line) && failure.test(line)) {
+                        shaderErrors.push(line.slice(0, 600));
+                        if (shaderErrors.length >= 20) break;
+                    }
+                }
+            }
+        } catch (_) { /* missing/rotated log is reported, not silently treated as proof */ }
+
+        const assetTypesOk = assets.length === targets.length && assets.every(asset => asset.ok);
+        const logChecked = fs.existsSync(logPath);
+        const complete = assetTypesOk && logChecked && shaderErrors.length === 0;
+        return {
+            success: complete,
+            message: complete
+                ? `Effect import gate passed for ${targets.length} asset(s).`
+                : 'Effect import gate failed; inspect asset/importer evidence and new shader errors.',
+            data: {
+                complete,
+                scope: {
+                    cocosAssetDbReimport: 'checked',
+                    assetTypesAndImporters: assetTypesOk ? 'passed' : 'failed',
+                    newProjectLogShaderErrors: logChecked ? (shaderErrors.length ? 'failed' : 'passed') : 'unverified',
+                    runtimeVariant: 'unverified',
+                    unityVisualParity: 'unverified',
+                },
+                assets,
+                logChecked,
+                shaderErrors,
+            },
+            error: complete ? undefined : 'Cocos effect import acceptance is incomplete',
+        };
     }
 
     private async exportAssetManifest(directory: string = 'db://assets', format: string = 'json', includeMetadata: boolean = true): Promise<ToolResponse> {

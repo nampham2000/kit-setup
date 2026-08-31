@@ -12,6 +12,7 @@ const { computeStaticProjectFingerprint, createUnityLiveSnapshotPatch } = requir
 const { jsonBytes, SUMMARY_MAX_BYTES, createCompactSummary } = require('./compact-projection.cjs');
 const {
   createCompactScanEnvelope,
+  inspectUnityProject,
   buildLiveCandidateRequest,
   applyLiveCandidateDispositions,
   defaultLiveProvider,
@@ -60,6 +61,39 @@ test('default provider adapts createUnityMcpProvider API', () => {
   const provider = defaultLiveProvider();
   assert.equal(typeof provider.probe, 'function');
   assert.equal(typeof provider.scan, 'function');
+});
+
+test('doctor fails closed when endpoint config exists but playable-port-scan times out', async t => {
+  const { fixture } = staticFixture(t);
+  const result = await inspectUnityProject({ project: fixture.root, timeoutMs: 250 }, {
+    doctor: () => doctorState(fixture.root, false),
+    readConnection: () => ({ url: 'http://127.0.0.1:25000', token: 'secret' }),
+    liveProvider: {
+      probe: async () => {
+        const error = new Error('request timed out');
+        error.code = 'UNITY_MCP_TIMEOUT';
+        throw error;
+      },
+    },
+  });
+  assert.equal(result.doctor.canAttach, true);
+  assert.equal(result.canUseLiveMcp, false);
+  assert.equal(result.liveMcp.configured, true);
+  assert.equal(result.liveMcp.toolReady, false);
+  assert.equal(result.liveMcp.error.code, 'UNITY_MCP_TOOL_UNRESPONSIVE');
+  assert.equal(JSON.stringify(result).includes('secret'), false);
+});
+
+test('doctor reports live Unity MCP only after scanner tool probe completes', async t => {
+  const { fixture } = staticFixture(t);
+  const result = await inspectUnityProject({ project: fixture.root }, {
+    doctor: () => doctorState(fixture.root, false),
+    readConnection: () => ({ url: 'http://127.0.0.1:25000', token: 'secret' }),
+    liveProvider: { probe: async () => ({ ready: true, packageVersion: '0.3.0', protocolVersion: 1 }) },
+  });
+  assert.equal(result.canUseLiveMcp, true);
+  assert.equal(result.liveMcp.toolReady, true);
+  assert.equal(result.liveMcp.scannerPackageVersion, '0.3.0');
 });
 
 test('bootstrap on a locked Editor waits the full requested readiness window and never batch-launches', async t => {
@@ -158,6 +192,40 @@ test('bootstrap promotes bounded project compile evidence over a generic readine
       return true;
     },
   );
+});
+
+test('bootstrap promotes Unity Package Manager TLS evidence over a generic MCP timeout', async t => {
+  const { fixture, snapshot } = staticFixture(t);
+  let compileReads = 0;
+  await assert.rejects(
+    scanUnityProject({ project: fixture.root, provider: 'unity-mcp', bootstrap: true, timeoutMs: 10 }, {
+      buildStaticSnapshot: () => snapshot,
+      doctor: () => doctorState(fixture.root, false),
+      setupPackages: () => ({ changed: true, scannerPackageSpec: 'file:scanner', upstreamPackageSpec: 'git', transaction: {} }),
+      ensureConfig: () => ({ url: 'http://127.0.0.1:25000', token: 'secret', changed: true }),
+      refreshOpenEditor: () => ({ attempted: true, dispatched: true }),
+      liveProvider: {
+        wait: async () => {
+          const error = new Error('window expired');
+          error.code = 'UNITY_MCP_TIMEOUT';
+          throw error;
+        },
+      },
+      readPackageDiagnostics: () => ({
+        code: 'UNITY_PACKAGE_TLS_CERTIFICATE_ERROR',
+        count: 1,
+        evidence: ['Curl error 35: Cert verify failed.'],
+      }),
+      readCompileDiagnostics: () => { compileReads += 1; return null; },
+    }),
+    error => {
+      assert.equal(error.code, 'UNITY_PACKAGE_TLS_CERTIFICATE_ERROR');
+      assert.equal(error.details.causeCode, 'UNITY_MCP_TIMEOUT');
+      assert.match(error.message, /TLS certificate/);
+      return true;
+    },
+  );
+  assert.equal(compileReads, 1);
 });
 
 test('existing-editor bootstrap retries until the expected scanner finishes domain reload', async t => {

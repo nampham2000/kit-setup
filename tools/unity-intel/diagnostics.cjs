@@ -68,7 +68,7 @@ const BLOCKER_RULES = Object.freeze([
     code: 'UNITY_SHADERLAB',
     severity: SEVERITIES.HIGH,
     label: 'ShaderLab (.shader)',
-    test: file => file.toLowerCase().endsWith('.shader'),
+    test: file => /\.(?:shader|tcp2shader)$/i.test(file),
     impact: 'Shader sinh ra có thể compile nhưng chưa chứng minh tương đương hình ảnh với Unity.',
     action: 'Chạy shader.convert, shader.validate rồi đối chiếu visual với nguồn.',
   },

@@ -277,8 +277,9 @@ function cmdConvert(options) {
     // different files, and `auto` may have chosen for the caller.
     console.log(`   Mode:       surface-pbr (${result.docIR.surfaceIntentStyle} PBR intent${result.mode === 'surface-pbr' && result.autoSelectedMode ? ', auto-selected' : ''})`);
   }
-  console.log(`   Confidence: ${result.scoreInfo.score}/100 (Grade ${result.scoreInfo.grade})`);
-  console.log(`   Validation: ${result.validationResult.valid ? 'PASS' : 'FAIL'}`);
+  console.log(`   Static confidence: ${result.scoreInfo.score}/100 (Grade ${result.scoreInfo.grade})`);
+  console.log(`   Static validation: ${result.validationResult.valid ? 'PASS' : 'FAIL'}`);
+  console.log('   Cocos import/runtime/Unity visual parity: UNVERIFIED');
 
   if (result.validationResult.errors.length > 0) {
     console.log('   Errors:');
@@ -338,7 +339,8 @@ function cmdValidate(effectPath) {
   }
   const text = fs.readFileSync(effectPath, 'utf8');
   const res = validateCceffectStructure(text);
-  console.log(`Validation for '${effectPath}': ${res.valid ? '✅ PASS' : '❌ FAIL'}`);
+  console.log(`Static validation for '${effectPath}': ${res.valid ? '✅ PASS' : '❌ FAIL'}`);
+  console.log('Scope: text/ABI heuristics only. Cocos importer, runtime shader variants, and Unity visual parity were NOT checked.');
   if (res.errors.length > 0) {
     console.log('Errors:');
     for (const e of res.errors) console.log(`  - ❌ ${e}`);
@@ -379,6 +381,13 @@ function cmdChain(options) {
   const blocking = [];
   const effectByShader = new Map();
 
+  if (!chain.closure.complete) {
+    blocking.push(
+      `DEPENDENCY CLOSURE INCOMPLETE: visited ${chain.closure.visitedAssetCount}/${chain.closure.maxAssets} asset(s), ` +
+      `depth ${chain.closure.deepestDepth}/${chain.closure.maxDepth}. Narrow the source or raise the bounded closure explicitly.`,
+    );
+  }
+
   if (outDir) {
     const effectsDir = path.join(outDir, 'effects');
     const materialsDir = path.join(outDir, 'materials');
@@ -393,8 +402,15 @@ function cmdChain(options) {
         effectByShader.set(sh.path, dest);
         sh.effect = dest;
         sh.score = res.scoreInfo.score;
+        sh.staticConfidenceScore = res.scoreInfo.score;
         sh.grade = res.scoreInfo.grade;
         sh.clean = analysis.ok;
+        sh.evidenceScope = {
+          staticAnalysis: analysis.ok ? 'passed' : 'failed',
+          cocosImporter: 'unverified',
+          runtimeVariant: 'unverified',
+          unityVisualParity: 'unverified',
+        };
         // surface-pbr and unlit produce structurally different effects, and a
         // PBR shader is routed automatically -- say which one ran.
         sh.mode = res.mode;
@@ -433,6 +449,8 @@ function cmdChain(options) {
   const rel = (p) => path.relative(options.unityRoot, p).replace(/\\/g, '/');
   console.log(`\n=== Shader chain: ${path.basename(chain.sourceAsset)} [${chain.sourceKind}] ===`);
   console.log(`guid index      ${chain.indexSize} assets${chain.fromCache ? ' (cached)' : ''}`);
+  console.log(`package roots   ${chain.packageRoots.length}${chain.packageRoots.length ? '  ' + chain.packageRoots.join(', ') : ''}`);
+  console.log(`closure         ${chain.closure.complete ? 'complete' : 'INCOMPLETE'}  ${chain.closure.visitedAssetCount} asset(s), ${chain.closure.nestedPrefabCount} nested prefab(s), ${chain.closure.modelImporterCount} model importer(s)`);
   console.log(`materials       ${chain.materials.length}${chain.materials.length ? '  ' + chain.materials.map(m => m.name).join(', ') : ''}`);
 
   for (const sh of chain.shaders) {
@@ -440,9 +458,10 @@ function cmdChain(options) {
       ? `surface-pbr/${sh.intentStyle || 'pbr'}`
       : 'unlit';
     const status = sh.effect
-      ? `${mode}, ${sh.clean ? 'compile-clean' : 'NEEDS WORK'}, score ${sh.score} (${sh.grade})`
+      ? `${mode}, ${sh.clean ? 'static-clean' : 'NEEDS WORK'}, static score ${sh.score} (${sh.grade})`
       : 'not converted (no --out-dir)';
-    console.log(`shader          ${sh.name}  [used by ${sh.usedByMaterials} material(s)]  ${status}`);
+    const source = sh.origin === 'package' ? `package:${sh.packageName}` : 'project';
+    console.log(`shader          ${sh.name}  [${source}, used by ${sh.usedByMaterials} material(s)]  ${status}`);
   }
   const builtinMats = chain.materials.filter(m => m.shaderIsBuiltin);
   if (builtinMats.length) {
@@ -457,7 +476,7 @@ function cmdChain(options) {
     for (const m of chain.meshes) console.log(`                ${rel(m)}`);
   }
   if (chain.unresolved.length) {
-    console.log(`unresolved      ${chain.unresolved.length} GUID(s) not found under --unity-root (built-in assets or a missing package)`);
+    console.log(`unresolved      ${chain.unresolved.length} rendering GUID(s) not found in Assets or selected package roots`);
   }
 
   if (outDir) {
@@ -471,7 +490,7 @@ function cmdChain(options) {
     for (const b of blocking) console.log(`  ❌ ${b}`);
     process.exitCode = 5;
   } else if (outDir) {
-    console.log('\n✅ every generated effect is compile-clean.');
+    console.log('\n✅ every generated effect passes the static analyzer. Cocos import/runtime/visual gates remain required.');
   }
 
   if (outDir && chain.materials.some(m => m.mtl)) {
@@ -520,6 +539,8 @@ function main() {
     // chain: GUID resolution needs the Unity Assets root.
     else if (arg === '--unity-root' && args[i + 1]) options.unityRoot = args[++i];
     else if (arg === '--unity-project' && args[i + 1]) options.unityProject = args[++i];
+    else if (arg === '--max-closure-assets' && args[i + 1]) options.maxClosureAssets = Number(args[++i]);
+    else if (arg === '--max-closure-depth' && args[i + 1]) options.maxClosureDepth = Number(args[++i]);
     else if (arg === '--json') options.json = true;
     else if (arg === '--no-cache') options.noCache = true;
   }
@@ -565,7 +586,7 @@ function main() {
 UCShaderTranspiler - Unity HLSL/ShaderLab -> Cocos Creator 3.8.8 GLSL Effect Transpiler
 
 Usage:
-  node unity-shader-compiler.cjs chain --src <Prefab|ScriptableObject.asset> --unity-root <Assets> [--out-dir <dir>] [--json] [--no-cache]
+  node unity-shader-compiler.cjs chain --src <Prefab|ScriptableObject.asset> --unity-root <Assets> [--out-dir <dir>] [--json] [--no-cache] [--max-closure-assets N] [--max-closure-depth N]
   node unity-shader-compiler.cjs convert --src <Shader> --out <Effect> [-m] [--mode auto|unlit|surface-pbr] [--unity-project <UnityProject>] [--unity-uv] [--report|--no-report] [--dry-run]
 
   --unity-uv  Lấy mẫu texture theo quy ước UV của Unity (gốc dưới-trái) bằng texU().

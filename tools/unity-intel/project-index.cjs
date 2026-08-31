@@ -55,6 +55,7 @@ const TYPE_BY_EXTENSION = new Map([
   ['.prefab', 'prefab'],
   ['.cs', 'script'],
   ['.shader', 'shader'],
+  ['.tcp2shader', 'shader'],
   ['.shadergraph', 'shaderGraph'],
   ['.mat', 'material'],
   ['.fbx', 'model'],

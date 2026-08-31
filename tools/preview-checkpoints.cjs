@@ -66,14 +66,21 @@ Manifest:
         "requiredScreenshotMetrics": {
           "brightPixelRatio": { "min": 0.16, "max": 0.32 }
         },
-        "referenceImage": ".unity/references/unity.png"
+        "referenceImage": ".unity/references/unity.png",
+        "referenceRegion": { "x": 0, "y": 0, "width": 1, "height": 1 },
+        "requiredReferenceMetrics": {
+          "foregroundRgbSimilarity": { "min": 0.90 },
+          "foregroundIou": { "min": 0.80 }
+        },
+        "referenceMetricOptions": { "autoTrimForeground": true, "backgroundDistanceThreshold": 24 }
       }
     ]
   }
 
 Mỗi case reload preview trong browser session riêng. Tool sinh từng PNG,
-manifest.json và index.html dạng contact sheet. Ảnh là evidence để con người/agent
-đối chiếu; tool không tự tuyên bố pixel parity.`;
+manifest.json và index.html dạng contact sheet. Khi khai báo
+requiredReferenceMetrics, tool crop/resize reference về đúng ROI candidate và
+fail-closed theo metric; nếu không khai báo thì reference chỉ là contact sheet.`;
 
 function slugify(value) {
   const slug = String(value || '').trim().toLowerCase()
@@ -216,6 +223,12 @@ const SUPPORTED_SCREENSHOT_METRICS = new Set([
   'meanLuminance', 'brightPixelRatio', 'meanRed', 'meanGreen', 'meanBlue',
 ]);
 
+const SUPPORTED_REFERENCE_METRICS = new Set([
+  'rgbSimilarity', 'luminanceSimilarity', 'meanAbsoluteError', 'rmse', 'meanLuminanceDelta',
+  'foregroundRgbSimilarity', 'foregroundLuminanceSimilarity', 'foregroundMeanLuminanceDelta',
+  'foregroundIou',
+]);
+
 function normalizeScreenshotRegion(value, label = 'screenshotRegion') {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error(`${label} phải là object normalized {x,y,width,height}`);
@@ -295,6 +308,210 @@ async function evaluateScreenshotMetricAssertion(requiredMetrics, screenshot, re
     };
   } catch (error) {
     return { required: true, ok: false, reason: `screenshot metric failed: ${error.message}` };
+  }
+}
+
+function colorDistance(data, offset, color) {
+  const dr = data[offset] - color[0];
+  const dg = data[offset + 1] - color[1];
+  const db = data[offset + 2] - color[2];
+  return Math.sqrt(dr * dr + dg * dg + db * db);
+}
+
+function estimateCornerBackground(data, width, height, channels = 3) {
+  const offsets = [0, (width - 1) * channels, (height - 1) * width * channels,
+    ((height * width) - 1) * channels];
+  return [0, 1, 2].map(channel => offsets.reduce((sum, offset) => sum + data[offset + channel], 0) / 4);
+}
+
+function findForegroundBounds(data, width, height, channels = 3, threshold = 24) {
+  const background = estimateCornerBackground(data, width, height, channels);
+  let left = width;
+  let top = height;
+  let right = -1;
+  let bottom = -1;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const offset = (y * width + x) * channels;
+      if (colorDistance(data, offset, background) <= threshold) continue;
+      if (x < left) left = x;
+      if (x > right) right = x;
+      if (y < top) top = y;
+      if (y > bottom) bottom = y;
+    }
+  }
+  if (right < left || bottom < top) return null;
+  return {
+    left,
+    top,
+    width: right - left + 1,
+    height: bottom - top + 1,
+    background,
+  };
+}
+
+function calculateReferenceMetrics(candidate, reference, channels = 3, options = {}) {
+  if (!Buffer.isBuffer(candidate) || !Buffer.isBuffer(reference)
+    || candidate.length !== reference.length || candidate.length < channels
+    || !Number.isInteger(channels) || channels < 3 || candidate.length % channels !== 0) {
+    throw new Error('candidate/reference pixels must have identical RGB dimensions');
+  }
+  const pixelCount = candidate.length / channels;
+  let absolute = 0;
+  let squared = 0;
+  let luminanceAbsolute = 0;
+  let candidateLuminance = 0;
+  let referenceLuminance = 0;
+  let foregroundAbsolute = 0;
+  let foregroundLuminanceAbsolute = 0;
+  let foregroundIntersection = 0;
+  let foregroundUnion = 0;
+  let candidateForegroundLuminance = 0;
+  let referenceForegroundLuminance = 0;
+  let candidateForegroundCount = 0;
+  let referenceForegroundCount = 0;
+  const foregroundThreshold = Number(options.backgroundDistanceThreshold) || 24;
+  const candidateBackground = options.candidateBackground || [0, 0, 0];
+  const referenceBackground = options.referenceBackground || [0, 0, 0];
+  for (let offset = 0; offset < candidate.length; offset += channels) {
+    const cr = candidate[offset];
+    const cg = candidate[offset + 1];
+    const cb = candidate[offset + 2];
+    const rr = reference[offset];
+    const rg = reference[offset + 1];
+    const rb = reference[offset + 2];
+    const dr = cr - rr;
+    const dg = cg - rg;
+    const db = cb - rb;
+    absolute += Math.abs(dr) + Math.abs(dg) + Math.abs(db);
+    squared += dr * dr + dg * dg + db * db;
+    const cy = 0.2126 * cr + 0.7152 * cg + 0.0722 * cb;
+    const ry = 0.2126 * rr + 0.7152 * rg + 0.0722 * rb;
+    candidateLuminance += cy;
+    referenceLuminance += ry;
+    luminanceAbsolute += Math.abs(cy - ry);
+    const candidateForeground = colorDistance(candidate, offset, candidateBackground) > foregroundThreshold;
+    const referenceForeground = colorDistance(reference, offset, referenceBackground) > foregroundThreshold;
+    if (candidateForeground) {
+      candidateForegroundCount++;
+      candidateForegroundLuminance += cy;
+    }
+    if (referenceForeground) {
+      referenceForegroundCount++;
+      referenceForegroundLuminance += ry;
+    }
+    if (candidateForeground || referenceForeground) foregroundUnion++;
+    if (candidateForeground && referenceForeground) {
+      foregroundIntersection++;
+      foregroundAbsolute += Math.abs(dr) + Math.abs(dg) + Math.abs(db);
+      foregroundLuminanceAbsolute += Math.abs(cy - ry);
+    }
+  }
+  const channelCount = pixelCount * 3;
+  const meanAbsoluteError = absolute / channelCount;
+  const luminanceMae = luminanceAbsolute / pixelCount;
+  return {
+    rgbSimilarity: Math.max(0, 1 - meanAbsoluteError / 255),
+    luminanceSimilarity: Math.max(0, 1 - luminanceMae / 255),
+    meanAbsoluteError,
+    rmse: Math.sqrt(squared / channelCount),
+    meanLuminanceDelta: Math.abs(candidateLuminance - referenceLuminance) / pixelCount,
+    foregroundRgbSimilarity: foregroundIntersection > 0
+      ? Math.max(0, 1 - foregroundAbsolute / (foregroundIntersection * 3 * 255)) : 0,
+    foregroundLuminanceSimilarity: foregroundIntersection > 0
+      ? Math.max(0, 1 - foregroundLuminanceAbsolute / (foregroundIntersection * 255)) : 0,
+    foregroundMeanLuminanceDelta: candidateForegroundCount > 0 && referenceForegroundCount > 0
+      ? Math.abs(candidateForegroundLuminance / candidateForegroundCount
+        - referenceForegroundLuminance / referenceForegroundCount) : 255,
+    foregroundIou: foregroundUnion > 0 ? foregroundIntersection / foregroundUnion : 0,
+  };
+}
+
+function regionPixels(metadata, region) {
+  const left = Math.min(metadata.width - 1, Math.round(metadata.width * region.x));
+  const top = Math.min(metadata.height - 1, Math.round(metadata.height * region.y));
+  const width = Math.max(1, Math.min(metadata.width - left, Math.round(metadata.width * region.width)));
+  const height = Math.max(1, Math.min(metadata.height - top, Math.round(metadata.height * region.height)));
+  return { left, top, width, height };
+}
+
+async function evaluateReferenceMetricAssertion(requiredMetrics, screenshot, referenceImage,
+  screenshotRegion, referenceRegion, options = {}) {
+  if (!requiredMetrics || Object.keys(requiredMetrics).length === 0) {
+    return { required: false, ok: true };
+  }
+  if (!screenshot || !referenceImage) {
+    return { required: true, ok: false, reason: 'candidate screenshot or Unity reference is missing' };
+  }
+  let sharp;
+  try { sharp = require('sharp'); } catch (_) {
+    return { required: true, ok: false, reason: 'sharp is required for reference metric assertions' };
+  }
+  try {
+    const candidateFile = resolveInsideProject(screenshot, 'screenshot');
+    const referenceFile = resolveInsideProject(referenceImage, 'referenceImage');
+    if (!fs.existsSync(candidateFile) || !fs.existsSync(referenceFile)) {
+      throw new Error('candidate screenshot or reference image not found');
+    }
+    const [candidateMeta, referenceMeta] = await Promise.all([
+      sharp(candidateFile).metadata(), sharp(referenceFile).metadata(),
+    ]);
+    if (!candidateMeta.width || !candidateMeta.height || !referenceMeta.width || !referenceMeta.height) {
+      throw new Error('missing candidate/reference image dimensions');
+    }
+    const candidatePixels = regionPixels(candidateMeta, screenshotRegion);
+    const referencePixels = regionPixels(referenceMeta, referenceRegion);
+    const [candidateInitial, referenceInitial] = await Promise.all([
+      sharp(candidateFile).extract(candidatePixels).removeAlpha().raw()
+        .toBuffer({ resolveWithObject: true }),
+      sharp(referenceFile).extract(referencePixels).removeAlpha().raw()
+        .toBuffer({ resolveWithObject: true }),
+    ]);
+    let candidateTrim = {
+      left: 0, top: 0, width: candidateInitial.info.width, height: candidateInitial.info.height,
+      background: estimateCornerBackground(candidateInitial.data,
+        candidateInitial.info.width, candidateInitial.info.height, candidateInitial.info.channels),
+    };
+    let referenceTrim = {
+      left: 0, top: 0, width: referenceInitial.info.width, height: referenceInitial.info.height,
+      background: estimateCornerBackground(referenceInitial.data,
+        referenceInitial.info.width, referenceInitial.info.height, referenceInitial.info.channels),
+    };
+    if (options.autoTrimForeground === true) {
+      candidateTrim = findForegroundBounds(candidateInitial.data, candidateInitial.info.width,
+        candidateInitial.info.height, candidateInitial.info.channels, options.backgroundDistanceThreshold);
+      referenceTrim = findForegroundBounds(referenceInitial.data, referenceInitial.info.width,
+        referenceInitial.info.height, referenceInitial.info.channels, options.backgroundDistanceThreshold);
+      if (!candidateTrim || !referenceTrim) throw new Error('autoTrimForeground could not find both objects');
+    }
+    const [candidateRaw, referenceRaw] = await Promise.all([
+      sharp(candidateInitial.data, { raw: candidateInitial.info })
+        .extract({ left: candidateTrim.left, top: candidateTrim.top,
+          width: candidateTrim.width, height: candidateTrim.height })
+        .raw().toBuffer(),
+      sharp(referenceInitial.data, { raw: referenceInitial.info })
+        .extract({ left: referenceTrim.left, top: referenceTrim.top,
+          width: referenceTrim.width, height: referenceTrim.height })
+        .resize(candidateTrim.width, candidateTrim.height, { fit: 'fill' })
+        .raw().toBuffer(),
+    ]);
+    const measured = calculateReferenceMetrics(candidateRaw, referenceRaw, 3, {
+      candidateBackground: candidateTrim.background,
+      referenceBackground: referenceTrim.background,
+      backgroundDistanceThreshold: options.backgroundDistanceThreshold,
+    });
+    const assertion = evaluateMetricAssertion(requiredMetrics, measured);
+    return {
+      ...assertion,
+      measured,
+      candidateRegion: { normalized: screenshotRegion, pixels: candidatePixels },
+      referenceRegion: { normalized: referenceRegion, pixels: referencePixels },
+      trim: { candidate: candidateTrim, reference: referenceTrim,
+        autoTrimForeground: options.autoTrimForeground === true },
+      comparisonSize: { width: candidateTrim.width, height: candidateTrim.height },
+    };
+  } catch (error) {
+    return { required: true, ok: false, reason: `reference metric failed: ${error.message}` };
   }
 }
 
@@ -403,14 +620,38 @@ function validateConfig(config, overrides = {}) {
       }
     }
     const hasScreenshotMetrics = Object.keys(requiredScreenshotMetrics).length > 0;
-    if (hasScreenshotMetrics && entry.screenshotRegion === undefined) {
-      throw new Error(`cases[${index}].requiredScreenshotMetrics cần screenshotRegion`);
+    const requiredReferenceMetrics = normalizeEvalMetricContract(entry.requiredReferenceMetrics,
+      `cases[${index}].requiredReferenceMetrics`);
+    for (const metric of Object.keys(requiredReferenceMetrics)) {
+      if (!SUPPORTED_REFERENCE_METRICS.has(metric)) {
+        throw new Error(`cases[${index}].requiredReferenceMetrics không hỗ trợ metric: ${metric}`);
+      }
     }
-    if (!hasScreenshotMetrics && entry.screenshotRegion !== undefined) {
-      throw new Error(`cases[${index}].screenshotRegion cần requiredScreenshotMetrics`);
+    const hasReferenceMetrics = Object.keys(requiredReferenceMetrics).length > 0;
+    if ((hasScreenshotMetrics || hasReferenceMetrics) && entry.screenshotRegion === undefined) {
+      throw new Error(`cases[${index}] visual metrics cần screenshotRegion`);
     }
-    const screenshotRegion = hasScreenshotMetrics
+    if (!hasScreenshotMetrics && !hasReferenceMetrics && entry.screenshotRegion !== undefined) {
+      throw new Error(`cases[${index}].screenshotRegion cần screenshot/reference metrics`);
+    }
+    if (hasReferenceMetrics && !entry.referenceImage) {
+      throw new Error(`cases[${index}].requiredReferenceMetrics cần referenceImage`);
+    }
+    const screenshotRegion = (hasScreenshotMetrics || hasReferenceMetrics)
       ? normalizeScreenshotRegion(entry.screenshotRegion, `cases[${index}].screenshotRegion`) : null;
+    const referenceRegion = hasReferenceMetrics
+      ? normalizeScreenshotRegion(entry.referenceRegion || { x: 0, y: 0, width: 1, height: 1 },
+        `cases[${index}].referenceRegion`) : null;
+    if (entry.referenceMetricOptions?.autoTrimForeground !== undefined
+      && typeof entry.referenceMetricOptions.autoTrimForeground !== 'boolean') {
+      throw new Error(`cases[${index}].referenceMetricOptions.autoTrimForeground phải là boolean`);
+    }
+    const backgroundDistanceThreshold = entry.referenceMetricOptions?.backgroundDistanceThreshold === undefined
+      ? 24 : Number(entry.referenceMetricOptions.backgroundDistanceThreshold);
+    if (!Number.isFinite(backgroundDistanceThreshold)
+      || backgroundDistanceThreshold < 1 || backgroundDistanceThreshold > 441) {
+      throw new Error(`cases[${index}].referenceMetricOptions.backgroundDistanceThreshold phải nằm trong 1-441`);
+    }
     const brightLuminanceThreshold = entry.screenshotMetricOptions?.brightLuminanceThreshold === undefined
       ? 220 : Number(entry.screenshotMetricOptions.brightLuminanceThreshold);
     if (!Number.isFinite(brightLuminanceThreshold)
@@ -473,7 +714,13 @@ function validateConfig(config, overrides = {}) {
       requiredEvalMetrics,
       requiredEvalBeforeMetrics,
       requiredScreenshotMetrics,
+      requiredReferenceMetrics,
       screenshotRegion,
+      referenceRegion,
+      referenceMetricOptions: {
+        autoTrimForeground: entry.referenceMetricOptions?.autoTrimForeground === true,
+        backgroundDistanceThreshold,
+      },
       screenshotMetricOptions: { brightLuminanceThreshold },
       postActionSeconds: entry.postActionSeconds === undefined
         ? undefined : Number(entry.postActionSeconds),
@@ -609,6 +856,9 @@ async function main() {
     const screenshotMetricAssertion = await evaluateScreenshotMetricAssertion(
       caseEntry.requiredScreenshotMetrics, runtime.screenshot, caseEntry.screenshotRegion,
       caseEntry.screenshotMetricOptions);
+    const referenceMetricAssertion = await evaluateReferenceMetricAssertion(
+      caseEntry.requiredReferenceMetrics, runtime.screenshot, referenceImage,
+      caseEntry.screenshotRegion, caseEntry.referenceRegion, caseEntry.referenceMetricOptions);
     results.push({
       name: caseEntry.name,
       slug: caseEntry.slug,
@@ -618,7 +868,8 @@ async function main() {
       ok: runtime.ok && !!runtime.screenshot && !runtime.evalBeforeError && !runtime.evalError
         && !runtime.previewDeviceError && !runtime.previewDeviceRestoreError
         && !runtime.gestureError && evalBeforeAssertion.ok && metricBeforeAssertion.ok
-        && evalAssertion.ok && traceAssertion.ok && metricAssertion.ok && screenshotMetricAssertion.ok,
+        && evalAssertion.ok && traceAssertion.ok && metricAssertion.ok && screenshotMetricAssertion.ok
+        && referenceMetricAssertion.ok,
       evidence: {
         fps: runtime.fps,
         frames: runtime.frames,
@@ -647,6 +898,7 @@ async function main() {
         traceAssertion,
         metricAssertion,
         screenshotMetricAssertion,
+        referenceMetricAssertion,
       },
     });
   }
@@ -657,7 +909,7 @@ async function main() {
     generatedAt: new Date().toISOString(),
     url: config.url,
     ok: results.every(entry => entry.ok),
-    note: 'Runtime-clean screenshots are visual evidence, not automatic pixel-parity proof.',
+    note: 'Runtime-clean screenshots prove visual parity only when an explicit reference metric contract passes.',
     cases: results,
   };
   fs.writeFileSync(path.join(outputDir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
@@ -704,4 +956,7 @@ module.exports = {
   normalizeScreenshotRegion,
   calculateScreenshotMetrics,
   evaluateScreenshotMetricAssertion,
+  calculateReferenceMetrics,
+  evaluateReferenceMetricAssertion,
+  findForegroundBounds,
 };

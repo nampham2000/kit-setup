@@ -7,6 +7,7 @@ const test = require('node:test');
 const {
   slugify, normalizeWindowSize, resolveInsideProject, validateConfig, parseArgs, evaluateEvalAssertion,
   evaluateTraceAssertion, evaluateMetricAssertion, calculateScreenshotMetrics,
+  calculateReferenceMetrics, findForegroundBounds,
 } = require('./preview-checkpoints.cjs');
 
 test('normalizes names and window size deterministically', () => {
@@ -176,6 +177,76 @@ test('screenshot metrics require a bounded normalized ROI and measure visible pi
     cases: [{ name: 'unknown pixel metric', screenshotRegion: { x: 0, y: 0, width: 1, height: 1 },
       requiredScreenshotMetrics: { magicPixels: { min: 1 } } }],
   }), /không hỗ trợ metric/);
+});
+
+test('Unity reference metrics are explicit, bounded, and never inferred from a contact sheet', () => {
+  const valid = validateConfig({
+    url: 'http://localhost:7456',
+    cases: [{
+      name: 'holder material parity',
+      referenceImage: 'docs/tape-jam/references/unity-yellow-holder-roll.png',
+      screenshotRegion: { x: 0.05, y: 0.02, width: 0.3, height: 0.18 },
+      requiredReferenceMetrics: {
+        foregroundRgbSimilarity: { min: 0.9 },
+        foregroundIou: { min: 0.8 },
+      },
+      referenceMetricOptions: { autoTrimForeground: true, backgroundDistanceThreshold: 20 },
+    }],
+  });
+  assert.deepEqual(valid.cases[0].referenceRegion, { x: 0, y: 0, width: 1, height: 1 });
+  assert.deepEqual(valid.cases[0].requiredReferenceMetrics.foregroundRgbSimilarity, { min: 0.9 });
+  assert.equal(valid.cases[0].referenceMetricOptions.autoTrimForeground, true);
+  assert.equal(valid.cases[0].referenceMetricOptions.backgroundDistanceThreshold, 20);
+
+  const reference = Buffer.from([10, 20, 30, 100, 120, 140]);
+  const exact = calculateReferenceMetrics(Buffer.from(reference), reference);
+  assert.equal(exact.rgbSimilarity, 1);
+  assert.equal(exact.luminanceSimilarity, 1);
+  assert.equal(exact.meanAbsoluteError, 0);
+  assert.equal(exact.rmse, 0);
+  assert.equal(exact.meanLuminanceDelta, 0);
+  const shifted = calculateReferenceMetrics(Buffer.from([30, 40, 50, 120, 140, 160]), reference);
+  assert.ok(shifted.rgbSimilarity < 1 && shifted.rgbSimilarity > 0.9);
+  assert.ok(shifted.meanLuminanceDelta > 19 && shifted.meanLuminanceDelta < 21);
+
+  const candidate = Buffer.from([10, 10, 10, 240, 180, 20]);
+  const referenceWithDifferentBackground = Buffer.from([60, 70, 80, 238, 178, 18]);
+  const foreground = calculateReferenceMetrics(candidate, referenceWithDifferentBackground, 3, {
+    candidateBackground: [10, 10, 10],
+    referenceBackground: [60, 70, 80],
+    backgroundDistanceThreshold: 20,
+  });
+  assert.equal(foreground.foregroundIou, 1);
+  assert.ok(foreground.foregroundRgbSimilarity > 0.99);
+  const centerObject = Buffer.from([
+    10,10,10, 10,10,10, 10,10,10,
+    10,10,10, 240,180,20, 10,10,10,
+    10,10,10, 10,10,10, 10,10,10,
+  ]);
+  assert.deepEqual(findForegroundBounds(centerObject, 3, 3, 3, 20), {
+    left: 1, top: 1, width: 1, height: 1, background: [10, 10, 10],
+  });
+
+  assert.throws(() => validateConfig({
+    url: 'http://localhost:7456',
+    cases: [{ name: 'missing reference', screenshotRegion: { x: 0, y: 0, width: 1, height: 1 },
+      requiredReferenceMetrics: { rgbSimilarity: { min: 0.9 } } }],
+  }), /referenceImage/);
+  assert.throws(() => validateConfig({
+    url: 'http://localhost:7456',
+    cases: [{ name: 'unknown reference metric', referenceImage: 'docs/ref.png',
+      screenshotRegion: { x: 0, y: 0, width: 1, height: 1 },
+      requiredReferenceMetrics: { ssimMagic: { min: 0.9 } } }],
+  }), /không hỗ trợ metric/);
+  assert.throws(() => validateConfig({
+    url: 'http://localhost:7456',
+    cases: [{ name: 'bad trim threshold', referenceImage: 'docs/ref.png',
+      screenshotRegion: { x: 0, y: 0, width: 1, height: 1 },
+      requiredReferenceMetrics: { foregroundIou: { min: 0.8 } },
+      referenceMetricOptions: { autoTrimForeground: true, backgroundDistanceThreshold: 0 } }],
+  }), /1-441/);
+  assert.throws(() => calculateReferenceMetrics(Buffer.from([0, 0, 0]), Buffer.from([0, 0, 0, 0])),
+    /identical/);
 });
 
 test('output/reference paths reject an intermediate symlink or junction', t => {

@@ -160,6 +160,7 @@ const TOOL_HINTS: Record<string, ToolHints> = {
     'assetAdvanced_get_unused_assets':          { annotations: { readOnlyHint: true,  destructiveHint: false, idempotentHint: true,  openWorldHint: false } },
     'assetAdvanced_compress_textures':          { annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false } },
     'assetAdvanced_enforce_texture_compression_policy': { annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false } },
+    'assetAdvanced_validate_effect_import':    { annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false } },
     'assetAdvanced_export_asset_manifest':      { annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true,  openWorldHint: true } },
 
     // -- referenceImage_ (Phase 4) -------------------------------------

@@ -1,120 +1,121 @@
 ---
 name: cocos-shader-converter
-description: "Use when converting Unity HLSL / ShaderLab / ShaderGraph shaders into Cocos Creator 3.8.8+ .effect shader files and materials, with 90-95% accuracy and zero std140 UBO alignment errors."
-argument-hint: "Unity shader (.shader/.hlsl) or ShaderGraph (.shadergraph) file to convert"
+description: "Use when converting Unity ShaderLab/HLSL/ShaderGraph or generated .tcp2shader rendering dependencies into Cocos Creator 3.8.8+ effects and materials, with source-closure, live-import, runtime, and measured visual acceptance gates."
+argument-hint: "Unity prefab/material/shader source plus Unity project root and Cocos project root"
 ---
 
-# Cocos Creator Shader & ShaderGraph Conversion Skill
+# Cocos Shader Conversion
 
-This skill provides comprehensive capabilities for transpiling Unity ShaderLab, HLSL, and ShaderGraph (`.shadergraph`) assets into Cocos Creator 3.8.8+ `.effect` (Cocos Shading Language) and `.mtl` material files with 90-95% visual accuracy.
+Convert rendering behavior, not an isolated text file. A syntactically valid `.effect` can still use the wrong material, keyword, color space, renderer slot, light rig, camera exposure, or runtime variant. The requested 90–95% visual target is an **acceptance target**. Never infer it from Grade A, a static score, a clean TypeScript build, or a contact sheet.
 
-## 1. Automated CLI Tool
+## Mandatory workflow
 
-### Convert Single Shader or ShaderGraph:
-```bash
-node playable-shared-kit/tools/unity-hlsl-to-cocos-effect.cjs convert --src <source_shader.shader|.shadergraph> --out <output_effect.effect> [-m] [--shading-model <auto|unlit|lit|toon|matcap|dissolve>] [--transparent | --alpha-clip | --opaque]
-```
+1. Run Unity port preflight before reading raw Unity source or writing output:
 
-### Batch Convert Directory of Shaders:
-```bash
-node playable-shared-kit/tools/unity-hlsl-to-cocos-effect.cjs batch --dir "Assets/Shaders" --out-dir "assets/effects" -m
-```
+   ```bash
+   npm run ai:port:preflight -- --project <UnityProjectRoot>
+   ```
 
----
+2. Check both live bridges. `canAttach` only means the Unity Editor is open and attachable. Require `canUseLiveMcp=true` before treating Unity MCP as source evidence:
 
-## 2. Supported Shading Paradigms & Features
+   ```bash
+   npm run unity:intel:doctor -- --project <UnityProjectRoot> --timeout-ms 3000
+   ```
 
-1. **Unity ShaderGraph (`.shadergraph`)**:
-   - Parses Unity ShaderGraph JSON (both modern Context/Block styles and classic MasterNode styles).
-   - Topologically sorts node dependency graph.
-   - Generates GLSL 300 ES code for math, trigonometry, UV transforms (Tiling/Offset, Rotate, Polar, Twirl, Spherize, Flipbook), procedural noise (Simple, Voronoi, Gradient), color blend modes (Burn, Dodge, Overlay, Screen, LinearLight, etc.), and texture sampling.
-2. **PBR / URP Lit**:
-   - Cook-Torrance GGX specular distribution, Smith geometry shadowing, Schlick Fresnel approximation.
-   - Direct directional lighting, hemispheric sky/ground ambient, and shadow map + planar shadow receiver support.
-3. **Stylized Toon / Cel-Shading**:
-   - Half-Lambert diffuse, smoothstep ramp threshold/smoothing, highlight and shadow color tints.
-   - Rim lighting with light mask support and stylized specular highlights.
-4. **MatCap (Spherical Environment Mapping)**:
-   - Real-time view-space normal UV mapping for high-performance stylized metallic and glossy reflections.
-5. **Dissolve / Cutoff FX**:
-   - Procedural or texture-driven dissolve with glowing edge burn ramp.
-6. **std140 UBO Alignment Packing**:
-   - Automatic 16-byte packing and GLSL alias generation ensuring 100% WebGPU / Vulkan / Metal compatibility with zero memory waste.
+   If the result is `UNITY_MCP_TOOL_UNRESPONSIVE`, static preflight may support bounded analysis but cannot support a 90–95% visual claim. Fix/reload the Unity MCP scanner first. Confirm Cocos MCP is connected to the exact target project before any reimport.
 
----
+3. Resolve the full rendering dependency closure from the owner prefab or ScriptableObject:
 
-## 3. Cocos 3.8 Effect Architecture (`.effect`)
+   ```bash
+   node playable-shared-kit/tools/shader-compiler/unity-shader-compiler.cjs chain \
+     --src <UnityPrefabOrAsset> \
+     --unity-root <UnityProjectRoot>/Assets \
+     --no-cache
+   ```
 
-A Cocos Effect is composed of:
-1. `CCEffect %{ ... }`: YAML header defining techniques, passes, properties, and render states.
-2. `CCProgram <name>-vs %{ ... }`: Vertex shader in GLSL 300 ES style.
-3. `CCProgram <name>-fs %{ ... }`: Fragment shader in GLSL 300 ES style.
+   The chain must be complete and include nested prefabs/assets, FBX external-material remaps, Assets, selected package roots, `.shader`, and generated `.tcp2shader` sources. An isolated `.mat` or screenshot is not a rendering closure.
 
-Example:
-```yaml
-CCEffect %{
-  techniques:
-  - name: opaque
-    passes:
-    - vert: custom-vs:vert
-      frag: custom-fs:frag
-      rasterizerState:
-        cullMode: back
-      depthStencilState:
-        depthTest: true
-        depthWrite: true
-      properties: &props
-        mainTexture:    { value: white }
-        mainColor:      { value: [1, 1, 1, 1], editor: { type: color } }
-        speed:          { value: 1.0, target: u_params0.x }
-}%
+4. Capture the source oracle through Unity MCP. For every visible renderer record:
 
-CCProgram custom-vs %{
-  precision highp float;
-  #include <legacy/input-standard>
-  #include <builtin/uniforms/cc-global>
-  #include <legacy/local-batch>
+   - effective material per renderer slot and submesh;
+   - shader source identity, render queue/pass, keywords and feature toggles;
+   - active scalar/vector/color/texture properties and texture importer color-space role;
+   - camera projection, FOV/orthographic size, near/far, HDR, AA and post processing;
+   - lights, transforms, culling masks, intensity/color/shadows;
+   - ambient/reflection/render settings and any runtime material swap.
 
-  out vec2 v_uv;
-  out vec3 v_worldPosition;
-  out mediump vec3 v_worldNormal;
+   Bind the oracle to the Unity source fingerprint/hash. Do not recreate these values by sampling one screenshot.
 
-  vec4 vert () {
-    StandardVertInput In;
-    CCVertInput(In);
+5. Convert only after the closure and oracle are known:
 
-    mat4 matWorld, matWorldIT;
-    CCGetWorldMatrixFull(matWorld, matWorldIT);
+   ```bash
+   node playable-shared-kit/tools/shader-compiler/unity-shader-compiler.cjs convert \
+     --src <UnityShader.shader|GeneratedShader.tcp2shader> \
+     --out assets/effects/<Name>.effect \
+     --unity-project <UnityProjectRoot> \
+     --mode auto --report
+   ```
 
-    vec4 pos = matWorld * In.position;
-    v_worldPosition = pos.xyz;
-    v_worldNormal = normalize((matWorldIT * vec4(In.normal, 0.0)).xyz);
-    v_uv = a_texCoord;
-    return cc_matProj * cc_matView * pos;
-  }
-}%
+   Use `surface-pbr` for supported URP/legacy surface intent and `unlit` only when source semantics are unlit. Treat unsupported engine inputs, tangent-space normal mapping, Unity shadow attenuation, internal URP/TCP2 structs, and extra passes as explicit obligations. Do not silently replace them with a tint multiplier.
 
-CCProgram custom-fs %{
-  precision highp float;
-  #include <builtin/uniforms/cc-global>
-  #include <legacy/output-standard>
-  #include <common/color/gamma>
+6. Convert materials with the exact generated effect and imported UUID:
 
-  in vec2 v_uv;
-  in vec3 v_worldPosition;
-  in mediump vec3 v_worldNormal;
+   ```bash
+   node playable-shared-kit/tools/shader-compiler/unity-shader-compiler.cjs convert-mat \
+     --src <UnityMaterial.mat> \
+     --out assets/materials/<Name>.mtl \
+     --effect assets/effects/<Name>.effect \
+     --effect-uuid <CocosEffectUuid> \
+     --unity-project <UnityProjectRoot>
+   ```
 
-  uniform sampler2D mainTexture;
+   Preserve material-slot ownership. Normal/mask/metallic/roughness textures stay raw. Albedo/base/emission textures follow the source semantic color space. Unity `Color` and `[HDR] Color` do not share one gamma rule.
 
-  uniform CustomParams {
-    vec4 u_params0;
-  };
+7. Run the static analyzer, while keeping its scope explicit:
 
-  vec4 frag () {
-    float speed = u_params0.x;
-    vec4 col = texture(mainTexture, v_uv);
-    col.rgb = SRGBToLinear(col.rgb);
-    return CCFragOutput(col);
-  }
-}%
-```
+   ```bash
+   node playable-shared-kit/tools/shader-compiler/unity-shader-compiler.cjs validate assets/effects/<Name>.effect
+   ```
+
+   `PASS` proves only the implemented text/ABI heuristics. Report score/grade is `staticConfidenceScore`; `cocosImporter`, `runtimeVariant`, and `unityVisualParity` remain `unverified`.
+
+8. Reimport every changed `.effect` and `.mtl` through Cocos MCP. Confirm the returned types are `cc.EffectAsset` and `cc.Material`, then inspect project logs for effect/shader/GLSL/EFX errors. Run `npm run ai:verify:assets` after the Editor has scanned them. A checked-in `.meta` or `imported: true` from an earlier generation is stale evidence after changing shader text.
+
+9. Run preview/runtime verification so the engine creates the used shader variants:
+
+   ```bash
+   npm run ai:verify:runtime -- --url http://127.0.0.1:7456/
+   ```
+
+   Exercise each visible material state, including hold/peek, enabled/disabled, close/open and runtime swaps. Recheck console/project logs after the state was rendered.
+
+10. Measure visual parity with an aligned Unity reference:
+
+    ```bash
+    npm run ai:verify:visual -- --config <matrix.json>
+    ```
+
+    Material/shader cases must declare `referenceImage`, a tight `screenshotRegion`, optional `referenceRegion`, and `requiredReferenceMetrics`. For isolated objects on a flat background, enable `referenceMetricOptions.autoTrimForeground` and require `foregroundRgbSimilarity >= 0.90`, `foregroundLuminanceSimilarity >= 0.90`, and a bounded `foregroundIou`; target 0.95 when Unity/Cocos viewport and geometry are sufficiently aligned. Also bound `foregroundMeanLuminanceDelta` and semantic runtime metrics. Open the generated candidate/reference contact sheet even when metrics pass.
+
+11. Finish with the standard gates and store the reusable finding in Work Memory:
+
+    ```bash
+    npm run ai:verify
+    npm run ai:lint
+    node playable-shared-kit/tools/work-memory.cjs remember --scope global --category porting-note --title "..." --content "..." --tags "shader,unity,cocos"
+    ```
+
+## Hard prohibitions
+
+- Do not claim “90–95%” from static confidence or from a screenshot viewed by eye.
+- Do not add arbitrary output color scales, metallic, smoothness, emission, rim, or fake highlights before source camera/light/material evidence is complete.
+- Do not port only the first material found in prefab YAML; model importer remaps and nested prefabs often own the visible material.
+- Do not accept an endpoint ping as Unity MCP readiness. The `playable-port-scan` tool probe must complete.
+- Do not treat runtime-clean as visual parity without a reference metric contract.
+
+## Effect ABI reminders
+
+- A Cocos effect contains `CCEffect` pass/property YAML and one or more `CCProgram` blocks.
+- Keep sampler declarations outside UBOs. Pack scalar/vector uniforms for std140 alignment and bind property targets explicitly.
+- Match source cull, depth test/write, blend, alpha clip and queue behavior before tuning color.
+- `--unity-uv` changes texture sampling convention for Unity-authored mesh UVs; never compensate by globally flipping mesh UVs when procedural shader code also reads `uv.y`.

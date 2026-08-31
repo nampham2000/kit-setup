@@ -9,7 +9,7 @@ const { discoverPackageRoots } = require('./package-roots.cjs');
 
 const PROJECT_STATE_SCHEMA_VERSION = 1;
 const CONTENT_HASH_EXTENSIONS = new Set([
-  '.asmdef', '.asmref', '.cginc', '.compute', '.cs', '.hlsl', '.json', '.shader', '.shadergraph',
+  '.asmdef', '.asmref', '.cginc', '.compute', '.cs', '.hlsl', '.json', '.shader', '.tcp2shader', '.shadergraph',
 ]);
 const MAX_CONTENT_HASH_BYTES = 2 * 1024 * 1024;
 

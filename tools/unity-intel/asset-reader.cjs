@@ -15,7 +15,7 @@ const SERIALIZED_EXTENSIONS = new Set([
 ]);
 const TEXT_EXTENSIONS = new Set([
   ...SERIALIZED_EXTENSIONS,
-  '.cs', '.shader', '.shadergraph', '.compute', '.cginc', '.hlsl', '.glslinc',
+  '.cs', '.shader', '.tcp2shader', '.shadergraph', '.compute', '.cginc', '.hlsl', '.glslinc',
   '.asmdef', '.asmref', '.inputactions', '.json', '.txt', '.xml', '.uxml', '.uss',
 ]);
 

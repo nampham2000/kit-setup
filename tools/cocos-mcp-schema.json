@@ -287,6 +287,30 @@
     "name": "assetAdvanced_validate_asset_references"
   },
   {
+    "description": "Reimport a Cocos effect and its materials, verify exact AssetDB types/importers, and fail on new shader/effect syntax errors",
+    "inputSchema": {
+      "properties": {
+        "effectUrl": {
+          "description": "Effect asset URL (db://assets/.../*.effect)",
+          "type": "string"
+        },
+        "materialUrls": {
+          "description": "Bounded material asset URLs to reimport and verify",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 32,
+          "type": "array"
+        }
+      },
+      "required": [
+        "effectUrl"
+      ],
+      "type": "object"
+    },
+    "name": "assetAdvanced_validate_effect_import"
+  },
+  {
     "description": "Clear the broadcast messages log",
     "inputSchema": {
       "properties": {},

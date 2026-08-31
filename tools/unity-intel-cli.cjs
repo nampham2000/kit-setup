@@ -170,6 +170,7 @@ async function execute(options) {
       unity: options.unity,
       mcpUrl: options.mcpUrl,
       mcpToken: process.env.UNITY_MCP_TOKEN || undefined,
+      timeoutMs: options.timeoutMs || 3_000,
     });
   }
   if (options.command === 'preflight') {
@@ -205,6 +206,10 @@ function printHuman(payload, command) {
     console.log(`Editor: ${payload.doctor && payload.doctor.ready ? 'ready' : 'not ready'}`);
     console.log(`Lock: ${payload.doctor && payload.doctor.lock ? payload.doctor.lock.state : 'unknown'}`);
     console.log(`Unity-MCP: ${payload.connection && payload.connection.url ? payload.connection.url : 'not configured'}`);
+    console.log(`Live scanner tool: ${payload.canUseLiveMcp ? 'ready' : 'unavailable'}`);
+    if (payload.liveMcp && payload.liveMcp.error) {
+      console.log(`  ${payload.liveMcp.error.code}: ${payload.liveMcp.error.message}`);
+    }
     return;
   }
   if (payload.section) {

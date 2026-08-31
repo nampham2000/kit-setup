@@ -595,6 +595,59 @@ function readUnityCompileDiagnostics(projectOrPath, options = {}) {
   };
 }
 
+function readUnityPackageDiagnostics(projectOrPath, options = {}) {
+  const fsImpl = options.fs || fs;
+  const pathImpl = options.path || path;
+  const processImpl = options.process || process;
+  const platform = options.platform || processImpl.platform;
+  const env = options.env || processImpl.env || {};
+  const homeDir = options.homeDir || os.homedir();
+  const project = typeof projectOrPath === 'string'
+    ? validateUnityProject(projectOrPath, { fs: fsImpl, path: pathImpl }) : projectOrPath;
+  const logPath = options.editorLog || defaultEditorLogPath(platform, env, homeDir, pathImpl);
+  if (!logPath) return null;
+  const tail = readBoundedFileTail(logPath, Number(options.maxBytes) || 4 * 1024 * 1024, fsImpl);
+  if (!tail) return null;
+  const lines = tail.split(/\r?\n/);
+  const projectKey = project.projectRoot.replace(/\\/g, '/').replace(/\/$/, '').toLowerCase();
+  let targetStart = -1;
+  for (let index = 0; index < lines.length; index++) {
+    const match = /^WorkingDir:\s*(.+?)\s*$/.exec(lines[index]);
+    if (!match) continue;
+    if (match[1].replace(/\\/g, '/').replace(/\/$/, '').toLowerCase() === projectKey) targetStart = index + 1;
+  }
+  if (targetStart < 0) return null;
+  let targetEnd = lines.length;
+  for (let index = targetStart; index < lines.length; index++) {
+    if (/^WorkingDir:\s*/.test(lines[index])) { targetEnd = index; break; }
+  }
+  const evidence = [];
+  const seen = new Set();
+  let code = null;
+  for (const line of lines.slice(targetStart, targetEnd)) {
+    const trimmed = line.trim();
+    if (/Curl error 35:.*Cert(?:ificate)? verify failed/i.test(trimmed)
+      || /UnityTls error code:\s*7/i.test(trimmed)) {
+      code = 'UNITY_PACKAGE_TLS_CERTIFICATE_ERROR';
+    } else if (/(?:Package Manager|UPM).*(?:error|failed)|Error adding package/i.test(trimmed)) {
+      code = code || 'UNITY_PACKAGE_RESOLUTION_ERROR';
+    } else continue;
+    const bounded = trimmed.slice(0, 500);
+    if (!seen.has(bounded)) {
+      seen.add(bounded);
+      evidence.push(bounded);
+      if (evidence.length >= 8) break;
+    }
+  }
+  if (!code) return null;
+  return {
+    code,
+    count: evidence.length,
+    evidence,
+    source: 'bounded-editor-log-tail',
+  };
+}
+
 function defaultHubPath(platform, env, pathImpl) {
   if (platform === 'win32') return pathImpl.join(env.PROGRAMFILES || 'C:\\Program Files', 'Unity Hub', 'Unity Hub.exe');
   if (platform === 'darwin') return '/Applications/Unity Hub.app/Contents/MacOS/Unity Hub';
@@ -688,6 +741,7 @@ module.exports = {
   readOpenUnityEditorInstance,
   refreshOpenUnityEditor,
   readUnityCompileDiagnostics,
+  readUnityPackageDiagnostics,
   buildHubInstallRemediation,
   doctorUnityEditor,
   isInside,

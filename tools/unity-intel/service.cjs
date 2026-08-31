@@ -6,6 +6,7 @@ const { buildUnityProjectSnapshot, findUnityProjectRoot } = require('./project-i
 const {
   doctorUnityEditor,
   readUnityCompileDiagnostics,
+  readUnityPackageDiagnostics,
   refreshOpenUnityEditor,
 } = require('./unity-editor.cjs');
 const {
@@ -219,7 +220,7 @@ function createCompactScanEnvelope(result) {
   return jsonBytes(reduced) <= SUMMARY_MAX_BYTES ? reduced : result.summary;
 }
 
-function inspectUnityProject(input = {}, injected = {}) {
+async function inspectUnityProject(input = {}, injected = {}) {
   const projectRoot = resolveProjectRoot(input.project || input.sourceRoot);
   const doctor = (injected.doctor || doctorUnityEditor)(projectRoot, { editorPath: input.unity });
   let connection = null;
@@ -231,6 +232,45 @@ function inspectUnityProject(input = {}, injected = {}) {
   } catch (error) {
     connection = { error: { code: error.code || 'UNITY_MCP_CONFIG_INVALID', message: error.message } };
   }
+  let liveMcp = {
+    configured: Boolean(connection && connection.url),
+    transportAuthenticated: false,
+    toolReady: false,
+    toolId: 'playable-port-scan',
+  };
+  if (connection && connection.url) {
+    try {
+      const provider = injected.liveProvider || defaultLiveProvider();
+      const probe = await callProbe(provider, connection, {
+        probeTimeoutMs: input.timeoutMs || input.probeTimeoutMs || 3_000,
+      });
+      if (probe === false || probe && probe.ready === false) {
+        throw new UnityIntelligenceError('UNITY_MCP_NOT_READY', 'Unity-MCP scanner tool chưa sẵn sàng.');
+      }
+      liveMcp = {
+        ...liveMcp,
+        transportAuthenticated: true,
+        toolReady: true,
+        scannerPackageVersion: probe && probe.packageVersion || null,
+        protocolVersion: probe && probe.protocolVersion || null,
+      };
+    } catch (error) {
+      const causeCode = error && error.code || 'UNITY_MCP_UNAVAILABLE';
+      liveMcp = {
+        ...liveMcp,
+        // Endpoint configuration alone must not be advertised as a usable
+        // live scanner; the playable-port-scan invocation must complete.
+        error: {
+          code: causeCode === 'UNITY_MCP_TIMEOUT'
+            ? 'UNITY_MCP_TOOL_UNRESPONSIVE' : causeCode,
+          causeCode,
+          message: causeCode === 'UNITY_MCP_TIMEOUT'
+            ? 'Unity-MCP endpoint/playable-port-scan không trả kết quả trong deadline.'
+            : String(error.message || error),
+        },
+      };
+    }
+  }
   return {
     schemaVersion: 1,
     project: path.basename(projectRoot),
@@ -238,6 +278,8 @@ function inspectUnityProject(input = {}, injected = {}) {
     connection: connection && connection.url
       ? publicConnection(connection)
       : connection,
+    canUseLiveMcp: liveMcp.toolReady,
+    liveMcp: sanitizeForProjection(liveMcp, { maxString: 320, maxArray: 8, maxDepth: 4 }),
   };
 }
 
@@ -853,9 +895,19 @@ async function scanUnityProject(input = {}, injected = {}) {
       'UNITY_MCP_HTTP_ERROR',
       'UNITY_MCP_UNAVAILABLE',
     ].includes(error.code)) {
+      const readPackageDiagnostics = injected.readPackageDiagnostics || readUnityPackageDiagnostics;
+      const packageFailure = readPackageDiagnostics(projectRoot);
+      if (packageFailure && packageFailure.count > 0) {
+        const causeCode = error.code;
+        error.code = packageFailure.code;
+        error.message = packageFailure.code === 'UNITY_PACKAGE_TLS_CERTIFICATE_ERROR'
+          ? 'Unity Package Manager không tải được Unity-MCP vì TLS certificate verification thất bại; live scanner chưa được cài/reload.'
+          : 'Unity Package Manager không resolve được package Unity-MCP; live scanner chưa được cài/reload.';
+        error.details = { ...(error.details || {}), causeCode, packageFailure };
+      }
       const readCompileDiagnostics = injected.readCompileDiagnostics || readUnityCompileDiagnostics;
       const compile = readCompileDiagnostics(projectRoot);
-      if (compile && compile.count > 0) {
+      if (!packageFailure && compile && compile.count > 0) {
         const causeCode = error.code;
         const examples = compile.evidence.slice(0, 2).join(' | ');
         error.code = 'UNITY_PROJECT_COMPILE_ERRORS';

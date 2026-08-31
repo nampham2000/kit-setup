@@ -33,6 +33,8 @@ const TOOLS = [
         project: commonProjectProperty,
         unity: { type: 'string', description: 'Optional exact Unity Editor executable.' },
         mcpUrl: { type: 'string', description: 'Optional HTTP loopback Unity-MCP endpoint.' },
+        timeoutMs: { type: 'integer', minimum: 250, maximum: 30000, default: 3000,
+          description: 'Deadline for authenticated playable-port-scan probe, not only endpoint discovery.' },
       },
       required: ['project'],
       additionalProperties: false,
@@ -159,7 +161,7 @@ async function getOrScan(args, dependencies = {}) {
 async function handleToolCall(name, args = {}, dependencies = {}) {
   if (name === 'doctorUnityProject') {
     const inspect = dependencies.inspectProject || inspectUnityProject;
-    return makeJsonResult(inspect(args));
+    return makeJsonResult(await inspect(args));
   }
   if (name === 'scanUnityProject') {
     const scan = dependencies.scanProject || scanProject;

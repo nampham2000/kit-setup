@@ -14,6 +14,7 @@ const {
   readOpenUnityEditorInstance,
   refreshOpenUnityEditor,
   readUnityCompileDiagnostics,
+  readUnityPackageDiagnostics,
 } = require('./unity-editor.cjs');
 const { createUnityFixture } = require('./test-fixture.cjs');
 
@@ -236,4 +237,22 @@ test('extracts only project-owned compile errors from a bounded shared Editor lo
     'Assets/Game/Main.cs(10,20): error CS0103: missing symbol',
     'Packages/com.example/Runtime.cs(3,4): error CS0117: missing member',
   ]);
+});
+
+test('extracts project-owned Unity Package Manager TLS failure without reading another project section', t => {
+  const fixture = createUnityFixture(t);
+  setProjectRevision(fixture);
+  const editorLog = path.join(fixture.root, 'Editor.log');
+  fs.writeFileSync(editorLog, [
+    'WorkingDir: D:/Other/UnityProject',
+    'Curl error 35: Cert verify failed. Certificate could not be verified',
+    `WorkingDir: ${fixture.root.replace(/\\/g, '/')}`,
+    'Curl error 35: Cert verify failed. Certificate could not be verified (either omitted or unsupported).',
+    'UnityTls error code: 7',
+    '',
+  ].join('\n'));
+  const result = readUnityPackageDiagnostics(fixture.root, { editorLog, maxBytes: 64 * 1024 });
+  assert.equal(result.code, 'UNITY_PACKAGE_TLS_CERTIFICATE_ERROR');
+  assert.equal(result.count, 2);
+  assert.equal(result.evidence.some(line => /Other/.test(line)), false);
 });
