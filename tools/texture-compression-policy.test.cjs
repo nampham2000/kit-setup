@@ -22,6 +22,15 @@ test('texture policy verify fails closed on importer drift', () => {
   assert.equal(result.code, 'TEXTURE_POLICY_DRIFT');
 });
 
+test('texture policy verify fails closed when preset is not exactly WebP quality 50', () => {
+  const result = evaluateResult({
+    success: true,
+    data: { complete: true, updated: 0, preset: { created: false, changed: true } },
+  }, { verify: true });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'TEXTURE_POLICY_DRIFT');
+});
+
 test('texture policy apply accepts a complete idempotent report', () => {
   const result = evaluateResult({
     success: true,

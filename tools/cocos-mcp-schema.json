@@ -104,6 +104,23 @@
     "name": "assetAdvanced_compress_textures"
   },
   {
+    "description": "Apply the portable playable Mesh Optimize, Mesh Simplify, Mesh Cluster, and Mesh Compress settings to every FBX through Cocos Asset DB",
+    "inputSchema": {
+      "properties": {
+        "directory": {
+          "default": "db://assets",
+          "type": "string"
+        },
+        "dryRun": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "name": "assetAdvanced_enforce_fbx_import_policy"
+  },
+  {
     "description": "Ensure PlayableTransparent WebP preset exists and assign it to every PNG/JPG/JPEG through Cocos Asset DB",
     "inputSchema": {
       "properties": {

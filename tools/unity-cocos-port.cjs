@@ -82,8 +82,6 @@ const {
   importedUnityAssetPath: importedUnityAssetPathImpl,
   ensureAssetMeta: ensureAssetMetaImpl,
   copyUnityAssetToCocos: copyUnityAssetToCocosImpl,
-  findCommand: findCommandImpl,
-  convertFbxToGlb: convertFbxToGlbImpl,
   handleMissingModel: handleMissingModelImpl,
 } = createAssetImportPorter({
   ensureDirectoryMetas,
@@ -294,7 +292,7 @@ Options:
   --dry-run                 Build and validate in memory, but do not write prefab/meta.
   --recursive               Recursively inspect nested prefab/model/controller dependencies.
   --copy-assets             Copy unresolved Unity assets into the Cocos assets folder when possible.
-  --convert-fbx-fallback    If FBX has no Cocos import, try FBX2glTF/assimp/Blender to create a GLB fallback.
+  --convert-fbx-fallback    Rejected legacy flag: the portable pipeline keeps FBX and fails on importer errors.
   --model-import-wait-ms    Wait for Cocos to populate copied model sub-assets. Default: 10000.
   --script-mode <mode>      skip | wire-if-present | require. Default: wire-if-present.
   --no-cache                Bỏ qua cache tăng dần (.unity/port-cache.json).
@@ -569,8 +567,7 @@ function parseArgs(argv) {
       continue;
     }
     if (arg === '--convert-fbx-fallback') {
-      options.convertFbxFallback = true;
-      continue;
+      fail('--convert-fbx-fallback is disabled: keep/export FBX and fix the Cocos FBX importer instead of generating glTF/GLB.');
     }
     if (arg === '--model-import-wait-ms') {
       options.modelImportWaitMs = Math.max(0, Number(readValue(arg)) || 0);
@@ -1651,8 +1648,8 @@ class CocosAssetDatabase {
     return '';
   }
 
-  resolveModelMaterialUuidsByStem(stem, materialNameHints = []) {
-    const candidates = this.findModelRecordsByStem(stem);
+  resolveModelMaterialUuidsByStem(stem, materialNameHints = [], requiredExt = '') {
+    const candidates = this.findModelRecordsByStem(stem).filter((record) => !requiredExt || record.ext === requiredExt);
     const hints = materialNameHints.map((hint) => String(hint || ''));
     for (const record of candidates) {
       const materials = subMetaRecords(record.uuid, record.subMetas, 'gltf-material');
@@ -1690,8 +1687,8 @@ class CocosAssetDatabase {
     return null;
   }
 
-  resolveModelMeshByStem(stem, meshNameHint = '') {
-    const candidates = this.findModelRecordsByStem(stem);
+  resolveModelMeshByStem(stem, meshNameHint = '', requiredExt = '') {
+    const candidates = this.findModelRecordsByStem(stem).filter((record) => !requiredExt || record.ext === requiredExt);
     for (const record of candidates) {
       const meshRecord = firstImportedSubMetaRecord(record.uuid, record.subMetas, 'gltf-mesh', meshNameHint);
       const mesh = meshRecord?.uuid || '';
@@ -6732,16 +6729,8 @@ function importedUnityAssetPath(unityAsset, options) {
   return importedUnityAssetPathImpl(unityAsset, options);
 }
 
-function convertFbxToGlb(unityAsset, converter, options, reporter, severity = 'medium') {
-  return convertFbxToGlbImpl(unityAsset, converter, options, reporter, severity);
-}
-
 function ensureAssetMeta(assetFile, kind, config = {}) {
   return ensureAssetMetaImpl(assetFile, kind, config);
-}
-
-function findCommand(names) {
-  return findCommandImpl(names);
 }
 
 function emitSpriteRenderer(nodeId, componentId, doc, builder, reporter, options, unityDb, cocosDb) {

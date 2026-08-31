@@ -47,7 +47,7 @@ module.exports = function createColliderPorter(deps) {
     if (!meshAsset) return '';
 
     const resolved = cocosDb?.resolveModelMeshByStem
-      ? cocosDb.resolveModelMeshByStem(meshAsset.stem, gameObject.name)
+      ? cocosDb.resolveModelMeshByStem(meshAsset.stem, gameObject.name, meshAsset.ext === '.asset' ? '.fbx' : meshAsset.ext)
       : null;
     if (resolved?.meshUuid) return resolved.meshUuid;
 

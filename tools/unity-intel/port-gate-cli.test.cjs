@@ -390,7 +390,7 @@ test('Spine prefab dry-run computes wiring without writing prepared data or atla
   assert.equal(fs.existsSync(prefabOut), false);
 });
 
-test('FBX fallback dry-run does not create metadata, launch a converter, or emit GLB', t => {
+test('legacy GLB fallback flag is rejected before metadata or converter side effects', t => {
   const fixture = createUnityFixture(t);
   const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'unity-fbx-dry-cache-'));
   const cocosRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'unity-fbx-dry-cocos-'));
@@ -472,12 +472,8 @@ test('FBX fallback dry-run does not create metadata, launch a converter, or emit
     '--dry-run', '--no-cache', '--convert-fbx-fallback', '--model-import-wait-ms', '60000',
   ], cacheDir, PREFAB_PORT, extraEnv);
 
-  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
-  assert.doesNotMatch(
-    `${result.stdout}\n${result.stderr}`,
-    /(?:đã chờ import|lần chờ import)/,
-    'dry-run must not wait for an editor-side model importer',
-  );
+  assert.notEqual(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  assert.match(`${result.stdout}\n${result.stderr}`, /convert-fbx-fallback is disabled/);
   assert.equal(fs.existsSync(path.join(assetsDir, 'unity_imported')), false);
   assert.equal(fs.existsSync(`${path.join(assetsDir, 'unity_imported')}.meta`), false);
   assert.equal(fs.existsSync(converterMarker), false);

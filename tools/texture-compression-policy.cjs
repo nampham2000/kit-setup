@@ -140,7 +140,7 @@ function evaluateResult(payload, options) {
     return { ok: false, code: 'TEXTURE_POLICY_APPLY_FAILED', payload };
   }
   const report = payload.data;
-  if (options.verify && (report.updated !== 0 || report.preset?.created)) {
+  if (options.verify && (report.updated !== 0 || report.preset?.changed)) {
     return { ok: false, code: 'TEXTURE_POLICY_DRIFT', payload };
   }
   return { ok: true, code: 'TEXTURE_POLICY_OK', payload };
@@ -193,6 +193,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  createClient,
   DEFAULT_PRESET_ID,
   TOOL_NAME,
   evaluateResult,
@@ -200,5 +201,6 @@ module.exports = {
   parseMcpEnvelope,
   resolveMcpUrl,
   run,
+  unwrapToolResult,
   usage,
 };

@@ -1,83 +1,63 @@
-# Cocos Playable Offline Audio Optimizer (FFmpeg)
+# Cocos Playable Offline Audio Optimizer
 
-Bộ công cụ tối ưu hóa âm thanh (SFX & BGM) offline cho playable ads trong Cocos Creator 3.8.x sử dụng FFmpeg.
+`audio-optimizer.cjs` dùng FFmpeg offline để chuẩn hóa audio của playable. Policy mặc định có thể mang sang mọi project/máy qua shared kit:
 
-## Tính năng chính
+- MP3;
+- quality 30: CBR 32 kbps, 22.05 kHz;
+- giữ nguyên số channel của từng nguồn (`mono` vẫn mono, `stereo` vẫn stereo);
+- đổi extension bằng Cocos Asset DB move/reimport và xác nhận UUID không đổi;
+- không sửa `.meta` trực tiếp.
 
-- **Format Conversion**: Convert hàng loạt SFX/BGM sang `mp3` hoặc `ogg` (hoặc `wav` / giữ nguyên).
-- **Mức tối ưu chất lượng linh hoạt**: Hỗ trợ các preset `20%`, `30%`, `40%`, `50%`, `60%`, `70%`, `80%` (hoặc custom 10..100%).
-- **Cơ chế tìm FFmpeg Offline đa tầng**: Tự động nhận diện từ CLI flag, biến môi trường, thư mục portable `dependency/ffmpeg`, package `ffmpeg-static`, system PATH hoặc standard OS paths.
-- **Đồng bộ Cocos Creator `.meta`**: Khi đổi định dạng (ví dụ `.wav` -> `.mp3` / `.ogg`), tool cập nhật `.meta` và giữ nguyên **UUID** gốc, bảo đảm Scene và Prefab không bao giờ bị đứt reference.
-- **Chế độ Mono & Hạ Sample Rate**: Tự động chuyển mono và hạ sample rate (32kHz / 22kHz / 16kHz) giúp giảm 50% - 90% dung lượng âm thanh cho playable ads (<2MB / <5MB).
-- **An toàn Dry-Run & Backup**: Chạy preview bảng dung lượng trước khi ghi thật bằng `--write`, hỗ trợ `--backup` và `--skip-if-larger`.
+## Lệnh chuẩn
 
----
+```powershell
+# Kiểm tra FFmpeg portable/system
+npm run sound:optimize -- --doctor
 
-## Bảng mức tối ưu hóa (Quality Levels)
+# Dry-run toàn bộ audio trong assets
+npm run sound:optimize
 
-| Mức Quality | MP3 Bitrate | OGG Quality | Sample Rate | Kênh (Channels) | Mức giảm dung lượng | Khuyến nghị sử dụng |
-|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| **80%** | 128 kbps | q4 (~128k) | 44.1 kHz | Stereo / Source | ~20% - 30% | Nhạc nền BGM chất lượng cao |
-| **70%** | 112 kbps | q3 (~112k) | 44.1 kHz | Stereo / Source | ~30% - 40% | BGM thông dụng |
-| **60%** | 96 kbps | q2 (~96k) | 32.0 kHz | Mono | ~40% - 50% | Voice & SFX tiêu chuẩn |
-| **50%** *(mặc định)* | 64 kbps | q1 (~64k) | 32.0 kHz | Mono | ~50% - 65% | **Chuẩn Playable SFX phổ biến** |
-| **40%** | 48 kbps | q0 (~48k) | 24.0 kHz | Mono | ~65% - 75% | Tiếng click/pop ngắn |
-| **30%** | 32 kbps | ~32k | 22.05 kHz | Mono | ~75% - 85% | SFX siêu nhẹ cho playable giới hạn |
-| **20%** | 20-24 kbps | ~24k | 16.0 kHz | Mono | ~85% - 92% | Playable siêu nhẹ (<2MB, Unity/IronSource) |
+# Áp policy MP3/30/original-channel
+npm run sound:optimize -- --write
 
----
-
-## Hướng dẫn sử dụng CLI
-
-### 1. Kiểm tra môi trường FFmpeg
-```bash
-node playable-shared-kit/tools/audio-optimizer.cjs --doctor
+# CI/final gate: fail nếu còn file lệch policy
+npm run sound:optimize -- --verify
 ```
 
-### 2. Xem trước tối ưu hóa (Dry-Run)
-```bash
-# Xem trước convert toàn bộ âm thanh trong assets/resources/sound sang MP3 chất lượng 50%
-node playable-shared-kit/tools/audio-optimizer.cjs --format mp3 -q 50 assets/resources/sound
+Nếu `assets/resources/sound` tồn tại, đó là scope mặc định; nếu không, tool quét toàn bộ `assets`. Có thể truyền file/thư mục cụ thể ở cuối lệnh.
 
-# Xem trước convert sang OGG chất lượng 40%
-node playable-shared-kit/tools/audio-optimizer.cjs --format ogg -q 40 assets/resources/sound
-```
+## Channel policy
 
-### 3. Thực hiện chuyển đổi và áp dụng thật (`--write`)
-```bash
-# Convert sang MP3 50% và ghi đè
-node playable-shared-kit/tools/audio-optimizer.cjs --format mp3 -q 50 --write assets/resources/sound
+| Cờ | Hành vi |
+| --- | --- |
+| không truyền cờ / `--preserve-channels` | Không thêm `-ac`; FFmpeg giữ mono/stereo nguồn. Đây là mặc định. |
+| `--mono` | Chủ động downmix mọi nguồn thành 1 channel. |
+| `--stereo` | Chủ động ép mọi nguồn thành 2 channel. |
 
-# Convert sang OGG 40% và ghi đè
-node playable-shared-kit/tools/audio-optimizer.cjs --format ogg -q 40 --write assets/resources/sound
-```
+MP3 không biểu diễn được nguồn trên 2 channel. Với policy preserve, tool fail-closed thay vì âm thầm downmix; chỉ dùng `--stereo` khi đã quyết định chấp nhận mất channel.
 
-### 4. Tối ưu file đơn lẻ có backup
-```bash
-node playable-shared-kit/tools/audio-optimizer.cjs --format mp3 -q 60 --write --backup assets/resources/sound/BGM.mp3
-```
+## Asset DB và UUID
 
-### 5. Tùy chọn nâng cao
-- `--mono` / `--stereo`: Ép kênh mono hoặc stereo.
-- `-r, --sample-rate <Hz>`: Chỉ định sample rate (ví dụ `16000`, `22050`, `32000`, `44100`).
-- `-b, --bitrate <rate>`: Chỉ định bitrate cụ thể (ví dụ `32k`, `48k`, `64k`).
-- `--skip-if-larger`: Bỏ qua nếu file sau tối ưu lớn hơn file gốc (Mặc định bật an toàn).
-- `--force`, `--allow-larger`: Bắt buộc ghi đè dù dung lượng sau tối ưu có tăng lên.
-- `--output <dir>`: Xuất ra thư mục riêng biệt thay vì ghi đè.
-- `--json`: Xuất kết quả dạng JSON phục vụ CI/CD hoặc AI workflow.
+Khi chạy `--write` trên file trong `assets/`, Cocos Creator phải mở đúng project và Cocos MCP phải reachable. Quy trình đổi `.wav` sang `.mp3`:
 
----
+1. encode ra thư mục temp ngoài Asset DB;
+2. query UUID nguồn;
+3. gọi `project_move_asset` từ URL `.wav` sang `.mp3`;
+4. thay payload bằng MP3 đã encode;
+5. gọi `project_reimport_asset`;
+6. query lại và assert UUID không đổi;
+7. rollback file/path nếu reimport hoặc UUID gate thất bại.
 
-## Cài đặt FFmpeg Offline
+`--no-meta` chỉ dùng cho file standalone ngoài Cocos project. Không dùng nó để lách Asset DB trong playable.
 
-Tool hỗ trợ nhiều cách kích hoạt FFmpeg:
-1. **Qua npm (Đã cài sẵn trong project)**: `ffmpeg-static`.
-2. **Portable FFmpeg**: Tải bản build portable của FFmpeg và đặt vào thư mục `playable-shared-kit/tools/dependency/ffmpeg/bin/ffmpeg.exe`.
-3. **Cài qua Package Manager**:
-   - Windows: `winget install Gyan.FFmpeg` hoặc `choco install ffmpeg` hoặc `scoop install ffmpeg`.
-   - macOS: `brew install ffmpeg`.
-   - Linux: `sudo apt install ffmpeg`.
-4. **Chỉ định đường dẫn trực tiếp**:
-   ```bash
-   node playable-shared-kit/tools/audio-optimizer.cjs --ffmpeg-path "D:/tools/ffmpeg/bin/ffmpeg.exe" ...
-   ```
+## Các tùy chọn khác
+
+- `--quality <10-100>` và `--bitrate <rate>`: override profile.
+- `--sample-rate <Hz>`: override sample rate.
+- `--skip-if-larger`: giữ nguồn nếu output lớn hơn; mặc định tắt vì policy yêu cầu mọi asset đúng MP3.
+- `--backup`: giữ bản `.bak` của nguồn trước khi ghi.
+- `--project <dir>` / `--mcp-url <url>`: chọn project/endpoint rõ ràng.
+- `--output <dir>`: xuất bản standalone, không migrate asset gốc.
+- `--json`: report máy đọc.
+
+FFmpeg được resolve theo thứ tự: CLI, `FFMPEG_PATH`, `tools/dependency/ffmpeg`, `ffmpeg-static`, PATH hệ thống, đường dẫn cài đặt thông dụng.

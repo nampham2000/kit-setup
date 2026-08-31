@@ -8,7 +8,7 @@
 
 ### 1. Phân bổ Dung lượng & Chuẩn Ad Networks (Resource Allocation Breakdown)
 - Thống kê chi tiết từng nhóm tài nguyên:
-  - **3D Models (FBX/GLTF)**: Dung lượng, số lượng mesh, tổng số tam giác (triangles) và đỉnh (vertices).
+  - **3D Models (ưu tiên FBX)**: Dung lượng, số lượng mesh, tổng số tam giác (triangles) và đỉnh (vertices).
   - **Textures & Sprites**: Kích thước, định dạng (PNG/JPG), kênh alpha (RGBA vs RGB), 9-slice.
   - **Audio Assets**: Định dạng, sample rate, số kênh (Mono/Stereo), bitrate, thời lượng.
   - **Gameplay & Shared Code**: Số dòng code TypeScript, dung lượng mã nguồn, kích thước SDK.
@@ -44,9 +44,13 @@
   - Quét cấu trúc nhị phân FBX (`Objects/Texture`, `Objects/Material`).
   - Kiểm tra xem các node `cc.MeshRenderer` trong game có đang gán vật liệu ngoài (`.mtl`) hay không.
   - Nếu đã gán `.mtl` ngoài, cảnh báo toàn bộ texture/material nhúng bên trong FBX đang là payload thừa và cung cấp lệnh dọn dẹp ngay bằng `strip-fbx-textures.cjs`.
-- **Audio Downsampling & Mono Downmixing**:
-  - Phát hiện hiệu ứng âm thanh (SFX) dạng Stereo hoặc có sample rate cao $> 32\text{kHz}$ hoặc định dạng WAV chưa nén.
-  - Gợi ý lệnh tối ưu `npm run sound:optimize` để downmix sang Mono MP3 32kHz giúp tiết kiệm dung lượng.
+- **Audio MP3/30 giữ nguyên channel**:
+  - Phát hiện WAV chưa nén, bitrate hoặc sample rate cao.
+  - Gợi ý `npm run sound:optimize -- --write`; tool giữ nguyên mono/stereo thay vì tự downmix.
+- **Font đang dùng có coverage đa ngôn ngữ**:
+  - Chỉ phân tích font được map vào build hoặc được scene/prefab tham chiếu.
+  - Đọc Unicode `cmap` của TTF/OTF/WOFF1 và character table của BMFont, báo các script ngoài Basic Latin, glyph thừa so với text được phát hiện và cơ hội subset ước tính.
+  - Đây là cảnh báo để tối ưu về sau; phải verify glyph sau khi tạo subset, không tự cắt font mù.
 - **Unused Engine Modules**:
   - Phát hiện module 3D Physics hoặc Skeletal Animation được bật trong `engine.json` nhưng không có node nào trong project sử dụng, gợi ý tắt để giảm $200\text{KB} - 400\text{KB}$ engine code.
 

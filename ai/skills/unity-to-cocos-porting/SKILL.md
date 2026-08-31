@@ -45,6 +45,20 @@ Lệnh dùng static provider trước, tạo core manifest, scene skeleton, wiri
 `.ai/port/resume-packet.json`. Không mở cả cây Unity source để “lấy context” sau bước này.
 Đọc `nextActions`, `staticFirst.wiring.todo` và port-report digest; chỉ mở evidence slice được chỉ định.
 
+Model pipeline phải FBX-only. Nếu nguồn đã là `.fbx`, copy/import đúng file đó. Nếu nguồn là Unity Mesh `.asset`
+YAML đọc được, porter xuất thẳng FBX 7.4. Với mesh compressed/binary mà static exporter không đọc được, dùng Unity
+FBX Exporter trong đúng Editor/version nguồn và ghi provenance; không chuyển qua glTF/GLB để làm importer có vẻ pass.
+Flag legacy `--convert-fbx-fallback` bị từ chối. Sau khi Cocos import, chạy `npm run ai:model:optimize` rồi
+`npm run ai:model:optimize -- --verify`; tool dùng Asset DB để áp Mesh Optimize, Simplify ratio 0.8, Cluster off và
+Compress-only. Nếu Cocos converter từ chối FBX gốc, chạy
+`npm run ai:fbx:normalize -- --src <Unity.fbx> --out <Cocos.fbx> --mode preserve`, reimport bằng Asset DB và bắt buộc
+`imported:true`. Chỉ dùng `--mode static` khi oracle nguồn/runtime chứng minh không có skeleton animation. Nếu C#/prefab
+vẫn giữ reference tới bone để scale/rotate trực tiếp, truyền `--preserve-anchor <boneName>` cho mọi anchor đó; static
+output mất anchor là lỗi high dù mesh vẫn render. Tool bake skin tại bone local scaleY=2 thành morph target cùng tên;
+runtime phải bind morph weight=`anchor.scaleY-1`. Existing shape key, modifier ngoài armature hoặc anchor mơ hồ phải fail
+để review. Sau đó kiểm bounds/mesh, visual và runtime. FBX importer còn fail là blocker
+cần sửa ở source/export/import config, không được che bằng glTF/GLB.
+
 Khi tiếp tục một port đang dở hoặc sau compaction/interruption, chạy trước:
 
 ```bash

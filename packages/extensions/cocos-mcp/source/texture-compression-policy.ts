@@ -29,6 +29,7 @@ export type TexturePolicyReport = {
         id: string;
         name: string;
         created: boolean;
+        changed: boolean;
         webpQuality: number | string | null;
     };
     scanned: number;
@@ -179,6 +180,7 @@ export class TextureCompressionPolicy {
         }
 
         let created = false;
+        let changed = false;
         if (!entry) {
             id = requestedId;
             if (current.userPreset[id]) {
@@ -190,20 +192,37 @@ export class TextureCompressionPolicy {
             };
             entry = current.userPreset[id];
             created = true;
-            if (!options.dryRun) {
-                await profileApi.setProject('builder', 'textureCompressConfig', current);
-                const verified = await profileApi.getProject('builder', 'textureCompressConfig');
-                if (!verified?.userPreset?.[id]) {
-                    throw new Error(`Texture compression preset ${requestedName} did not persist in the Cocos builder profile.`);
-                }
-                entry = verified.userPreset[id];
+            changed = true;
+        } else {
+            const currentWeb = entry?.options?.web;
+            const keys = currentWeb && typeof currentWeb === 'object' ? Object.keys(currentWeb) : [];
+            const currentQuality = normalizeWebpQuality(currentWeb?.webp?.quality);
+            if (keys.length !== 1 || keys[0] !== 'webp' || currentQuality !== quality) {
+                entry.options ||= {};
+                entry.options.web = { webp: { quality } };
+                changed = true;
             }
+        }
+
+        if (changed && !options.dryRun) {
+            await profileApi.setProject('builder', 'textureCompressConfig', current);
+            const verified = await profileApi.getProject('builder', 'textureCompressConfig');
+            const verifiedEntry = verified?.userPreset?.[id];
+            const verifiedWeb = verifiedEntry?.options?.web;
+            if (!verifiedEntry
+                || Object.keys(verifiedWeb || {}).length !== 1
+                || !verifiedWeb?.webp
+                || normalizeWebpQuality(verifiedWeb.webp.quality) !== quality) {
+                throw new Error(`Texture compression preset ${requestedName} did not persist as WebP quality ${quality}.`);
+            }
+            entry = verifiedEntry;
         }
 
         return {
             id,
             name: String(entry.name || requestedName),
             created,
+            changed,
             webpQuality: entry?.options?.web?.webp?.quality ?? null,
         };
     }
@@ -253,6 +272,25 @@ function logAutomationError(scope: string, error: unknown): void {
     console.error(`[TextureCompressionPolicy] ${scope}: ${message}`);
 }
 
+function scheduleBootstrapScan(attempt = 0): void {
+    const policy = getTextureCompressionPolicy();
+    const delayMs = attempt === 0 ? 500 : 1000;
+    bootstrapTimer = setTimeout(() => {
+        bootstrapTimer = null;
+        if (!automationStarted) return;
+        void policy.enforceAll().then((report) => {
+            console.log(`[TextureCompressionPolicy] preset=${report.preset.name} eligible=${report.eligible} updated=${report.updated} unchanged=${report.unchanged} failed=${report.failed}`);
+        }).catch((error) => {
+            const message = error instanceof Error ? error.message : String(error);
+            if (/asset db is not ready/i.test(message) && attempt < 30 && automationStarted) {
+                scheduleBootstrapScan(attempt + 1);
+                return;
+            }
+            logAutomationError('startup scan', error);
+        });
+    }, delayMs);
+}
+
 export function startTextureCompressionAutomation(): void {
     if (automationStarted) return;
     automationStarted = true;
@@ -279,12 +317,7 @@ export function startTextureCompressionAutomation(): void {
         console.warn('[TextureCompressionPolicy] Editor broadcast listeners are unavailable; use assetAdvanced_enforce_texture_compression_policy for existing assets.');
     }
 
-    bootstrapTimer = setTimeout(() => {
-        bootstrapTimer = null;
-        void policy.enforceAll().then((report) => {
-            console.log(`[TextureCompressionPolicy] preset=${report.preset.name} eligible=${report.eligible} updated=${report.updated} unchanged=${report.unchanged} failed=${report.failed}`);
-        }).catch((error) => logAutomationError('startup scan', error));
-    }, 500);
+    scheduleBootstrapScan();
 }
 
 export function stopTextureCompressionAutomation(): void {

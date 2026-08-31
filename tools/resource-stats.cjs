@@ -38,6 +38,7 @@ const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 const crypto = require('crypto');
+const { inspectFontFile } = require('./resource-stats/font-inspector.cjs');
 
 // ==========================================
 // CLI ARGUMENTS & CONFIGURATION
@@ -770,10 +771,6 @@ function parseAudioDetails(filePath, buffer) {
     info.needsOptimization = true;
     info.reason.push('Uncompressed WAV format (should convert to MP3/OGG)');
   }
-  if (info.channels > 1 && info.durationSec > 0 && info.durationSec < 10) {
-    info.needsOptimization = true;
-    info.reason.push(`Stereo sound effect (SFX should be mono)`);
-  }
   if (info.bitrateKbps > 64) {
     info.needsOptimization = true;
     info.reason.push(`High bitrate (${info.bitrateKbps}kbps > 64kbps for playables)`);
@@ -803,6 +800,9 @@ class PlayableResourceStats {
     this.pathMap = new Map(); // posixPath -> asset metadata
     this.spriteFrameMap = new Map(); // spriteFrame uuid -> texture info
     this.uuidToBuildMap = new Map(); // uuid / subUuid -> { path, relPath, size, ext, bundle }
+    this.referencedAssetUuids = new Set();
+    this.usedFontCharacters = new Set();
+    this.systemFontFamilies = new Set();
 
     this.buildInfo = {
       hasBuild: false,
@@ -834,6 +834,8 @@ class PlayableResourceStats {
       perceptualDuplicates: [],
       fbxDiagnostics: [],
       audioDiagnostics: [],
+      fontDiagnostics: [],
+      fontUsage: { usedAssetFonts: 0, multilingualAssetFonts: 0, systemFontFamilies: [] },
       engineDiagnostics: {
         enabledModules: [],
         unusedModules: [],
@@ -850,6 +852,7 @@ class PlayableResourceStats {
     this.scanAssetFiles();
     this.scanEngineSettings();
     this.scanScenesAndPrefabs();
+    this.analyzeFonts();
     this.analyzeTextureDuplication();
     this.analyzeFbxModels();
     this.finalizeBuildStats();
@@ -1247,11 +1250,77 @@ class PlayableResourceStats {
         const objects = JSON.parse(content);
         if (!Array.isArray(objects)) continue;
 
+        this.collectFontUsage(objects);
         this.inspectSceneObjects(fileRecord.relPath, objects);
       } catch (e) {
         // non JSON or parse failure
       }
     }
+  }
+
+  collectFontUsage(value) {
+    const visit = (item) => {
+      if (!item || typeof item !== 'object') return;
+      if (typeof item.__uuid__ === 'string') this.referencedAssetUuids.add(item.__uuid__);
+      if (item.__type__ === 'cc.Label' || item.__type__ === 'cc.RichText') {
+        const fontUuid = item._font?.__uuid__;
+        if (fontUuid) this.referencedAssetUuids.add(fontUuid);
+        const fontFamily = String(item._fontFamily || '').trim();
+        if (!fontUuid && fontFamily) this.systemFontFamilies.add(fontFamily);
+        for (const character of String(item._string || '')) this.usedFontCharacters.add(character);
+      }
+      if (Array.isArray(item)) {
+        for (const child of item) visit(child);
+      } else {
+        for (const child of Object.values(item)) visit(child);
+      }
+    };
+    visit(value);
+  }
+
+  analyzeFonts() {
+    const requiredCharacters = [...this.usedFontCharacters].join('');
+    let usedAssetFonts = 0;
+    for (const fontFile of this.stats.categories.fonts.files) {
+      const meta = this.pathMap.get(fontFile.relPath);
+      const isUsed = this.buildInfo.hasBuild
+        ? Boolean(fontFile.isPackaged)
+        : Boolean(meta?.uuid && this.referencedAssetUuids.has(meta.uuid));
+      fontFile.isUsed = isUsed;
+      if (!isUsed) continue;
+      usedAssetFonts += 1;
+      const fullPath = path.join(this.projectRoot, fontFile.relPath);
+      const inspection = inspectFontFile(fullPath, requiredCharacters);
+      fontFile.fontInfo = inspection;
+      if (!inspection.multilingual) continue;
+      const estimatedSavings = inspection.excessRatio == null
+        ? 0
+        : Math.max(0, Math.round((fontFile.isPackaged ? (fontFile.buildSize || fontFile.size) : fontFile.size) * inspection.excessRatio * 0.75));
+      this.stats.fontDiagnostics.push({
+        relPath: fontFile.relPath,
+        size: fontFile.size,
+        sizeFormatted: formatBytes(fontFile.size),
+        buildSize: fontFile.buildSize || 0,
+        buildSizeFormatted: formatBytes(fontFile.buildSize || 0),
+        isPackaged: fontFile.isPackaged,
+        glyphCount: inspection.glyphCount,
+        scripts: inspection.scripts,
+        requiredCharacterCount: inspection.requiredCharacterCount,
+        requiredGlyphs: inspection.requiredGlyphs,
+        excessGlyphs: inspection.excessGlyphs,
+        excessRatio: inspection.excessRatio,
+        estimatedSavings,
+        estimatedSavingsFormatted: formatBytes(estimatedSavings),
+        reason: inspection.reason,
+        error: inspection.error,
+      });
+    }
+    this.stats.fontUsage = {
+      usedAssetFonts,
+      multilingualAssetFonts: this.stats.fontDiagnostics.length,
+      systemFontFamilies: [...this.systemFontFamilies].sort(),
+      detectedCharacters: this.usedFontCharacters.size,
+    };
   }
 
   inspectSceneObjects(scenePath, objects) {
@@ -1669,13 +1738,28 @@ class PlayableResourceStats {
       const totalAudioSavings = this.stats.audioDiagnostics.reduce((acc, c) => acc + c.estimatedSavings, 0);
       score -= Math.min(20, Math.ceil(totalAudioSavings / (30 * 1024)) * 5);
       wins.push({
-        title: `Optimize ${this.stats.audioDiagnostics.length} Audio File(s) to 32kHz Mono MP3/OGG`,
+        title: `Optimize ${this.stats.audioDiagnostics.length} Audio File(s) to MP3 quality 30 while preserving channels`,
         category: 'Audio',
         potentialSavingsBytes: totalAudioSavings,
         potentialSavingsFormatted: formatBytes(totalAudioSavings),
         impact: 'Medium',
         action: 'npm run sound:optimize -- --write',
-        explanation: 'Audio assets have high sample rates (>32kHz) or uncompressed WAV headers that can be downmixed to mono MP3/OGG.',
+        explanation: 'Audio assets have high sample rates, high bitrates, or uncompressed WAV payloads. The portable profile converts to 32kbps MP3 and preserves each source mono/stereo channel count.',
+      });
+    }
+
+    // Informational: used multilingual fonts are usually much larger than the
+    // small character set needed by a single-language playable.
+    if (this.stats.fontDiagnostics.length > 0) {
+      const totalFontSavings = this.stats.fontDiagnostics.reduce((sum, item) => sum + item.estimatedSavings, 0);
+      wins.push({
+        title: `Subset ${this.stats.fontDiagnostics.length} Used Multilingual Font(s) to Playable Characters`,
+        category: 'Fonts',
+        potentialSavingsBytes: totalFontSavings,
+        potentialSavingsFormatted: formatBytes(totalFontSavings),
+        impact: 'Low',
+        action: 'Review the Font Diagnostics section and generate a project-specific subset before replacing the source font.',
+        explanation: 'These fonts are referenced by the game and include script ranges beyond Basic Latin. A single-language playable can often retain only the characters actually shown by its labels.',
       });
     }
 
@@ -1905,7 +1989,23 @@ function renderCliReport(stats, options) {
       console.log(`  ${i + 1}. ${b}${a.relPath}${colors.reset} (${aSizeStr}) - ${a.audioInfo.format} ${a.audioInfo.sampleRate}Hz ${a.audioInfo.channelLabel}`);
       console.log(`     ${y}Issue: ${a.audioInfo.reason.join('; ')}${colors.reset}`);
     });
-    console.log(`  ${g}→ Run: npm run sound:optimize${colors.reset}`);
+    console.log(`  ${g}→ Run: npm run sound:optimize -- --write${colors.reset}`);
+  }
+
+  // SECTION: Used multilingual fonts
+  if (stats.fontDiagnostics.length > 0 || stats.fontUsage.systemFontFamilies.length > 0) {
+    console.log(`\n${b}🔤 FONT LANGUAGE-COVERAGE DIAGNOSTICS:${colors.reset}`);
+    console.log(`  ${d}Only fonts referenced by scenes/prefabs (or present in the current build) are reported.${colors.reset}`);
+    for (const [index, font] of stats.fontDiagnostics.entries()) {
+      const ratio = font.excessRatio == null ? 'unknown' : `${Math.round(font.excessRatio * 100)}%`;
+      console.log(`  ${index + 1}. ${b}${font.relPath}${colors.reset} (${font.sizeFormatted})`);
+      console.log(`     Scripts: ${font.scripts.join(', ')} | Glyphs: ${font.glyphCount.toLocaleString()} | estimated excess: ${ratio}`);
+      console.log(`     ${y}Used multilingual font: consider subsetting to ${font.requiredCharacterCount} detected playable character(s).${colors.reset}`);
+      if (font.error) console.log(`     ${y}Inspection note: ${font.error}${colors.reset}`);
+    }
+    if (stats.fontUsage.systemFontFamilies.length > 0) {
+      console.log(`  ${d}System font families (not bundled font assets): ${stats.fontUsage.systemFontFamilies.join(', ')}${colors.reset}`);
+    }
   }
 
   // SECTION: Top Quick Wins
@@ -2344,6 +2444,38 @@ function generateHtmlReport(stats, options, outputPath) {
           </tbody>
         </table>
       </div>
+    </section>
+
+    <!-- Used multilingual font diagnostics -->
+    <section>
+      <h2>🔤 Used Font Language Coverage</h2>
+      <div class="card" style="padding: 0; overflow: hidden;">
+        <table>
+          <thead>
+            <tr>
+              <th>Used Font Asset</th>
+              <th>Scripts</th>
+              <th>Glyphs</th>
+              <th>Detected Playable Characters</th>
+              <th>Est. Subset Opportunity</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${stats.fontDiagnostics.length === 0 ? `
+              <tr><td colspan="5" style="text-align: center; color: var(--success); padding: 2rem;">✔ No used bundled font with multilingual coverage was detected.</td></tr>
+            ` : stats.fontDiagnostics.map((font) => `
+              <tr>
+                <td><strong>${font.relPath}</strong><div style="color: var(--text-muted); font-size: 0.75rem;">${font.sizeFormatted}</div></td>
+                <td>${font.scripts.join(', ')}</td>
+                <td>${font.glyphCount.toLocaleString()}</td>
+                <td>${font.requiredCharacterCount}</td>
+                <td style="color: var(--warning);">${font.excessRatio == null ? 'Inspect manually' : `${Math.round(font.excessRatio * 100)}% glyphs outside detected label set (~${font.estimatedSavingsFormatted})`}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+      ${stats.fontUsage.systemFontFamilies.length > 0 ? `<div class="subtitle" style="margin-top: 0.75rem;">System fonts (not bundled): ${stats.fontUsage.systemFontFamilies.join(', ')}</div>` : ''}
     </section>
 
   </div>

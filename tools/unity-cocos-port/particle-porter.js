@@ -67,7 +67,7 @@ module.exports = function createParticlePorter(deps = {}) {
 
     const meshNameHint = meshAsset.stem || gameObject?.name || '';
     const resolved = cocosDb?.resolveModelMeshByStem
-      ? cocosDb.resolveModelMeshByStem(meshAsset.stem, meshNameHint)
+      ? cocosDb.resolveModelMeshByStem(meshAsset.stem, meshNameHint, meshAsset.ext === '.asset' ? '.fbx' : meshAsset.ext)
       : null;
     if (resolved?.meshUuid) {
       return { meshUuid: resolved.meshUuid, pendingImport: false, meshAsset, source: resolved.source };

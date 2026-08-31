@@ -1,5 +1,6 @@
 import { ToolDefinition, ToolResponse, ToolExecutor } from '../types';
 import { getTextureCompressionPolicy } from '../texture-compression-policy';
+import { getModelImportPolicy } from '../model-import-policy';
 
 export class AssetAdvancedTools implements ToolExecutor {
     getTools(): ToolDefinition[] {
@@ -217,6 +218,17 @@ export class AssetAdvancedTools implements ToolExecutor {
                 }
             },
             {
+                name: 'enforce_fbx_import_policy',
+                description: 'Apply the portable playable Mesh Optimize, Mesh Simplify, Mesh Cluster, and Mesh Compress settings to every FBX through Cocos Asset DB',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        directory: { type: 'string', default: 'db://assets' },
+                        dryRun: { type: 'boolean', default: false }
+                    }
+                }
+            },
+            {
                 name: 'validate_effect_import',
                 description: 'Reimport a Cocos effect and its materials, verify exact AssetDB types/importers, and fail on new shader/effect syntax errors',
                 inputSchema: {
@@ -288,6 +300,8 @@ export class AssetAdvancedTools implements ToolExecutor {
                 return await this.enforceTextureCompressionPolicy(args || {});
             case 'enforce_texture_compression_policy':
                 return await this.enforceTextureCompressionPolicy(args || {});
+            case 'enforce_fbx_import_policy':
+                return await this.enforceFbxImportPolicy(args || {});
             case 'validate_effect_import':
                 return await this.validateEffectImport(args || {});
             case 'export_asset_manifest':
@@ -573,6 +587,25 @@ export class AssetAdvancedTools implements ToolExecutor {
                     : `Texture compression policy failed for ${report.failed} asset(s).`,
                 data: report,
                 error: report.complete ? undefined : `${report.failed} eligible texture(s) could not be configured`,
+            };
+        } catch (error: any) {
+            return { success: false, error: error?.message || String(error) };
+        }
+    }
+
+    private async enforceFbxImportPolicy(args: any): Promise<ToolResponse> {
+        try {
+            const report = await getModelImportPolicy().enforceAll({
+                directory: args.directory,
+                dryRun: args.dryRun,
+            });
+            return {
+                success: report.complete,
+                message: report.complete
+                    ? `FBX import policy applied to ${report.eligible} eligible asset(s).`
+                    : `FBX import policy failed for ${report.failed} asset(s).`,
+                data: report,
+                error: report.complete ? undefined : `${report.failed} eligible FBX model(s) could not be configured`,
             };
         } catch (error: any) {
             return { success: false, error: error?.message || String(error) };

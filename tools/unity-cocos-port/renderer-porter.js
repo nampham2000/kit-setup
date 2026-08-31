@@ -77,7 +77,8 @@ module.exports = function createRendererPorter(deps) {
     const meshNameHint = gameObject.syntheticModelName || gameObject.name;
     const componentId = `synthetic-model-${modelAsset.guid || modelAsset.uuid || gameObject.fileId}`;
     const componentFileId = `cmp-model-${sanitizeFileId(gameObject.name)}`;
-    const resolved = cocosDb.resolveModelMeshByStem(modelAsset.stem, gameObject.syntheticModelName || gameObject.name);
+    const requiredExt = modelAsset.ext === '.asset' ? '.fbx' : modelAsset.ext;
+    const resolved = cocosDb.resolveModelMeshByStem(modelAsset.stem, gameObject.syntheticModelName || gameObject.name, requiredExt);
     if (resolved?.meshUuid) {
       const overrideMaterialUuids = resolveSyntheticMaterialOverrides(
         gameObject, resolved, options, unityDb, cocosDb, reporter,
@@ -171,11 +172,12 @@ module.exports = function createRendererPorter(deps) {
     }
 
     if (meshAsset && !meshUuid) {
-      const resolved = cocosDb.resolveModelMeshByStem(meshAsset.stem, gameObject.name);
+      const requiredExt = meshAsset.ext === '.asset' ? '.fbx' : meshAsset.ext;
+      const resolved = cocosDb.resolveModelMeshByStem(meshAsset.stem, gameObject.name, requiredExt);
       if (resolved) {
         meshUuid = resolved.meshUuid;
         if (hasExplicitMaterialSlots) {
-          const resolvedMaterials = cocosDb.resolveModelMaterialUuidsByStem(meshAsset.stem, materialHints);
+          const resolvedMaterials = cocosDb.resolveModelMaterialUuidsByStem(meshAsset.stem, materialHints, requiredExt);
           materialUuids = resolvedMaterials?.materialUuids || resolved.materialUuids || (resolved.materialUuid ? [resolved.materialUuid] : []);
         }
         if (resolved.fallbackExt !== meshAsset.ext && ['.fbx', '.gltf', '.glb'].includes(resolved.fallbackExt)) {

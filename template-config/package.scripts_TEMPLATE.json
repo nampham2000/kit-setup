@@ -27,6 +27,8 @@
     "texture:pbr": "node playable-shared-kit/tools/pbr-texture-packer.cjs",
     "texture:compress": "node playable-shared-kit/tools/texture-compression-policy.cjs",
     "ai:texture:compress": "node playable-shared-kit/tools/texture-compression-policy.cjs --json",
+    "ai:model:optimize": "node playable-shared-kit/tools/model-import-policy.cjs --json",
+    "ai:fbx:normalize": "node playable-shared-kit/tools/fbx-normalizer.cjs",
     "fbx:strip": "node playable-shared-kit/tools/strip-fbx-textures.cjs",
     "cleanup:unused": "node playable-shared-kit/tools/unused-asset-cleanup.cjs",
     "cleanup:delete": "node playable-shared-kit/tools/unused-asset-cleanup.cjs --delete",

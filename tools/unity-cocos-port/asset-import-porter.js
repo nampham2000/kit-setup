@@ -2,77 +2,8 @@
 
 const fs = require('fs');
 const path = require('path');
-const { spawnSync } = require('child_process');
 const { copyAssetIfChanged, ensureDir, randomUuid, toPosix } = require('./core-utils');
-const { exportUnityMeshAssetToGltf } = require('./unity-mesh-fbx-exporter');
-
-const BLENDER_FBX_CONVERTER = path.join(__dirname, 'blender-fbx-to-glb.py');
-
-function fallbackGlbPath(unityAsset, options) {
-  return path.join(options.cocosRoot, 'assets', 'unity_imported', unityAsset.relativePath).replace(/\.fbx$/i, '.glb');
-}
-
-/**
- * Pending model sub-assets are useful while the Editor is closed because they
- * give generated prefabs deterministic temporary UUIDs.  They must not survive
- * once a converted GLB is ready for a real Cocos import, though: a root meta
- * that already says `imported: true` makes AssetDB trust the placeholder and it
- * registers the GLB as a plain cc.Asset with no mesh children.
- *
- * Only remove a meta that is provably owned by this porter.  A real Cocos meta
- * (or any meta containing a non-placeholder imported sub-asset) is preserved.
- */
-function releaseOwnedPendingModelMeta(assetFile) {
-  const metaFile = `${assetFile}.meta`;
-  if (!fs.existsSync(metaFile)) return false;
-  let meta;
-  try {
-    meta = JSON.parse(fs.readFileSync(metaFile, 'utf8'));
-  } catch {
-    return false;
-  }
-  if (meta?.importer !== 'gltf') return false;
-  const subMetas = Object.values(meta.subMetas || {});
-  const ownedPending = subMetas.filter((subMeta) =>
-    subMeta?.userData?.unityCocosPortPendingImport === true);
-  if (!ownedPending.length) return false;
-  const hasRealImportedSubAsset = subMetas.some((subMeta) =>
-    subMeta?.imported === true && subMeta?.userData?.unityCocosPortPendingImport !== true);
-  if (hasRealImportedSubAsset) return false;
-  fs.unlinkSync(metaFile);
-  // Touch the model as well as removing its placeholder meta so a running
-  // AssetDB watcher sees a fresh import boundary immediately.
-  const now = new Date();
-  fs.utimesSync(assetFile, now, now);
-  return true;
-}
-
-function buildFbxConverterInvocation(converter, input, output) {
-  const executable = path.basename(converter).toLowerCase();
-  if (/^assimp(?:\.exe)?$/.test(executable)) {
-    return { backend: 'assimp', args: ['export', input, output] };
-  }
-  if (/^blender(?:\.exe)?$/.test(executable)) {
-    return {
-      backend: 'blender',
-      args: [
-        '--background',
-        '--factory-startup',
-        '--python', BLENDER_FBX_CONVERTER,
-        '--',
-        '--input', input,
-        '--output', output,
-      ],
-    };
-  }
-  return { backend: 'fbx2gltf', args: ['-i', input, '-o', output] };
-}
-
-function shouldContinueToFbxFallback(meshAsset, resolved, options) {
-  return meshAsset?.ext === '.fbx'
-    && Boolean(options?.convertFbxFallback)
-    && (!resolved || Boolean(resolved.pendingImport));
-}
+const { exportUnityMeshAssetToFbx } = require('./unity-mesh-fbx-exporter');
 
 module.exports = function createAssetImportPorter(deps) {
   const {
@@ -180,89 +111,16 @@ module.exports = function createAssetImportPorter(deps) {
     return dest;
   }
 
-  function findCommand(names) {
-    const command = process.platform === 'win32' ? 'where' : 'which';
-    for (const name of names) {
-      const result = spawnSync(command, [name], { encoding: 'utf8' });
-      if (result.status === 0) return result.stdout.split(/\r?\n/).find(Boolean) || name;
-    }
-    if (names.some(name => /^blender(?:\.exe)?$/i.test(name))) {
-      const candidates = [];
-      if (process.env.BLENDER_PATH) candidates.push(process.env.BLENDER_PATH);
-      if (process.platform === 'win32') {
-        const roots = [
-          path.join(process.env.ProgramFiles || 'C:\\Program Files', 'Blender Foundation'),
-          path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Blender Foundation'),
-          'D:\\Tools',
-        ];
-        for (const root of roots) {
-          if (!root || !fs.existsSync(root)) continue;
-          for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
-            if (!entry.isDirectory() || !/^Blender(?:\s|$)/i.test(entry.name)) continue;
-            candidates.push(path.join(root, entry.name, 'blender.exe'));
-          }
-        }
-      } else if (process.platform === 'darwin') {
-        candidates.push('/Applications/Blender.app/Contents/MacOS/Blender');
-      } else {
-        candidates.push('/usr/bin/blender', '/usr/local/bin/blender');
-      }
-      const available = candidates.filter(candidate => candidate && fs.existsSync(candidate));
-      available.sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
-      if (available.length) return available[0];
-    }
-    return '';
+  function extractedUnityMeshFbxPath(unityAsset, options) {
+    return importedUnityAssetPath(unityAsset, options).replace(/\.asset$/i, '.fbx');
   }
 
-  function convertFbxToGlb(unityAsset, converter, options, reporter, severity = 'medium') {
-    const dest = fallbackGlbPath(unityAsset, options);
-    if (options.dryRun) {
-      reporter.add(severity, 'FBX_FALLBACK_SKIPPED_DRY_RUN', unityAsset.relativePath, toPosix(path.relative(options.cocosRoot, dest)), 'FBX fallback would run during a real port; dry-run did not create files or launch a converter');
-      return '';
-    }
-    ensureDir(path.dirname(dest));
-    ensureDirectoryMetas(path.dirname(dest), path.join(options.cocosRoot, 'assets'));
-    if (fs.existsSync(dest)) {
-      if (releaseOwnedPendingModelMeta(dest)) {
-        reporter.low('FBX_FALLBACK_PENDING_META_RELEASED', unityAsset.relativePath, toPosix(path.relative(options.cocosRoot, dest)), 'Released a porter-owned placeholder meta so Cocos AssetDB can perform the real GLB import');
-      }
-      reporter.add(severity, 'FBX_FALLBACK_EXISTS', unityAsset.relativePath, toPosix(path.relative(options.cocosRoot, dest)), 'Existing GLB fallback found; refresh/import is required before it can be wired');
-      return dest;
-    }
-
-    const invocation = buildFbxConverterInvocation(converter, unityAsset.path, dest);
-    if (invocation.backend === 'blender' && !fs.existsSync(BLENDER_FBX_CONVERTER)) {
-      reporter.add(severity, 'FBX_FALLBACK_FAILED', unityAsset.relativePath, converter, 'Bundled Blender FBX fallback script is missing', BLENDER_FBX_CONVERTER);
-      return '';
-    }
-    const result = spawnSync(converter, invocation.args, {
-      encoding: 'utf8',
-      timeout: 180000,
-      windowsHide: true,
-    });
-    if (result.status !== 0) {
-      const detail = `${result.stderr || result.stdout || result.error?.message || ''}`.trim();
-      reporter.add(severity, 'FBX_FALLBACK_FAILED', unityAsset.relativePath, converter, `FBX fallback conversion failed (${invocation.backend})`, detail);
-      return '';
-    }
-    if (!fs.existsSync(dest) || fs.statSync(dest).size === 0) {
-      reporter.add(severity, 'FBX_FALLBACK_FAILED', unityAsset.relativePath, converter, `FBX fallback conversion produced no GLB (${invocation.backend})`);
-      return '';
-    }
-    reporter.add(severity, 'FBX_FALLBACK_CREATED', unityAsset.relativePath, toPosix(path.relative(options.cocosRoot, dest)), `Created GLB fallback with ${invocation.backend}; refresh/import is required before it can be wired`);
-    return dest;
-  }
-
-  function extractedUnityMeshGltfPath(unityAsset, options) {
-    return importedUnityAssetPath(unityAsset, options).replace(/\.asset$/i, '.gltf');
-  }
-
-  function prepareUnityMeshAssetGltf(meshAsset, reporter, options, severity, meshNameHint = '') {
-    const dest = extractedUnityMeshGltfPath(meshAsset, options);
+  function prepareUnityMeshAssetFbx(meshAsset, reporter, options, severity, meshNameHint = '') {
+    const dest = extractedUnityMeshFbxPath(meshAsset, options);
     if (!dest || !fs.existsSync(meshAsset.path)) return null;
 
     if (options.dryRun) {
-      reporter.add(severity, 'UNITY_MESH_ASSET_GLTF_EXTRACT_SKIPPED_DRY_RUN', meshAsset.relativePath, toPosix(path.relative(options.cocosRoot, dest)), 'Unity Mesh .asset would be extracted to glTF; dry-run left the filesystem unchanged');
+      reporter.add(severity, 'UNITY_MESH_ASSET_FBX_EXTRACT_SKIPPED_DRY_RUN', meshAsset.relativePath, toPosix(path.relative(options.cocosRoot, dest)), 'Unity Mesh .asset would be exported directly to FBX; dry-run left the filesystem unchanged');
       return null;
     }
 
@@ -271,14 +129,14 @@ module.exports = function createAssetImportPorter(deps) {
 
     let exported = null;
     try {
-      exported = exportUnityMeshAssetToGltf(meshAsset.path, dest);
+      exported = exportUnityMeshAssetToFbx(meshAsset.path, dest);
     } catch (error) {
-      reporter.add(severity === 'low' ? 'low' : 'medium', 'UNITY_MESH_ASSET_GLTF_EXTRACT_FAILED', meshAsset.relativePath, '', 'Unity Mesh .asset could not be extracted to glTF', error?.message || String(error));
+      reporter.add(severity === 'low' ? 'low' : 'high', 'UNITY_MESH_ASSET_FBX_EXTRACT_FAILED', meshAsset.relativePath, '', 'Unity Mesh .asset could not be exported directly to FBX', error?.message || String(error));
       return null;
     }
 
     if (!exported) {
-      reporter.add(severity === 'low' ? 'low' : 'medium', 'UNITY_MESH_ASSET_GLTF_EXTRACT_FAILED', meshAsset.relativePath, '', 'Unity Mesh .asset did not contain readable uncompressed mesh data');
+      reporter.add(severity === 'low' ? 'low' : 'high', 'UNITY_MESH_ASSET_FBX_EXTRACT_FAILED', meshAsset.relativePath, '', 'Unity Mesh .asset did not contain readable uncompressed mesh data; use the Unity FBX Exporter package instead of a glTF/GLB conversion');
       return null;
     }
 
@@ -288,10 +146,10 @@ module.exports = function createAssetImportPorter(deps) {
     recoverModelMetaFromLibrary(dest, options);
     reporter.add(
       severity,
-      'UNITY_MESH_ASSET_GLTF_EXTRACTED',
+      'UNITY_MESH_ASSET_FBX_EXTRACTED',
       meshAsset.relativePath,
       toPosix(path.relative(options.cocosRoot, dest)),
-      `Unity Mesh .asset was extracted to glTF (${exported.vertexCount} vertices, ${exported.indexCount} indices)`,
+      `Unity Mesh .asset was exported directly to FBX (${exported.vertexCount} vertices, ${exported.indexCount} indices)`,
       resolvedMeshName,
     );
 
@@ -306,37 +164,18 @@ module.exports = function createAssetImportPorter(deps) {
   function handleMissingModel(meshAsset, reporter, options, config = {}) {
     const { autoCopy = false, severity = 'medium', meshNameHint = '' } = config;
     if (meshAsset?.ext === '.asset' && (options.copyAssets || autoCopy)) {
-      const prepared = prepareUnityMeshAssetGltf(meshAsset, reporter, options, severity, meshNameHint || meshAsset.stem);
+      const prepared = prepareUnityMeshAssetFbx(meshAsset, reporter, options, severity, meshNameHint || meshAsset.stem);
       if (prepared?.resolved) {
         if (prepared.resolved.pendingImport) {
-          reporter.low('MODEL_SUBASSETS_PREPARED', meshAsset.relativePath, prepared.resolved.source, 'Extracted glTF was prepared with stable Cocos mesh sub-asset ids; refresh/import is still required');
+          reporter.low('MODEL_SUBASSETS_PREPARED', meshAsset.relativePath, prepared.resolved.source, 'Exported FBX was prepared for Cocos import; refresh/import is still required');
         } else {
-          reporter.low('MODEL_SUBASSETS_READY', meshAsset.relativePath, prepared.resolved.source, 'Extracted glTF mesh sub-assets became available during the current port pass');
+          reporter.low('MODEL_SUBASSETS_READY', meshAsset.relativePath, prepared.resolved.source, 'Exported FBX mesh sub-assets became available during the current port pass');
         }
         return { pendingImport: Boolean(prepared.resolved.pendingImport), detail: prepared.resolved.source, resolved: prepared.resolved };
       }
       if (prepared?.dest) {
-        reporter.add(severity, 'ASSET_COPIED_NEEDS_IMPORT', meshAsset.relativePath, toPosix(path.relative(options.cocosRoot, prepared.dest)), 'Extracted glTF asset awaits Cocos import before mesh sub-assets are available');
+        reporter.add(severity, 'ASSET_COPIED_NEEDS_IMPORT', meshAsset.relativePath, toPosix(path.relative(options.cocosRoot, prepared.dest)), 'Exported FBX asset awaits Cocos import before mesh sub-assets are available');
         return { pendingImport: true, detail: toPosix(path.relative(options.cocosRoot, prepared.dest)), resolved: null };
-      }
-    }
-
-    // Prefer an already converted GLB before probing the known-failing FBX
-    // importer again. This makes the fallback idempotent and avoids two import
-    // timeout probes on every subsequent port pass.
-    if (meshAsset?.ext === '.fbx' && options.convertFbxFallback && !options.dryRun) {
-      const existingFallback = fallbackGlbPath(meshAsset, options);
-      if (fs.existsSync(existingFallback) && fs.statSync(existingFallback).size > 0) {
-        if (releaseOwnedPendingModelMeta(existingFallback)) {
-          reporter.low('FBX_FALLBACK_PENDING_META_RELEASED', meshAsset.relativePath, toPosix(path.relative(options.cocosRoot, existingFallback)), 'Released a porter-owned placeholder meta so Cocos AssetDB can perform the real GLB import');
-        }
-        const fallbackResolved = waitForImportedModelAsset(existingFallback, options, meshNameHint);
-        if (fallbackResolved && !fallbackResolved.pendingImport) {
-          reporter.low('MODEL_SUBASSETS_READY', meshAsset.relativePath, fallbackResolved.source, 'Reused an imported GLB fallback; the source FBX importer was not retried');
-          return { pendingImport: false, detail: fallbackResolved.source, resolved: fallbackResolved };
-        }
-        reporter.add(severity, 'MODEL_SUBASSETS_PREPARED', meshAsset.relativePath, toPosix(path.relative(options.cocosRoot, existingFallback)), 'Existing GLB fallback still awaits a real Cocos AssetDB import; refresh assets and rerun');
-        return { pendingImport: true, detail: toPosix(path.relative(options.cocosRoot, existingFallback)), resolved: fallbackResolved || null };
       }
     }
 
@@ -345,21 +184,12 @@ module.exports = function createAssetImportPorter(deps) {
       copiedDest = copyUnityAssetToCocos(meshAsset, options, reporter, 'model', severity, { deferNeedsImportReport: true, meshNameHint });
       const resolved = waitForImportedModelAsset(copiedDest, options, meshNameHint);
       if (resolved) {
-        if (resolved.pendingImport && shouldContinueToFbxFallback(meshAsset, resolved, options)) {
-          reporter.medium(
-            'FBX_PENDING_IMPORT_FALLBACK',
-            meshAsset.relativePath,
-            resolved.source,
-            'Cocos did not materialize the FBX mesh during the import wait; continuing to the requested converter fallback',
-          );
-        } else if (resolved.pendingImport) {
+        if (resolved.pendingImport) {
           reporter.low('MODEL_SUBASSETS_PREPARED', meshAsset.relativePath, resolved.source, 'Model asset was copied with stable Cocos mesh sub-asset ids; refresh/import is still required');
         } else {
           reporter.low('MODEL_SUBASSETS_READY', meshAsset.relativePath, resolved.source, 'Model mesh/material sub-assets became available during the current port pass');
         }
-        if (!shouldContinueToFbxFallback(meshAsset, resolved, options)) {
-          return { pendingImport: Boolean(resolved.pendingImport), detail: resolved.source, resolved };
-        }
+        return { pendingImport: Boolean(resolved.pendingImport), detail: resolved.source, resolved };
       }
     }
 
@@ -371,37 +201,21 @@ module.exports = function createAssetImportPorter(deps) {
       return { pendingImport: Boolean(copiedDest), detail: copiedDest ? toPosix(path.relative(options.cocosRoot, copiedDest)) : '', resolved: null };
     }
 
-    if (options.convertFbxFallback) {
-      if (options.dryRun) {
-        const fallbackDest = fallbackGlbPath(meshAsset, options);
-        reporter.add(severity, 'FBX_FALLBACK_SKIPPED_DRY_RUN', meshAsset.relativePath, toPosix(path.relative(options.cocosRoot, fallbackDest)), 'FBX fallback would run during a real port; dry-run did not create files or launch a converter');
-        return { pendingImport: Boolean(copiedDest), detail: copiedDest ? toPosix(path.relative(options.cocosRoot, copiedDest)) : '', resolved: null };
-      }
-      const converter = findCommand(['FBX2glTF', 'FBX2glTF.exe', 'assimp', 'assimp.exe', 'blender', 'blender.exe']);
-      if (converter) {
-        const convertedDest = convertFbxToGlb(meshAsset, converter, options, reporter, severity);
-        const resolved = waitForImportedModelAsset(convertedDest || copiedDest, options, meshNameHint);
-        if (resolved && !resolved.pendingImport) {
-          reporter.low('MODEL_SUBASSETS_READY', meshAsset.relativePath, resolved.source, 'Model mesh/material sub-assets became available during the current port pass');
-          return { pendingImport: false, detail: resolved.source, resolved };
-        }
-        if (resolved?.pendingImport) {
-          reporter.add(severity, 'MODEL_SUBASSETS_PREPARED', meshAsset.relativePath, resolved.source, 'GLB fallback was created with stable pending mesh ids; refresh Cocos AssetDB and rerun to bind imported sub-assets');
-          return { pendingImport: true, detail: resolved.source, resolved };
-        }
-        return { pendingImport: Boolean(convertedDest || copiedDest), detail: toPosix(path.relative(options.cocosRoot, convertedDest || copiedDest || '')), resolved: null };
-      }
-      reporter.add(severity, 'FBX_CONVERTER_MISSING', meshAsset.relativePath, '', 'FBX import failed/missing and no FBX2glTF, assimp, or Blender command was found');
-      return { pendingImport: Boolean(copiedDest), detail: copiedDest ? toPosix(path.relative(options.cocosRoot, copiedDest)) : '', resolved: null };
-    }
-
     if (copiedDest) {
       reporter.add(severity, 'ASSET_COPIED_NEEDS_IMPORT', meshAsset.relativePath, toPosix(path.relative(options.cocosRoot, copiedDest)), 'Unity asset copied to Cocos; refresh/import is required before it can be wired');
       reporter.add(severity, 'FBX_ASSET_COPIED', meshAsset.relativePath, toPosix(path.relative(options.cocosRoot, copiedDest)), 'FBX asset was copied into Cocos assets and awaits editor import before mesh sub-assets exist');
+      reporter.add(
+        'medium',
+        'FBX_NORMALIZE_IF_IMPORT_REJECTED',
+        meshAsset.relativePath,
+        toPosix(path.relative(options.cocosRoot, copiedDest)),
+        'If Cocos explicitly rejects this FBX, run the shared FBX-to-FBX normalizer in preserve mode, reimport through Asset DB, and use static mode only with proof that runtime does not animate the skeleton',
+        'npm run ai:fbx:normalize -- --src <Unity.fbx> --out <Cocos.fbx> --mode preserve',
+      );
       return { pendingImport: true, detail: toPosix(path.relative(options.cocosRoot, copiedDest)), resolved: null };
     }
 
-    reporter.add(severity, 'FBX_FALLBACK_AVAILABLE', meshAsset.relativePath, '', 'No Cocos FBX import found. Re-run with --convert-fbx-fallback to try GLB fallback.');
+    reporter.add('high', 'FBX_IMPORT_REQUIRED', meshAsset.relativePath, '', 'No imported Cocos FBX mesh was found. Keep the asset as FBX, refresh Cocos Asset DB, and resolve the FBX importer error. If the converter rejects the source, use model.fbx-normalize; glTF/GLB fallback is intentionally disabled.');
     return { pendingImport: false, detail: '', resolved: null };
   }
 
@@ -409,13 +223,6 @@ module.exports = function createAssetImportPorter(deps) {
     importedUnityAssetPath,
     ensureAssetMeta,
     copyUnityAssetToCocos,
-    findCommand,
-    convertFbxToGlb,
     handleMissingModel,
   };
 };
-
-module.exports.buildFbxConverterInvocation = buildFbxConverterInvocation;
-module.exports.shouldContinueToFbxFallback = shouldContinueToFbxFallback;
-module.exports.releaseOwnedPendingModelMeta = releaseOwnedPendingModelMeta;
-module.exports.fallbackGlbPath = fallbackGlbPath;

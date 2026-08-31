@@ -98,7 +98,7 @@ test('extension policy creates WebP 50 fallback and applies it to PNG/JPG/JPEG o
   }
 });
 
-test('extension policy reuses a spaced Playable Transparent alias without rewriting it', async () => {
+test('extension policy normalizes a spaced Playable Transparent alias to WebP 50', async () => {
   const fixture = makeEditor({
     preset: {
       id: 'existing-preset-id',
@@ -111,8 +111,10 @@ test('extension policy reuses a spaced Playable Transparent alias without rewrit
     assert.equal(report.complete, true);
     assert.equal(report.preset.id, 'existing-preset-id');
     assert.equal(report.preset.created, false);
-    assert.equal(report.preset.webpQuality, 72);
-    assert.equal(fixture.profileWrites, 0);
+    assert.equal(report.preset.webpQuality, 50);
+    assert.equal(report.preset.changed, true);
+    assert.equal(fixture.profileWrites, 1);
+    assert.deepEqual(fixture.profile.userPreset['existing-preset-id'].options.web, { webp: { quality: 50 } });
     assert.equal(fixture.metas.get('png').userData.presetId, 'existing-preset-id');
   } finally {
     delete global.Editor;

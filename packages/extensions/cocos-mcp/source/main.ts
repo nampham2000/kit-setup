@@ -3,6 +3,7 @@ import { readSettings, saveSettings } from './settings';
 import { MCPServerSettings } from './types';
 import { ToolManager } from './tools/tool-manager';
 import { startTextureCompressionAutomation, stopTextureCompressionAutomation } from './texture-compression-policy';
+import { startModelImportAutomation, stopModelImportAutomation } from './model-import-policy';
 
 let mcpServer: MCPServer | null = null;
 let toolManager: ToolManager;
@@ -252,6 +253,7 @@ export function load() {
     // Keep PNG/JPG/JPEG importer metadata portable and build-ready. The policy
     // is idempotent and writes through Cocos Asset DB/Profile APIs only.
     startTextureCompressionAutomation();
+    startModelImportAutomation();
     
     // Start the server if auto-start is enabled.
     if (settings.autoStart) {
@@ -266,6 +268,7 @@ export function load() {
  * @zh Method triggered when the extension is unloaded
  */
 export function unload() {
+    stopModelImportAutomation();
     stopTextureCompressionAutomation();
     if (mcpServer) {
         mcpServer.stop();

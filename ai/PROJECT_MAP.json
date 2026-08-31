@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "generatedAt": "2026-08-31T10:08:04.664Z",
+    "generatedAt": "2026-08-31T12:33:35.992Z",
     "description": "Compact project manifest for AI Agents. Use this instead of scanning file trees.",
     "project": {
       "projectName": "cc_playable_framework",
@@ -329,7 +329,7 @@
     "audioCount": 9,
     "audio": {
       "count": 9,
-      "totalKb": 1245.4,
+      "totalKb": 351.9,
       "sample": [
         "assets/resources/sound/tapejam/sfx_box_appear.mp3",
         "assets/resources/sound/tapejam/sfx_box_close.mp3",
@@ -343,7 +343,7 @@
     "modelCount": 33,
     "models": {
       "count": 33,
-      "totalKb": 14216,
+      "totalKb": 14233.5,
       "sample": [
         "assets/unity_imported/_Game/3DAssets/Level FBX/level_2.fbx",
         "assets/unity_imported/_Game/3DAssets/Level FBX/level_3.fbx",
@@ -422,7 +422,7 @@
       "exists": true,
       "root": "assets/unity_imported",
       "count": 67,
-      "totalKb": 16245,
+      "totalKb": 16262.5,
       "sample": [
         "assets/unity_imported/_Game/3DAssets/Level FBX/level_2.fbx",
         "assets/unity_imported/_Game/3DAssets/Level FBX/materials/mtl_carton.mtl",
@@ -606,6 +606,8 @@
     "verify.regressions": "npm run ai:verify:regressions",
     "verify.gc": "npm run ai:lint",
     "texture.compress-policy": "npm run ai:texture:compress",
+    "model.import-policy": "npm run ai:model:optimize",
+    "model.fbx-normalize": "npm run ai:fbx:normalize -- --src <Unity.fbx> --out <Cocos.fbx>",
     "audio.optimize": "npm run sound:optimize",
     "assets.cleanup": "npm run cleanup:unused",
     "stats.resources": "npm run stats",
