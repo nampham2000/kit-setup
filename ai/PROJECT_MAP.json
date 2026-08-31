@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "generatedAt": "2026-08-31T00:12:47.530Z",
+    "generatedAt": "2026-08-31T01:16:31.096Z",
     "description": "Compact project manifest for AI Agents. Use this instead of scanning file trees.",
     "project": {
       "projectName": "cc_playable_framework",
@@ -265,7 +265,7 @@
     "shaderCount": 4,
     "shaders": {
       "count": 4,
-      "totalKb": 26.5,
+      "totalKb": 30.3,
       "sample": [
         "assets/effects/UnitySpriteRendererColor.effect",
         "assets/effects/TapeUnlit.effect",

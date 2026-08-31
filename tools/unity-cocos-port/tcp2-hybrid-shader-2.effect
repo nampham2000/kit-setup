@@ -3,6 +3,7 @@ CCEffect %{
   temporaries:
     p1: &p1
       mainTexture: { value: white }
+      emissiveMap: { value: white }
       tilingOffset: { value: [1, 1, 0, 0] }
       mainColor: { value: [1, 1, 1, 1], linear: true, editor: { type: color } }
       highlightColor: { value: [1, 1, 1, 1], linear: true, editor: { type: color } }
@@ -21,6 +22,16 @@ CCEffect %{
       specularStrength: { value: 0, target: specularParams.y }
       emissive: { value: [0, 0, 0, 1], linear: true, editor: { type: color } }
       recolorStrength: { value: 0, target: recolorParams.x, editor: { range: [0, 1], step: 0.01 } }
+      unityLightDirection0: { value: [0, 1, 0, 0] }
+      unityLightDirection1: { value: [0, 1, 0, 0] }
+      unityLightColor0: { value: [1, 1, 1, 1], linear: true, editor: { type: color } }
+      unityLightColor1: { value: [1, 1, 1, 1], linear: true, editor: { type: color } }
+      unityLightIntensities: { value: [1, 0, 0, 0] }
+      unityAmbientSky: { value: [0, 0, 0, 1], linear: true, editor: { type: color } }
+      unityAmbientEquator: { value: [0, 0, 0, 1], linear: true, editor: { type: color } }
+      unityAmbientGround: { value: [0, 0, 0, 1], linear: true, editor: { type: color } }
+      unityAmbientParams: { value: [1, 0, 0, 0] }
+      unitySourceRigParams: { value: [0, 0, 0, 0] }
     d1: &d1 { depthTest: true, depthWrite: true }
     d2: &d2 { depthTest: true, depthWrite: false }
     r1: &r1 { cullMode: back }
@@ -76,6 +87,16 @@ CCProgram tcp2-mesh-shared %{
     vec4 specularParams;
     vec4 emissive;
     vec4 recolorParams;
+    vec4 unityLightDirection0;
+    vec4 unityLightDirection1;
+    vec4 unityLightColor0;
+    vec4 unityLightColor1;
+    vec4 unityLightIntensities;
+    vec4 unityAmbientSky;
+    vec4 unityAmbientEquator;
+    vec4 unityAmbientGround;
+    vec4 unityAmbientParams;
+    vec4 unitySourceRigParams;
   };
 }%
 
@@ -115,19 +136,39 @@ CCProgram tcp2-mesh-fs %{
   in mediump vec3 v_worldNormal;
   in vec2 v_uv;
   uniform sampler2D mainTexture;
+  uniform sampler2D emissiveMap;
 
-  float ggxDistribution (float noH, float roughness) {
-    float alpha = max(roughness * roughness, 0.001);
-    float alpha2 = alpha * alpha;
-    float denominator = noH * noH * (alpha2 - 1.0) + 1.0;
-    return alpha2 / max(3.14159265 * denominator * denominator, 0.0001);
+  // Exact TCP2 Hybrid 2 GGX response. TCP2 squares the authored roughness
+  // before passing it to GGX, then applies its 0.05 and linear-color-space
+  // surface reduction terms.
+  float tcp2Specular (vec3 lightDirection, vec3 viewDirection, vec3 normal) {
+    vec3 halfDirection = normalize(lightDirection + viewDirection);
+    float noH = max(dot(normal, halfDirection), 0.0);
+    float authoredRoughness = max(specularParams.x, 0.00001);
+    float roughness = authoredRoughness * authoredRoughness;
+    float a2 = roughness * roughness;
+    float denominator = (noH * a2 - noH) * noH + 1.0;
+    float specular = (1.0 / 3.14159265) * a2
+      / max(denominator * denominator + 0.0001, 0.0001);
+    specular *= 3.14159265 * 0.05;
+    specular *= 1.0 / (roughness * roughness + 1.0);
+    return max(specular, 0.0);
+  }
+
+  vec3 unityTriLightAmbient (vec3 normal) {
+    float up = max(normal.y, 0.0);
+    float down = max(-normal.y, 0.0);
+    vec3 upper = mix(unityAmbientEquator.rgb, unityAmbientSky.rgb, up);
+    vec3 lower = mix(unityAmbientEquator.rgb, unityAmbientGround.rgb, down);
+    return (normal.y >= 0.0 ? upper : lower) * unityAmbientParams.x;
   }
 
   vec4 frag () {
     vec4 baseColor = texture(mainTexture, v_uv);
-    // Imported Unity color atlases are sRGB textures. Cocos' sampler already
-    // returns linear RGB, so converting the sample again makes saturated TCP2
-    // paint much darker than the Unity source.
+    // Cocos 3.8.8's own builtin-standard effect explicitly decodes albedo-map
+    // samples with SRGBToLinear. Unity imports this atlas as an sRGB color
+    // texture too, so the TCP2 port must do the same before lighting it.
+    baseColor.rgb = SRGBToLinear(baseColor.rgb);
     float authoredLuma = dot(baseColor.rgb, vec3(0.2126, 0.7152, 0.0722));
     vec3 recolored = mainColor.rgb * mix(0.5, 1.3, clamp(authoredLuma, 0.0, 1.0));
     // The canonical dynamic-color atlas is the red Unity variant. Select its
@@ -143,25 +184,69 @@ CCProgram tcp2-mesh-fs %{
     vec3 normal = normalize(v_worldNormal);
     vec3 lightDirection = normalize(-cc_mainLitDir.xyz);
     vec3 viewDirection = normalize(cc_cameraPos.xyz - v_worldPosition);
-    vec3 halfDirection = normalize(lightDirection + viewDirection);
     float noL = max(dot(normal, lightDirection), 0.0);
     float noV = max(dot(normal, viewDirection), 0.0001);
-    float noH = max(dot(normal, halfDirection), 0.0);
     float halfLambert = dot(normal, lightDirection) * 0.5 + 0.5;
     float halfWidth = max(toonParams.y * 0.5, 0.0001);
     float ramp = smoothstep(toonParams.x - halfWidth, toonParams.x + halfWidth, halfLambert);
 
-    vec3 mainLight = cc_mainLitColor.rgb * cc_mainLitColor.w;
-    vec3 toonTint = mix(shadowColor.rgb, highlightColor.rgb, ramp);
-    vec3 direct = baseColor.rgb * toonTint * mix(vec3(1.0), mainLight, toonParams.w);
-    float hemisphere = normal.y * 0.5 + 0.5;
-    vec3 ambient = mix(cc_ambientGround.rgb, cc_ambientSky.rgb, hemisphere) * cc_ambientSky.w;
-    vec3 indirect = baseColor.rgb * ambient * toonParams.z;
+    vec3 direct;
+    vec3 indirect;
+    vec3 rimContribution;
+    vec3 specular;
+    if (unitySourceRigParams.x > 0.5) {
+      vec3 sourceDirection0 = normalize(unityLightDirection0.xyz);
+      vec3 sourceDirection1 = normalize(unityLightDirection1.xyz);
+      vec3 sourceLight0 = unityLightColor0.rgb * unityLightIntensities.x;
+      vec3 sourceLight1 = unityLightColor1.rgb * unityLightIntensities.y;
+      float sourceNoL0 = max(dot(normal, sourceDirection0), 0.0);
+      float sourceNoL1 = max(dot(normal, sourceDirection1), 0.0);
+      float sourceWrapped0 = dot(normal, sourceDirection0) * 0.5 + 0.5;
+      float sourceWrapped1 = dot(normal, sourceDirection1) * 0.5 + 0.5;
+      float sourceRamp0 = smoothstep(toonParams.x - halfWidth,
+        toonParams.x + halfWidth, sourceWrapped0);
+      float sourceRamp1 = smoothstep(toonParams.x - halfWidth,
+        toonParams.x + halfWidth, sourceWrapped1);
 
-    float rim = smoothstep(rimParams.x, max(rimParams.y, rimParams.x + 0.0001), 1.0 - noV);
-    vec3 rimContribution = rimColor.rgb * rim * mix(vec3(1.0), mainLight * ramp, rimParams.z) * rimParams.w;
-    vec3 specular = ggxDistribution(noH, specularParams.x) * specularColor.rgb * mainLight * noL * specularParams.y;
-    vec3 emissionContribution = emissive.rgb * baseColor.rgb;
+      // Unity forward-base uses the authored shadow/highlight ramp. Its
+      // additional directional light starts from black and adds highlight.
+      vec3 sourceMainTint = mix(shadowColor.rgb, highlightColor.rgb, sourceRamp0);
+      direct = baseColor.rgb * sourceMainTint
+        * mix(vec3(1.0), sourceLight0, toonParams.w);
+      direct += baseColor.rgb * highlightColor.rgb * sourceRamp1 * sourceLight1;
+      indirect = baseColor.rgb * unityTriLightAmbient(normal) * toonParams.z;
+
+      float sourceRim = smoothstep(rimParams.x,
+        max(rimParams.y, rimParams.x + 0.0001), 1.0 - noV);
+      // TCP2 processes the fill directional light through the additional-light
+      // loop, so its ramp/light mask contributes to the same rim emission.
+      vec3 sourceRimLights = sourceLight0 * sourceRamp0
+        + sourceLight1 * sourceRamp1;
+      vec3 sourceRimMask = mix(vec3(1.0), sourceRimLights, rimParams.z);
+      rimContribution = rimColor.rgb * sourceRim * sourceRimMask * rimParams.w;
+      specular = tcp2Specular(sourceDirection0, viewDirection, normal)
+        * specularColor.rgb * sourceLight0 * sourceNoL0 * specularParams.y;
+      specular += tcp2Specular(sourceDirection1, viewDirection, normal)
+        * specularColor.rgb * sourceLight1 * sourceNoL1 * specularParams.y;
+    } else {
+      vec3 mainLight = cc_mainLitColor.rgb * cc_mainLitColor.w;
+      vec3 toonTint = mix(shadowColor.rgb, highlightColor.rgb, ramp);
+      direct = baseColor.rgb * toonTint * mix(vec3(1.0), mainLight, toonParams.w);
+      float hemisphere = normal.y * 0.5 + 0.5;
+      vec3 ambient = mix(cc_ambientGround.rgb, cc_ambientSky.rgb, hemisphere) * cc_ambientSky.w;
+      indirect = baseColor.rgb * ambient * toonParams.z;
+
+      float rim = smoothstep(rimParams.x,
+        max(rimParams.y, rimParams.x + 0.0001), 1.0 - noV);
+      rimContribution = rimColor.rgb * rim
+        * mix(vec3(1.0), mainLight * ramp, rimParams.z) * rimParams.w;
+      specular = tcp2Specular(lightDirection, viewDirection, normal)
+        * specularColor.rgb * mainLight * noL * specularParams.y;
+    }
+    // TCP2 can use a separate sRGB emission atlas; decode it independently
+    // from the base map before applying the authored HDR emission color.
+    vec3 emissionSample = SRGBToLinear(texture(emissiveMap, v_uv).rgb);
+    vec3 emissionContribution = emissive.rgb * emissionSample;
     return CCFragOutput(vec4(direct + indirect + rimContribution + specular + emissionContribution, baseColor.a));
   }
 }%

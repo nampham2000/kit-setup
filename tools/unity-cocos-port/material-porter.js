@@ -608,9 +608,12 @@ module.exports = function createMaterialPorter(deps) {
     if (alphaClip) urpUnlitProps.alphaThreshold = cutoff;
 
     const tcp2Props = {
-      mainColor: unityLinearColorToCocos(mainColor),
-      highlightColor: unityLinearColorToCocos(firstDefinedMaterialValue(colors, ['_HColor'], { r: 1, g: 1, b: 1, a: 1 })),
-      shadowColor: unityLinearColorToCocos(firstDefinedMaterialValue(colors, ['_SColor'], { r: 0.2, g: 0.2, b: 0.2, a: 1 })),
+      // TCP2 Base/HColor/SColor are regular ShaderLab Color properties. Unity
+      // serializes them as sRGB and linearizes them when supplying the shader;
+      // Cocos `linear: true` does the same, so preserve the serialized bytes.
+      mainColor: unityColorToCocos(mainColor),
+      highlightColor: unityColorToCocos(firstDefinedMaterialValue(colors, ['_HColor'], { r: 1, g: 1, b: 1, a: 1 })),
+      shadowColor: unityColorToCocos(firstDefinedMaterialValue(colors, ['_SColor'], { r: 0.2, g: 0.2, b: 0.2, a: 1 })),
       rampThreshold: clamp01(firstDefinedMaterialValue(floats, ['_RampThreshold'], 0.75), 0.75),
       rampSmoothing: clamp01(firstDefinedMaterialValue(floats, ['_RampSmoothing'], 0.1), 0.1),
       indirectStrength: clamp01(firstDefinedMaterialValue(floats, ['_IndirectIntensity'], 1), 1),
@@ -623,9 +626,15 @@ module.exports = function createMaterialPorter(deps) {
       specularColor: unityLinearColorToCocos(firstDefinedMaterialValue(colors, ['_SpecularColor'], { r: 0.75, g: 0.75, b: 0.75, a: 1 })),
       specularRoughness: clamp01(firstDefinedMaterialValue(floats, ['_SpecularRoughness'], 0.5), 0.5),
       specularStrength: Number(firstDefinedMaterialValue(floats, ['_UseSpecular'], 0)) > 0 ? 1 : 0,
-      emissive: unityLinearColorToCocos(emissionColor),
+      // Saved TCP2 emission data remains in .mat when the feature is disabled.
+      // Respect _UseEmission instead of turning that dormant value into an
+      // undocumented brightness compensation in every ported project.
+      emissive: unityLinearColorToCocos(emissionEnabled
+        ? emissionColor
+        : { r: 0, g: 0, b: 0, a: 1 }),
     };
     if (mainTextureUuid) tcp2Props.mainTexture = { __uuid__: mainTextureUuid };
+    if (emissiveTextureUuid) tcp2Props.emissiveMap = { __uuid__: emissiveTextureUuid };
     if (mainTilingOffset) tcp2Props.tilingOffset = mainTilingOffset;
 
     if (mainTilingOffset) {
@@ -800,10 +809,11 @@ module.exports = function createMaterialPorter(deps) {
       ? transparent ? 1 : 0
       : resolveUnityParticleMaterialTechnique(materialDoc, unityDb);
 
+    const tcp2ParticleEmissionEnabled = Number(firstDefinedMaterialValue(floats, ['_UseEmission'], 0) || 0) > 0;
     const props = tcp2ParticleMaterial ? {
-      mainColor: unityLinearColorToCocos(mainColor),
-      highlightColor: unityLinearColorToCocos(firstDefinedMaterialValue(colors, ['_HColor'], { r: 1, g: 1, b: 1, a: 1 })),
-      shadowColor: unityLinearColorToCocos(firstDefinedMaterialValue(colors, ['_SColor'], { r: 0.2, g: 0.2, b: 0.2, a: 1 })),
+      mainColor: unityColorToCocos(mainColor),
+      highlightColor: unityColorToCocos(firstDefinedMaterialValue(colors, ['_HColor'], { r: 1, g: 1, b: 1, a: 1 })),
+      shadowColor: unityColorToCocos(firstDefinedMaterialValue(colors, ['_SColor'], { r: 0.2, g: 0.2, b: 0.2, a: 1 })),
       rampThreshold: clamp01(firstDefinedMaterialValue(floats, ['_RampThreshold'], 0.75), 0.75),
       rampSmoothing: clamp01(firstDefinedMaterialValue(floats, ['_RampSmoothing'], 0.1), 0.1),
       indirectStrength: clamp01(firstDefinedMaterialValue(floats, ['_IndirectIntensity'], 1), 1),
@@ -816,7 +826,9 @@ module.exports = function createMaterialPorter(deps) {
       specularColor: unityLinearColorToCocos(firstDefinedMaterialValue(colors, ['_SpecularColor'], { r: 0.75, g: 0.75, b: 0.75, a: 1 })),
       specularRoughness: clamp01(firstDefinedMaterialValue(floats, ['_SpecularRoughness'], 0.5), 0.5),
       specularStrength: Number(firstDefinedMaterialValue(floats, ['_UseSpecular'], 0)) > 0 ? 1 : 0,
-      emissive: unityLinearColorToCocos(firstDefinedMaterialValue(colors, ['_EmissionColor', '_EmissiveColor'], { r: 0, g: 0, b: 0, a: 1 })),
+      emissive: unityLinearColorToCocos(tcp2ParticleEmissionEnabled
+        ? firstDefinedMaterialValue(colors, ['_EmissionColor', '_EmissiveColor'], { r: 0, g: 0, b: 0, a: 1 })
+        : { r: 0, g: 0, b: 0, a: 1 }),
     } : {};
     if (!isDefaultParticleTilingOffset(scale, offset)) {
       props.mainTiling_Offset = [
