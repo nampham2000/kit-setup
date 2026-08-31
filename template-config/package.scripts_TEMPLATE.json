@@ -25,6 +25,8 @@
     "shader:ubo": "node playable-shared-kit/tools/ubo-alignment-formatter.cjs",
     "shader:compile": "node playable-shared-kit/tools/shader-compiler/unity-shader-compiler.cjs",
     "texture:pbr": "node playable-shared-kit/tools/pbr-texture-packer.cjs",
+    "texture:compress": "node playable-shared-kit/tools/texture-compression-policy.cjs",
+    "ai:texture:compress": "node playable-shared-kit/tools/texture-compression-policy.cjs --json",
     "fbx:strip": "node playable-shared-kit/tools/strip-fbx-textures.cjs",
     "cleanup:unused": "node playable-shared-kit/tools/unused-asset-cleanup.cjs",
     "cleanup:delete": "node playable-shared-kit/tools/unused-asset-cleanup.cjs --delete",

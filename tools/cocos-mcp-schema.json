@@ -58,13 +58,18 @@
     "name": "assetAdvanced_batch_import_assets"
   },
   {
-    "description": "Batch compress texture assets",
+    "description": "Apply the portable PlayableTransparent compressed-texture preset to PNG/JPG/JPEG assets",
     "inputSchema": {
       "properties": {
         "directory": {
           "default": "db://assets",
           "description": "Directory containing textures",
           "type": "string"
+        },
+        "dryRun": {
+          "default": false,
+          "description": "Report changes without saving builder profile or image importer metadata",
+          "type": "boolean"
         },
         "format": {
           "default": "auto",
@@ -77,10 +82,19 @@
           ],
           "type": "string"
         },
+        "presetId": {
+          "description": "Preferred stable preset ID when the preset must be created",
+          "type": "string"
+        },
+        "presetName": {
+          "default": "PlayableTransparent",
+          "description": "Existing preset display name, or fallback preset name",
+          "type": "string"
+        },
         "quality": {
-          "default": 0.8,
-          "description": "Compression quality (0.1-1.0)",
-          "maximum": 1,
+          "default": 50,
+          "description": "WebP quality (1-100; legacy 0.1-1.0 values are converted to percent)",
+          "maximum": 100,
           "minimum": 0.1,
           "type": "number"
         }
@@ -88,6 +102,37 @@
       "type": "object"
     },
     "name": "assetAdvanced_compress_textures"
+  },
+  {
+    "description": "Ensure PlayableTransparent WebP preset exists and assign it to every PNG/JPG/JPEG through Cocos Asset DB",
+    "inputSchema": {
+      "properties": {
+        "directory": {
+          "default": "db://assets",
+          "type": "string"
+        },
+        "dryRun": {
+          "default": false,
+          "type": "boolean"
+        },
+        "presetId": {
+          "description": "Preferred stable preset ID used only when creating the fallback preset",
+          "type": "string"
+        },
+        "presetName": {
+          "default": "PlayableTransparent",
+          "type": "string"
+        },
+        "quality": {
+          "default": 50,
+          "maximum": 100,
+          "minimum": 1,
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "name": "assetAdvanced_enforce_texture_compression_policy"
   },
   {
     "description": "Export asset manifest/inventory",

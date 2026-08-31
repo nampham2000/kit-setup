@@ -458,6 +458,14 @@ now ship full annotations. Reading the asset tree is exposed as a resource
 fallback (the registry records the subscription so future asset-DB watchers
 can wire up `notifications/resources/updated` without protocol churn).
 
+`assetAdvanced_enforce_texture_compression_policy` is the portable texture
+build gate. It resolves the existing `PlayableTransparent` (or spaced
+`Playable Transparent`) preset, creates a WebP quality 50 fallback only when
+the preset is missing, and persists `useCompressTexture` plus the real preset
+ID on every PNG/JPG/JPEG through the Asset DB API. The extension also performs
+an idempotent startup backfill and listens for `asset-db:asset-add` /
+`asset-db:asset-change`, so newly imported images inherit the same contract.
+
 ### Phase 5 — Editor runtime
 
 A new `editorRuntime_*` tool category exposes preview / log operations:

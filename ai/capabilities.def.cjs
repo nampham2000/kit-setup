@@ -872,6 +872,28 @@ const CAPABILITIES = [
 
   // ─────────────────────────────────────────────────────────── optimize ──
   {
+    id: 'texture.compress-policy',
+    group: 'optimize',
+    title: 'Gán preset nén PlayableTransparent cho PNG/JPG/JPEG qua Cocos Asset DB',
+    npm: 'npm run ai:texture:compress',
+    cmd: `node ${TOOLS}/texture-compression-policy.cjs --json`,
+    args: [],
+    optional: ['--project <dir>', '--directory <db://assets/...>', '--preset-name <name>', '--preset-id <id>', '--quality <1-100>', '--dry-run', '--verify', '--json'],
+    when: 'Sau khi checkout/sync shared kit, sau batch import texture, và trước build cuối để bảo đảm mọi PNG/JPG/JPEG dùng preset PlayableTransparent.',
+    outputs: ['stdout JSON; Cocos builder profile và image importer metadata được ghi qua Editor.Profile/Asset DB'],
+    limits: [
+      'Cocos Creator phải đang mở đúng project và Cocos MCP phải reachable; tool fail-closed nếu Asset DB chưa ready.',
+      'Không sửa `.meta` bằng filesystem. Tool chỉ dùng `save-asset-meta`, đọc lại để verify presetId/useCompressTexture, và listener asset-add/asset-change áp dụng tự động cho import sau này.',
+      'Nếu tìm thấy preset tên `PlayableTransparent` hoặc `Playable Transparent`, tool giữ nguyên preset hiện có. Chỉ khi thiếu mới tạo fallback WebP quality 50 với stable preset ID.',
+      'Chỉ áp dụng case-insensitive cho `.png`, `.jpg`, `.jpeg`; không tự áp dụng WebP/TGA/HDR để tránh đổi contract ngoài yêu cầu.',
+      '`--verify` chạy dry-run và fail nếu còn texture cần sửa hoặc fallback preset chưa tồn tại.',
+    ],
+    status: 'ok',
+    probe: 'help',
+    probeCmd: `node ${TOOLS}/texture-compression-policy.cjs --help`,
+    expect: ['--quality', '--verify', 'PlayableTransparent', 'PNG/JPG/JPEG'],
+  },
+  {
     id: 'audio.optimize',
     group: 'optimize',
     title: 'Nén audio bằng FFmpeg',

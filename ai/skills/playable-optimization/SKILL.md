@@ -11,15 +11,26 @@ This skill provides guidelines and checklists to ensure Playable Ads meet strict
 ## 1. Automated Cleanup Tools
 
 Before building, always run the automated asset optimization tools:
-1. **Strip FBX Textures**:
+1. **Enforce portable texture compression metadata** (Cocos Creator must be open):
+   ```bash
+   npm run ai:texture:compress
+   npm run ai:texture:compress -- --verify
+   ```
+   The shared Cocos extension also listens to `asset-db:asset-add` and
+   `asset-db:asset-change`. Every `.png`, `.jpg`, and `.jpeg` is assigned the
+   existing `PlayableTransparent` / `Playable Transparent` preset. If neither
+   exists, the extension creates a WebP quality 50 preset and persists
+   `useCompressTexture=true` plus its `presetId` through the Cocos Profile and
+   Asset DB APIs. Never patch image `.meta` files directly.
+2. **Strip FBX Textures**:
    ```bash
    node playable-shared-kit/tools/strip-fbx-textures.cjs <file.fbx>
    ```
-2. **Clean Unused Assets**:
+3. **Clean Unused Assets**:
    ```bash
    node playable-shared-kit/tools/unused-asset-cleanup.cjs scan --clean
    ```
-3. **Build & Package Super-HTML**:
+4. **Build & Package Super-HTML**:
    ```bash
    npm run build
    ```

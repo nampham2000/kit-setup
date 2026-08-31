@@ -97,6 +97,7 @@ Chạy `npm run ai:contract:verify` để chứng minh manifest khớp với CLI
 
 | Khi nào dùng | Lệnh | Giới hạn cần biết |
 | --- | --- | --- |
+| Sau khi checkout/sync shared kit, sau batch import texture, và trước build cuối để bảo đảm mọi PNG/JPG/JPEG dùng preset PlayableTransparent. | `npm run ai:texture:compress` | Cocos Creator phải đang mở đúng project và Cocos MCP phải reachable; tool fail-closed nếu Asset DB chưa ready. Không sửa `.meta` bằng filesystem. Tool chỉ dùng `save-asset-meta`, đọc lại để verify presetId/useCompressTexture, và listener asset-add/asset-change áp dụng tự động cho import sau này. Nếu tìm thấy preset tên `PlayableTransparent` hoặc `Playable Transparent`, tool giữ nguyên preset hiện có. Chỉ khi thiếu mới tạo fallback WebP quality 50 với stable preset ID. Chỉ áp dụng case-insensitive cho `.png`, `.jpg`, `.jpeg`; không tự áp dụng WebP/TGA/HDR để tránh đổi contract ngoài yêu cầu. `--verify` chạy dry-run và fail nếu còn texture cần sửa hoặc fallback preset chưa tồn tại. |
 | Khi bundle vượt ngưỡng và audio chiếm tỉ trọng lớn. | `npm run sound:optimize` | Mặc định là dry-run; phải thêm `--write` mới ghi đè. |
 | Trước khi build bản cuối, để cắt bundle. | `npm run cleanup:unused` | NGUY HIỂM: asset vừa port nhưng chưa được scene/prefab nào tham chiếu sẽ bị liệt kê là unused. KHÔNG chạy `--delete` ngay sau khi port. |
 | Khi cần biết thứ gì đang làm bundle phình. | `npm run stats` | — |
@@ -313,6 +314,12 @@ Những tool sau **không làm được việc mà tên gọi gợi ý**. Đọc
   - `requiredEvalMetrics`/`requiredEvalBeforeMetrics` fail-closed nếu eval thiếu metric, không finite hoặc vượt min/max. Runtime mesh animation phải chứng minh actionStarted=0 trước gesture và >=1 sau gesture; evalBefore không được tự gọi action đang test. Dùng metric cho UV span/error, position, direction dot, root scale và thickness; `{ok:true}` đơn lẻ không đủ.
   - Trước run, tool gọi Cocos `editorRuntime_reload_preview` với refreshAssets=true để tránh test bundle TypeScript cũ. `--no-refresh` chỉ dùng khi chủ ý và được ghi rõ trong receipt.
   - Receipt bind SHA-256 của registry, matrix, eval/reference và watchFiles; thay đổi byte sau PASS làm `check` fail stale. Tool không tự đánh giá pixel parity ngoài oracle/reference contract.
+- **`texture.compress-policy`** (npm run ai:texture:compress)
+  - Cocos Creator phải đang mở đúng project và Cocos MCP phải reachable; tool fail-closed nếu Asset DB chưa ready.
+  - Không sửa `.meta` bằng filesystem. Tool chỉ dùng `save-asset-meta`, đọc lại để verify presetId/useCompressTexture, và listener asset-add/asset-change áp dụng tự động cho import sau này.
+  - Nếu tìm thấy preset tên `PlayableTransparent` hoặc `Playable Transparent`, tool giữ nguyên preset hiện có. Chỉ khi thiếu mới tạo fallback WebP quality 50 với stable preset ID.
+  - Chỉ áp dụng case-insensitive cho `.png`, `.jpg`, `.jpeg`; không tự áp dụng WebP/TGA/HDR để tránh đổi contract ngoài yêu cầu.
+  - `--verify` chạy dry-run và fail nếu còn texture cần sửa hoặc fallback preset chưa tồn tại.
 - **`audio.optimize`** (npm run sound:optimize)
   - Mặc định là dry-run; phải thêm `--write` mới ghi đè.
 - **`assets.cleanup`** (npm run cleanup:unused)

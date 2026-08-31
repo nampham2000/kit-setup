@@ -1,4 +1,5 @@
 import { ToolDefinition, ToolResponse, ToolExecutor } from '../types';
+import { getTextureCompressionPolicy } from '../texture-compression-policy';
 
 export class AssetAdvancedTools implements ToolExecutor {
     getTools(): ToolDefinition[] {
@@ -162,7 +163,7 @@ export class AssetAdvancedTools implements ToolExecutor {
             },
             {
                 name: 'compress_textures',
-                description: 'Batch compress texture assets',
+                description: 'Apply the portable PlayableTransparent compressed-texture preset to PNG/JPG/JPEG assets',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -179,11 +180,39 @@ export class AssetAdvancedTools implements ToolExecutor {
                         },
                         quality: {
                             type: 'number',
-                            description: 'Compression quality (0.1-1.0)',
+                            description: 'WebP quality (1-100; legacy 0.1-1.0 values are converted to percent)',
                             minimum: 0.1,
-                            maximum: 1.0,
-                            default: 0.8
+                            maximum: 100,
+                            default: 50
+                        },
+                        presetName: {
+                            type: 'string',
+                            description: 'Existing preset display name, or fallback preset name',
+                            default: 'PlayableTransparent'
+                        },
+                        presetId: {
+                            type: 'string',
+                            description: 'Preferred stable preset ID when the preset must be created'
+                        },
+                        dryRun: {
+                            type: 'boolean',
+                            description: 'Report changes without saving builder profile or image importer metadata',
+                            default: false
                         }
+                    }
+                }
+            },
+            {
+                name: 'enforce_texture_compression_policy',
+                description: 'Ensure PlayableTransparent WebP preset exists and assign it to every PNG/JPG/JPEG through Cocos Asset DB',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        directory: { type: 'string', default: 'db://assets' },
+                        presetName: { type: 'string', default: 'PlayableTransparent' },
+                        presetId: { type: 'string', description: 'Preferred stable preset ID used only when creating the fallback preset' },
+                        quality: { type: 'number', minimum: 1, maximum: 100, default: 50 },
+                        dryRun: { type: 'boolean', default: false }
                     }
                 }
             },
@@ -236,7 +265,9 @@ export class AssetAdvancedTools implements ToolExecutor {
             case 'get_unused_assets':
                 return await this.getUnusedAssets(args.directory, args.excludeDirectories);
             case 'compress_textures':
-                return await this.compressTextures(args.directory, args.format, args.quality);
+                return await this.enforceTextureCompressionPolicy(args || {});
+            case 'enforce_texture_compression_policy':
+                return await this.enforceTextureCompressionPolicy(args || {});
             case 'export_asset_manifest':
                 return await this.exportAssetManifest(args.directory, args.format, args.includeMetadata);
             default:
@@ -504,14 +535,26 @@ export class AssetAdvancedTools implements ToolExecutor {
         });
     }
 
-    private async compressTextures(directory: string = 'db://assets', format: string = 'auto', quality: number = 0.8): Promise<ToolResponse> {
-        return new Promise((resolve) => {
-            // Note: Texture compression would require image processing APIs
-            resolve({
-                success: false,
-                error: 'Texture compression requires image processing capabilities not available in current Cocos Creator MCP implementation. Use the Editor\'s built-in texture compression settings or external tools.'
+    private async enforceTextureCompressionPolicy(args: any): Promise<ToolResponse> {
+        try {
+            const report = await getTextureCompressionPolicy().enforceAll({
+                directory: args.directory,
+                presetName: args.presetName,
+                presetId: args.presetId,
+                quality: args.quality,
+                dryRun: args.dryRun,
             });
-        });
+            return {
+                success: report.complete,
+                message: report.complete
+                    ? `Texture compression policy applied to ${report.eligible} eligible asset(s).`
+                    : `Texture compression policy failed for ${report.failed} asset(s).`,
+                data: report,
+                error: report.complete ? undefined : `${report.failed} eligible texture(s) could not be configured`,
+            };
+        } catch (error: any) {
+            return { success: false, error: error?.message || String(error) };
+        }
     }
 
     private async exportAssetManifest(directory: string = 'db://assets', format: string = 'json', includeMetadata: boolean = true): Promise<ToolResponse> {
