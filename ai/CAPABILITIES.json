@@ -44,6 +44,10 @@
       "rule": "Với Unity URP/Lit, không được suy metallic/smoothness từ cảm giác bóng của screenshot. Phải trace tuần tự material/prefab -> texture -> ShaderLab property class và active keyword -> renderer layer -> camera culling/HDR/post-processing/AA -> từng light culling mask, transform, color, intensity, shadow -> RenderSettings ambient/reflection. `_BaseColor` và `_SpecColor` của URP Lit là Color thường; `[HDR] _EmissionColor` là linear. Texture đã bake highlight + HDR emission + directional light riêng theo layer có thể tạo vẻ bạc dù metallic=0, specular đen và roughness=1. Chỉ bật `USE_UNITY_UNTONEMAPPED_OUTPUT` khi camera nguồn HDR nhưng post-processing/tone mapper tắt; standalone material conversion không đủ evidence. Mọi output calibration phải làm sau khi bind exact source semantics, lưu oracle/hash và khóa bằng runtime assertion + tight screenshot ROI."
     },
     {
+      "id": "depth-precision-parity",
+      "rule": "Khi mesh/layer gần đồng phẳng bị lủng hoặc xuyên màu theo góc quay sau khi port Unity sang Cocos/WebGL, phải trace đồng thời camera nguồn `near/far`, projection, reversed-Z/depth format, shader `ZTest/ZWrite/Cull/Offset`, render queue và khoảng cách hình học thật. Không thêm polygon offset, depthOrder bias hay displacement theo màu/level nếu Unity không có chúng. Ưu tiên giữ source near clip trong config; chỉ siết far theo scale port khi có evidence. Regression phải tái hiện ít nhất hai grazing angle, assert runtime camera + material pass, khóa tight screenshot ROI tại vùng từng thủng, và chứng minh bounds của mọi level ở cả hai đầu zoom vẫn nằm an toàn trong near/far cho xoay tùy ý."
+    },
+    {
       "id": "nested-prefab-source-defaults",
       "rule": "Khi Unity PrefabInstance chỉ serialize một phần m_Modifications, effective Cocos instance phải merge override lên source prefab Transform/GameObject thật. Identity placeholder của stripped Transform không phải authored value. Regression porter phải có ca source scale/position/rotation khác default nhưng owner chỉ override một trục/position, và output phải giữ mọi source field còn lại."
     },

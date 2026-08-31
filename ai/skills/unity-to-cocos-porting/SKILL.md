@@ -76,6 +76,15 @@ Khi sửa camera, transform, shader/material, UI hoặc input, tạo ma trận
 aspect rộng/hẹp dễ làm lộ lỗi framing. Mỗi case có hành vi phải kèm `requireEvalOk: true`; ảnh sạch
 không thay thế oracle drag/reset/pick.
 
+Khi surface gần đồng phẳng chỉ bị thủng/xuyên màu ở một số góc, đừng mặc định sửa bằng `Offset` hoặc đẩy mesh.
+Đọc exact camera prefab/scene của Unity (`near`, `far`, projection), kiểm reversed-Z/depth format của source target,
+và đọc đủ `ZTest/ZWrite/Cull/Offset` + render queue của shader hai phía. WebGL conventional depth phụ thuộc mạnh vào
+near plane; hạ source near `0.3` xuống `0.1` có thể làm các layer cách nhau dưới millimeter rơi vào cùng depth bin
+dù shader và texture đúng. Giữ near/far config-driven, dùng source near trước, rồi A/B cùng level/góc/zoom. Chỉ chấp
+nhận khi hai grazing angle sạch, runtime pass vẫn giữ semantics nguồn, tight ROI chặn pixel xuyên màu cũ, và bound
+sphere bảo thủ của mọi level ở cả zoom min/max còn cách near/far đủ xa dưới phép xoay tùy ý. Polygon offset,
+depthOrder bias và displacement theo màu/level bị cấm nếu source không có evidence tương ứng.
+
 Ngay sau preflight/scaffold, khởi tạo registry regression portable bằng
 `npm run ai:verify:regressions:init -- --risk <risk>` và commit
 `tools/port-regressions.json` cùng mọi matrix, eval/oracle, ảnh Unity reference và watchFiles. Chọn risk từ
