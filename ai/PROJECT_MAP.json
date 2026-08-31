@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "generatedAt": "2026-08-30T12:18:02.319Z",
+    "generatedAt": "2026-08-31T00:12:47.530Z",
     "description": "Compact project manifest for AI Agents. Use this instead of scanning file trees.",
     "project": {
       "projectName": "cc_playable_framework",
@@ -265,7 +265,7 @@
     "shaderCount": 4,
     "shaders": {
       "count": 4,
-      "totalKb": 22.1,
+      "totalKb": 26.5,
       "sample": [
         "assets/effects/UnitySpriteRendererColor.effect",
         "assets/effects/TapeUnlit.effect",
@@ -276,14 +276,14 @@
     },
     "materials": {
       "count": 17,
-      "totalKb": 16.3,
+      "totalKb": 17.9,
       "sample": [
         "assets/materials/UnitySpriteRendererColor.mtl",
         "assets/materials/UnitySpriteRendererColorOpaque.mtl",
         "assets/materials/UnitySpriteRendererGlow.mtl",
         "assets/unity_imported/_Game/3DAssets/Level FBX/materials/mtl_carton.mtl",
         "assets/unity_imported/_Game/3DAssets/Tape/Material/mtl_tape_active_blue.mtl",
-        "assets/unity_imported/_Game/3DAssets/Box/mat/mat_box_unlock_red.mtl"
+        "assets/unity_imported/_Game/3DAssets/Box/mat/mat_tray.mtl"
       ],
       "truncated": 11
     },
@@ -330,7 +330,7 @@
       "exists": true,
       "root": "assets/unity_imported",
       "count": 51,
-      "totalKb": 8668.6,
+      "totalKb": 8670.2,
       "sample": [
         "assets/unity_imported/_Game/3DAssets/Level FBX/level_2.fbx",
         "assets/unity_imported/_Game/3DAssets/Level FBX/materials/mtl_carton.mtl",
@@ -478,6 +478,7 @@
     "map.generate": "npm run ai:map",
     "scene.inspect": "npm run ai:scene -- <sceneName>",
     "memory.query": "npm run memory:query -- <keyword>",
+    "portable.workflow.doctor": "npm run ai:portable:doctor",
     "unity.intel.doctor": "npm run unity:intel:doctor -- --project <UnityProjectRoot>",
     "unity.intel.setup": "npm run unity:intel:setup -- --project <UnityProjectRoot>",
     "port.preflight": "npm run ai:port:preflight -- --project <UnityProjectRoot>",

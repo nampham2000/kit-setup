@@ -516,6 +516,7 @@ function main() {
     // does not declare.
     else if (arg === '--effect-uuid' && args[i + 1]) options.effectUuid = args[++i];
     else if (arg === '--effect' && args[i + 1]) options.effectPath = args[++i];
+    else if (arg === '--texture-map' && args[i + 1]) options.textureRemapPath = args[++i];
     // chain: GUID resolution needs the Unity Assets root.
     else if (arg === '--unity-root' && args[i + 1]) options.unityRoot = args[++i];
     else if (arg === '--unity-project' && args[i + 1]) options.unityProject = args[++i];
@@ -570,7 +571,7 @@ Usage:
   --unity-uv  Lấy mẫu texture theo quy ước UV của Unity (gốc dưới-trái) bằng texU().
               Bật khi shader chạy trên hình học mang UV từ Unity. Mặc định TẮT vì
               bật lên sẽ đổi hình của mọi effect đã sinh trước đó.
-  node unity-shader-compiler.cjs convert-mat --src <UnityMat> --out <CocosMtl> [--effect <Effect>] [--effect-uuid <uuid>]
+  node unity-shader-compiler.cjs convert-mat --src <UnityMat> --out <CocosMtl> [--effect <Effect>] [--effect-uuid <uuid>] [--texture-map <guid-to-uuid.json>]
   node unity-shader-compiler.cjs scan <UnityDir>
   node unity-shader-compiler.cjs inspect <Shader>
   node unity-shader-compiler.cjs batch --dir <ShadersDir> --out-dir <EffectsDir> [-m]

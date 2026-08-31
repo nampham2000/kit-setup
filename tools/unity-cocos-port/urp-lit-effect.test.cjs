@@ -12,3 +12,15 @@ test('URP Lit emission texture is sampled instead of replacing it with flat grey
   assert.match(source, /emissionContribution\s*\*=\s*SRGBToLinear\(texture\(emissiveMap,\s*v_uv\)\.rgb\)/);
   assert.doesNotMatch(source, /direct\s*\+\s*ambient\s*\+\s*emissive\.rgb/);
 });
+
+test('URP Lit can replay a bounded Unity light rig and calibrated output response', () => {
+  const source = fs.readFileSync(path.join(__dirname, 'urp-lit.effect'), 'utf8');
+  assert.match(source, /specularColor:\s*\{[^\n]*linear:\s*true/);
+  assert.match(source, /#if USE_UNITY_SOURCE_LIGHT_RIG/);
+  assert.match(source, /unityDirectSpecular/);
+  assert.match(source, /unityDirectLight[\s\S]*unityLightDirection0/);
+  assert.match(source, /unityDirectLight[\s\S]*unityLightDirection1/);
+  assert.match(source, /unityTrilightAmbient/);
+  assert.match(source, /unityOutputColorScale/);
+  assert.match(source, /finalColor\s*=\s*\(direct\s*\+\s*ambient\s*\+\s*emissionContribution\)\s*\*\s*unityOutputColorScale\.rgb/);
+});

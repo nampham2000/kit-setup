@@ -39,6 +39,13 @@ function parseUnityMatYaml(yamlContent) {
     const rawKws = kwMatch[1].replace(/["']/g, '').trim().split(/\s+/);
     keywords.push(...rawKws.filter(Boolean));
   }
+  // Unity 6 serializes active local keywords as a YAML list instead of the
+  // legacy single m_ShaderKeywords string.
+  const validKeywordsMatch = /\n\s*m_ValidKeywords:\s*\n([\s\S]*?)(?=\n\s*m_InvalidKeywords:)/.exec(yamlContent);
+  if (validKeywordsMatch) {
+    const listed = [...validKeywordsMatch[1].matchAll(/^\s*-\s*(\S+)\s*$/gm)].map(match => match[1]);
+    for (const keyword of listed) if (!keywords.includes(keyword)) keywords.push(keyword);
+  }
 
   const lines = yamlContent.split(/\r?\n/);
   let currentSection = '';
@@ -192,13 +199,13 @@ function normalizedChannelToByte(value, fallback = 0) {
   return Math.max(0, Math.min(255, Math.round(Math.max(0, Math.min(1, normalized)) * 255)));
 }
 
-function linearChannelToSrgbByte(value) {
+function srgbChannelToLinearByte(value) {
   const number = Number(value);
-  const linear = Math.max(0, Math.min(1, Number.isFinite(number) ? number : 0));
-  const srgb = linear <= 0.0031308
-    ? linear * 12.92
-    : 1.055 * Math.pow(linear, 1 / 2.4) - 0.055;
-  return normalizedChannelToByte(srgb);
+  const srgb = Math.max(0, Math.min(1, Number.isFinite(number) ? number : 0));
+  const linear = srgb <= 0.04045
+    ? srgb / 12.92
+    : Math.pow((srgb + 0.055) / 1.055, 2.4);
+  return normalizedChannelToByte(linear);
 }
 
 /**
@@ -212,6 +219,26 @@ function extractCocosEffectPropertyMetadata(effectText) {
   if (!ccEffect) return metadata;
 
   const lines = ccEffect[1].split(/\r?\n/);
+  // First collect every inline `{ value: ... }` declaration. This covers both
+  // ordinary pass `properties:` blocks and reusable `temporaries` anchors such
+  // as `p1: &p1`, which are common in hand-authored Cocos effects.
+  for (let index = 0; index < lines.length; index += 1) {
+    const entry = /^\s+([A-Za-z_]\w*)\s*:\s*(\{.*)$/.exec(lines[index]);
+    if (!entry) continue;
+    let declaration = entry[2];
+    let braceDepth = (declaration.match(/\{/g) || []).length - (declaration.match(/\}/g) || []).length;
+    while (braceDepth > 0 && index + 1 < lines.length) {
+      declaration += `\n${lines[++index]}`;
+      braceDepth += (lines[index].match(/\{/g) || []).length - (lines[index].match(/\}/g) || []).length;
+    }
+    if (!/(?:^|[,{\s])value\s*:/.test(declaration)) continue;
+    metadata.set(entry[1], {
+      linear: /(?:^|[,\s])linear\s*:\s*true(?:[,\s}]|$)/i.test(declaration),
+    });
+  }
+
+  // Preserve support for multiline property blocks whose declaration does not
+  // begin with an inline brace on the first line.
   for (let index = 0; index < lines.length; index += 1) {
     const propertiesMatch = /^(\s*)(?:-\s*)?properties\s*:\s*(?:&[A-Za-z_]\w*)?\s*$/.exec(lines[index]);
     if (!propertiesMatch) continue;
@@ -242,6 +269,27 @@ function extractCocosEffectPropertyMetadata(effectText) {
   return metadata;
 }
 
+const EFFECT_PROPERTY_ALIASES = Object.freeze({
+  baseColor: ['mainColor'],
+  color: ['mainColor'],
+  emissionColor: ['emissive'],
+  specColor: ['specularColor'],
+  baseMap: ['mainTexture'],
+  mainTex: ['mainTexture'],
+  emissionMap: ['emissiveMap'],
+  smoothness: ['roughness'],
+  glossiness: ['roughness'],
+  cutoff: ['alphaThreshold'],
+});
+
+function resolveEffectPropertyName(sourceName, effectPropertyNames) {
+  if (!effectPropertyNames || effectPropertyNames.size === 0 || effectPropertyNames.has(sourceName)) {
+    return sourceName;
+  }
+  const aliases = EFFECT_PROPERTY_ALIASES[sourceName] || [];
+  return aliases.find(name => effectPropertyNames.has(name)) || sourceName;
+}
+
 /**
  * Converts Unity .mat to Cocos .mtl JSON string
  */
@@ -252,6 +300,12 @@ function convertUnityMatToCocosMtl(yamlContent, options = {}) {
   const linearColorProperties = options.linearColorProperties instanceof Set
     ? options.linearColorProperties
     : new Set(options.linearColorProperties || []);
+  const effectPropertyNames = options.effectPropertyNames instanceof Set
+    ? options.effectPropertyNames
+    : new Set(options.effectPropertyNames || []);
+  const textureRemap = options.textureRemap && typeof options.textureRemap === 'object'
+    ? options.textureRemap
+    : {};
 
   const defines = {};
   for (const kw of keywords) {
@@ -262,10 +316,19 @@ function convertUnityMatToCocosMtl(yamlContent, options = {}) {
 
   // Convert Colors
   for (const [uName, val] of Object.entries(properties.colors)) {
-    const cName = toCocosPropertyName(uName);
+    const cName = resolveEffectPropertyName(toCocosPropertyName(uName), effectPropertyNames);
+    // Unity serializes ShaderLab Color properties as authored sRGB values and
+    // converts them to linear when uploading to a shader in a linear project.
+    // Cocos `linear: true` has the same input contract, so those bytes must be
+    // copied directly. Gamma-encoding the YAML value again brightens emission
+    // and specular colors (0.51 became 0.74) and washes warm textures yellow.
+    // A known non-linear/raw Cocos property receives the Unity shader-linear
+    // value instead. With no effect metadata, preserve the authored value.
     const convertRgb = linearColorProperties.has(cName)
-      ? linearChannelToSrgbByte
-      : normalizedChannelToByte;
+      ? normalizedChannelToByte
+      : effectPropertyNames.has(cName)
+        ? srgbChannelToLinearByte
+        : normalizedChannelToByte;
     propsObj[cName] = {
       __type__: 'cc.Color',
       r: convertRgb(val[0]),
@@ -277,16 +340,19 @@ function convertUnityMatToCocosMtl(yamlContent, options = {}) {
 
   // Convert Floats
   for (const [uName, val] of Object.entries(properties.floats)) {
-    const cName = toCocosPropertyName(uName);
-    propsObj[cName] = val;
+    const sourceName = toCocosPropertyName(uName);
+    const cName = resolveEffectPropertyName(sourceName, effectPropertyNames);
+    propsObj[cName] = cName === 'roughness' && (sourceName === 'smoothness' || sourceName === 'glossiness')
+      ? 1 - val
+      : val;
   }
 
   // Convert Textures
   for (const [uName, val] of Object.entries(properties.textures)) {
-    const cName = toCocosPropertyName(uName);
+    const cName = resolveEffectPropertyName(toCocosPropertyName(uName), effectPropertyNames);
     if (val.guid) {
       propsObj[cName] = {
-        __uuid__: val.guid,
+        __uuid__: textureRemap[val.guid] || val.guid,
       };
     }
     // Unity keeps tiling/offset on the texture entry; the generated effect
@@ -303,6 +369,10 @@ function convertUnityMatToCocosMtl(yamlContent, options = {}) {
       };
     }
   }
+
+  if (propsObj.mainTexture) defines.USE_ALBEDO_MAP = true;
+  if (propsObj.emissiveMap) defines.USE_EMISSIVE_MAP = true;
+  if (keywords.includes('_SPECULAR_SETUP')) defines.USE_SPECULAR_WORKFLOW = true;
 
   const mtlData = {
     __type__: 'cc.Material',
@@ -380,6 +450,11 @@ function convertMatFile(srcPath, outPath, options = {}) {
       .filter(([, metadata]) => metadata.linear)
       .map(([name]) => name),
   );
+  let textureRemap = options.textureRemap || {};
+  if (options.textureRemapPath) {
+    const remapText = fs.readFileSync(options.textureRemapPath, 'utf8');
+    textureRemap = JSON.parse(remapText);
+  }
 
   // convertUnityMatToCocosMtl returns serialized JSON, not an object.
   const mtlJson = convertUnityMatToCocosMtl(yamlContent, {
@@ -387,6 +462,8 @@ function convertMatFile(srcPath, outPath, options = {}) {
     materialName,
     effectUuid,
     linearColorProperties,
+    effectPropertyNames: new Set(effectProperties.keys()),
+    textureRemap,
   });
   const mtl = JSON.parse(mtlJson);
 

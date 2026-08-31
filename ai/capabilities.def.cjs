@@ -640,7 +640,7 @@ const CAPABILITIES = [
     outputs: ['<out>'],
     limits: [
       'Thiếu --effect-uuid thì `_effectAsset` rỗng và material rơi về effect mặc định — trông như port hỏng.',
-      'Thiếu --effect thì GHI HẾT property Unity từng gán (URP Lit có ~50 cái), Cocos sẽ log unknown-property và tool không biết property color nào được khai báo `linear: true`. Luôn truyền --effect để lọc và chuyển Unity linear RGB sang Cocos sRGB bytes đúng cách.',
+      'Thiếu --effect thì GHI HẾT property Unity từng gán (URP Lit có ~50 cái), Cocos sẽ log unknown-property và tool không biết property color nào được khai báo `linear: true`. Luôn truyền --effect để lọc và giữ đúng contract màu: Unity material Color được serialize dưới dạng sRGB; Cocos `linear: true` cũng nhận sRGB rồi mới linearize khi upload.',
     ],
     status: 'ready',
     probe: 'help',
@@ -1102,7 +1102,7 @@ const CORE_RULES = [
   },
   {
     id: 'material-color-space-parity',
-    rule: 'Khi port Unity material color vào Cocos effect property có `linear: true`, phải gamma-encode RGB linear đã serialize sang sRGB `cc.Color` bytes trước khi Cocos linearize lúc upload; alpha vẫn map tuyến tính. Không nhân thẳng RGB với 255. `shader.material` phải nhận `--effect`, và visual checkpoint phải kiểm cả material/texture identity lẫn runtime color/emissive value.',
+    rule: 'Unity ShaderLab `Color` material property được serialize dưới dạng sRGB và chỉ được chuyển sang linear khi upload vào shader của project linear. Vì Cocos effect property có `linear: true` dùng cùng contract, phải map trực tiếp RGB sRGB sang `cc.Color` bytes; tuyệt đối không gamma-encode YAML lần thứ hai. Nếu target Cocos property là raw/non-linear thì mới chuyển sRGB Unity sang shader-linear trước khi ghi. Alpha luôn map tuyến tính. `shader.material` phải nhận `--effect`; visual checkpoint phải kiểm material/texture identity, runtime color/emissive và ảnh màu thực tế.',
   },
   {
     id: 'nested-prefab-source-defaults',

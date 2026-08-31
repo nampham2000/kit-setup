@@ -10,6 +10,22 @@ CCEffect %{
       alphaThreshold: { value: 0.5, target: pbrParams.z }
       emissive: { value: [0, 0, 0, 1], linear: true, editor: { type: color } }
       emissiveMap: { value: white }
+      specularColor: { value: [0.04, 0.04, 0.04, 1], linear: true, editor: { type: color } }
+      unityLightDirection0: { value: [0, 1, 0, 0] }
+      unityLightDirection1: { value: [0, 1, 0, 0] }
+      unityLightColor0: { value: [1, 1, 1, 1], linear: true, editor: { type: color } }
+      unityLightColor1: { value: [1, 1, 1, 1], linear: true, editor: { type: color } }
+      unityLightIntensities: { value: [1, 0, 0, 0] }
+      unityAmbientSky: { value: [0, 0, 0, 1], linear: true, editor: { type: color } }
+      unityAmbientEquator: { value: [0.114, 0.125, 0.133, 1], linear: true, editor: { type: color } }
+      unityAmbientGround: { value: [0.58431375, 0.58431375, 0.58431375, 1], linear: true, editor: { type: color } }
+      unityAmbientParams: { value: [1, 0, 0, 0] }
+      unityOutputColorScale: { value: [1, 1, 1, 0] }
+      peekSideColor: { value: [0.08, 0.1, 0.14, 0.48], linear: true, editor: { type: color } }
+      peekFresnelPower: { value: 1.35, target: peekParams.x }
+      peekFresnelStart: { value: 0.24, target: peekParams.y }
+      peekFresnelEnd: { value: 0.62, target: peekParams.z }
+      peekSideColorMix: { value: 0.18, target: peekParams.w }
       planarShadowDirection: { value: [-0.3213938, -0.7660444, -0.5566705, 0] }
     d1: &d1 { depthTest: true, depthWrite: false }
     b1: &b1
@@ -71,6 +87,19 @@ CCProgram urp-lit-shared %{
     vec4 mainColor;
     vec4 pbrParams;
     vec4 emissive;
+    vec4 specularColor;
+    vec4 unityLightDirection0;
+    vec4 unityLightDirection1;
+    vec4 unityLightColor0;
+    vec4 unityLightColor1;
+    vec4 unityLightIntensities;
+    vec4 unityAmbientSky;
+    vec4 unityAmbientEquator;
+    vec4 unityAmbientGround;
+    vec4 unityAmbientParams;
+    vec4 unityOutputColorScale;
+    vec4 peekSideColor;
+    vec4 peekParams;
     vec4 planarShadowDirection;
   };
 }%
@@ -157,6 +186,40 @@ CCProgram urp-lit-fs %{
     return noL / mix(noL, 1.0, k) * noV / mix(noV, 1.0, k);
   }
 
+  // Unity URP 17's mobile Lit path uses perceptual roughness and a compact
+  // Cook-Torrance approximation. Keeping the source formula preserves broad
+  // highlights on imported split normals instead of flattening hard-surface
+  // joints into one uniformly lit face.
+  float unityDirectSpecular (vec3 normal, vec3 lightDirection, vec3 viewDirection, float perceptualRoughness) {
+    vec3 halfDirection = normalize(lightDirection + viewDirection);
+    float noH = max(dot(normal, halfDirection), 0.0);
+    float loH = max(dot(lightDirection, halfDirection), 0.0);
+    float roughness = max(perceptualRoughness * perceptualRoughness, 0.0078125);
+    float roughness2 = max(roughness * roughness, 0.000061035);
+    float d = noH * noH * (roughness2 - 1.0) + 1.00001;
+    float normalization = roughness * 4.0 + 2.0;
+    return roughness2 / max((d * d) * max(0.1, loH * loH) * normalization, 0.000001);
+  }
+
+  vec3 unityDirectLight (vec3 baseColor, vec3 normal, vec3 viewDirection,
+    vec3 lightDirection, vec3 lightColor, float intensity) {
+    float noL = max(dot(normal, lightDirection), 0.0);
+    float reflectivity = max(max(specularColor.r, specularColor.g), specularColor.b);
+    vec3 diffuse = baseColor * (1.0 - reflectivity);
+    float specularTerm = unityDirectSpecular(normal, lightDirection, viewDirection, pbrParams.x);
+    vec3 brdf = diffuse + specularTerm * specularColor.rgb;
+    return brdf * lightColor * intensity * noL;
+  }
+
+  vec3 unityTrilightAmbient (vec3 normal) {
+    float up = max(normal.y, 0.0);
+    float down = max(-normal.y, 0.0);
+    vec3 ambient = normal.y >= 0.0
+      ? mix(unityAmbientEquator.rgb, unityAmbientSky.rgb, up)
+      : mix(unityAmbientEquator.rgb, unityAmbientGround.rgb, down);
+    return ambient * unityAmbientParams.x;
+  }
+
   vec4 frag () {
     vec4 baseColor = texture(mainTexture, v_uv);
     baseColor.rgb = SRGBToLinear(baseColor.rgb);
@@ -168,27 +231,61 @@ CCProgram urp-lit-fs %{
     vec3 normal = normalize(v_worldNormal);
     vec3 lightDirection = normalize(-cc_mainLitDir.xyz);
     vec3 viewDirection = normalize(cc_cameraPos.xyz - v_worldPosition);
-    vec3 halfDirection = normalize(lightDirection + viewDirection);
-    float noL = max(dot(normal, lightDirection), 0.0);
-    float noV = max(dot(normal, viewDirection), 0.0001);
-    float noH = max(dot(normal, halfDirection), 0.0);
-    float voH = max(dot(viewDirection, halfDirection), 0.0);
-    float shadow = shadowFactor(normal);
-    vec3 lightColor = cc_mainLitColor.rgb * cc_mainLitColor.w;
-
-    vec3 f0 = mix(vec3(0.04), baseColor.rgb, pbrParams.y);
-    vec3 fresnel = f0 + (vec3(1.0) - f0) * pow(1.0 - voH, 5.0);
-    vec3 specular = distributionGGX(noH, pbrParams.x)
-      * geometrySmith(noL, noV, pbrParams.x) * fresnel;
-    vec3 diffuse = baseColor.rgb * (1.0 - pbrParams.y) / 3.14159265;
-    vec3 direct = (diffuse + specular) * lightColor * noL * shadow;
-    float hemisphere = normal.y * 0.5 + 0.5;
-    vec3 ambient = mix(cc_ambientGround.rgb, cc_ambientSky.rgb, hemisphere) * cc_ambientSky.w * baseColor.rgb;
+    #if USE_PEEK_FRESNEL
+      float peekFacing = clamp(1.0 - abs(dot(normal, viewDirection)), 0.0, 1.0);
+    #endif
+    #if USE_PEEK_FRESNEL
+      // Unity's held lid reads almost invisible head-on while the grazing side
+      // faces remain dark enough to describe the cup depth. A uniform alpha on
+      // the combined lid/side mesh makes the whole cup look like a muddy sheet.
+      float peekSide = smoothstep(peekParams.y, max(peekParams.z, peekParams.y + 0.001), peekFacing);
+      peekSide = pow(peekSide, max(peekParams.x, 0.01));
+      // Keep the held surface identifiable at grazing angles. The previous
+      // full replacement with a near-black side tint produced black facets as
+      // the cup rotated; the configured mix now caps that color influence.
+      baseColor.rgb = mix(baseColor.rgb, peekSideColor.rgb,
+        peekSide * clamp(peekParams.w, 0.0, 1.0));
+      baseColor.a = mix(baseColor.a, peekSideColor.a, peekSide);
+    #endif
+    vec3 direct;
+    vec3 ambient;
+    #if USE_UNITY_SOURCE_LIGHT_RIG
+      // Replay up to two source directional lights. A port must bind directions,
+      // authored colors, and intensities from Unity rather than collapsing the
+      // rig into Cocos' single global main-light uniform.
+      direct = unityDirectLight(baseColor.rgb, normal, viewDirection,
+        normalize(unityLightDirection0.xyz), unityLightColor0.rgb, unityLightIntensities.x);
+      direct += unityDirectLight(baseColor.rgb, normal, viewDirection,
+        normalize(unityLightDirection1.xyz), unityLightColor1.rgb, unityLightIntensities.y);
+      float reflectivity = max(max(specularColor.r, specularColor.g), specularColor.b);
+      ambient = unityTrilightAmbient(normal) * baseColor.rgb * (1.0 - reflectivity);
+    #else
+      vec3 halfDirection = normalize(lightDirection + viewDirection);
+      float noL = max(dot(normal, lightDirection), 0.0);
+      float noV = max(dot(normal, viewDirection), 0.0001);
+      float noH = max(dot(normal, halfDirection), 0.0);
+      float voH = max(dot(viewDirection, halfDirection), 0.0);
+      float shadow = shadowFactor(normal);
+      vec3 lightColor = cc_mainLitColor.rgb * cc_mainLitColor.w;
+      vec3 f0 = mix(vec3(0.04), baseColor.rgb, pbrParams.y);
+      vec3 fresnel = f0 + (vec3(1.0) - f0) * pow(1.0 - voH, 5.0);
+      vec3 specular = distributionGGX(noH, pbrParams.x)
+        * geometrySmith(noL, noV, pbrParams.x) * fresnel;
+      vec3 diffuse = baseColor.rgb * (1.0 - pbrParams.y) / 3.14159265;
+      direct = (diffuse + specular) * lightColor * noL * shadow;
+      float hemisphere = normal.y * 0.5 + 0.5;
+      ambient = mix(cc_ambientGround.rgb, cc_ambientSky.rgb, hemisphere) * cc_ambientSky.w * baseColor.rgb;
+    #endif
     vec3 emissionContribution = emissive.rgb;
     #if USE_EMISSIVE_MAP
       emissionContribution *= SRGBToLinear(texture(emissiveMap, v_uv).rgb);
     #endif
-    return CCFragOutput(vec4(direct + ambient + emissionContribution, baseColor.a));
+    // Unity and Cocos both render in linear space, but their final browser
+    // output responses are not numerically identical. Projects may bind a
+    // visual-oracle-measured per-channel scale after all authored material and
+    // light values are present. The neutral default keeps this path lossless.
+    vec3 finalColor = (direct + ambient + emissionContribution) * unityOutputColorScale.rgb;
+    return CCFragOutput(vec4(finalColor, baseColor.a));
   }
 }%
 

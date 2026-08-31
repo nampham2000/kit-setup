@@ -674,7 +674,7 @@ Material:
       assert.equal(props.mainTexture.__uuid__, '8a7b9c1d2e3f');
     });
 
-    test('gamma-encodes only colors declared linear by the target Cocos effect', (t) => {
+    test('preserves Unity sRGB material colors for linear Cocos properties and linearizes raw targets', (t) => {
       const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'unity-mat-linear-color-'));
       t.after(() => fs.rmSync(tempRoot, { recursive: true, force: true }));
       const sourcePath = path.join(tempRoot, 'Tray.mat');
@@ -711,8 +711,78 @@ CCProgram test %{
       });
 
       const props = JSON.parse(fs.readFileSync(outputPath, 'utf8'))._props[0];
-      assert.deepEqual(props.baseColor, { __type__: 'cc.Color', r: 128, g: 128, b: 128, a: 0 });
-      assert.deepEqual(props.emissionColor, { __type__: 'cc.Color', r: 189, g: 189, b: 189, a: 255 });
+      assert.deepEqual(props.baseColor, { __type__: 'cc.Color', r: 55, g: 55, b: 55, a: 0 });
+      assert.deepEqual(props.emissionColor, { __type__: 'cc.Color', r: 130, g: 130, b: 130, a: 255 });
+    });
+
+    test('maps Unity URP material semantics into anchored Cocos effect properties and remaps texture UUIDs', (t) => {
+      const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'unity-mat-anchored-effect-'));
+      t.after(() => fs.rmSync(tempRoot, { recursive: true, force: true }));
+      const sourcePath = path.join(tempRoot, 'Carton.mat');
+      const effectPath = path.join(tempRoot, 'URPLit.effect');
+      const outputPath = path.join(tempRoot, 'Carton.mtl');
+
+      fs.writeFileSync(sourcePath, `
+%YAML 1.1
+--- !u!21 &2100000
+Material:
+  m_ValidKeywords:
+  - _EMISSION
+  - _SPECULAR_SETUP
+  m_InvalidKeywords: []
+  m_SavedProperties:
+    m_TexEnvs:
+    - _BaseMap:
+        m_Texture: {fileID: 2800000, guid: 02f05ab5ebb8f3843964aaf0d66f1b52, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _EmissionMap:
+        m_Texture: {fileID: 2800000, guid: 02f05ab5ebb8f3843964aaf0d66f1b52, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    m_Floats:
+    - _Smoothness: 0.5
+    m_Colors:
+    - _BaseColor: {r: 1, g: 1, b: 1, a: 1}
+    - _EmissionColor: {r: 0.50980395, g: 0.50980395, b: 0.50980395, a: 1}
+    - _SpecColor: {r: 0.2, g: 0.2, b: 0.2, a: 1}
+`, 'utf8');
+      fs.writeFileSync(effectPath, `
+CCEffect %{
+  temporaries:
+    p1: &p1
+      mainTexture: { value: white }
+      mainColor: { value: [1, 1, 1, 1], linear: true, editor: { type: color } }
+      roughness: { value: 0.5 }
+      emissive: { value: [0, 0, 0, 1], linear: true, editor: { type: color } }
+      emissiveMap: { value: white }
+      specularColor: { value: [0.04, 0.04, 0.04, 1], linear: true, editor: { type: color } }
+  techniques:
+  - passes:
+    - properties: *p1
+}%
+CCProgram test %{ precision highp float; }%
+`, 'utf8');
+
+      convertMatFile(sourcePath, outputPath, {
+        effectPath,
+        effectUuid: 'urp-lit-effect-uuid',
+        textureRemap: { '02f05ab5ebb8f3843964aaf0d66f1b52': 'cocos-carton-texture-uuid' },
+      });
+
+      const converted = JSON.parse(fs.readFileSync(outputPath, 'utf8'));
+      const props = converted._props[0];
+      assert.deepEqual(Object.keys(props).sort(), [
+        'emissive', 'emissiveMap', 'mainColor', 'mainTexture', 'roughness', 'specularColor',
+      ]);
+      assert.deepEqual(props.emissive, { __type__: 'cc.Color', r: 130, g: 130, b: 130, a: 255 });
+      assert.deepEqual(props.specularColor, { __type__: 'cc.Color', r: 51, g: 51, b: 51, a: 255 });
+      assert.equal(props.roughness, 0.5);
+      assert.equal(props.mainTexture.__uuid__, 'cocos-carton-texture-uuid');
+      assert.equal(props.emissiveMap.__uuid__, 'cocos-carton-texture-uuid');
+      assert.equal(converted._defines[0].USE_ALBEDO_MAP, true);
+      assert.equal(converted._defines[0].USE_EMISSIVE_MAP, true);
+      assert.equal(converted._defines[0].USE_SPECULAR_WORKFLOW, true);
     });
 
     test('generates structured material asset manifest with texture diagnostics', () => {
