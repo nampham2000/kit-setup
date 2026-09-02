@@ -13,7 +13,16 @@
     "./utils/pool/NodePoolAdapter": "./utils/pool/NodePoolAdapter.ts",
     "./utils/pool/Poolable": "./utils/pool/Poolable.ts",
     "./config": "./config/index.ts",
-    "./components": "./components/index.ts"
+    "./config/PlayableConfig": "./config/PlayableConfig.ts",
+    "./config/PlayableConfigManager": "./config/PlayableConfigManager.ts",
+    "./components": "./components/index.ts",
+    "./components/CameraController": "./components/CameraController.ts",
+    "./components/Interactive3DHero": "./components/Interactive3DHero.ts",
+    "./components/PlayableAudioController": "./components/PlayableAudioController.ts",
+    "./components/PlayableCTAController": "./components/PlayableCTAController.ts",
+    "./components/PlayableEntry": "./components/PlayableEntry.ts",
+    "./components/PlayableTrackingController": "./components/PlayableTrackingController.ts",
+    "./components/PlayableUIHUD": "./components/PlayableUIHUD.ts"
   },
   "dependencies": {
     "playable-sdk": "file:../playable-sdk"

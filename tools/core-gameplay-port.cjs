@@ -15,6 +15,12 @@ const {
 } = require('./port-regression-gate.cjs');
 const { runUnityPortPreflight, assertUnityPortPreflight } = require('./unity-intel/preflight.cjs');
 const { FIDELITY_CHECKPOINTS } = require('./unity-intel/core-gameplay-scope.cjs');
+const {
+  PHYSICS_BACKENDS,
+  PHYSICS_2D_BACKENDS,
+  SPINE_BACKENDS,
+  ensureCocosEngineFeatures,
+} = require('./cocos-engine-feature-audit.cjs');
 
 const MANIFEST_SCHEMA_VERSION = 3;
 const MANIFEST_KIND = 'cc-playable-core-port-manifest';
@@ -39,14 +45,21 @@ const GATE_TIMEOUT_MS = 10 * 60 * 1000;
 const GATE_MAX_BUFFER_BYTES = 2 * 1024 * 1024;
 const EVIDENCE_METHODS = Object.freeze(['runtime', 'visual', 'runtime-visual']);
 const VISUAL_ONLY_ALLOWED = new Set(['camera-layout', 'animation-vfx-feedback']);
+const ENGINE_FEATURE_ID = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*$/;
 const REQUIRED_SCRIPTS = Object.freeze([
   Object.freeze({ id: 'verify.all', script: 'ai:verify' }),
   Object.freeze({ id: 'verify.gc', script: 'ai:lint' }),
   Object.freeze({ id: 'verify.assets', script: 'ai:verify:assets' }),
-  Object.freeze({ id: 'verify.regressions', script: 'ai:verify:regressions' }),
+  // Core acceptance consumes the hash-bound regression receipt. The full
+  // registry is intentionally run by the implementation workflow after each
+  // watched change; rerunning it here can duplicate long campaign playthroughs
+  // and hit the generic child timeout even though the current receipt is valid.
+  Object.freeze({ id: 'verify.regressions', script: 'ai:verify:regressions:check' }),
   Object.freeze({ id: 'build.playable', script: 'build' }),
   Object.freeze({ id: 'verify.runtime', script: 'ai:verify:runtime' }),
 ]);
+const PREVIEW_REQUIRED_SCRIPTS = Object.freeze(REQUIRED_SCRIPTS.filter(item => item.id !== 'build.playable'));
+const DEFAULT_PREVIEW_URL = 'http://127.0.0.1:7456/';
 
 const USAGE = `Core Gameplay Port
 
@@ -60,7 +73,7 @@ Commands:
   init     Run mandatory playable-core preflight and write a compact evidence manifest.
   scaffold Run static-first init + scene skeleton/wiring, then persist a bounded resume packet.
   resume   Rebuild a bounded handoff/status packet without reading raw Unity source.
-  verify   Run verify/lint/assets/regressions/build/runtime gates and accept only evidence-backed fidelity >=80.
+  verify   Run evidence-backed fidelity gates; --preview-only never builds or claims build acceptance.
 
 Options:
   --unity-project <dir>  Complete Unity project root (required).
@@ -68,12 +81,19 @@ Options:
   --manifest <file>      Relative path inside Cocos project. Default: ${DEFAULT_MANIFEST}.
   --wiring <file>        Static scene wiring path. Default: ${DEFAULT_WIRING}.
   --packet <file>        Resume packet path. Default: ${DEFAULT_RESUME_PACKET}.
+  --target-scene <file>  Relative Cocos .scene output. Default: assets/<UnitySceneName>.scene.
   --provider <mode>      auto | static | unity-mcp. Default: auto.
+  --dispositions <file>  Hash-bound source-high disposition JSON used by the live preflight.
+  --cache-dir <dir>      Relocate the incremental Unity index cache only.
+  --no-cache             Re-scan Unity records without reading/writing the incremental index.
+  --refresh-cache        Ignore the current index cache and replace it with fresh records.
   --bootstrap            Allow Unity-MCP package setup/reload during init.
   --force                Replace an existing manifest during init.
   --dry-run              Init without creating a directory or file.
   --write                Persist the refreshed packet when running resume.
   --no-run-gates         Verify manifest only; result cannot be accepted as runnable.
+  --preview-only         Skip build and verify the active Cocos editor preview; never claims build acceptance.
+  --preview-url <url>    Loopback editor preview URL. Default: ${DEFAULT_PREVIEW_URL}.
   --json                 Compact JSON output.
   --help                 Show help.
 
@@ -109,9 +129,12 @@ function parseArgs(argv) {
     if (argument === '--dry-run') { options.dryRun = true; continue; }
     if (argument === '--write') { options.write = true; continue; }
     if (argument === '--no-run-gates') { options.runGates = false; continue; }
+    if (argument === '--preview-only') { options.previewOnly = true; continue; }
+    if (argument === '--no-cache') { options.cache = false; continue; }
+    if (argument === '--refresh-cache') { options.refreshCache = true; continue; }
     const equal = /^--([a-z-]+)=(.*)$/.exec(argument);
     const name = equal ? equal[1] : argument.startsWith('--') ? argument.slice(2) : null;
-    if (!['unity-project', 'cocos-project', 'manifest', 'wiring', 'packet', 'provider'].includes(name)) {
+    if (!['unity-project', 'cocos-project', 'manifest', 'wiring', 'packet', 'target-scene', 'provider', 'dispositions', 'cache-dir', 'preview-url'].includes(name)) {
       throw corePortError('CORE_PORT_OPTION_INVALID', `Option khong ho tro: ${argument}`);
     }
     const value = equal ? equal[2] : argv[++index];
@@ -122,7 +145,27 @@ function parseArgs(argv) {
   if (!['auto', 'static', 'unity-mcp'].includes(options.provider)) {
     throw corePortError('CORE_PORT_PROVIDER_INVALID', '--provider phai la auto, static hoac unity-mcp.');
   }
+  if ((options.previewOnly || options.previewUrl) && options.command !== 'verify') {
+    throw corePortError('CORE_PORT_PREVIEW_MODE_INVALID', '--preview-only/--preview-url chi dung voi verify.');
+  }
+  if (options.previewUrl && !options.previewOnly) {
+    throw corePortError('CORE_PORT_PREVIEW_MODE_INVALID', '--preview-url can --preview-only.');
+  }
+  if (options.previewOnly) options.previewUrl = normalizePreviewUrl(options.previewUrl || DEFAULT_PREVIEW_URL);
   return options;
+}
+
+function normalizePreviewUrl(value) {
+  let parsed;
+  try { parsed = new URL(String(value || '')); } catch (_) {
+    throw corePortError('CORE_PORT_PREVIEW_URL_INVALID', '--preview-url phai la loopback http(s) URL.');
+  }
+  const loopback = parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost' || parsed.hostname === '[::1]';
+  if (!loopback || !['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password
+      || parsed.search || parsed.hash || parsed.pathname !== '/') {
+    throw corePortError('CORE_PORT_PREVIEW_URL_INVALID', '--preview-url chi nhan loopback http(s) origin khong credentials/query/hash/path.');
+  }
+  return parsed.href;
 }
 
 function validateUnityRoot(value) {
@@ -285,9 +328,15 @@ function targetScenePath(entryScene) {
   return `assets/${safe}.scene`;
 }
 
-function createManifest(brief) {
+function createManifest(brief, options = {}) {
   const core = brief.coreGameplay;
-  const targetEntryScene = targetScenePath(core.entry.primary);
+  const targetEntryScene = options.targetScene
+    ? String(options.targetScene).replace(/\\/g, '/')
+    : targetScenePath(core.entry.primary);
+  validateLogicalPath(targetEntryScene, 'target scene');
+  if (!targetEntryScene.endsWith('.scene')) {
+    throw corePortError('CORE_PORT_TARGET_SCENE_INVALID', '--target-scene phải là Cocos .scene path bên trong project.');
+  }
   return {
     schemaVersion: MANIFEST_SCHEMA_VERSION,
     kind: MANIFEST_KIND,
@@ -316,6 +365,15 @@ function createManifest(brief) {
         'build/common/**/*.html',
       ],
       requiredGates: REQUIRED_SCRIPTS.map(item => item.id),
+    },
+    engineFeatures: brief.engineFeatureClosure || {
+      schemaVersion: 1,
+      status: 'not-required',
+      requiredModules: [],
+      disabledModules: [],
+      selectors: { physicsBackend: null, physics2dBackend: null, spineBackend: null },
+      evidence: [],
+      blockers: [],
     },
     checkpoints: core.acceptance.weights.map(([id, weight]) => {
       const projected = (core.acceptance.mandatory || []).includes(id);
@@ -389,6 +447,54 @@ function ensureRegressionRegistry(cocosRoot, brief, dependencies = {}) {
   return { status: 'created', path: result.registry, requiredRisks: result.requiredRisks };
 }
 
+async function enforceEngineFeatureClosure(cocosRoot, closure, options = {}, dependencies = {}) {
+  const requiredModules = [...new Set(closure && closure.requiredModules || [])];
+  const disabledModules = [...new Set(closure && closure.disabledModules || [])];
+  const blockers = closure && closure.blockers || [];
+  if (blockers.length || closure && closure.status === 'blocked') {
+    throw corePortError('CORE_PORT_ENGINE_FEATURE_SOURCE_BLOCKED', 'Unity engine feature closure còn thiếu exact source evidence.', {
+      blockers: blockers.slice(0, 8),
+    });
+  }
+  if (!requiredModules.length && !disabledModules.length) {
+    return { required: false, complete: true, status: 'not-required', requiredModules: [], disabledModules: [] };
+  }
+  if (options.dryRun) {
+    return {
+      required: true,
+      complete: false,
+      status: 'planned',
+      requiredModules,
+      disabledModules,
+      selectors: closure.selectors || {},
+    };
+  }
+  const ensure = dependencies.ensureEngineFeatures || ensureCocosEngineFeatures;
+  const result = await ensure(cocosRoot, {
+    requiredModules,
+    disabledModules,
+    physicsBackend: closure.selectors && closure.selectors.physicsBackend || undefined,
+    physics2dBackend: closure.selectors && closure.selectors.physics2dBackend || undefined,
+    spineBackend: closure.selectors && closure.selectors.spineBackend || undefined,
+  });
+  if (!result || result.complete !== true) {
+    throw corePortError('CORE_PORT_ENGINE_FEATURES_PENDING', 'Cocos Feature Cropping chưa được apply vào active preview; dừng trước gameplay implementation.', {
+      requiredModules,
+      disabledModules,
+      selectors: closure.selectors || {},
+      status: result && (result.status || result.finalAudit && result.finalAudit.pendingEditorApply ? 'pending-editor-apply' : null),
+    });
+  }
+  return {
+    required: true,
+    complete: true,
+    status: 'verified',
+    requiredModules,
+    disabledModules,
+    selectors: closure.selectors || {},
+  };
+}
+
 async function initCorePort(options, dependencies = {}) {
   const unityRoot = validateUnityRoot(options.unityProject);
   const cocosRoot = validateCocosRoot(options.cocosProject);
@@ -399,6 +505,10 @@ async function initCorePort(options, dependencies = {}) {
     project: unityRoot,
     provider: options.provider || 'auto',
     bootstrap: options.bootstrap === true,
+    sourceDispositions: options.dispositions,
+    cache: options.cache !== false,
+    indexCacheDir: options.cacheDir,
+    refreshCache: options.refreshCache === true,
     profile: 'playable-core',
     intent: 'project',
   });
@@ -412,6 +522,14 @@ async function initCorePort(options, dependencies = {}) {
   if (!brief.decision.coreEntryReady || !brief.coreGameplay || !brief.coreGameplay.entry.primary) {
     throw corePortError('CORE_PORT_ENTRY_REQUIRED', 'Khong chon duoc duy nhat gameplay entry scene; can bounded scene decision.');
   }
+  progress({ stage: 'engine-features', status: 'start' });
+  const engineFeatures = await enforceEngineFeatureClosure(
+    cocosRoot,
+    brief.engineFeatureClosure || { status: 'not-required', requiredModules: [], disabledModules: [], selectors: {}, blockers: [] },
+    options,
+    dependencies,
+  );
+  progress({ stage: 'engine-features', status: 'complete' });
   const file = manifestPath(cocosRoot, options.manifest);
   const existed = fs.existsSync(file);
   const expectedHash = existed ? hashFile(file) : null;
@@ -419,7 +537,7 @@ async function initCorePort(options, dependencies = {}) {
     throw corePortError('CORE_PORT_MANIFEST_EXISTS', `Manifest da ton tai: ${relativeSlash(cocosRoot, file)}. Dung --force neu muon tao lai.`);
   }
   brief.coreGameplayCheckpointEvidence = checkpointSourcesFromBrief(brief);
-  const manifest = createManifest(brief);
+  const manifest = createManifest(brief, options);
   let regressions = { status: 'planned', path: DEFAULT_REGRESSION_REGISTRY, requiredRisks: regressionRisksFromBrief(brief) };
   if (!options.dryRun) {
     progress({ stage: 'manifest', status: 'start' });
@@ -442,6 +560,7 @@ async function initCorePort(options, dependencies = {}) {
       deferred: brief.coreGameplay.excluded.map(item => [item.id, item.count]),
     },
     acceptance: brief.coreGameplay.acceptance,
+    engineFeatures,
     regressions,
     next: options.dryRun
       ? 'Run init without --dry-run.'
@@ -742,7 +861,7 @@ async function scaffoldCorePort(options, dependencies = {}) {
     return {
       ...initialized,
       command: 'scaffold',
-      staticFirst: { status: 'planned', targetScene: targetScenePath(initialized.source.entryScene), wiring: options.wiring || DEFAULT_WIRING },
+      staticFirst: { status: 'planned', targetScene: options.targetScene || targetScenePath(initialized.source.entryScene), wiring: options.wiring || DEFAULT_WIRING },
       packet: { written: false, path: options.packet || DEFAULT_RESUME_PACKET },
     };
   }
@@ -808,6 +927,79 @@ function validatePathArray(value, kind, checkpointId) {
   for (const item of value) validateLogicalPath(item, kind);
 }
 
+function validateEngineFeatureClosure(value) {
+  // Schema-v3 manifests written before this gate remain readable. Every new
+  // manifest contains this field, and if present it is validated as source
+  // evidence rather than trusted as an arbitrary list of profile keys.
+  if (value === undefined) return;
+  if (!value || value.schemaVersion !== 1 || !['required', 'not-required'].includes(value.status) ||
+      !Array.isArray(value.requiredModules) || value.requiredModules.length > 64 ||
+      new Set(value.requiredModules).size !== value.requiredModules.length ||
+      value.disabledModules !== undefined && (!Array.isArray(value.disabledModules) || value.disabledModules.length > 64 ||
+        new Set(value.disabledModules).size !== value.disabledModules.length) ||
+      !value.selectors || typeof value.selectors !== 'object' ||
+      !Array.isArray(value.evidence) || !Array.isArray(value.blockers) || value.blockers.length !== 0) {
+    throw corePortError('CORE_PORT_MANIFEST_INVALID', 'Unity-derived engine feature closure khong hop le.');
+  }
+  const disabledModules = value.disabledModules || [];
+  for (const moduleName of [...value.requiredModules, ...disabledModules]) {
+    if (typeof moduleName !== 'string' || moduleName.length > 96 || !ENGINE_FEATURE_ID.test(moduleName)) {
+      throw corePortError('CORE_PORT_MANIFEST_INVALID', `Engine feature id khong an toan: ${String(moduleName)}`);
+    }
+  }
+  if (disabledModules.some(moduleName => value.requiredModules.includes(moduleName))) {
+    throw corePortError('CORE_PORT_MANIFEST_INVALID', 'Engine feature khong the vua required vua disabled.');
+  }
+  if ((value.status === 'not-required') !== (value.requiredModules.length === 0 && disabledModules.length === 0)) {
+    throw corePortError('CORE_PORT_MANIFEST_INVALID', 'Engine feature closure status khong khop requiredModules.');
+  }
+  const selectors = value.selectors;
+  const selectorContract = [
+    ['physicsBackend', PHYSICS_BACKENDS, null],
+    ['physics2dBackend', PHYSICS_2D_BACKENDS, null],
+    ['spineBackend', SPINE_BACKENDS, null],
+  ];
+  for (const [key, allowed, empty] of selectorContract) {
+    if (selectors[key] !== empty && !allowed.includes(selectors[key])) {
+      throw corePortError('CORE_PORT_MANIFEST_INVALID', `Engine feature selector ${key} khong hop le.`);
+    }
+  }
+  const required = new Set(value.requiredModules);
+  const selectorPairs = [
+    ['physicsBackend', null, PHYSICS_BACKENDS],
+    ['physics2dBackend', 'physics-2d', PHYSICS_2D_BACKENDS],
+    ['spineBackend', 'spine', SPINE_BACKENDS],
+  ];
+  for (const [key, parent, alternatives] of selectorPairs) {
+    const selected = selectors[key];
+    const requiredAlternatives = alternatives.filter(item => required.has(item));
+    if (!selected && requiredAlternatives.length !== 0) {
+      throw corePortError('CORE_PORT_MANIFEST_INVALID', `Engine feature selector ${key} bi thieu.`);
+    }
+    if (selected && (!required.has(selected) || requiredAlternatives.length !== 1 ||
+        (parent && !required.has(parent)))) {
+      throw corePortError('CORE_PORT_MANIFEST_INVALID', `Engine feature selector ${key} khong nam trong requiredModules.`);
+    }
+  }
+  if (value.evidence.length !== value.requiredModules.length ||
+      new Set(value.evidence.map(item => item && item.module)).size !== value.evidence.length) {
+    throw corePortError('CORE_PORT_MANIFEST_INVALID', 'Engine feature evidence phai co dung mot record cho moi module.');
+  }
+  for (const item of value.evidence) {
+    if (!item || !required.has(item.module) || !Array.isArray(item.sources) || item.sources.length > 3 ||
+        !Array.isArray(item.signals) || item.signals.length > 4 ||
+        new Set(item.sources).size !== item.sources.length || new Set(item.signals).size !== item.signals.length) {
+      throw corePortError('CORE_PORT_MANIFEST_INVALID', 'Engine feature evidence record khong hop le.');
+    }
+    for (const source of item.sources) validateLogicalPath(source, 'source');
+    for (const signal of item.signals) {
+      if (typeof signal !== 'string' || !signal || signal.length > 160 || /[\0-\x1f]/.test(signal)) {
+        throw corePortError('CORE_PORT_MANIFEST_INVALID', 'Engine feature evidence signal khong hop le.');
+      }
+    }
+  }
+}
+
 function validateManifest(cocosRoot, file) {
   const manifest = readJsonBounded(file, MAX_MANIFEST_BYTES, 'CORE_PORT_MANIFEST_INVALID');
   if (manifest.schemaVersion !== MANIFEST_SCHEMA_VERSION || manifest.kind !== MANIFEST_KIND ||
@@ -846,6 +1038,7 @@ function validateManifest(cocosRoot, file) {
       !arraysEqual(manifest.delivery.requiredGates, expectedGates)) {
     throw corePortError('CORE_PORT_MANIFEST_INVALID', 'Runnable artifact/gate contract bi thay doi.');
   }
+  validateEngineFeatureClosure(manifest.engineFeatures);
   if (manifest.checkpoints.length !== FIDELITY_CHECKPOINTS.length ||
       new Set(manifest.checkpoints.map(item => item.id)).size !== FIDELITY_CHECKPOINTS.length) {
     throw corePortError('CORE_PORT_MANIFEST_INVALID', `Manifest phai co dung ${FIDELITY_CHECKPOINTS.length} fidelity checkpoints.`);
@@ -910,7 +1103,12 @@ function checkpointEvidencePasses(cocosRoot, relative, checkpoint, manifest) {
   if (payload.targetHashes.some(item => !item || typeof item !== 'object')) return false;
   const projected = payload.targetHashes
     .map(item => ({ path: item.path, sha256: item.sha256 }))
-    .sort((left, right) => String(left.path).localeCompare(String(right.path)));
+    // Match currentTargetHashes' locale-independent UTF-16 ordering exactly.
+    // localeCompare can order `assets/.../core/*` before `assets/.../Harvest*`
+    // on one machine while Array#sort orders the uppercase segment first,
+    // producing a false stale-evidence failure with identical hashes.
+    .sort((left, right) => String(left.path) < String(right.path) ? -1
+      : String(left.path) > String(right.path) ? 1 : 0);
   return projected.every((item, index) => item.path === current[index].path &&
     typeof item.sha256 === 'string' && /^[a-f0-9]{64}$/.test(item.sha256) && item.sha256 === current[index].sha256);
 }
@@ -973,13 +1171,19 @@ function runRequiredGates(cocosRoot, options = {}) {
     ? (options.comspec || process.env.ComSpec || 'cmd.exe')
     : 'npm';
   const prefixArgs = platform === 'win32' ? ['/d', '/s', '/c', 'npm.cmd'] : [];
+  const requiredScripts = options.previewOnly ? PREVIEW_REQUIRED_SCRIPTS : REQUIRED_SCRIPTS;
   const results = [];
-  for (const gate of REQUIRED_SCRIPTS) {
+  for (const gate of requiredScripts) {
     if (typeof scripts[gate.script] !== 'string' || !scripts[gate.script].trim()) {
       results.push({ id: gate.id, ok: false, code: 'script-missing', script: gate.script });
       break;
     }
-    const child = (options.spawnSync || spawnSync)(executable, [...prefixArgs, 'run', gate.script], {
+    const gateArgs = options.previewOnly && gate.id === 'verify.all'
+      ? ['--', '--skip-build-size']
+      : options.previewOnly && gate.id === 'verify.runtime'
+        ? ['--', '--url', normalizePreviewUrl(options.previewUrl || DEFAULT_PREVIEW_URL)]
+        : [];
+    const child = (options.spawnSync || spawnSync)(executable, [...prefixArgs, 'run', gate.script, ...gateArgs], {
       cwd: cocosRoot,
       encoding: 'utf8',
       windowsHide: true,
@@ -1037,18 +1241,21 @@ function existingContainedFile(root, relative) {
   } catch (_) { return false; }
 }
 
-function inspectRequiredArtifacts(cocosRoot, manifest) {
+function inspectRequiredArtifacts(cocosRoot, manifest, options = {}) {
   const assets = path.join(cocosRoot, 'assets');
   const mandatoryTargets = manifest.checkpoints
     .filter(item => item.mandatory)
     .flatMap(item => item.targetEvidence)
     .filter(item => /^assets\/script\/.+\.ts$/i.test(item));
-  return {
+  const artifacts = {
     scene: existingContainedFile(cocosRoot, manifest.delivery.targetEntryScene),
     gameplayScript: mandatoryTargets.length > 0 && mandatoryTargets.every(item => existingContainedFile(cocosRoot, item)),
     config: existingContainedFile(cocosRoot, 'assets/resources/playable-config.json'),
-    builtHtml: hasArtifact(path.join(cocosRoot, 'build', 'common'), file => /\.html?$/i.test(file)),
   };
+  if (!options.previewOnly) {
+    artifacts.builtHtml = hasArtifact(path.join(cocosRoot, 'build', 'common'), file => /\.html?$/i.test(file));
+  }
+  return artifacts;
 }
 
 function verifyCorePort(options, dependencies = {}) {
@@ -1064,31 +1271,61 @@ function verifyCorePort(options, dependencies = {}) {
     throw corePortError('CORE_PORT_MANIFEST_STALE', 'Manifest khong khop preflight receipt/source hien tai; chay init --force lai.');
   }
   const fidelity = evaluateFidelity(manifest, unityRoot, cocosRoot);
+  const previewOnly = options.previewOnly === true;
+  const requiredScripts = previewOnly ? PREVIEW_REQUIRED_SCRIPTS : REQUIRED_SCRIPTS;
   const gateResults = options.runGates === false
     ? []
     : (dependencies.runGates || runRequiredGates)(cocosRoot, {
       ...(dependencies.gateOptions || {}),
+      previewOnly,
+      previewUrl: previewOnly ? normalizePreviewUrl(options.previewUrl || DEFAULT_PREVIEW_URL) : undefined,
       redactRoots: [unityRoot, ...((dependencies.gateOptions && dependencies.gateOptions.redactRoots) || [])],
     });
-  const gatesPassed = gateResults.length === REQUIRED_SCRIPTS.length && gateResults.every(item => item.ok);
-  const artifacts = inspectRequiredArtifacts(cocosRoot, manifest);
-  const artifactsPassed = Object.values(artifacts).every(Boolean);
-  const accepted = gatesPassed && artifactsPassed && fidelity.mandatoryPassed && fidelity.score >= fidelity.minimum;
+  const gatesPassed = gateResults.length === requiredScripts.length && gateResults.every(item => item.ok);
+  const artifacts = inspectRequiredArtifacts(cocosRoot, manifest, { previewOnly });
+  const artifactKeys = previewOnly ? ['scene', 'gameplayScript', 'config'] : Object.keys(artifacts);
+  const artifactsPassed = artifactKeys.every(key => artifacts[key]);
+  const evidenceAccepted = gatesPassed && artifactsPassed && fidelity.mandatoryPassed && fidelity.score >= fidelity.minimum;
+  const accepted = !previewOnly && evidenceAccepted;
+  const previewAccepted = previewOnly && evidenceAccepted;
+  const previewRunnable = previewOnly && gatesPassed && artifactsPassed;
   return {
-    ok: accepted,
+    ok: previewOnly ? previewAccepted : accepted,
     command: 'verify',
+    mode: previewOnly ? 'preview-only' : 'build',
+    status: previewOnly
+      ? (previewAccepted ? 'preview-accepted' : 'preview-blocked')
+      : (accepted ? 'accepted' : 'blocked'),
     accepted,
-    runnable: { passed: gatesPassed && artifactsPassed, gatesRun: options.runGates !== false, gates: gateResults, artifacts },
+    previewAccepted,
+    runnable: {
+      passed: previewOnly ? false : gatesPassed && artifactsPassed,
+      gatesRun: options.runGates !== false,
+      gates: gateResults,
+      artifacts,
+      ...(previewOnly ? { reason: 'preview-only mode does not establish build runnable status' } : {}),
+    },
+    previewRunnable: {
+      passed: previewRunnable,
+      status: previewRunnable ? 'preview-runnable' : 'preview-not-runnable',
+      url: previewOnly ? normalizePreviewUrl(options.previewUrl || DEFAULT_PREVIEW_URL) : null,
+      gatesRun: previewOnly && options.runGates !== false,
+      artifacts: Object.fromEntries(artifactKeys.map(key => [key, artifacts[key]])),
+    },
     fidelity,
     evidenceContract: manifest.delivery.evidenceContract,
-    claim: accepted
-      ? `Core gameplay accepted at ${fidelity.score}/100 (target ${fidelity.target}).`
-      : 'Do not claim 80-90% fidelity or runnable delivery until every reported gate passes.',
+    claim: previewOnly
+      ? previewAccepted
+        ? `Core gameplay preview-accepted at ${fidelity.score}/100 and preview-runnable; build acceptance was not run and is not claimed.`
+        : 'Do not claim preview acceptance or preview-runnable delivery until every reported preview gate passes; build acceptance was not run.'
+      : accepted
+        ? `Core gameplay accepted at ${fidelity.score}/100 (target ${fidelity.target}).`
+        : 'Do not claim 80-90% fidelity or runnable delivery until every reported gate passes.',
     nextActions: [
       ...fidelity.items.filter(item => !item.grounded).slice(0, 5).map(item =>
         `Add schema-v${EVIDENCE_SCHEMA_VERSION} ${item.mandatory ? 'runtime' : 'runtime/visual'} evidence for ${item.id}: ${item.missing.join(', ')}`),
       ...gateResults.filter(item => !item.ok).map(item => `Fix ${item.id}`),
-      ...Object.entries(artifacts).filter(([, ok]) => !ok).map(([id]) => `Create/import ${id}`),
+      ...artifactKeys.filter(id => !artifacts[id]).map(id => `Create/import ${id}`),
     ].slice(0, 8),
   };
 }
@@ -1137,7 +1374,10 @@ module.exports = {
   MAX_MANIFEST_BYTES,
   MAX_EVIDENCE_BYTES,
   REQUIRED_SCRIPTS,
+  PREVIEW_REQUIRED_SCRIPTS,
+  DEFAULT_PREVIEW_URL,
   parseArgs,
+  normalizePreviewUrl,
   validateUnityRoot,
   validateCocosRoot,
   resolveContained,
@@ -1148,6 +1388,7 @@ module.exports = {
   checkpointSourcesFromBrief,
   regressionRisksFromBrief,
   ensureRegressionRegistry,
+  enforceEngineFeatureClosure,
   initCorePort,
   summarizeWiring,
   summarizePortReport,

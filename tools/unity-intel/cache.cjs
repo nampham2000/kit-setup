@@ -6,7 +6,11 @@ const os = require('node:os');
 const path = require('node:path');
 
 const CACHE_SCHEMA_VERSION = 2;
-const INDEXER_VERSION = 2;
+// Version 4 adds Unity engine-feature evidence to the serialized record
+// contract and content-bound stamps for every textual/serialized asset plus
+// its .meta. Coarse-timestamp filesystems such as exFAT must not reuse stale
+// evidence after same-size content replacement.
+const INDEXER_VERSION = 4;
 
 const EXTRACTOR_FILES = [
   'schema.cjs',
@@ -17,16 +21,17 @@ const EXTRACTOR_FILES = [
   'dependency-graph.cjs',
   'package-roots.cjs',
   'project-index.cjs',
+  'engine-feature-closure.cjs',
   'script-index.cjs',
   '../lib/unity-serialized-file.cjs',
 ];
 
-function extractorFingerprint() {
+function extractorFingerprint(readFile = (file) => fs.readFileSync(file)) {
   const hash = crypto.createHash('sha256');
   for (const name of EXTRACTOR_FILES) {
     const file = path.join(__dirname, name);
     hash.update(name);
-    try { hash.update(fs.readFileSync(file)); } catch (_) { hash.update('missing'); }
+    try { hash.update(readFile(file, name)); } catch (_) { hash.update('missing'); }
   }
   return hash.digest('hex').slice(0, 16);
 }
@@ -167,7 +172,9 @@ function fileStamp(fileStat, metaStat, filePath = null, metaPath = null, options
 module.exports = {
   CACHE_SCHEMA_VERSION,
   INDEXER_VERSION,
+  EXTRACTOR_FILES: Object.freeze([...EXTRACTOR_FILES]),
   EXTRACTOR_FINGERPRINT,
+  extractorFingerprint,
   resolveDefaultCacheDir,
   assertExternalCacheLocation,
   createCacheContext,

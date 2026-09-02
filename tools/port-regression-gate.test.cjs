@@ -84,6 +84,8 @@ test('init writes a tracked portable starter but does not pretend it is ready', 
 
 test('CLI is explicit about refresh and rejects unknown options', () => {
   assert.equal(parseArgs(['run', '--no-refresh', '--json']).refresh, false);
+  assert.deepEqual(parseArgs(['run', '--suite', 'lifecycle', '--suite=visual']).suites,
+    ['lifecycle', 'visual']);
   assert.deepEqual(parseArgs(['init', '--risk', 'input-response', '--risk=level-lifecycle']).risks,
     ['input-response', 'level-lifecycle']);
   assert.throws(() => parseArgs(['run', '--maybe']), error => error.code === 'REGRESSION_OPTION_INVALID');
@@ -134,6 +136,28 @@ test('raycast coverage fails without both positive and negative semantic cases',
     error => error.code === 'REGRESSION_RAYCAST_POLARITY_MISSING');
 });
 
+test('raycast coverage accepts a positive gesture resolved from evalBefore runtime evidence', t => {
+  const root = fixture(t);
+  const matrix = 'tools/qa/raycast-runtime-target.json';
+  writeMatrix(root, matrix, [{
+    name: 'visible runtime target',
+    evalBefore: '({ target: { x: 0.2, y: 0.3 } })',
+    gestureFromEvalBefore: {
+      x1: 'target.x', y1: 'target.y', x2: 'target.x', y2: 'target.y', durationMs: 80, steps: 1,
+    },
+    eval: 'true', requireEvalOk: true, regressionTags: ['positive'],
+  }, {
+    name: 'covered target', gesture: '0.5,0.5,0.5,0.5,100,1', eval: 'true', requireEvalOk: true,
+    regressionTags: ['negative'],
+  }]);
+  const source = registry([{
+    id: 'raycast-runtime-target', risks: ['raycast-occlusion'], matrix,
+    watchFiles: ['assets/script/Game.ts'],
+  }], ['raycast-occlusion']);
+  const file = writeRegistry(root, source);
+  assert.doesNotThrow(() => validateRegistry(root, source, { configFile: file }));
+});
+
 test('visual and ordered animation risks fail closed without source reference or trace', t => {
   const root = fixture(t);
   const matrix = 'tools/qa/visual.json';
@@ -150,6 +174,43 @@ test('visual and ordered animation risks fail closed without source reference or
   }], ['animation-callback-flow']);
   assert.throws(() => validateRegistry(root, animation, { configFile: file }),
     error => error.code === 'REGRESSION_ANIMATION_TRACE_MISSING');
+});
+
+test('responsive layout accepts a source reference plus a metric-bound short viewport', t => {
+  const root = fixture(t);
+  const matrix = 'tools/qa/responsive-layout.json';
+  const metrics = {
+    layoutOverlapMax: { max: 0.01 },
+    slicedBorderInsetError: { max: 0.001 },
+  };
+  const cases = [{
+    name: 'source portrait',
+    windowSize: '744x1061',
+    eval: 'true',
+    requireEvalOk: true,
+    requiredEvalMetrics: metrics,
+    referenceImage: 'docs/references/unity.png',
+    requiredReferenceMetrics: { foregroundIou: { min: 0.8 } },
+    regressionTags: ['source-viewport'],
+  }, {
+    name: 'short wide',
+    windowSize: '762x756',
+    eval: 'true',
+    requireEvalOk: true,
+    requiredEvalMetrics: metrics,
+    regressionTags: ['short-wide-viewport'],
+  }];
+  writeMatrix(root, matrix, cases);
+  const source = registry([{
+    id: 'responsive', risks: ['responsive-layout'], matrix, watchFiles: ['assets/script/Game.ts'],
+  }], ['responsive-layout']);
+  const file = writeRegistry(root, source);
+  assert.equal(validateRegistry(root, source, { configFile: file }).suites[0].risks[0], 'responsive-layout');
+
+  cases[1].requiredEvalMetrics = { layoutOverlapMax: { max: 0.01 } };
+  writeMatrix(root, matrix, cases);
+  assert.throws(() => validateRegistry(root, source, { configFile: file }),
+    error => error.code === 'REGRESSION_RESPONSIVE_LAYOUT_ORACLE_MISSING');
 });
 
 test('animation curve fidelity requires a portable source oracle and bounded runtime curve metrics', t => {
@@ -339,14 +400,54 @@ test('mandatory suite failure writes evidence but keeps the gate red', async t =
     error => error.code === 'REGRESSION_RECEIPT_STALE');
 });
 
+test('selective suite rerun merges only into a current complete receipt', async t => {
+  const root = fixture(t);
+  const firstMatrix = 'tools/qa/first.json';
+  const secondMatrix = 'tools/qa/second.json';
+  writeMatrix(root, firstMatrix, [{
+    name: 'first tap', gesture: '0.5,0.5,0.5,0.5,100,1', eval: 'true', requireEvalOk: true,
+  }]);
+  writeMatrix(root, secondMatrix, [{
+    name: 'second tap', gesture: '0.5,0.5,0.5,0.5,100,1', eval: 'true', requireEvalOk: true,
+  }]);
+  writeRegistry(root, registry([
+    { id: 'first', risks: ['input-response'], matrix: firstMatrix, watchFiles: ['assets/script/Game.ts'] },
+    { id: 'second', risks: ['input-response'], matrix: secondMatrix, watchFiles: ['assets/script/Game.ts'] },
+  ], ['input-response']));
+  let phase = 'initial';
+  const executed = [];
+  const dependencies = {
+    assertPortable() { return { ok: true, files: 4 }; },
+    async refreshPreview() { return { ok: true, tool: 'fake-refresh' }; },
+    runMatrix(_root, suite, runNumber) {
+      executed.push(`${phase}:${suite.id}`);
+      return { run: runNumber, ok: phase === 'rerun' || suite.id === 'second', cases: [] };
+    },
+  };
+  const initial = await runRegressionGate({ project: root }, dependencies);
+  assert.equal(initial.ok, false);
+  phase = 'rerun';
+  const rerun = await runRegressionGate({ project: root, suites: ['first'] }, dependencies);
+  assert.equal(rerun.ok, true);
+  assert.deepEqual(rerun.selectiveRerun, ['first']);
+  assert.deepEqual(executed, ['initial:first', 'initial:second', 'rerun:first']);
+  assert.deepEqual(rerun.suites.map(item => [item.id, item.ok]), [['first', true], ['second', true]]);
+  assert.equal(checkRegressionReceipt({ project: root, portabilityCheck: false }).ok, true);
+});
+
 test('input concurrency requires distinct real gestures, overlap ordering and collision-free reservations', t => {
   const root = fixture(t);
   const matrix = 'tools/qa/input-concurrency.json';
   writeMatrix(root, matrix, [{
     name: 'two rapid taps',
-    gestures: ['0.2,0.5,0.2,0.5,30,1', '0.8,0.5,0.8,0.5,30,1'],
+    gesturesFromEvalBefore: [
+      { x1: 'targets.0.x', y1: 'targets.0.y', x2: 'targets.0.x', y2: 'targets.0.y',
+        durationMs: 30, steps: 1 },
+      { x1: 'targets.1.x', y1: 'targets.1.y', x2: 'targets.1.x', y2: 'targets.1.y',
+        durationMs: 30, steps: 1 },
+    ],
     gestureGapMs: 50,
-    evalBefore: '({ok:true,actionStarted:0})',
+    evalBefore: '({ok:true,actionStarted:0,targets:[{x:0.2,y:0.5},{x:0.8,y:0.5}]})',
     requireEvalBeforeOk: true,
     requiredEvalBeforeMetrics: { actionStarted: { min: 0, max: 0 } },
     eval: '({ok:true})',

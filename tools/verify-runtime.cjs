@@ -283,6 +283,57 @@ function parseGesture(value) {
   return { x1, y1, x2, y2, durationMs, steps, normalized };
 }
 
+function parseEvalPayload(value) {
+  if (typeof value !== 'string') return value;
+  try {
+    return JSON.parse(value);
+  } catch (_) {
+    return value;
+  }
+}
+
+function readFinitePath(root, pathValue, label) {
+  const pathText = String(pathValue || '').trim();
+  if (!/^[A-Za-z_$][\w$]*(?:\.(?:[A-Za-z_$][\w$]*|\d+))*$/.test(pathText)) {
+    throw new Error(`${label} must be a dot-separated evalBefore result path`);
+  }
+  const segments = pathText.split('.');
+  let value = root;
+  for (const segment of segments) {
+    if (value === null || value === undefined || (typeof value !== 'object' && typeof value !== 'function')) {
+      throw new Error(`${label} cannot resolve ${pathText}`);
+    }
+    if (!Object.prototype.hasOwnProperty.call(value, segment)) {
+      throw new Error(`${label} cannot resolve own path ${pathText}`);
+    }
+    value = value[segment];
+  }
+  if (!Number.isFinite(value)) throw new Error(`${label} must resolve to a finite number: ${pathText}`);
+  return Number(value);
+}
+
+/** Resolve a real gesture from coordinates measured by evalBefore in the active preview. */
+function resolveGestureFromEvalBefore(spec, evalBeforeResult) {
+  if (!spec || typeof spec !== 'object' || Array.isArray(spec)) {
+    throw new Error('gestureFromEvalBefore must be an object');
+  }
+  const payload = parseEvalPayload(evalBeforeResult);
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    throw new Error('gestureFromEvalBefore requires an object evalBefore result');
+  }
+  const x1 = readFinitePath(payload, spec.x1, 'gestureFromEvalBefore.x1');
+  const y1 = readFinitePath(payload, spec.y1, 'gestureFromEvalBefore.y1');
+  const x2 = readFinitePath(payload, spec.x2, 'gestureFromEvalBefore.x2');
+  const y2 = readFinitePath(payload, spec.y2, 'gestureFromEvalBefore.y2');
+  const durationMs = Math.max(16, Math.min(5000, Math.round(Number(spec.durationMs))));
+  const steps = Math.max(1, Math.min(120, Math.round(Number(spec.steps))));
+  if (!Number.isFinite(durationMs) || !Number.isFinite(steps)) {
+    throw new Error('gestureFromEvalBefore durationMs/steps must be finite numbers');
+  }
+  const normalized = [x1, y1, x2, y2].every(item => item >= 0 && item <= 1);
+  return { x1, y1, x2, y2, durationMs, steps, normalized };
+}
+
 async function evaluatePage(session, sessionId, expression) {
   const evaluated = await session.send('Runtime.evaluate', {
     expression,
@@ -296,6 +347,27 @@ async function evaluatePage(session, sessionId, expression) {
       : detail.text);
   }
   return evaluated && evaluated.result ? evaluated.result.value : undefined;
+}
+
+function isNavigationEvaluationError(error) {
+  const message = String(error && error.message ? error.message : error);
+  return /Inspected target navigated or closed|Execution context was destroyed|Cannot find context/i.test(message);
+}
+
+async function evaluatePageWithNavigationRetry(session, sessionId, expression, timing = {}) {
+  const evaluator = timing.evaluate || evaluatePage;
+  const waitFor = timing.wait || wait;
+  try {
+    return { value: await evaluator(session, sessionId, expression), retriedAfterNavigation: false };
+  } catch (error) {
+    if (!isNavigationEvaluationError(error)) throw error;
+    // AssetDB refresh can trigger one preview navigation after the CDP target
+    // opens. The old document and all partial setup state are gone, so rerun
+    // evalBefore once in the new document instead of dispatching gestures
+    // against a missing baseline.
+    await waitFor(Math.max(0, Number(timing.retryDelayMs ?? 1000)));
+    return { value: await evaluator(session, sessionId, expression), retriedAfterNavigation: true };
+  }
 }
 
 async function selectCocosPreviewDevice(session, sessionId, device, timing = {}) {
@@ -566,7 +638,8 @@ async function runOne(target, options) {
     await session.send('Log.enable', {}, sessionId);
     await session.send('Page.enable', {}, sessionId);
     await session.send('Page.addScriptToEvaluateOnNewDocument', { source: FRAME_COUNTER }, sessionId);
-    if (options.gesture || options.gestures?.length) {
+    if (options.gesture || options.gestures?.length || options.gestureFromEvalBefore
+      || options.gesturesFromEvalBefore?.length) {
       // Enable before navigation so Cocos detects touch capability while its
       // browser input sources are being constructed.
       await session.send('Emulation.setTouchEmulationEnabled', {
@@ -590,13 +663,41 @@ async function runOne(target, options) {
 
     if (options.evalBeforeExpression) {
       try {
-        result.evalBeforeResult = await evaluatePage(session, sessionId, options.evalBeforeExpression);
+        const evaluatedBefore = await evaluatePageWithNavigationRetry(
+          session,
+          sessionId,
+          options.evalBeforeExpression,
+        );
+        result.evalBeforeResult = evaluatedBefore.value;
+        result.evalBeforeRetriedAfterNavigation = evaluatedBefore.retriedAfterNavigation;
       } catch (error) {
         result.evalBeforeError = error.message;
       }
     }
+    let dynamicGesture = null;
+    let dynamicGestures = [];
+    if ((options.gestureFromEvalBefore || options.gesturesFromEvalBefore?.length)
+      && !result.evalBeforeError) {
+      try {
+        if (options.gestureFromEvalBefore) {
+          dynamicGesture = resolveGestureFromEvalBefore(
+            options.gestureFromEvalBefore,
+            result.evalBeforeResult,
+          );
+        } else {
+          dynamicGestures = options.gesturesFromEvalBefore.map(spec => (
+            resolveGestureFromEvalBefore(spec, result.evalBeforeResult)
+          ));
+        }
+      } catch (error) {
+        result.gestureError = error.message;
+        result.eventCounts.exceptions += 1;
+        pushUniqueBounded(result.exceptions, `[gesture] ${error.message}`, 50);
+      }
+    }
     const gestureSequence = options.gestures?.length ? options.gestures
-      : (options.gesture ? [options.gesture] : []);
+      : (options.gesture ? [options.gesture]
+        : (dynamicGestures.length ? dynamicGestures : (dynamicGesture ? [dynamicGesture] : [])));
     if (gestureSequence.length) {
       try {
         const sequence = await dispatchTouchGestureSequence(session, sessionId, gestureSequence, {
@@ -883,5 +984,7 @@ if (require.main === module) {
 
 module.exports = {
   runOne, findBuiltHtml, findBrowser, ensureWebSocketRuntime,
-  parseArgs, parseGesture, dispatchTouchGesture, dispatchTouchGestureSequence, selectCocosPreviewDevice,
+  parseArgs, parseGesture, resolveGestureFromEvalBefore,
+  isNavigationEvaluationError, evaluatePageWithNavigationRetry,
+  dispatchTouchGesture, dispatchTouchGestureSequence, selectCocosPreviewDevice,
 };

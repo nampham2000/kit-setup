@@ -3,7 +3,9 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const {
-  parseArgs, parseGesture, dispatchTouchGesture, dispatchTouchGestureSequence, selectCocosPreviewDevice,
+  parseArgs, parseGesture, resolveGestureFromEvalBefore,
+  isNavigationEvaluationError, evaluatePageWithNavigationRetry,
+  dispatchTouchGesture, dispatchTouchGestureSequence, selectCocosPreviewDevice,
 } = require('./verify-runtime.cjs');
 
 test('CLI preserves repeated gestures and their inter-tap wait', () => {
@@ -66,6 +68,59 @@ test('gesture scheduler compensates for CDP round-trip time', async () => {
   assert.equal(result.dispatchElapsedMs, 300);
   assert.equal(result.holdBeforeMoveMs, 0);
   assert.equal(result.keepPressed, false);
+});
+
+test('gesture coordinates can resolve from active evalBefore runtime evidence', () => {
+  const spec = {
+    x1: 'actionableTouchTargets.0.runtimeX',
+    y1: 'actionableTouchTargets.0.runtimeY',
+    x2: 'actionableTouchTargets.0.runtimeX',
+    y2: 'actionableTouchTargets.0.runtimeY',
+    durationMs: 80,
+    steps: 1,
+  };
+  assert.deepEqual(resolveGestureFromEvalBefore(spec, {
+    actionableTouchTargets: [{ runtimeX: 0.195, runtimeY: 0.326 }],
+  }), {
+    x1: 0.195, y1: 0.326, x2: 0.195, y2: 0.326,
+    durationMs: 80, steps: 1, normalized: true,
+  });
+  assert.throws(() => resolveGestureFromEvalBefore(spec, {
+    actionableTouchTargets: [],
+  }), /cannot resolve|finite/);
+  assert.throws(() => resolveGestureFromEvalBefore({ ...spec, x1: '__proto__.x' }, {}), /finite|resolve/);
+});
+
+test('evalBefore retries exactly once when AssetDB refresh navigates the active preview', async () => {
+  let calls = 0;
+  let waited = 0;
+  const result = await evaluatePageWithNavigationRetry({}, 'session', '({ok:true})', {
+    evaluate: async () => {
+      calls += 1;
+      if (calls === 1) throw new Error('Inspected target navigated or closed (-32000)');
+      return { ok: true, target: { x: 0.25, y: 0.75 } };
+    },
+    wait: async milliseconds => { waited += milliseconds; },
+  });
+  assert.equal(isNavigationEvaluationError(new Error('Execution context was destroyed')), true);
+  assert.equal(calls, 2);
+  assert.equal(waited, 1000);
+  assert.deepEqual(result, {
+    value: { ok: true, target: { x: 0.25, y: 0.75 } },
+    retriedAfterNavigation: true,
+  });
+});
+
+test('evalBefore does not hide a semantic evaluation failure', async () => {
+  let calls = 0;
+  await assert.rejects(evaluatePageWithNavigationRetry({}, 'session', 'bad()', {
+    evaluate: async () => {
+      calls += 1;
+      throw new Error('ReferenceError: target is not defined');
+    },
+    wait: async () => { throw new Error('must not wait'); },
+  }), /ReferenceError/);
+  assert.equal(calls, 1);
 });
 
 test('gesture can hold at the start before moving', async () => {

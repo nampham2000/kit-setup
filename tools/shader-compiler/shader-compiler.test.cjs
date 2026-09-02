@@ -27,6 +27,7 @@ const { lowerHlslToGlsl } = require('./unity-semantic-lowering.cjs');
 const { buildStd140Ubo } = require('./ubo-layout-builder.cjs');
 const { emitCocosEffect, emitSurfaceShaderEffect } = require('./cocos-effect-generator.cjs');
 const { validateCceffectStructure } = require('./shader-validator.cjs');
+const { analyzeEffect } = require('./glsl-static-analyzer.cjs');
 const { transpileShaderFile } = require('./unity-shader-compiler.cjs');
 const { UnityIncludeResolver } = require('./unity-include-resolver.cjs');
 const { convertUnityMatToCocosMtl, convertMatFile } = require('./unity-material-converter.cjs');
@@ -1173,6 +1174,18 @@ Shader "Custom/WithUsePass" {
       assert.equal(alloc.manifest._Cube.binding, 12);
       assert.equal(alloc.collisions.length, 0);
     });
+
+    test('skips Cocos Batcher2D reserved sprite binding 12', () => {
+      const samplers = Array.from({ length: 13 }, (_, index) => ({
+        name: `texture${index}`,
+        type: 'sampler2D',
+      }));
+      const alloc = allocateBindings(samplers, { reservedSlots: [{ set: 2, binding: 12 }] });
+      assert.ok(Object.values(alloc.manifest).every(binding => (
+        binding.type === 'uniformBlock' || binding.binding !== 12
+      )));
+      assert.equal(alloc.manifest.texture11.binding, 13);
+    });
   });
 
   describe('18. Render State Translation Expansion', () => {
@@ -1736,6 +1749,218 @@ Shader "Custom/WithUsePass" {
       for (const res of results) {
         assert.equal(res.passed, true, `Golden fixture '${res.fixtureName}' failed: ${JSON.stringify(res.assertions)}`);
       }
+    });
+  });
+
+  describe('28. Direct vector assignment portability', () => {
+    test('keeps an authored float2 TEXCOORD0 as a vec2 attribute expression', () => {
+      const source = `
+Shader "Test/SpriteFloat2Texcoord" {
+  Properties { _MainTex ("Texture", 2D) = "white" {} }
+  SubShader {
+    Pass {
+      CGPROGRAM
+      #pragma vertex vert
+      #pragma fragment frag
+      sampler2D _MainTex;
+      struct appdata_t { float4 vertex : POSITION; float2 texcoord : TEXCOORD0; };
+      struct v2f { float4 vertex : SV_POSITION; float2 texcoord : TEXCOORD0; };
+      v2f vert(appdata_t input) {
+        v2f output;
+        output.vertex = UnityObjectToClipPos(input.vertex);
+        output.texcoord = input.texcoord;
+        return output;
+      }
+      fixed4 frag(v2f input) : SV_Target { return tex2D(_MainTex, input.texcoord); }
+      ENDCG
+    }
+  }
+}`;
+      const effect = emitCocosEffect(parseShaderLab(source, 'SpriteFloat2Texcoord.shader'));
+      assert.match(effect, /v_uv\s*=\s*a_texCoord\s*;/);
+      assert.doesNotMatch(effect, /v_uv\s*=\s*vec4\(a_texCoord/);
+      const validation = validateCceffectStructure(effect);
+      assert.equal(validation.valid, true, validation.errors.join('\n'));
+    });
+
+    test('truncates Unity appdata_t float4 texcoord when the v2f field is float2', () => {
+      const source = `
+Shader "Test/AppdataTexcoordTruncation" {
+  Properties { _MainTex ("Texture", 2D) = "white" {} }
+  SubShader {
+    Pass {
+      CGPROGRAM
+      #pragma vertex vert
+      #pragma fragment frag
+      #include "UnityCG.cginc"
+      sampler2D _MainTex;
+      struct appdata_t {
+        float4 vertex : POSITION;
+        float4 texcoord : TEXCOORD0;
+      };
+      struct v2f {
+        float4 vertex : SV_POSITION;
+        float2 uv : TEXCOORD0;
+      };
+      v2f vert(appdata_t v) {
+        v2f o;
+        o.vertex = UnityObjectToClipPos(v.vertex);
+        o.uv = v.texcoord;
+        return o;
+      }
+      fixed4 frag(v2f i) : SV_Target { return tex2D(_MainTex, i.uv); }
+      ENDCG
+    }
+  }
+}`;
+      const effect = emitCocosEffect(parseShaderLab(source, 'AppdataTexcoordTruncation.shader'));
+      assert.match(effect, /v_uv\s*=\s*vec4\(a_texCoord,\s*0\.0,\s*0\.0\)\.xy\s*;/);
+      assert.doesNotMatch(effect, /v_uv\s*=\s*vec4\(a_texCoord,\s*0\.0,\s*0\.0\)\s*;/);
+      const validation = validateCceffectStructure(effect);
+      assert.equal(validation.valid, true, validation.errors.join('\n'));
+    });
+
+    test('validator rejects a direct vec4 assignment into a vec2 varying', () => {
+      const effect = `
+CCEffect %{
+  techniques:
+  - passes:
+    - vert: vs:vert
+      frag: fs:frag
+}%
+CCProgram vs %{
+  precision highp float;
+  in vec2 a_texCoord;
+  out vec2 v_uv;
+  vec4 vert () {
+    v_uv = vec4(a_texCoord, 0.0, 0.0);
+    return vec4(0.0);
+  }
+}%
+CCProgram fs %{
+  precision highp float;
+  in vec2 v_uv;
+  vec4 frag () { return vec4(v_uv, 0.0, 1.0); }
+}%`;
+      const validation = validateCceffectStructure(effect);
+      assert.equal(validation.valid, false);
+      assert.ok(validation.errors.some(error => error.includes('GLSL_VECTOR_ASSIGNMENT_WIDTH_MISMATCH')),
+        validation.errors.join('\n'));
+    });
+
+    test('carries Unity texel-size auto uniforms as WebGL1-safe material properties', () => {
+      const source = `
+Shader "Test/TexelSizeUniform" {
+  Properties { _MainTex ("Texture", 2D) = "white" {} }
+  SubShader {
+    Pass {
+      CGPROGRAM
+      #pragma vertex vert
+      #pragma fragment frag
+      sampler2D _MainTex;
+      float4 _MainTex_TexelSize;
+      struct appdata { float4 vertex : POSITION; float2 uv : TEXCOORD0; };
+      struct v2f { float4 vertex : SV_POSITION; float2 uv : TEXCOORD0; };
+      v2f vert(appdata input) {
+        v2f output;
+        output.vertex = UnityObjectToClipPos(input.vertex);
+        output.uv = input.uv;
+        return output;
+      }
+      fixed4 frag(v2f input) : SV_Target {
+        return tex2D(_MainTex, input.uv + _MainTex_TexelSize.xy);
+      }
+      ENDCG
+    }
+  }
+}`;
+      const effect = emitCocosEffect(parseShaderLab(source, 'TexelSizeUniform.shader'));
+      assert.match(effect, /mainTextureTexelSize:\s*\{\s*value:\s*\[0, 0, 0, 0\]\s*\}/);
+      assert.match(effect, /vec4\s+mainTextureTexelSize\s*;/);
+      assert.match(effect, /v_uv\s*\+\s*mainTextureTexelSize\.xy/);
+      assert.doesNotMatch(effect, /\btextureSize\s*\(/);
+      const validation = validateCceffectStructure(effect);
+      assert.equal(validation.valid, true, validation.errors.join('\n'));
+    });
+
+    test('binds Unity PerRendererData main texture through the Cocos Batcher2D sprite ABI', () => {
+      const source = `
+Shader "Test/PerRendererSpriteTexture" {
+  Properties {
+    [PerRendererData] _MainTex ("Sprite Texture", 2D) = "white" {}
+    _Color ("Tint", Color) = (1,1,1,1)
+  }
+  SubShader {
+    Tags { "Queue"="Transparent" "CanUseSpriteAtlas"="True" }
+    Pass {
+      ZWrite Off
+      Blend SrcAlpha OneMinusSrcAlpha
+      CGPROGRAM
+      #pragma vertex vert
+      #pragma fragment frag
+      sampler2D _MainTex;
+      float4 _MainTex_TexelSize;
+      struct appdata { float4 vertex : POSITION; float2 uv : TEXCOORD0; };
+      struct v2f { float4 vertex : SV_POSITION; float2 uv : TEXCOORD0; };
+      v2f vert(appdata input) {
+        v2f output;
+        output.vertex = UnityObjectToClipPos(input.vertex);
+        output.uv = input.uv;
+        return output;
+      }
+      fixed4 frag(v2f input) : SV_Target {
+        return KawaseSample(_MainTex, input.uv, _MainTex_TexelSize.xy);
+      }
+      fixed4 KawaseSample(sampler2D tex, float2 uv, float2 texelSize) {
+        return tex2D(tex, uv + texelSize);
+      }
+      ENDCG
+    }
+  }
+}`;
+      const doc = parseShaderLab(source, 'PerRendererSpriteTexture.shader');
+      const mainTex = doc.properties.find(property => property.name === '_MainTex');
+      assert.ok(mainTex.attributes.includes('PerRendererData'));
+      const effect = emitCocosEffect(doc);
+      assert.doesNotMatch(effect, /\n\s*mainTexture:\s*\{\s*value:/);
+      assert.match(effect, /mainTexture_ST:\s*\{\s*value:\s*\[1, 1, 0, 0\]\s*\}/);
+      assert.match(effect, /mainTextureTexelSize:\s*\{\s*value:\s*\[0, 0, 0, 0\]\s*\}/);
+      assert.match(effect, /#pragma builtin\(local\)[\s\S]*layout\(set = 2, binding = 12\) uniform sampler2D cc_spriteTexture;/);
+      assert.match(effect, /uniform Constant \{/);
+      assert.doesNotMatch(effect, /layout\(set = 2, binding = 0\) uniform Constant \{/);
+      assert.doesNotMatch(effect, /cc_matWorld/);
+      assert.match(effect, /pos\s*=\s*\(cc_matViewProj\s*\*\s*vec4/);
+      assert.match(effect, /KawaseSample\(cc_spriteTexture, v_uv, mainTextureTexelSize\.xy\)/);
+      assert.match(effect, /vec4\s+KawaseSample\(sampler2D tex, vec2 uv, vec2 texelSize\)[\s\S]*texture\(tex, uv \+ texelSize\)/);
+      assert.doesNotMatch(effect, /\btexU\s*\(tex,/);
+      assert.doesNotMatch(effect, /uniform sampler2D mainTexture;/);
+      const validation = validateCceffectStructure(effect);
+      assert.equal(validation.valid, true, validation.errors.join('\n'));
+      const staticAnalysis = analyzeEffect(effect);
+      assert.ok(staticAnalysis.warnings.every(warning => warning.code !== 'UBO_MEMBER_UNBOUND'));
+    });
+
+    test('validator fails before Cocos importer on textureSize WebGL1 incompatibility', () => {
+      const effect = `
+CCEffect %{
+  techniques:
+  - passes:
+    - vert: vs:vert
+      frag: fs:frag
+}%
+CCProgram vs %{
+  precision highp float;
+  vec4 vert () { return vec4(0.0); }
+}%
+CCProgram fs %{
+  precision highp float;
+  layout(set = 2, binding = 1) uniform sampler2D mainTexture;
+  vec4 frag () { return vec4(vec2(textureSize(mainTexture, 0)), 0.0, 1.0); }
+}%`;
+      const validation = validateCceffectStructure(effect);
+      assert.equal(validation.valid, false);
+      assert.ok(validation.errors.some(error => error.includes('GLSL_WEBGL1_TEXTURE_SIZE_UNSUPPORTED')),
+        validation.errors.join('\n'));
     });
   });
 

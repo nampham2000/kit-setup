@@ -46,7 +46,14 @@ Manifest:
       {
         "name": "baseline",
         "evalBeforeFile": ".unity/checkpoints/baseline-before.js",
-        "gesture": "0.3,0.6,0.7,0.6,500,20",
+        "gestureFromEvalBefore": {
+          "x1": "actionableTouchTargets.0.runtimeX",
+          "y1": "actionableTouchTargets.0.runtimeY",
+          "x2": "actionableTouchTargets.0.runtimeX",
+          "y2": "actionableTouchTargets.0.runtimeY",
+          "durationMs": 80,
+          "steps": 1
+        },
         "gestureHoldBeforeMoveMs": 300,
         "gestureKeepPressed": true,
         "postActionSeconds": 3,
@@ -560,6 +567,32 @@ function evaluateTraceAssertion(requiredTrace, value) {
   return { required: true, ok: true, matched };
 }
 
+function normalizeDynamicGestureSpec(dynamic, label) {
+  if (!dynamic || typeof dynamic !== 'object' || Array.isArray(dynamic)) {
+    throw new Error(`${label} phải là object`);
+  }
+  const pathKeys = ['x1', 'y1', 'x2', 'y2'];
+  if (pathKeys.some(key => typeof dynamic[key] !== 'string' || !dynamic[key].trim())) {
+    throw new Error(`${label} cần x1/y1/x2/y2 path`);
+  }
+  if (!Number.isFinite(Number(dynamic.durationMs))
+    || Number(dynamic.durationMs) < 16 || Number(dynamic.durationMs) > 5000) {
+    throw new Error(`${label}.durationMs phải nằm trong 16-5000 ms`);
+  }
+  if (!Number.isFinite(Number(dynamic.steps))
+    || Number(dynamic.steps) < 1 || Number(dynamic.steps) > 120) {
+    throw new Error(`${label}.steps phải nằm trong 1-120`);
+  }
+  return {
+    x1: dynamic.x1.trim(),
+    y1: dynamic.y1.trim(),
+    x2: dynamic.x2.trim(),
+    y2: dynamic.y2.trim(),
+    durationMs: Number(dynamic.durationMs),
+    steps: Number(dynamic.steps),
+  };
+}
+
 function validateConfig(config, overrides = {}) {
   if (!config || typeof config !== 'object' || Array.isArray(config)) throw new Error('Manifest phải là JSON object');
   const url = overrides.url || config.url;
@@ -666,27 +699,49 @@ function validateConfig(config, overrides = {}) {
         || entry.gestures.some(gesture => typeof gesture !== 'string' || !gesture.trim()))) {
       throw new Error(`cases[${index}].gestures phải có 2-8 gesture string`);
     }
-    if (entry.gesture && entry.gestures) {
-      throw new Error(`cases[${index}] không được dùng đồng thời gesture và gestures`);
+    if (entry.gestureFromEvalBefore !== undefined) {
+      if (!entry.evalBefore && !entry.evalBeforeFile) {
+        throw new Error(`cases[${index}].gestureFromEvalBefore cần evalBefore/evalBeforeFile`);
+      }
+      normalizeDynamicGestureSpec(entry.gestureFromEvalBefore,
+        `cases[${index}].gestureFromEvalBefore`);
     }
-    if (entry.gestureKeepPressed === true && !entry.gesture) {
-      throw new Error(`cases[${index}].gestureKeepPressed cần gesture`);
+    if (entry.gesturesFromEvalBefore !== undefined) {
+      if (!Array.isArray(entry.gesturesFromEvalBefore)
+        || entry.gesturesFromEvalBefore.length < 2 || entry.gesturesFromEvalBefore.length > 8) {
+        throw new Error(`cases[${index}].gesturesFromEvalBefore phải có 2-8 gesture object`);
+      }
+      if (!entry.evalBefore && !entry.evalBeforeFile) {
+        throw new Error(`cases[${index}].gesturesFromEvalBefore cần evalBefore/evalBeforeFile`);
+      }
+      entry.gesturesFromEvalBefore.forEach((dynamic, dynamicIndex) => {
+        normalizeDynamicGestureSpec(dynamic,
+          `cases[${index}].gesturesFromEvalBefore[${dynamicIndex}]`);
+      });
+    }
+    const gestureModes = Number(!!entry.gesture) + Number(!!entry.gestures)
+      + Number(!!entry.gestureFromEvalBefore) + Number(!!entry.gesturesFromEvalBefore);
+    if (gestureModes > 1) {
+      throw new Error(`cases[${index}] không được dùng đồng thời gesture, gestures, gestureFromEvalBefore và gesturesFromEvalBefore`);
+    }
+    if (entry.gestureKeepPressed === true && !entry.gesture && !entry.gestureFromEvalBefore) {
+      throw new Error(`cases[${index}].gestureKeepPressed cần gesture hoặc gestureFromEvalBefore`);
     }
     if (entry.gestureHoldBeforeMoveMs !== undefined
       && (!Number.isFinite(Number(entry.gestureHoldBeforeMoveMs))
         || Number(entry.gestureHoldBeforeMoveMs) < 0 || Number(entry.gestureHoldBeforeMoveMs) > 5000)) {
       throw new Error(`cases[${index}].gestureHoldBeforeMoveMs phải nằm trong 0-5000 ms`);
     }
-    if (Number(entry.gestureHoldBeforeMoveMs) > 0 && !entry.gesture) {
-      throw new Error(`cases[${index}].gestureHoldBeforeMoveMs cần gesture`);
+    if (Number(entry.gestureHoldBeforeMoveMs) > 0 && !entry.gesture && !entry.gestureFromEvalBefore) {
+      throw new Error(`cases[${index}].gestureHoldBeforeMoveMs cần gesture hoặc gestureFromEvalBefore`);
     }
     if (entry.gestureGapMs !== undefined
       && (!Number.isFinite(Number(entry.gestureGapMs))
         || Number(entry.gestureGapMs) < 0 || Number(entry.gestureGapMs) > 5000)) {
       throw new Error(`cases[${index}].gestureGapMs phải nằm trong 0-5000 ms`);
     }
-    if (entry.gestureGapMs !== undefined && !entry.gestures) {
-      throw new Error(`cases[${index}].gestureGapMs cần gestures`);
+    if (entry.gestureGapMs !== undefined && !entry.gestures && !entry.gesturesFromEvalBefore) {
+      throw new Error(`cases[${index}].gestureGapMs cần gestures hoặc gesturesFromEvalBefore`);
     }
     if (entry.previewDevice !== undefined
       && (typeof entry.previewDevice !== 'string' || !entry.previewDevice.trim())) {
@@ -707,6 +762,14 @@ function validateConfig(config, overrides = {}) {
       evalExpression: readExpression(entry, 'eval', 'evalFile'),
       parsedGesture: entry.gesture ? parseGesture(entry.gesture) : null,
       parsedGestures: entry.gestures ? entry.gestures.map(gesture => parseGesture(gesture)) : [],
+      gestureFromEvalBefore: entry.gestureFromEvalBefore
+        ? normalizeDynamicGestureSpec(entry.gestureFromEvalBefore,
+          `cases[${index}].gestureFromEvalBefore`) : null,
+      gesturesFromEvalBefore: entry.gesturesFromEvalBefore
+        ? entry.gesturesFromEvalBefore.map((dynamic, dynamicIndex) => normalizeDynamicGestureSpec(
+          dynamic,
+          `cases[${index}].gesturesFromEvalBefore[${dynamicIndex}]`,
+        )) : [],
       gestureGapMs: entry.gestureGapMs === undefined ? 0 : Number(entry.gestureGapMs),
       gestureHoldBeforeMoveMs: entry.gestureHoldBeforeMoveMs === undefined
         ? 0 : Number(entry.gestureHoldBeforeMoveMs),
@@ -841,6 +904,8 @@ async function main() {
       evalExpression: caseEntry.evalExpression,
       gesture: caseEntry.parsedGesture,
       gestures: caseEntry.parsedGestures,
+      gestureFromEvalBefore: caseEntry.gestureFromEvalBefore,
+      gesturesFromEvalBefore: caseEntry.gesturesFromEvalBefore,
       gestureGapMs: caseEntry.gestureGapMs,
       gestureHoldBeforeMoveMs: caseEntry.gestureHoldBeforeMoveMs,
       gestureKeepPressed: caseEntry.gestureKeepPressed === true,

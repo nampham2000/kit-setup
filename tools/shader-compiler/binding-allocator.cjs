@@ -45,6 +45,10 @@ function allocateBindings(resources, options = {}) {
   const uboSet = baseSet;
   const uboBinding = 0;
   occupiedSlots.add(`${uboSet}:${uboBinding}`);
+  for (const slot of options.reservedSlots || []) {
+    if (!slot || !Number.isInteger(slot.set) || !Number.isInteger(slot.binding)) continue;
+    occupiedSlots.add(`${slot.set}:${slot.binding}`);
+  }
   manifest._UBO_Constant = {
     cocosProperty: 'Constant',
     set: uboSet,

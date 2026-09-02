@@ -299,6 +299,107 @@ function escapeRegExp(text) {
   return String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function hlslVectorWidth(type) {
+  const match = /^(?:float|half|fixed|min16float|int|uint)([2-4])$/i.exec(String(type || ''));
+  return match ? Number(match[1]) : 1;
+}
+
+function texcoordAttributeExpression(type, attribute) {
+  const width = hlslVectorWidth(type);
+  if (width <= 2) return attribute;
+  if (width === 3) return `vec3(${attribute}, 0.0)`;
+  return `vec4(${attribute}, 0.0, 0.0)`;
+}
+
+function fallbackCocosSamplerName(unityName) {
+  let name = String(unityName || '').replace(/^_+/, '');
+  if (!name) return 'mainTexture';
+  name = name.charAt(0).toLowerCase() + name.slice(1);
+  return name === 'mainTex' || name === 'baseMap' ? 'mainTexture' : name;
+}
+
+/**
+ * Unity UI Image/SpriteRenderer supplies `[PerRendererData] _MainTex` per draw.
+ * Cocos Batcher2D does the same only through its fixed local descriptor ABI:
+ * `cc_spriteTexture`, set 2, binding 12. Treating it as a regular material
+ * sampler leaves a white/default texture bound and can make the Sprite vanish.
+ */
+function isCocosSpriteTextureProperty(prop) {
+  if (!prop || (prop.type !== '2D' && prop.cocosType !== 'sampler2D')) return false;
+  const cName = prop.cocosName || prop.name;
+  return cName === 'mainTexture'
+    && (prop.attributes || []).some(attribute => /^PerRendererData$/i.test(String(attribute).trim()));
+}
+
+function allocateSamplerBindings(samplers, options) {
+  const needsSpriteBinding = samplers.some(sampler => sampler.runtimeBinding === 'cocos-sprite-texture');
+  const allocatable = samplers.filter(sampler => sampler.runtimeBinding !== 'cocos-sprite-texture');
+  const reservedSlots = [...(options.reservedSlots || [])];
+  if (needsSpriteBinding) reservedSlots.push({ set: 2, binding: 12 });
+  return allocateBindings(allocatable, { ...options, reservedSlots });
+}
+
+/**
+ * Unity auto-binds `<Tex>_TexelSize`; Cocos material effects do not. Carry it
+ * as an explicit vec4 property so WebGL1 never depends on textureSize(), and
+ * so the runtime adapter can bind (1/w, 1/h, w, h) from the real texture.
+ */
+function ensureTexelSizeProperties(docIR, rawCode, uboFields, propertyNameMap) {
+  const matches = [...String(rawCode || '').matchAll(/\b_?([A-Za-z_]\w*?)_TexelSize\b/g)];
+  for (const match of matches) {
+    const stem = match[1];
+    const mappedAutoUniform = propertyNameMap.get(match[0]);
+    const samplerName = propertyNameMap.get(`_${stem}`) || propertyNameMap.get(stem) ||
+      fallbackCocosSamplerName(stem);
+    const propertyName = mappedAutoUniform || `${samplerName}TexelSize`;
+    propertyNameMap.set(match[0], propertyName);
+    if (!uboFields.some(field => field.name === propertyName)) {
+      uboFields.push({ name: propertyName, type: 'vec4' });
+    }
+    if (!(docIR.properties || []).some(property => (property.cocosName || property.name) === propertyName)) {
+      docIR.properties.push({
+        name: propertyName,
+        cocosName: propertyName,
+        displayName: `${samplerName} texel size`,
+        type: 'Vector',
+        unityType: 'Vector',
+        cocosType: 'vec4',
+        defaultValue: [0, 0, 0, 0],
+        runtimeBinding: 'texture-texel-size',
+        textureProperty: samplerName,
+      });
+    }
+  }
+}
+
+/**
+ * HLSL accepts direct assignment from a wider vector to a narrower struct
+ * field and truncates the right-hand side. GLSL ES does not. This is common
+ * with Unity's built-in `appdata_t`: `texcoord` is float4 while a sprite v2f
+ * carries only float2 UVs (`o.uv = v.texcoord`).
+ *
+ * Preserve the authored HLSL semantics before identifier lowering by adding
+ * the exact destination-width swizzle only to direct struct-field copies.
+ * Wider source channels remain available everywhere else.
+ */
+function coerceNarrowDirectStructAssignments(body, outputVar, outputStruct, inputVar, inputStruct) {
+  if (!outputVar || !outputStruct || !inputVar || !inputStruct) return body;
+  let out = body;
+  const swizzles = { 1: 'x', 2: 'xy', 3: 'xyz', 4: 'xyzw' };
+  for (const outputField of outputStruct.fields || []) {
+    const destinationWidth = hlslVectorWidth(outputField.type);
+    for (const inputField of inputStruct.fields || []) {
+      const sourceWidth = hlslVectorWidth(inputField.type);
+      if (destinationWidth >= sourceWidth) continue;
+      const lhs = `${escapeRegExp(outputVar)}\\.${escapeRegExp(outputField.name)}`;
+      const rhs = `${escapeRegExp(inputVar)}\\.${escapeRegExp(inputField.name)}`;
+      const directCopy = new RegExp(`(\\b${lhs}\\s*=\\s*\\b${rhs}\\b)(?!\\s*\\.)`, 'g');
+      out = out.replace(directCopy, `$1.${swizzles[destinationWidth]}`);
+    }
+  }
+  return out;
+}
+
 /**
  * Fields of the vertex-output struct that no alias covers, and that therefore
  * need their own varying declared in both stages.
@@ -429,6 +530,13 @@ function buildCceffectYaml(docIR, passIR, uboInfo, options = {}) {
     lines.push('      properties:');
     for (const prop of docIR.properties) {
       const pName = prop.cocosName || prop.name;
+      if (isCocosSpriteTextureProperty(prop)) {
+        // Batcher2D owns the texture descriptor. Keep ST authorable for Unity
+        // shaders that use TRANSFORM_TEX, but never emit a material texture
+        // property that cannot receive SpriteFrame.texture.
+        lines.push(`        ${pName}_ST: { value: [1, 1, 0, 0] }`);
+        continue;
+      }
       const valStr = formatYamlPropertyValue(prop);
 
       // Scalar đã gộp vào lát cắt vec4 phải khai báo `target:`, nếu không Cocos
@@ -483,6 +591,9 @@ function emitSurfaceShaderEffect(docIR, passIR, options = {}) {
       uboFields.push({ name: cName, type: prop.cocosType || 'float' });
     }
   }
+  ensureTexelSizeProperties(
+    docIR, passIR.program && passIR.program.rawHlsl, uboFields, propertyNameMap,
+  );
 
   // Surface programs are `#include`d by the entry programs rather than being
   // the entry themselves, so their uniforms live in an unnumbered `Constants`
@@ -520,13 +631,16 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
 
   for (const prop of docIR.properties) {
     const cName = prop.cocosName || prop.name;
-    propertyNameMap.set(prop.name, cName);
+    const spriteTexture = isCocosSpriteTextureProperty(prop);
+    const samplerName = spriteTexture ? 'cc_spriteTexture' : cName;
+    propertyNameMap.set(prop.name, samplerName);
 
     if (prop.type === '2D' || prop.type === 'Cube' || prop.type === '3D') {
       samplers.push({
-        name: cName,
+        name: samplerName,
         type: prop.cocosType || 'sampler2D',
         originalName: prop.name,
+        runtimeBinding: spriteTexture ? 'cocos-sprite-texture' : undefined,
       });
 
       // Add corresponding tiling & offset vector (_ST)
@@ -535,6 +649,7 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
         type: 'vec4',
       });
       propertyNameMap.set(`${prop.name}_ST`, `${cName}_ST`);
+      if (spriteTexture) propertyNameMap.set(`${prop.name}_TexelSize`, `${cName}TexelSize`);
     } else {
       uboFields.push({
         name: cName,
@@ -542,6 +657,11 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
       });
     }
   }
+
+  ensureTexelSizeProperties(docIR, rawCode, uboFields, propertyNameMap);
+  const usesCocosSpriteTexture = samplers.some(
+    sampler => sampler.runtimeBinding === 'cocos-sprite-texture',
+  );
 
   // Also include any explicit HLSL uniforms that weren't in Properties block
   for (const u of programIR.uniforms || []) {
@@ -555,7 +675,12 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
 
   // Build std140 UBO layout with explicit descriptor set binding (Set 2, Binding 0)
   const ubo = buildStd140Ubo(uboFields, true, {
-    explicitBindings: options.explicitBindings !== undefined ? options.explicitBindings : true,
+    // Batcher2D owns descriptor set 2 for CCLocal + cc_spriteTexture. Its
+    // material UBO must stay unnumbered so Cocos assigns the material set,
+    // matching builtin-sprite and the shared ui-sprite-alpha-sep effect.
+    explicitBindings: usesCocosSpriteTexture
+      ? false
+      : (options.explicitBindings !== undefined ? options.explicitBindings : true),
     set: 2,
     binding: 0,
     // Trên ngưỡng này, scalar được gộp vào lát cắt vec4 và phơi lại qua `target:`.
@@ -586,7 +711,9 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
       if (stillColliding.length) {
         // Không tách được: quay về scalar rời (hành vi cũ, luôn đúng).
         const relaxed = buildStd140Ubo(uboFields, true, {
-          explicitBindings: options.explicitBindings !== undefined ? options.explicitBindings : true,
+          explicitBindings: usesCocosSpriteTexture
+            ? false
+            : (options.explicitBindings !== undefined ? options.explicitBindings : true),
           set: 2,
           binding: 0,
         });
@@ -664,12 +791,25 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
     return res;
   }
 
+  function preserveCocosSpriteUvSampling(codeStr) {
+    if (!usesCocosSpriteTexture) return codeStr;
+    // Batcher2D writes SpriteFrame UVs in the coordinate space expected by
+    // cc_spriteTexture. Cocos' builtin-sprite effect samples those UVs directly
+    // (and only flips SAMPLE_FROM_RT), so the generic Unity texture-origin
+    // compatibility helper would invert ordinary UI/SpriteFrame textures.
+    // Apply this to helper bodies as well as entry points: blur shaders commonly
+    // pass _MainTex into a sampler2D helper, where the concrete binding name is
+    // no longer visible to a call-site-only rewrite.
+    return codeStr.replace(/\btexU\s*\(/g, 'texture(');
+  }
+
   // 4. Translate Helper Functions in source
   const helperFunctions = [];
   for (const func of programIR.functions || []) {
     if (func.name !== programIR.vertexEntry && func.name !== programIR.fragmentEntry) {
       let funcGlsl = lowerHlslToGlsl(func.raw, options);
       funcGlsl = remapIdentifiers(funcGlsl);
+      funcGlsl = preserveCocosSpriteUvSampling(funcGlsl);
       helperFunctions.push(funcGlsl);
     }
   }
@@ -680,8 +820,8 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
   // 5. Generate Vertex Program (CCProgram vs)
   const vsIncludes = [
     '  #include <builtin/uniforms/cc-global>',
-    '  #include <builtin/uniforms/cc-local>',
   ];
+  if (!usesCocosSpriteTexture) vsIncludes.push('  #include <builtin/uniforms/cc-local>');
   if (/cc_fog|cc_fogColor|UNITY_FOG/i.test(rawCode)) vsIncludes.push('  #include <builtin/uniforms/cc-fog>');
   if (/cc_shadow|TRANSFER_SHADOW|SHADOW_COORDS/i.test(rawCode)) vsIncludes.push('  #include <builtin/uniforms/cc-shadow>');
   if (/cc_joints|cc_jointTexture|a_joints|a_weights/i.test(rawCode)) vsIncludes.push('  #include <builtin/uniforms/cc-skinning>');
@@ -718,10 +858,16 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
     if (vsSamplers.length > 0) {
       // Same allocator as the fragment stage: a sampler must carry the same
       // set/binding in both stages or Cocos rejects the pipeline layout.
-      const vsAlloc = allocateBindings(samplers, options);
+      const vsAlloc = allocateSamplerBindings(samplers, options);
       for (const s of vsSamplers) {
-        const b = vsAlloc.manifest[s.name] || { set: 2, binding: 1 };
-        vsLines.push(`  layout(set = ${b.set}, binding = ${b.binding}) uniform ${s.type} ${s.name};`);
+        if (s.runtimeBinding === 'cocos-sprite-texture') {
+          vsLines.push('  #pragma builtin(local)');
+          vsLines.push(`  layout(set = 2, binding = 12) uniform ${s.type} ${s.name};`);
+        } else {
+          const b = vsAlloc.manifest[s.name] || { set: 2, binding: 1 };
+          if (usesCocosSpriteTexture) vsLines.push(`  uniform ${s.type} ${s.name};`);
+          else vsLines.push(`  layout(set = ${b.set}, binding = ${b.binding}) uniform ${s.type} ${s.name};`);
+        }
       }
       vsLines.push('');
     }
@@ -779,6 +925,12 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
     // Translate custom vertex body
     let vBody = lowerHlslToGlsl(vertFunc.body, options);
     vBody = remapIdentifiers(vBody);
+    if (usesCocosSpriteTexture) {
+      // Sprite.fillBuffers submits world-space vertices and commitComp passes
+      // transform=null. Cocos builtin-sprite therefore multiplies those vertices
+      // by cc_matViewProj only; cc_matWorld belongs to local-coordinate renderers.
+      vBody = vBody.replace(/\bcc_matViewProj\s*\*\s*cc_matWorld\s*\*/g, 'cc_matViewProj *');
+    }
 
     // The generated entry reserves `pos` for the final clip/object position.
     // URP commonly declares `VertexPositionInputs pos`, which previously made
@@ -820,6 +972,14 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
     if (vertFunc.params.length > 0) {
       const pName = vertFunc.params[0].name;
 
+      // HLSL permits a direct wider-vector -> narrower-vector struct copy;
+      // GLSL ES requires the truncating swizzle to be explicit. Do this while
+      // both struct declarations are still available, before `v.texcoord`
+      // becomes `vec4(a_texCoord, 0, 0)` and loses its source type.
+      vBody = coerceNarrowDirectStructAssignments(
+        vBody, outputVar, outputStruct, pName, vertexInputStruct,
+      );
+
       // GHI vào vị trí đỉnh phải đi trước phần đọc. Trong HLSL `v` là struct cục bộ
       // nên `v.vertex.xyz += ...` (RECTSIZE, wind, vertex offset) hợp lệ; hạ thẳng
       // thành `a_position += ...` là GHI VÀO ATTRIBUTE — `in` trong GLSL ES 3.0 chỉ
@@ -834,6 +994,21 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
       vBody = vBody.replace(new RegExp(`\\b${pName}\\.pos\\b`, 'g'), 'a_position');
       vBody = vBody.replace(new RegExp(`\\b${pName}\\.positionOS\\.xyz\\b`, 'g'), 'a_position');
       vBody = vBody.replace(new RegExp(`\\b${pName}\\.positionOS\\b`, 'g'), 'vec4(a_position, 1.0)');
+      // Sprite shaders often declare TEXCOORD0 as float2, while Unity's
+      // built-in appdata_t declares it as float4. Preserve the parsed width;
+      // blindly widening the float2 case creates invalid GLSL assignments.
+      if (vertexInputStruct) {
+        for (const field of vertexInputStruct.fields || []) {
+          if (/^TEXCOORD0$/i.test(field.semantic || '')) {
+            vBody = vBody.replace(
+              new RegExp(`\\b${pName}\\.${escapeRegExp(field.name)}\\b`, 'g'),
+              texcoordAttributeExpression(field.type, 'a_texCoord'),
+            );
+          }
+        }
+      }
+      // Conservative fallback when the input struct was macro-supplied or
+      // only partially parsed: Unity's conventional texcoord field is float4.
       vBody = vBody.replace(new RegExp(`\\b${pName}\\.texcoord\\b`, 'g'), 'vec4(a_texCoord, 0.0, 0.0)');
       vBody = vBody.replace(new RegExp(`\\b${pName}\\.uv\\b`, 'g'), 'a_texCoord');
       // Unity's second UV set is conventionally named uv2 but carries the
@@ -842,7 +1017,10 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
       if (vertexInputStruct) {
         for (const field of vertexInputStruct.fields || []) {
           if (/^TEXCOORD1$/i.test(field.semantic || '')) {
-            vBody = vBody.replace(new RegExp(`\\b${pName}\\.${escapeRegExp(field.name)}\\b`, 'g'), 'a_texCoord1');
+            vBody = vBody.replace(
+              new RegExp(`\\b${pName}\\.${escapeRegExp(field.name)}\\b`, 'g'),
+              texcoordAttributeExpression(field.type, 'a_texCoord1'),
+            );
           }
         }
       }
@@ -907,11 +1085,11 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
   if (customVertAssignedClipPos) {
     vsLines.push('    return pos;');
   } else if (varyings.some(v => v.includes('v_screenPos')) && !vertFunc) {
-    vsLines.push('    vec4 clipPos = cc_matViewProj * cc_matWorld * pos;');
+    vsLines.push(`    vec4 clipPos = ${usesCocosSpriteTexture ? 'cc_matViewProj' : 'cc_matViewProj * cc_matWorld'} * pos;`);
     vsLines.push('    v_screenPos = vec4(vec2(clipPos.x, clipPos.y) * 0.5 + vec2(clipPos.w * 0.5), clipPos.zw);');
     vsLines.push('    return clipPos;');
   } else {
-    vsLines.push('    return cc_matViewProj * cc_matWorld * pos;');
+    vsLines.push(`    return ${usesCocosSpriteTexture ? 'cc_matViewProj' : 'cc_matViewProj * cc_matWorld'} * pos;`);
   }
   vsLines.push('  }');
   vsLines.push('}%');
@@ -949,13 +1127,18 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
 
   // Samplers with deterministic descriptor allocation
   if (samplers.length > 0) {
-    const bindingAlloc = allocateBindings(samplers, options);
+    const bindingAlloc = allocateSamplerBindings(samplers, options);
     for (const s of samplers) {
-      const bindingInfo = bindingAlloc.manifest[s.name] || { set: 2, binding: 1 };
-      if (options.explicitBindings !== false) {
-        fsLines.push(`  layout(set = ${bindingInfo.set}, binding = ${bindingInfo.binding}) uniform ${s.type} ${s.name};`);
+      if (s.runtimeBinding === 'cocos-sprite-texture') {
+        fsLines.push('  #pragma builtin(local)');
+        fsLines.push(`  layout(set = 2, binding = 12) uniform ${s.type} ${s.name};`);
       } else {
-        fsLines.push(`  uniform ${s.type} ${s.name};`);
+        const bindingInfo = bindingAlloc.manifest[s.name] || { set: 2, binding: 1 };
+        if (!usesCocosSpriteTexture && options.explicitBindings !== false) {
+          fsLines.push(`  layout(set = ${bindingInfo.set}, binding = ${bindingInfo.binding}) uniform ${s.type} ${s.name};`);
+        } else {
+          fsLines.push(`  uniform ${s.type} ${s.name};`);
+        }
       }
     }
     fsLines.push('');
@@ -1001,6 +1184,7 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
   if (fragFunc && fragFunc.body) {
     let fBody = lowerHlslToGlsl(fragFunc.body, options);
     fBody = remapIdentifiers(fBody);
+    fBody = preserveCocosSpriteUvSampling(fBody);
 
     // Replace param references with varyings
     if (fragFunc.params.length > 0) {

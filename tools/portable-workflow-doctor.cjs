@@ -5,6 +5,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 
+const { assertPortableRegistry, loadRegistry, portableFileList } = require('./port-regression-gate.cjs');
+
 const DEFAULT_PROJECT_ROOT = path.resolve(__dirname, '..', '..');
 const REQUIRED_SCRIPTS = Object.freeze({
   'ai:sync': 'ai-knowledge-sync.cjs',
@@ -26,6 +28,8 @@ const PORTABLE_FILES = Object.freeze([
   'playable-shared-kit/tools/portable-workflow-doctor.cjs',
   'playable-shared-kit/tools/work-memory/data/shared-memory.db',
 ]);
+const PROJECT_PORTABLE_ROOT_FILES = Object.freeze(['package.json', 'package-lock.json']);
+const MAX_PORTABLE_EVIDENCE_DIAGNOSTICS = 20;
 
 const USAGE = `Portable Porting Workflow Doctor
 
@@ -124,8 +128,101 @@ function command(file, args, cwd, timeout = 60000) {
   }
 }
 
-function isGitTracked(projectRoot, relativeFile, runner = command) {
-  return runner('git', ['-C', projectRoot, 'ls-files', '--error-unmatch', '--', relativeFile], projectRoot, 10000).ok;
+function gitTrackedFiles(projectRoot, relativeFiles, runner = command) {
+  const candidates = [...new Set((relativeFiles || [])
+    .map(relative => String(relative || '').replace(/\\/g, '/'))
+    .filter(Boolean))];
+  if (!candidates.length) return { ok: true, tracked: new Set(), error: null };
+
+  // One bounded Git process is materially safer than one process per file on
+  // Codex Desktop for Windows. The desktop review integration already performs
+  // background status/diff work, so a portability check must not amplify a Git
+  // retry/process storm when the repository contains a large evidence closure.
+  const result = runner('git', ['-C', projectRoot, 'ls-files', '-z', '--cached', '--', ...candidates], projectRoot, 10000);
+  const tracked = new Set(result.ok
+    ? String(result.stdout || '').split('\0').filter(Boolean).map(relative => relative.replace(/\\/g, '/'))
+    : []);
+  return {
+    ok: result.ok,
+    tracked,
+    error: result.ok ? null : (result.error || result.stdout || `git exited ${result.exitCode}`),
+  };
+}
+
+function regressionSpawnAdapter(runner, projectRoot) {
+  return (file, args, options = {}) => {
+    const result = runner(file, args, options.cwd || projectRoot, options.timeout || 15000);
+    return {
+      status: result.ok ? 0 : (result.exitCode ?? 1),
+      stdout: result.stdout || '',
+      stderr: result.ok ? '' : (result.stdout || ''),
+      ...(result.error ? { error: new Error(result.error) } : {}),
+    };
+  };
+}
+
+function inspectProjectPortableEvidence(projectRoot, runner = command) {
+  const registryRelative = 'tools/port-regressions.json';
+  const registryFile = path.join(projectRoot, ...registryRelative.split('/'));
+  const registryFound = fs.existsSync(registryFile);
+  let registryError = null;
+  let closureFiles = [];
+  let closureUntracked = [];
+  let closureUntrackedCount = 0;
+
+  if (registryFound) {
+    try {
+      const registry = loadRegistry(projectRoot, { config: registryRelative });
+      // Keep this list canonical with the regression gate. It includes the
+      // registry, matrices, eval/oracle/reference dependencies, and watchFiles.
+      closureFiles = portableFileList(projectRoot, registry);
+      try {
+        assertPortableRegistry(projectRoot, registry, {
+          spawnSync: regressionSpawnAdapter(runner, projectRoot),
+        });
+      } catch (error) {
+        if (error.code === 'REGRESSION_FILES_UNTRACKED') {
+          closureUntracked = Array.isArray(error.details && error.details.files) ? error.details.files : [];
+          closureUntrackedCount = Number(error.details && error.details.count) || closureUntracked.length;
+        } else throw error;
+      }
+    } catch (error) {
+      registryError = {
+        code: error.code || 'REGRESSION_REGISTRY_INVALID',
+        message: error.message,
+      };
+    }
+  }
+
+  const files = [...new Set([
+    ...PROJECT_PORTABLE_ROOT_FILES,
+    ...(registryFound ? [registryRelative] : []),
+    ...closureFiles,
+  ])].sort();
+  const missing = PROJECT_PORTABLE_ROOT_FILES
+    .filter(relative => !fs.existsSync(path.join(projectRoot, ...relative.split('/'))));
+  const rootTrackingCandidates = PROJECT_PORTABLE_ROOT_FILES
+    .filter(relative => !missing.includes(relative));
+  if (registryFound && registryError) rootTrackingCandidates.push(registryRelative);
+  const rootTracking = gitTrackedFiles(projectRoot, rootTrackingCandidates, runner);
+  const rootUntracked = rootTrackingCandidates.filter(relative => !rootTracking.tracked.has(relative));
+  const untracked = [...rootUntracked, ...closureUntracked];
+  const untrackedCount = rootUntracked.length + closureUntrackedCount;
+  const diagnosticLimit = MAX_PORTABLE_EVIDENCE_DIAGNOSTICS;
+
+  return {
+    ok: missing.length === 0 && untrackedCount === 0 && !registryError,
+    registryFound,
+    fileCount: files.length,
+    closureFileCount: closureFiles.length,
+    missingCount: missing.length,
+    missing: missing.slice(0, diagnosticLimit),
+    untrackedCount,
+    untracked: untracked.slice(0, diagnosticLimit),
+    diagnosticsTruncated: missing.length > diagnosticLimit || untrackedCount > diagnosticLimit,
+    ...(registryError ? { registryError } : {}),
+    ...(!rootTracking.ok ? { gitTrackingError: rootTracking.error } : {}),
+  };
 }
 
 function addCheck(checks, id, ok, severity, summary, details = null, nextAction = null) {
@@ -239,19 +336,30 @@ function runDoctor(options = {}, dependencies = {}) {
     'tools/portable-workflow-doctor.cjs',
     'tools/work-memory/data/shared-memory.db',
   ];
-  const sharedUntracked = sharedPortableFiles
-    .filter(relative => fs.existsSync(path.join(sharedRoot, relative)) && !isGitTracked(sharedRoot, relative, runner));
+  const sharedTrackingCandidates = sharedPortableFiles
+    .filter(relative => fs.existsSync(path.join(sharedRoot, relative)));
+  const sharedTracking = gitTrackedFiles(sharedRoot, sharedTrackingCandidates, runner);
+  const sharedUntracked = sharedTrackingCandidates
+    .filter(relative => !sharedTracking.tracked.has(relative));
   addCheck(checks, 'shared-portable-source-tracked', sharedUntracked.length === 0, 'high',
     sharedUntracked.length ? 'Shared portable source exists but is not tracked.' : 'Shared contract, skills, tool, and global memory are Git-tracked.',
     sharedUntracked.length ? { untracked: sharedUntracked } : { count: sharedPortableFiles.length },
     sharedUntracked.length ? 'Commit every shared portable source file in playable-shared-kit.' : null);
 
-  const trackedMissing = ['package.json', 'package-lock.json', 'tools/port-regressions.json']
-    .filter(relative => fs.existsSync(path.join(projectRoot, relative)) && !isGitTracked(projectRoot, relative, runner));
-  addCheck(checks, 'project-portable-evidence', trackedMissing.length === 0, 'high',
-    trackedMissing.length ? 'Project portability inputs exist but are not tracked.' : 'Project lockfile and regression registry are Git-tracked.',
-    trackedMissing.length ? { untracked: trackedMissing } : null,
-    trackedMissing.length ? 'Add these files to Git; local receipts and screenshots are not handoff truth.' : null);
+  const portableEvidence = inspectProjectPortableEvidence(projectRoot, runner);
+  const portableEvidenceSummary = portableEvidence.registryError
+    ? 'Regression registry dependency closure is invalid or incomplete.'
+    : portableEvidence.missingCount
+      ? 'Project portability dependency closure has missing files.'
+      : portableEvidence.untrackedCount
+        ? 'Project portability dependency closure contains untracked files.'
+        : portableEvidence.registryFound
+          ? 'Project lockfile and full regression dependency closure are Git-tracked.'
+          : 'Project lockfile is Git-tracked; no regression registry exists yet.';
+  addCheck(checks, 'project-portable-evidence', portableEvidence.ok, 'high', portableEvidenceSummary,
+    portableEvidence,
+    portableEvidence.ok ? null
+      : 'Repair the registry closure and add its matrices, eval/oracles, Unity references, and watchFiles to Git; regenerate local receipts.' );
 
   const registryFile = path.join(projectRoot, 'tools', 'port-regressions.json');
   if (fs.existsSync(registryFile)) {
@@ -351,6 +459,8 @@ module.exports = {
   compareGeneratedContract,
   findAbsolutePathTokens,
   inspectPackageScripts,
+  inspectProjectPortableEvidence,
+  gitTrackedFiles,
   normalizeSkillSource,
   parseArgs,
   parseSubmoduleStatus,

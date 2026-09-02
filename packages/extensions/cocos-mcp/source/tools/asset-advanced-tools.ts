@@ -642,14 +642,27 @@ export class AssetAdvancedTools implements ToolExecutor {
                 await Editor.Message.request('asset-db', 'reimport-asset', target.url);
                 const info: any = await Editor.Message.request('asset-db', 'query-asset-info', target.url);
                 const type = String(info?.type || '');
-                const importer = String(info?.meta?.importer || '');
+                let meta: any = info?.meta || null;
+                let metaSource = 'query-asset-info';
+                if (!meta?.importer) {
+                    meta = await Editor.Message.request(
+                        'asset-db',
+                        'query-asset-meta',
+                        info?.uuid || target.url,
+                    );
+                    metaSource = 'query-asset-meta';
+                }
+                const importer = String(meta?.importer || '');
+                const imported = meta?.imported;
                 const typeOk = type === target.expectedType;
-                const importerOk = importer === target.expectedImporter;
+                const importerOk = importer === target.expectedImporter && imported !== false;
                 assets.push({
                     url: target.url,
                     uuid: info?.uuid || null,
                     type,
                     importer,
+                    imported: imported === undefined ? null : Boolean(imported),
+                    metaSource,
                     typeOk,
                     importerOk,
                     ok: Boolean(info && typeOk && importerOk),
@@ -669,10 +682,15 @@ export class AssetAdvancedTools implements ToolExecutor {
                 const descriptor = fs.openSync(logPath, 'r');
                 try { fs.readSync(descriptor, buffer, 0, length, start); }
                 finally { fs.closeSync(descriptor); }
-                const relevant = /(?:effect|shader|glsl|ccprogram|efx\d*)/i;
-                const failure = /(?:error|failed?|invalid|syntax|undeclared|does not exist)/i;
+                const shaderDiagnosticPatterns = [
+                    /\bEFX\d+\b/i,
+                    /\b(?:shader|glsl|ccprogram)\b.{0,240}\b(?:error|failed?|invalid|syntax|undeclared|compilation failed)\b/i,
+                    /\b(?:error|failed?|invalid|syntax|undeclared|compilation failed)\b.{0,240}\b(?:shader|glsl|ccprogram)\b/i,
+                    /\b(?:cceffect|effect|\.effect)\b.{0,240}\b(?:compile|compilation|parse|parsing|syntax)\b.{0,120}\b(?:error|failed?|invalid)\b/i,
+                    /\b(?:error|failed?|invalid)\b.{0,120}\b(?:compile|compilation|parse|parsing|syntax)\b.{0,240}\b(?:cceffect|effect|\.effect)\b/i,
+                ];
                 for (const line of buffer.toString('utf8').split(/\r?\n/)) {
-                    if (relevant.test(line) && failure.test(line)) {
+                    if (shaderDiagnosticPatterns.some(pattern => pattern.test(line))) {
                         shaderErrors.push(line.slice(0, 600));
                         if (shaderErrors.length >= 20) break;
                     }

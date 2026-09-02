@@ -7,7 +7,72 @@ const path = require('node:path');
 const test = require('node:test');
 
 const { buildUnityProjectSnapshot } = require('./index.cjs');
-const { createUnityFixture } = require('./test-fixture.cjs');
+const {
+  EXTRACTOR_FILES,
+  EXTRACTOR_FINGERPRINT,
+  INDEXER_VERSION,
+  extractorFingerprint,
+} = require('./cache.cjs');
+const { buildUnityEngineFeatureClosure } = require('./engine-feature-closure.cjs');
+const { createUnityFixture, isLinkUnavailableError } = require('./test-fixture.cjs');
+
+test('cached engine feature evidence fingerprints its detector producer', () => {
+  assert.ok(EXTRACTOR_FILES.includes('engine-feature-closure.cjs'));
+  assert.equal(extractorFingerprint(), EXTRACTOR_FINGERPRINT);
+  const changedDetector = extractorFingerprint((file, name) => {
+    const bytes = fs.readFileSync(file);
+    return name === 'engine-feature-closure.cjs'
+      ? Buffer.concat([bytes, Buffer.from('\n// detector-regression-sentinel\n')])
+      : bytes;
+  });
+  assert.notEqual(changedDetector, EXTRACTOR_FINGERPRINT);
+});
+
+test('a stale detector fingerprint cannot resurrect poisoned engine feature evidence', t => {
+  const fixture = createUnityFixture(t);
+  const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'unity-intel-feature-cache-test-'));
+  t.after(() => fs.rmSync(cacheDir, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(fixture.assets, 'Game', 'Scripts', 'FeatureGate.cs'), `
+public sealed class FeatureGate : UnityEngine.MonoBehaviour {
+  private void Update() { Poll(); }
+  private void Poll() { UnityEngine.Physics2D.RaycastAll(UnityEngine.Vector2.zero, UnityEngine.Vector2.right); }
+  private void DeadDebugHelper() { UnityEngine.Debug.DrawLine(UnityEngine.Vector3.zero, UnityEngine.Vector3.one); }
+}
+`);
+  fs.writeFileSync(path.join(fixture.assets, 'Game', 'Billboard.prefab'), `--- !u!199 &1
+ParticleSystemRenderer:
+  m_RenderMode: 0
+  m_Mesh: {fileID: 10202, guid: 00000000000000000000000000000000, type: 0}
+`);
+  const options = { projectRoot: fixture.root, sourceRoot: fixture.assets, cacheDir };
+  const cold = buildUnityProjectSnapshot(options);
+  const expected = buildUnityEngineFeatureClosure(cold, { profile: 'full-project' });
+  assert.ok(expected.requiredModules.includes('physics-2d-box2d'));
+  assert.ok(!expected.requiredModules.includes('primitive'));
+  assert.ok(!expected.requiredModules.includes('debug-renderer'));
+
+  const payload = JSON.parse(fs.readFileSync(cold.cache.file, 'utf8'));
+  payload.indexerVersion = INDEXER_VERSION;
+  payload.extractorFingerprint = 'legacy-detector';
+  for (const entry of Object.values(payload.entries)) {
+    if (!entry || !entry.record) continue;
+    entry.record.engineFeatureEvidence = [
+      { feature: 'primitive', signal: 'legacy-dormant-mesh-token' },
+      { feature: 'debug-renderer', signal: 'legacy-dead-debug-token' },
+    ];
+  }
+  fs.writeFileSync(cold.cache.file, `${JSON.stringify(payload)}\n`);
+
+  const rebuilt = buildUnityProjectSnapshot(options);
+  const uncached = buildUnityProjectSnapshot({ ...options, cache: false });
+  const rebuiltClosure = buildUnityEngineFeatureClosure(rebuilt, { profile: 'full-project' });
+  const uncachedClosure = buildUnityEngineFeatureClosure(uncached, { profile: 'full-project' });
+  assert.equal(rebuilt.cache.mode, 'cold');
+  assert.equal(rebuilt.cache.hits, 0);
+  assert.equal(rebuilt.cache.misses, cold.assets.count);
+  assert.deepEqual(rebuiltClosure, uncachedClosure);
+  assert.deepEqual(rebuiltClosure, expected);
+});
 
 test('incremental cache is cold, warm, then invalidates only the changed asset', t => {
   const fixture = createUnityFixture(t);
@@ -115,8 +180,8 @@ test('cache directory junction cannot redirect an external-looking cache back in
   try {
     fs.symlinkSync(fixture.root, redirect, process.platform === 'win32' ? 'junction' : 'dir');
   } catch (error) {
-    if (error && (error.code === 'EPERM' || error.code === 'EACCES')) {
-      t.skip('Host does not allow directory symlinks/junctions.');
+    if (isLinkUnavailableError(error)) {
+      t.skip(`Host filesystem does not support directory symlinks/junctions: ${error.code}`);
       return;
     }
     throw error;

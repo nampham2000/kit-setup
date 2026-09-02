@@ -13,6 +13,13 @@ const PHYSICS_BACKENDS = Object.freeze([
   'physics-ammo',
   'physics-physx',
 ]);
+const SPINE_BACKENDS = Object.freeze(['spine-3.8', 'spine-4.2']);
+const PHYSICS_2D_BACKENDS = Object.freeze([
+  'physics-2d-box2d',
+  'physics-2d-box2d-wasm',
+  'physics-2d-builtin',
+  'physics-2d-box2d-jsb',
+]);
 const BACKEND_LABELS = Object.freeze({
   'physics-builtin': 'Builtin',
   'physics-cannon': 'Cannon',
@@ -33,6 +40,12 @@ const IMPORT_MAP_SILENT_FEATURES = new Set([
   'websocket-server',
   'meshopt',
 ]);
+// Cocos 3.8.8 persists option parents as enabled cache records with an exact
+// `_option`, but normalizes `includeModules` to the selected child. The active
+// preview likewise exposes Physics2D's parent as `physics-2d-framework`, while
+// the version-specific Spine backend is represented by the generic `spine`
+// runtime module. These are engine-owned representations, not missing features.
+const OPTION_PARENT_FEATURES = new Set(['spine', 'physics-2d']);
 const PHYSICS_COMPONENTS = new Set([
   'RigidBody', 'ConstantForce',
   'BoxCollider', 'SphereCollider', 'CapsuleCollider', 'MeshCollider',
@@ -71,6 +84,36 @@ class EngineFeatureError extends Error {
 
 function sha256(bytes) {
   return crypto.createHash('sha256').update(bytes).digest('hex');
+}
+
+function resolveSpineBackend(requiredModules = [], options = {}) {
+  const explicit = options.spineBackend || null;
+  if (explicit && !SPINE_BACKENDS.includes(explicit)) {
+    throw new EngineFeatureError('ENGINE_FEATURE_SPINE_BACKEND_UNKNOWN', `Unknown Cocos Spine backend: ${explicit}`);
+  }
+  const requested = SPINE_BACKENDS.filter(name => requiredModules.includes(name));
+  if (requested.length > 1) {
+    throw new EngineFeatureError('ENGINE_FEATURE_SPINE_BACKEND_CONFLICT', `Multiple Cocos Spine backends requested: ${requested.join(', ')}`);
+  }
+  if (explicit && requested.length && explicit !== requested[0]) {
+    throw new EngineFeatureError('ENGINE_FEATURE_SPINE_BACKEND_CONFLICT', `Spine selector ${explicit} conflicts with required module ${requested[0]}.`);
+  }
+  return explicit || requested[0] || null;
+}
+
+function resolvePhysics2dBackend(requiredModules = [], options = {}) {
+  const explicit = options.physics2dBackend || null;
+  if (explicit && !PHYSICS_2D_BACKENDS.includes(explicit)) {
+    throw new EngineFeatureError('ENGINE_FEATURE_PHYSICS_2D_BACKEND_UNKNOWN', `Unknown Cocos Physics2D backend: ${explicit}`);
+  }
+  const requested = PHYSICS_2D_BACKENDS.filter(name => requiredModules.includes(name));
+  if (requested.length > 1) {
+    throw new EngineFeatureError('ENGINE_FEATURE_PHYSICS_2D_BACKEND_CONFLICT', `Multiple Cocos Physics2D backends requested: ${requested.join(', ')}`);
+  }
+  if (explicit && requested.length && explicit !== requested[0]) {
+    throw new EngineFeatureError('ENGINE_FEATURE_PHYSICS_2D_BACKEND_CONFLICT', `Physics2D selector ${explicit} conflicts with required module ${requested[0]}.`);
+  }
+  return explicit || requested[0] || null;
 }
 
 function normalizeComponent(value) {
@@ -410,6 +453,26 @@ function readAppliedPreviewFeatures(projectRoot) {
   }
 }
 
+function profileFeatureEnabled(config, include, moduleName) {
+  const record = config.cache[moduleName];
+  if (!record || record._value !== true) return false;
+  if (include.has(moduleName)) return true;
+  if (!OPTION_PARENT_FEATURES.has(moduleName)) return false;
+  const selected = record._option;
+  return typeof selected === 'string'
+    && config.cache[selected]?._value === true
+    && include.has(selected);
+}
+
+function appliedFeaturePresent(applied, moduleName, selectors = {}) {
+  if (applied.features.includes(moduleName)) return true;
+  if (moduleName === 'physics-2d') return applied.features.includes('physics-2d-framework');
+  if (SPINE_BACKENDS.includes(moduleName)
+    && selectors.spineBackend === moduleName
+    && applied.features.includes('spine')) return true;
+  return false;
+}
+
 function auditCocosEngineFeatures(projectRoot, options = {}) {
   const root = validateProjectRoot(projectRoot);
   const evidence = options.evidence || scanCocosProject(root, options);
@@ -417,13 +480,21 @@ function auditCocosEngineFeatures(projectRoot, options = {}) {
   const requiredModules = options.requiredModules
     ? [...new Set(options.requiredModules)].sort()
     : inferRequiredModules(evidence, physicsDecision);
+  const disabledModules = [...new Set(options.disabledModules || [])].sort();
+  const overlap = disabledModules.filter(moduleName => requiredModules.includes(moduleName));
+  if (overlap.length) {
+    throw new EngineFeatureError('ENGINE_FEATURE_PLAN_CONFLICT', `Features cannot be both required and disabled: ${overlap.join(', ')}`);
+  }
+  const spineBackend = resolveSpineBackend(requiredModules, options);
+  const physics2dBackend = resolvePhysics2dBackend(requiredModules, options);
   const profile = readEngineProfile(root);
   const include = new Set(profile.config.includeModules);
   const profileMissing = [];
+  const profileUnexpected = [];
   for (const moduleName of requiredModules) {
     if (!profile.config.cache[moduleName]) {
       profileMissing.push(`${moduleName}:unknown-to-profile`);
-    } else if (profile.config.cache[moduleName]._value !== true || !include.has(moduleName)) {
+    } else if (!profileFeatureEnabled(profile.config, include, moduleName)) {
       profileMissing.push(moduleName);
     }
   }
@@ -431,15 +502,30 @@ function auditCocosEngineFeatures(projectRoot, options = {}) {
   if (physicsDecision.backend && selectedBackend !== physicsDecision.backend) {
     profileMissing.push(`physics:${physicsDecision.backend}`);
   }
+  for (const moduleName of disabledModules) {
+    if (!profile.config.cache[moduleName]) {
+      profileUnexpected.push(`${moduleName}:unknown-to-profile`);
+    } else if (profile.config.cache[moduleName]._value !== false || include.has(moduleName)) {
+      profileUnexpected.push(moduleName);
+    }
+  }
+  const selectedSpineBackend = profile.config.cache.spine?._option || null;
+  if (spineBackend && selectedSpineBackend !== spineBackend) {
+    profileMissing.push(`spine:${spineBackend}`);
+  }
+  const selectedPhysics2dBackend = profile.config.cache['physics-2d']?._option || null;
+  if (physics2dBackend && selectedPhysics2dBackend !== physics2dBackend) {
+    profileMissing.push(`physics-2d:${physics2dBackend}`);
+  }
   const applied = readAppliedPreviewFeatures(root);
   const inferredProfileFeatures = [];
+  const previewRegeneratedAfterProfile = Number.isFinite(applied.modifiedMs)
+    && Number.isFinite(profile.modifiedMs)
+    && applied.modifiedMs >= profile.modifiedMs;
   const appliedMissing = applied.available
     ? requiredModules.filter((moduleName) => {
-      if (applied.features.includes(moduleName)) return false;
-      const profileEnabled = profile.config.cache[moduleName]?._value === true && include.has(moduleName);
-      const previewRegeneratedAfterProfile = Number.isFinite(applied.modifiedMs)
-        && Number.isFinite(profile.modifiedMs)
-        && applied.modifiedMs >= profile.modifiedMs;
+      if (appliedFeaturePresent(applied, moduleName, { spineBackend, physics2dBackend })) return false;
+      const profileEnabled = profileFeatureEnabled(profile.config, include, moduleName);
       if (IMPORT_MAP_SILENT_FEATURES.has(moduleName) && profileEnabled && previewRegeneratedAfterProfile) {
         inferredProfileFeatures.push(moduleName);
         return false;
@@ -447,8 +533,11 @@ function auditCocosEngineFeatures(projectRoot, options = {}) {
       return true;
     })
     : [...requiredModules];
-  const profileComplete = profileMissing.length === 0;
-  const complete = profileComplete && applied.available && appliedMissing.length === 0;
+  const appliedUnexpected = applied.available
+    ? disabledModules.filter(moduleName => applied.features.includes(moduleName) || !previewRegeneratedAfterProfile)
+    : [...disabledModules];
+  const profileComplete = profileMissing.length === 0 && profileUnexpected.length === 0;
+  const complete = profileComplete && applied.available && appliedMissing.length === 0 && appliedUnexpected.length === 0;
   return {
     ok: profileComplete,
     complete,
@@ -456,6 +545,7 @@ function auditCocosEngineFeatures(projectRoot, options = {}) {
     evidence: compactEvidence(evidence),
     physicsDecision,
     requiredModules,
+    disabledModules,
     profile: {
       file: path.relative(root, profile.file).replace(/\\/g, '/'),
       version: profile.document.__version__,
@@ -464,7 +554,10 @@ function auditCocosEngineFeatures(projectRoot, options = {}) {
       modifiedMs: profile.modifiedMs,
       includeModules: [...profile.config.includeModules],
       selectedBackend,
+      selectedSpineBackend,
+      selectedPhysics2dBackend,
       missing: profileMissing,
+      unexpected: profileUnexpected,
       complete: profileComplete,
     },
     appliedPreview: {
@@ -475,7 +568,8 @@ function auditCocosEngineFeatures(projectRoot, options = {}) {
         ? 'profile-enabled-and-preview-regenerated-after-profile'
         : null,
       missing: appliedMissing,
-      complete: applied.available && appliedMissing.length === 0,
+      unexpected: appliedUnexpected,
+      complete: applied.available && appliedMissing.length === 0 && appliedUnexpected.length === 0,
     },
     pendingEditorApply: profileComplete && !complete,
   };
@@ -570,7 +664,14 @@ function patchEngineProfile(projectRoot, plan, options = {}) {
   const nextDocument = parsed.document;
   const config = parsed.config;
   const requiredModules = [...new Set(plan.requiredModules || [])];
+  const disabledModules = [...new Set(plan.disabledModules || [])];
+  const overlap = disabledModules.filter(moduleName => requiredModules.includes(moduleName));
+  if (overlap.length) {
+    throw new EngineFeatureError('ENGINE_FEATURE_PLAN_CONFLICT', `Features cannot be both required and disabled: ${overlap.join(', ')}`);
+  }
   const backend = plan.physicsBackend || plan.physicsDecision?.backend || null;
+  const spineBackend = resolveSpineBackend(requiredModules, plan);
+  const physics2dBackend = resolvePhysics2dBackend(requiredModules, plan);
   for (const moduleName of requiredModules) {
     if (!config.cache[moduleName]) {
       throw new EngineFeatureError('ENGINE_FEATURE_UNKNOWN_MODULE', `Cocos profile does not define feature '${moduleName}'; refusing a blind insert.`);
@@ -578,7 +679,17 @@ function patchEngineProfile(projectRoot, plan, options = {}) {
     config.cache[moduleName]._value = true;
   }
   const include = new Set(config.includeModules);
-  for (const moduleName of requiredModules) include.add(moduleName);
+  for (const moduleName of requiredModules) {
+    if (OPTION_PARENT_FEATURES.has(moduleName)) include.delete(moduleName);
+    else include.add(moduleName);
+  }
+  for (const moduleName of disabledModules) {
+    if (!config.cache[moduleName]) {
+      throw new EngineFeatureError('ENGINE_FEATURE_UNKNOWN_MODULE', `Cocos profile does not define feature '${moduleName}'; refusing a blind removal.`);
+    }
+    config.cache[moduleName]._value = false;
+    include.delete(moduleName);
+  }
   if (backend) {
     if (!PHYSICS_BACKENDS.includes(backend)) throw new EngineFeatureError('ENGINE_FEATURE_BACKEND_UNKNOWN', `Unknown backend: ${backend}`);
     if (!config.cache.physics) throw new EngineFeatureError('ENGINE_FEATURE_PROFILE_SCHEMA', 'Profile has no physics selector.');
@@ -588,6 +699,30 @@ function patchEngineProfile(projectRoot, plan, options = {}) {
       if (!config.cache[candidate]) throw new EngineFeatureError('ENGINE_FEATURE_PROFILE_SCHEMA', `Profile has no ${candidate} entry.`);
       config.cache[candidate]._value = candidate === backend;
       if (candidate === backend) include.add(candidate);
+      else include.delete(candidate);
+    }
+  }
+  if (spineBackend) {
+    if (!config.cache.spine) throw new EngineFeatureError('ENGINE_FEATURE_PROFILE_SCHEMA', 'Profile has no spine selector.');
+    config.cache.spine._value = true;
+    config.cache.spine._option = spineBackend;
+    include.delete('spine');
+    for (const candidate of SPINE_BACKENDS) {
+      if (!config.cache[candidate]) throw new EngineFeatureError('ENGINE_FEATURE_PROFILE_SCHEMA', `Profile has no ${candidate} entry.`);
+      config.cache[candidate]._value = candidate === spineBackend;
+      if (candidate === spineBackend) include.add(candidate);
+      else include.delete(candidate);
+    }
+  }
+  if (physics2dBackend) {
+    if (!config.cache['physics-2d']) throw new EngineFeatureError('ENGINE_FEATURE_PROFILE_SCHEMA', 'Profile has no physics-2d selector.');
+    config.cache['physics-2d']._value = true;
+    config.cache['physics-2d']._option = physics2dBackend;
+    include.delete('physics-2d');
+    for (const candidate of PHYSICS_2D_BACKENDS) {
+      if (!config.cache[candidate]) throw new EngineFeatureError('ENGINE_FEATURE_PROFILE_SCHEMA', `Profile has no ${candidate} entry.`);
+      config.cache[candidate]._value = candidate === physics2dBackend;
+      if (candidate === physics2dBackend) include.add(candidate);
       else include.delete(candidate);
     }
   }
@@ -617,7 +752,10 @@ function patchEngineProfile(projectRoot, plan, options = {}) {
       beforeHash: profile.hash,
       afterHash,
       requiredModules,
+      disabledModules,
       physicsBackend: backend,
+      spineBackend,
+      physics2dBackend,
       pendingEditorApply: true,
     };
     const receiptFile = writeReceipt(root, receipt);
@@ -715,21 +853,37 @@ function waitForPort(port, timeoutMs = 120_000) {
 }
 
 async function restartCocosProject(projectRoot, options = {}) {
-  if (process.platform !== 'win32') {
+  const platform = options.platform || process.platform;
+  if (platform !== 'win32') {
     return { attempted: false, complete: false, error: 'External Cocos restart is currently implemented for Windows only.' };
   }
   const settings = JSON.parse(fs.readFileSync(path.join(projectRoot, 'settings', 'mcp-server.json'), 'utf8'));
   const port = Number(settings.port) || 3000;
-  const script = fs.existsSync(path.join(projectRoot, '1_open-project.bat'))
-    ? path.join(projectRoot, '1_open-project.bat')
-    : path.resolve(__dirname, '..', 'scripts', '1_open-project.bat');
+  const canonicalScript = path.resolve(__dirname, '..', 'scripts', '1_open-project.bat');
+  const projectScript = path.join(projectRoot, '1_open-project.bat');
+  // Prefer the exact shared-kit launcher that shipped with this gate. A copied
+  // project-root launcher may predate automation exit semantics and can report
+  // failure after successfully restarting Cocos.
+  const script = options.restartScript || (fs.existsSync(canonicalScript) ? canonicalScript : projectScript);
   if (!fs.existsSync(script)) return { attempted: false, complete: false, error: '1_open-project.bat was not found.' };
-  const beforePid = portOwner(port);
-  const run = spawnSync('cmd.exe', ['/d', '/s', '/c', 'call "%PLAYABLE_OPEN_PROJECT_BAT%"'], {
+  const owner = options.portOwner || portOwner;
+  const wait = options.waitForPort || waitForPort;
+  const spawn = options.spawnSync || spawnSync;
+  const beforePid = owner(port);
+  // Pass the exact batch path through the environment and invoke it with
+  // PowerShell's call operator. cmd.exe /s /c rewrites outer quotes and can
+  // turn a valid absolute batch path into a literal `\"...\"` command.
+  const run = spawn('powershell.exe', [
+    '-NoProfile',
+    '-NonInteractive',
+    '-ExecutionPolicy', 'Bypass',
+    '-Command', '& $env:PLAYABLE_OPEN_PROJECT_BAT',
+  ], {
     cwd: projectRoot,
     env: {
       ...process.env,
       PLAYABLE_OPEN_PROJECT_BAT: script,
+      PLAYABLE_AUTOMATION_MODE: '1',
       PLAYABLE_SKIP_MCP_BACKENDS: '1',
       PLAYABLE_SKIP_MCP_VERIFY: '1',
     },
@@ -737,19 +891,25 @@ async function restartCocosProject(projectRoot, options = {}) {
     timeout: options.restartTimeoutMs || 180_000,
     maxBuffer: 512 * 1024,
   });
-  const ready = await waitForPort(port, 120_000);
-  const afterPid = portOwner(port);
+  const processSucceeded = !run.error && run.status === 0 && !run.signal;
+  const ready = processSucceeded ? await wait(port, 120_000) : false;
+  const afterPid = owner(port);
   const changedPid = Boolean(beforePid && afterPid && beforePid !== afterPid);
+  const outputTail = `${run.stdout || ''}\n${run.stderr || ''}`.trim().split(/\r?\n/).slice(-20);
+  const processError = run.error?.message || (!processSucceeded
+    ? `Cocos restart command failed with status ${run.status === null ? 'null' : run.status}${run.signal ? ` (signal ${run.signal})` : ''}.`
+    : null);
   return {
     attempted: true,
-    complete: ready && (!beforePid || changedPid),
+    complete: processSucceeded && ready && (!beforePid || changedPid),
     beforePid,
     afterPid,
     changedPid,
     port,
     processStatus: run.status,
-    outputTail: `${run.stdout || ''}\n${run.stderr || ''}`.trim().split(/\r?\n/).slice(-20),
-    error: run.error?.message || null,
+    processSucceeded,
+    outputTail,
+    error: processError,
   };
 }
 
@@ -799,8 +959,12 @@ async function ensureCocosEngineFeatures(projectRoot, options = {}) {
     try {
       client = await createMcpClient(root, options);
       const raw = await client.call('engineFeature_ensure_features', {
-        modules: audit.requiredModules.filter((name) => !PHYSICS_BACKENDS.includes(name)),
+        modules: audit.requiredModules.filter((name) => !PHYSICS_BACKENDS.includes(name) &&
+          !SPINE_BACKENDS.includes(name) && !PHYSICS_2D_BACKENDS.includes(name)),
+        disabledModules: audit.disabledModules,
         physicsBackend: audit.physicsDecision.backend || undefined,
+        spineBackend: resolveSpineBackend(audit.requiredModules, options) || undefined,
+        physics2dBackend: resolvePhysics2dBackend(audit.requiredModules, options) || undefined,
         reload: true,
         timeoutMs: options.timeoutMs || 240_000,
       });
@@ -819,7 +983,10 @@ async function ensureCocosEngineFeatures(projectRoot, options = {}) {
     result.fallbackUsed = true;
     result.patchReceipt = patchEngineProfile(root, {
       requiredModules: audit.requiredModules,
+      disabledModules: audit.disabledModules,
       physicsBackend: audit.physicsDecision.backend,
+      spineBackend: resolveSpineBackend(audit.requiredModules, options),
+      physics2dBackend: resolvePhysics2dBackend(audit.requiredModules, options),
     }, options);
     audit = auditCocosEngineFeatures(root, options);
   }
@@ -848,6 +1015,8 @@ function parseCli(argv) {
     else if (arg === '--mcp-url') options.mcpUrl = args[++index];
     else if (arg === '--source-engine') options.sourceEngine = args[++index];
     else if (arg === '--physics-backend') options.physicsBackend = args[++index];
+    else if (arg === '--spine-backend') options.spineBackend = args[++index];
+    else if (arg === '--physics-2d-backend') options.physics2dBackend = args[++index];
     else if (arg === '--max-mcp-attempts') options.maxMcpAttempts = Number(args[++index]);
     else if (arg === '--timeout-ms') options.timeoutMs = Number(args[++index]);
     else if (arg === '--report') options.reportFile = path.resolve(args[++index]);
@@ -871,6 +1040,8 @@ function printHelp() {
     `  --mcp-url <url>             Override the project Cocos-MCP endpoint.\n` +
     `  --max-mcp-attempts <n>      Profile API attempts before guarded fallback (default 2).\n` +
     `  --physics-backend <name>    Checked override: physics-builtin|physics-cannon|physics-ammo|physics-physx.\n` +
+    `  --spine-backend <name>      Exact selector: spine-3.8|spine-4.2.\n` +
+    `  --physics-2d-backend <name> Exact selector: physics-2d-box2d|physics-2d-box2d-wasm|physics-2d-builtin|physics-2d-box2d-jsb.\n` +
     `  --force-backend             Permit an incompatible backend override and record the risk.\n` +
     `  --no-restart                Persist/patch only; leave pendingEditorApply=true.\n` +
     `  --dry-run                   Do not write Profile/engine.json or restart Cocos.\n` +
@@ -892,6 +1063,8 @@ async function main(argv = process.argv.slice(2)) {
     output = patchEngineProfile(root, {
       requiredModules: audit.requiredModules,
       physicsBackend: audit.physicsDecision.backend,
+      spineBackend: resolveSpineBackend(audit.requiredModules, options),
+      physics2dBackend: resolvePhysics2dBackend(audit.requiredModules, options),
     }, options);
   } else throw new EngineFeatureError('ENGINE_FEATURE_COMMAND_UNKNOWN', `Unknown command: ${options.command}`);
   console.log(JSON.stringify(output, null, 2));
@@ -907,6 +1080,8 @@ if (require.main === module) {
 
 module.exports = {
   PHYSICS_BACKENDS,
+  SPINE_BACKENDS,
+  PHYSICS_2D_BACKENDS,
   BACKEND_LABELS,
   EngineFeatureError,
   createEvidence,
@@ -928,4 +1103,6 @@ module.exports = {
   waitForEngineApplication,
   writeAuditReport,
   sha256,
+  resolveSpineBackend,
+  resolvePhysics2dBackend,
 };

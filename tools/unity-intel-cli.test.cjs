@@ -27,11 +27,13 @@ test('preflight accepts a bounded intent and repeated targets', () => {
   const parsed = parseArgs([
     'preflight', '--project', 'D:/Game', '--intent', 'prefab',
     '--target', 'Assets/A.prefab', '--target=Assets/B.prefab', '--profile', 'full-project',
+    '--dispositions', 'D:/Evidence/source-dispositions.json',
   ]);
   assert.equal(parsed.command, 'preflight');
   assert.equal(parsed.intent, 'prefab');
   assert.deepEqual(parsed.targets, ['Assets/A.prefab', 'Assets/B.prefab']);
   assert.equal(parsed.profile, 'full-project');
+  assert.equal(parsed.dispositions, 'D:/Evidence/source-dispositions.json');
 });
 
 test('parser rejects accidental unbounded pages and unknown providers', () => {

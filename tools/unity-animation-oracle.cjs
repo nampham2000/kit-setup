@@ -118,6 +118,114 @@ function yamlSectionHasData(text, key) {
   return false;
 }
 
+function yamlListEntries(text, key) {
+  const lines = String(text || '').split(/\r?\n/);
+  for (let index = 0; index < lines.length; index++) {
+    const match = /^(\s*)([^:]+):\s*(.*)$/.exec(lines[index]);
+    if (!match || match[2].trim() !== key) continue;
+    const inline = match[3].trim();
+    if (inline === '[]' || inline === '{}' || inline === 'null') return [];
+    const baseIndent = match[1].length;
+    const block = [];
+    for (let next = index + 1; next < lines.length; next++) {
+      const line = lines[next];
+      if (!line.trim()) {
+        if (block.length) block.push(line);
+        continue;
+      }
+      const indent = line.match(/^\s*/)[0].length;
+      const trimmed = line.trimStart();
+      if (indent < baseIndent || (indent === baseIndent && !trimmed.startsWith('- '))) break;
+      block.push(line);
+    }
+    const first = block.find(line => /^\s*-\s+/.test(line));
+    if (!first) return [];
+    const itemIndent = first.match(/^\s*/)[0].length;
+    const entries = [];
+    let current = null;
+    for (const line of block) {
+      const indent = line.match(/^\s*/)[0].length;
+      if (indent === itemIndent && /^\s*-\s+/.test(line)) {
+        if (current) entries.push(current);
+        current = [line];
+      } else if (current) {
+        current.push(line);
+      }
+    }
+    if (current) entries.push(current);
+    return entries;
+  }
+  return [];
+}
+
+function parseYamlScalar(raw) {
+  const value = String(raw ?? '').trim();
+  if (!value) return '';
+  if (value === 'null' || value === '~') return null;
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  if (/^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/.test(value)) return Number(value);
+  if (value.startsWith('"') && value.endsWith('"')) {
+    try { return JSON.parse(value); } catch { return value.slice(1, -1); }
+  }
+  if (value.startsWith("'") && value.endsWith("'")) return value.slice(1, -1).replace(/''/g, "'");
+  return value;
+}
+
+function parseInlineMap(raw) {
+  const value = String(raw ?? '').trim();
+  if (!value.startsWith('{') || !value.endsWith('}')) return parseYamlScalar(value);
+  const map = {};
+  for (const field of value.slice(1, -1).split(',')) {
+    const separator = field.indexOf(':');
+    if (separator < 0) continue;
+    const key = field.slice(0, separator).trim();
+    if (!key) continue;
+    map[key] = parseYamlScalar(field.slice(separator + 1));
+  }
+  return map;
+}
+
+function readYamlEntryField(lines, key, fallback) {
+  const pattern = new RegExp(`^\\s*(?:-\\s*)?${key}\\s*:\\s*(.*)$`);
+  for (const line of lines) {
+    const match = pattern.exec(line);
+    if (match) return parseYamlScalar(match[1]);
+  }
+  return fallback;
+}
+
+function parseUnityAnimationEvents(text) {
+  const entries = yamlListEntries(text, 'm_Events');
+  const events = [];
+  const errors = [];
+  for (let index = 0; index < entries.length; index++) {
+    const lines = entries[index];
+    const time = Number(readYamlEntryField(lines, 'time', Number.NaN));
+    const functionName = String(readYamlEntryField(lines, 'functionName', '') || '');
+    if (!Number.isFinite(time) || !functionName) {
+      errors.push(`event[${index}] requires a finite time and non-empty functionName`);
+      continue;
+    }
+    const event = {
+      time,
+      functionName,
+      data: String(readYamlEntryField(lines, 'data', '') ?? ''),
+      objectReferenceParameter: {},
+      floatParameter: Number(readYamlEntryField(lines, 'floatParameter', 0) || 0),
+      intParameter: Number(readYamlEntryField(lines, 'intParameter', 0) || 0),
+      messageOptions: Number(readYamlEntryField(lines, 'messageOptions', 0) || 0),
+    };
+    const objectLine = lines.find(line => /^\s*objectReferenceParameter\s*:/.test(line));
+    if (objectLine) {
+      const raw = objectLine.slice(objectLine.indexOf(':') + 1);
+      event.objectReferenceParameter = parseInlineMap(raw);
+    }
+    events.push(event);
+  }
+  return { events, errors, sourceEntryCount: entries.length };
+}
+
 function bindingInfo(track) {
   const hierarchy = [];
   let component = '';
@@ -202,13 +310,17 @@ function buildOracle(files, unityRoot) {
     const clip = parseUnityAnimationClipForOracle(file, reporter);
     if (!clip) fail(`Unable to parse Unity AnimationClip: ${file}`, 'ANIMATION_ORACLE_PARSE_FAILED');
     const raw = fs.readFileSync(file, 'utf8');
+    const animationEvents = parseUnityAnimationEvents(raw);
+    if (animationEvents.errors.length) {
+      report('high', 'ANIMATION_EVENT_PARSE_FAILED', clip._name,
+        'Unity animation events could not be represented completely in the portable oracle.',
+        animationEvents.errors.join('; '));
+    }
     const unsupportedSections = [
       ['m_CompressedRotationCurves', 'ANIMATION_COMPRESSED_ROTATION_CURVE_SKIPPED',
         'Compressed quaternion curves are not represented in the portable oracle.'],
       ['m_PPtrCurves', 'ANIMATION_PPTR_CURVE_SKIPPED',
         'Object-reference curves are not represented in the portable oracle.'],
-      ['m_Events', 'ANIMATION_EVENT_SKIPPED',
-        'Animation events are not represented in the portable oracle; preserve their callback/VFX/SFX obligations separately.'],
     ];
     for (const [section, code, message] of unsupportedSections) {
       if (yamlSectionHasData(raw, section)) report('high', code, clip._name, message);
@@ -224,6 +336,7 @@ function buildOracle(files, unityRoot) {
       loop: clip.wrapMode === 2,
       wrapMode: clip.wrapMode,
       completeness: incomplete ? 'partial' : 'complete',
+      events: animationEvents.events,
       tracks,
     };
   });

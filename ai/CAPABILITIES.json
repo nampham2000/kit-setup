@@ -17,11 +17,97 @@
     },
     {
       "id": "verify-gate",
-      "rule": "Sau mọi lần sửa code hoặc port: chạy `npm run ai:verify` và `npm run ai:lint`. Với port core Unity, còn phải chạy `npm run ai:port:core:verify` và chỉ kết luận runnable/fidelity khi acceptance pass."
+      "rule": "Sau mọi lần sửa code hoặc port: chạy `npm run ai:verify` và `npm run ai:lint`. Với port core Unity, còn phải chạy `npm run ai:port:core:verify` và chỉ kết luận runnable/fidelity khi acceptance pass. Khi user cấm build, direct headless gate phải là `npm run ai:verify -- --skip-build-size`; core acceptance phải là `npm run ai:port:core:verify -- --unity-project <UnityProjectRoot> --cocos-project <CocosProjectRoot> --preview-only`. `--preview-only` không phải option của `ai:verify`, còn `--skip-build-size` không thay thế core acceptance. Chỉ được kết luận `preview-accepted`/`preview-runnable`, tuyệt đối không suy thành build accepted/runnable.",
+      "agentContract": {
+        "directPreviewVerification": {
+          "capabilityId": "verify.all",
+          "command": "npm run ai:verify -- --skip-build-size",
+          "ownedFlag": "--skip-build-size"
+        },
+        "corePreviewAcceptance": {
+          "capabilityId": "port.core.acceptance",
+          "command": "npm run ai:port:core:verify -- --unity-project <UnityProjectRoot> --cocos-project <CocosProjectRoot> --preview-only",
+          "ownedFlag": "--preview-only"
+        },
+        "prohibitedFlagRouting": [
+          "ai:verify -- --preview-only",
+          "ai:port:core:verify -- --skip-build-size"
+        ],
+        "previewClaim": [
+          "preview-accepted",
+          "preview-runnable"
+        ],
+        "prohibitedClaim": [
+          "build-accepted",
+          "build-runnable"
+        ]
+      }
     },
     {
       "id": "canonical-paths",
       "rule": "Script vào `assets/script/`, effect vào `assets/effects/`, config vào `assets/resources/`. Không tự tạo biến thể như `assets/scripts/`."
+    },
+    {
+      "id": "cocos-component-module-boundary",
+      "rule": "Cocos Creator 3.8.x chỉ cho một class vừa có `@ccclass` vừa kế thừa `cc.Component` (kể cả qua custom base) trên mỗi module TypeScript; Component export/re-export từ barrel cũng bị tính và có thể làm importer trả `_sealed=null`, preview đen. Tách mỗi concrete Component ra file riêng, shared base ra file riêng, giữ marker/barrel Component-free và import concrete module trực tiếp. `@ccclass` data/serializable không kế thừa Component được phép. `ai:lint` và `ai:verify` phải fail trước preview khi vi phạm.",
+      "agentContract": {
+        "appliesTo": [
+          "cocos-typescript-source",
+          "unity-to-cocos-port"
+        ],
+        "maximumDecoratedComponentsPerModule": 1,
+        "componentIdentity": "@ccclass-and-extends-cc.Component-through-local-or-relative-base",
+        "counts": [
+          "declared-component",
+          "exported-component",
+          "re-exported-component"
+        ],
+        "allows": [
+          "ccclass-non-component-data",
+          "component-free-marker",
+          "component-free-barrel"
+        ],
+        "requiredStructure": [
+          "one-concrete-component-per-file",
+          "shared-base-own-file",
+          "direct-concrete-module-import"
+        ],
+        "failureEvidence": [
+          "cocos-importer-rejection",
+          "null-_sealed",
+          "missing-component-registry",
+          "black-preview"
+        ],
+        "gates": [
+          "ai:lint",
+          "ai:verify"
+        ]
+      }
+    },
+    {
+      "id": "cocos-compressed-component-id-resolution",
+      "rule": "Cocos scene có thể serialize custom script Component bằng compressed class ID, nên không thấy full script UUID trong raw `.scene` không phải evidence component bị thiếu. Phải resolve attachment qua AssetDB/MCP component resolution (hoặc decode class ID) và xác nhận runtime class registration trước khi attach; không duplicate Component dựa trên UUID grep.",
+      "agentContract": {
+        "appliesTo": [
+          "cocos-scene-component-audit",
+          "cocos-component-attachment"
+        ],
+        "serializedIdentity": [
+          "full-script-uuid",
+          "compressed-class-id"
+        ],
+        "requiredBeforeAttach": [
+          "assetdb-or-mcp-component-resolution-or-class-id-decode",
+          "runtime-class-registration"
+        ],
+        "prohibitedEvidence": [
+          "full-uuid-absence-only",
+          "raw-scene-uuid-grep-only"
+        ],
+        "prohibitedAction": [
+          "duplicate-component-attachment"
+        ]
+      }
     },
     {
       "id": "portable-asset-optimization",
@@ -36,8 +122,207 @@
       "rule": "Tool báo thành công KHÔNG đồng nghĩa kết quả đúng. Luôn mở ít nhất một file sinh ra để đối chiếu với nguồn trước khi kết luận."
     },
     {
+      "id": "generator-cli-readonly-idempotence",
+      "rule": "Mọi CLI generator phải parse mode trước khi đọc/ghi output: `--help` chỉ in usage, `--check`/`--verify` chỉ so byte và tuyệt đối không mutate, argument lạ/xung đột phải fail trước write. Generate mặc định phải so content và bỏ qua file đã giống để chạy lặp idempotent, không tranh lock với AssetDB/Editor hay làm stale receipt. Regression khóa cả SHA-256 và mtime trước/sau help, check, invalid mode và unchanged generate."
+    },
+    {
+      "id": "unity-port-source-evidence-first",
+      "rule": "Chỉ khi sửa bug hoặc lệch fidelity của một port Unity→Cocos: trước khi sửa, phải mở lại bounded Unity source closure sở hữu hành vi lỗi (script/prefab/data/material/clip liên quan) và ghi chuỗi evidence -> root cause -> fix -> regression portable. Khi source evidence tồn tại, không được đoán offset/tint/timing/feature toggle hay thêm workaround để làm hình ảnh/flow có vẻ đúng. Nếu closure không truy cập được hoặc evidence còn thiếu, phải ghi explicit evidence gap/blocker và không được tuyên bố fidelity hay semantic parity.",
+      "agentContract": {
+        "appliesTo": [
+          "unity-port-bug-fix",
+          "unity-port-fidelity-fix"
+        ],
+        "boundedSourceClosure": [
+          "script",
+          "prefab",
+          "data",
+          "material",
+          "clip"
+        ],
+        "requiredRecord": [
+          "evidence",
+          "root-cause",
+          "fix",
+          "regression"
+        ],
+        "prohibitedWhenSourceEvidenceExists": [
+          "guessed-offset",
+          "guessed-tint",
+          "guessed-timing",
+          "guessed-feature-toggle",
+          "appearance-only-workaround"
+        ],
+        "missingClosurePolicy": "explicit-evidence-gap-or-blocker-no-fidelity-claim"
+      }
+    },
+    {
+      "id": "unity-engine-feature-closure-first",
+      "rule": "Ngay sau Unity preflight và trước khi tạo/sửa gameplay code, phải consume `engineFeatureClosure` rồi hoàn tất engine feature gate trên active Cocos preview. Chỉ bật exact feature ID có evidence trong playable-core + adapter closure: AnimatorController => `animation` + `skeletal-animation` + `marionette`; Spine => `spine` + backend đúng version skeleton; Physics2D/Physics3D => parent/backend selector đúng hành vi và exclusive. Với Cocos 3.8.8 option parent có thể bị normalize khỏi includeModules: authoritative là parent cache + exact `_option` + selected child cache/include; preview alias `physics-2d-framework`/generic `spine` chỉ được chấp nhận khi exact selector khớp và preview mới hơn profile. Sáu optional 3D module `primitive`, `occlusion-query`, `geometry-renderer`, `debug-renderer`, `terrain`, `light-probe` mặc định giữ tắt, chỉ bật khi semantics active/reachable chứng minh cần; negative closure phải gỡ false-positive cũ khỏi cache/include và preview, không chỉ ngừng yêu cầu mới. Serialized particle mesh ở billboard mode, private debug helper không có call site và asset ngoài closure không phải evidence. Incremental index cache chứa `engineFeatureEvidence` phải fingerprint detector producer; direct preflight và core init cùng source/tool fingerprint phải cho cùng closure. Version/backend chưa resolve, stale detector cache hoặc restart receipt thất bại là blocker; không workaround bằng gameplay code. Profile/cache/include và active preview apply đều phải khớp trước implementation.",
+      "agentContract": {
+        "before": [
+          "create-gameplay-code",
+          "modify-gameplay-code",
+          "write-core-scaffold"
+        ],
+        "source": "port.preflight.engineFeatureClosure",
+        "requiredMappings": {
+          "animatorController": [
+            "animation",
+            "skeletal-animation",
+            "marionette"
+          ],
+          "spine": [
+            "spine",
+            "exact-version-backend"
+          ],
+          "physics2d": [
+            "physics-2d",
+            "exact-exclusive-backend"
+          ],
+          "physics3d": [
+            "behavior-derived-exclusive-backend"
+          ]
+        },
+        "optional3dDefault": "off-unless-active-reachable-evidence",
+        "optional3dModules": [
+          "primitive",
+          "occlusion-query",
+          "geometry-renderer",
+          "debug-renderer",
+          "terrain",
+          "light-probe"
+        ],
+        "rejectEvidence": [
+          "out-of-core-asset",
+          "uncalled-private-helper",
+          "dormant-particle-mesh"
+        ],
+        "completionEvidence": [
+          "profile-selector",
+          "profile-cache",
+          "include-exclusivity",
+          "disabled-module-removal",
+          "active-preview-apply"
+        ],
+        "unresolvedPolicy": "block-before-gameplay-implementation"
+      }
+    },
+    {
       "id": "font-asset-parity",
       "rule": "Khi port text, phải ưu tiên font asset thật theo chuỗi: TTF/webfont trực tiếp -> dependency của TMP/Unity Font -> `font.convert` cho định dạng lạ -> system font cuối cùng. Font copy/convert phải được wire thành `cc.TTFFont` và qua `ai:verify:assets`. Chỉ fallback system font sau khi các bước trên thất bại; fallback phải giữ family cùng Bold/Italic/Underline/Shadow/Outline/alignment/wrapping/spacing của Unity và report `high` nếu không phải Unity built-in system font tương đương."
+    },
+    {
+      "id": "unity-tmp-cocos-layout-parity",
+      "rule": "Khi port Unity TMP autosize/character spacing sang Cocos Label, không map mù sang `Label.SHRINK` hoặc chép nguyên `characterSpacing`. Phải đọc prefab + TMP font asset/TTF + exact string, tính effective font size từ glyph advances và min/max source; nếu source fit ở max thì bind đúng size đó vì Cocos SHRINK không có TMP minimum contract. TMP nhân character spacing với `currentEmScale = fontSize * 0.01`; Cocos 3.8.8 default TTF assembler bỏ qua `spacingX`, nên chỉ dùng `CacheMode.CHAR` khi effect/feature của label tương thích rồi gán spacing đã quy đổi. Oracle portable phải khóa source/font hashes, formula, string, rect, wrap/overflow, runtime font identity/cache/size/spacing và tight text ROI. Unity SDF với Cocos Canvas TTF được phép dùng threshold raster riêng chỉ sau khi geometry normalized đã khớp và các semantic metrics bắt buộc pass; không screenshot-tune size/spacing.",
+      "agentContract": {
+        "sourceClosure": [
+          "tmp-prefab",
+          "tmp-font-asset",
+          "font-file",
+          "exact-string",
+          "tmp-runtime-formula"
+        ],
+        "requiredOracle": [
+          "source-hashes",
+          "font-hash",
+          "glyph-advance",
+          "effective-font-size",
+          "converted-spacing"
+        ],
+        "cocos38DefaultTtfSpacingX": "ignored",
+        "compatibleSpacingPath": "Label.CacheMode.CHAR",
+        "verification": [
+          "runtime-font-identity",
+          "runtime-cache-mode",
+          "runtime-font-size",
+          "runtime-spacing-x",
+          "normalized-text-geometry",
+          "tight-text-roi"
+        ],
+        "prohibitedFixes": [
+          "blind-label-shrink",
+          "raw-character-spacing-copy",
+          "screenshot-tuned-font-size",
+          "screenshot-tuned-spacing"
+        ]
+      }
+    },
+    {
+      "id": "unity-tmp-material-keyword-parity",
+      "rule": "Khi port TMP material sang Cocos Label, chỉ active shader keyword mới được bật effect runtime: `OUTLINE_ON` sở hữu outline; `UNDERLAY_ON` hoặc `UNDERLAY_INNER` sở hữu shadow/underlay. Các `_OutlineWidth`, `_UnderlayDilate`, `_UnderlayOffset*`, `_UnderlaySoftness` và màu đã serialize nhưng keyword không active là dormant state, không được dùng để tự bật effect. Parser phải đọc `m_ShaderKeywords`/`m_ValidKeywords`, bỏ qua `m_InvalidKeywords`, rồi regression khóa keyword nguồn, exact color/width/offset/blur, effect tắt khi dormant và console preview sạch.",
+      "agentContract": {
+        "sourceClosure": [
+          "tmp-label-prefab",
+          "tmp-shared-material",
+          "active-material-keywords",
+          "saved-material-properties"
+        ],
+        "activeKeywordFields": [
+          "m_ShaderKeywords",
+          "m_ValidKeywords"
+        ],
+        "ignoredKeywordFields": [
+          "m_InvalidKeywords"
+        ],
+        "featureOwnership": {
+          "outline": [
+            "OUTLINE_ON"
+          ],
+          "shadow": [
+            "UNDERLAY_ON",
+            "UNDERLAY_INNER"
+          ]
+        },
+        "prohibitedFixes": [
+          "enable-effect-from-dormant-saved-property",
+          "scan-invalid-keywords-as-active",
+          "delete-effect-to-hide-warning"
+        ],
+        "verification": [
+          "source-material-hash",
+          "active-keyword-identity",
+          "runtime-label-effect-state",
+          "exact-effect-properties",
+          "runtime-console-clean"
+        ]
+      }
+    },
+    {
+      "id": "cocos-label-effect-api",
+      "rule": "Trên Cocos Creator 3.8.2+, không import/thêm `LabelOutline` hoặc `LabelShadow` vì cả Component và property proxy của chúng đã deprecated và phát warning runtime. Cấu hình trực tiếp trên `Label`: bật `enableOutline` rồi gán `outlineColor/outlineWidth`; bật `enableShadow` rồi gán `shadowColor/shadowOffset/shadowBlur`. Khi migrate một port Unity, phải giữ nguyên exact font, color, width, offset, blur và kiểm visual + console; không xóa effect chỉ để sạch warning. `ai:lint` và `ai:verify` phải fail nếu TypeScript còn dùng hai Component legacy.",
+      "agentContract": {
+        "appliesTo": [
+          "cocos-3.8-typescript-source",
+          "unity-to-cocos-text-port"
+        ],
+        "prohibitedComponents": [
+          "LabelOutline",
+          "LabelShadow"
+        ],
+        "replacementProperties": [
+          "Label.enableOutline",
+          "Label.outlineColor",
+          "Label.outlineWidth",
+          "Label.enableShadow",
+          "Label.shadowColor",
+          "Label.shadowOffset",
+          "Label.shadowBlur"
+        ],
+        "migrationMustPreserve": [
+          "font",
+          "color",
+          "outline-width",
+          "shadow-offset",
+          "shadow-blur"
+        ],
+        "verification": [
+          "runtime-console-clean",
+          "visual-effect-visible",
+          "ai:lint",
+          "ai:verify"
+        ]
+      }
     },
     {
       "id": "material-color-space-parity",
@@ -61,7 +346,7 @@
     },
     {
       "id": "particle-source-oracle-parity",
-      "rule": "Không sửa VFX particle bằng cách đoán root scale/alpha/depth để làm ảnh trông gần đúng. Phải đọc prefab instance override + source particle prefab + material/texture + renderer state + camera layer/depth + animation event time; lưu SHA-256 và effective values vào oracle. Runtime giữ authored local transform nếu source không có adapter riêng, rồi regression kiểm start size/lifetime/simulation speed/capacity/curve, local transform, active particle và bounded visible pixels ở đúng thời điểm."
+      "rule": "Không sửa VFX particle bằng cách đoán root scale/alpha/depth để làm ảnh trông gần đúng. Phải đọc prefab instance override + source particle prefab + material/texture + renderer state + camera layer/depth + animation event time; lưu SHA-256 và effective values vào oracle. `ParticleSystemRenderer.enabled=false` không chứng minh particle vô hình nếu UIParticle/UI bridge khác sở hữu việc render; phải trace bridge reference, scale và renderer ownership trước khi exclude. Runtime giữ authored local transform nếu source không có adapter riêng, rồi regression kiểm start size/lifetime/simulation speed/capacity/curve, local transform, active particle và bounded visible pixels ở đúng thời điểm."
     },
     {
       "id": "runtime-material-swap-parity",
@@ -76,6 +361,80 @@
       "rule": "Khi port thay đổi camera, transform, material/shader, UI layout hoặc input fidelity, phải chạy `npm run ai:verify:visual -- --config <matrix.json>` trên Cocos preview với ảnh nguồn/các checkpoint phù hợp và mở ảnh kết quả. Với hành vi có oracle, dùng `requireEvalOk: true`; VFX/particle phải có `screenshotRegion` + `requiredScreenshotMetrics` với bounded min/max phù hợp để chứng minh visible pixels và chặn cả vô hình lẫn quá dày. Material/shader cần thêm `referenceImage` + `requiredReferenceMetrics` để đo candidate với Unity reference trên ROI đã align. Runtime-clean hoặc contact sheet không có metric contract không được diễn giải thành pixel parity."
     },
     {
+      "id": "unity-world-ui-short-viewport-parity",
+      "rule": "Khi Unity fit board/world bằng camera orthographic nhưng HUD dùng `CanvasScaler` theo reference resolution, viewport thấp/rộng có thể làm HUD lấn board dù từng hệ đúng riêng. Không sửa bằng đổi z-order, offset hoặc scale board theo screenshot. Phải đọc camera size + board safe padding + thuật toán fit/recenter và RectTransform/CanvasScaler của top HUD, slot, booster; giữ nguyên board world-fit, rồi chỉ scale các HUD wrapper dưới ngưỡng chiều cao suy ra từ safe-zone và authored HUD extents. Mọi target snap vào HUD phải dùng cùng transform/scale; vẫn giữ draw order nguồn bằng các wrapper riêng. Sprite `Sliced` phải lưu border qua AssetDB/importer, không chỉ mutate runtime. Regression risk `responsive-layout` phải có viewport nguồn và một viewport thấp/rộng, khóa `layoutOverlapMax<=0.01`, `slicedBorderInsetError<=0.001`, console sạch và mở ảnh kết quả.",
+      "agentContract": {
+        "appliesTo": [
+          "unity-orthographic-world-plus-canvas-hud-port",
+          "short-viewport-layout-fidelity"
+        ],
+        "sourceClosure": [
+          "camera-orthographic-size",
+          "board-fit-script",
+          "board-safe-padding",
+          "canvas-scaler",
+          "hud-rect-transforms",
+          "sliced-sprite-border"
+        ],
+        "preserve": [
+          "board-world-fit",
+          "source-draw-order",
+          "snap-target-transform"
+        ],
+        "adaptiveOwner": "hud-wrappers-only-below-source-derived-height-threshold",
+        "requiredRegression": [
+          "source-viewport",
+          "short-wide-viewport",
+          "exact-sliced-insets",
+          "zero-board-hud-overlap",
+          "runtime-console-clean",
+          "opened-screenshot"
+        ],
+        "prohibitedFixes": [
+          "screenshot-tuned-board-scale",
+          "z-order-only-fix",
+          "guessed-offset",
+          "runtime-only-sliced-border"
+        ]
+      }
+    },
+    {
+      "id": "unity-sliced-sprite-uv-parity",
+      "rule": "Khi port Unity `Image.Type.Sliced`/9-slice sang Cocos, `TextureImporter.spriteBorder` là biên cắt theo pixel của texture nguồn, không phải số UI đã nhân CanvasScaler. Cocos 3.8.x dùng cùng `SpriteFrame.inset*` cho cả biên UV và bề rộng vertex, nên pre-scale 95/65 thành 63.33/43.33 sẽ cắt sai texture và làm méo góc dù runtime `Sprite.type=SLICED`. Phải giữ inset pixel gốc qua AssetDB/importer; nếu UI đổi 1080->720 thì giữ node border ở kích thước nguồn và scale node/parent, không scale inset. Regression phải assert đồng thời runtime Sprite type, exact raw insets, node scale, rendered width/height và mở ảnh ở viewport nguồn + thấp/rộng; chỉ kiểm inset tồn tại hoặc chỉ kiểm ảnh là false-positive.",
+      "agentContract": {
+        "appliesTo": [
+          "unity-image-type-sliced-port",
+          "cocos-nine-slice-border-fidelity"
+        ],
+        "sourceClosure": [
+          "unity-image-type",
+          "texture-importer-sprite-border",
+          "source-texture-size",
+          "rect-transform",
+          "canvas-scaler"
+        ],
+        "preserve": [
+          "raw-texture-pixel-uv-boundaries",
+          "authored-rendered-size",
+          "corner-geometry"
+        ],
+        "requiredRegression": [
+          "runtime-sprite-type-sliced",
+          "exact-raw-insets",
+          "node-scale",
+          "rendered-size",
+          "source-and-short-wide-viewports",
+          "opened-screenshot"
+        ],
+        "prohibitedFixes": [
+          "pre-scale-spriteframe-insets",
+          "runtime-only-inset-mutation",
+          "screenshot-tuned-corner-scale",
+          "inset-exists-only-regression"
+        ]
+      }
+    },
+    {
       "id": "portable-regression-registry",
       "rule": "Mọi port phải có `tools/port-regressions.json` được commit, khai báo requiredRisks từ Unity preflight/bug history và mandatory suite cho từng risk. Matrix, eval/oracle, ảnh Unity reference và watchFiles phải cùng nằm trong Git. Sau mỗi fix hoặc thay đổi watched target, chạy `npm run ai:verify:regressions`; không reuse PASS cũ vì receipt bị khóa SHA-256. Risk input dùng gesture thật + semantic oracle; input-concurrency dùng `gestures[]` + pre/post overlap/reservation metrics; hold-drag dùng `gestureHoldBeforeMoveMs`; raycast có ca positive/negative; callback flow có `requiredTrace`; VFX có bounded visible-pixel screenshot metrics; runtime mesh có linear+curved cases cùng bounded metrics; lifecycle chạy ít nhất 2 rounds."
     },
@@ -85,15 +444,88 @@
     },
     {
       "id": "raycast-first-hit-parity",
-      "rule": "Khi port raycast selection, phải mang đủ selectable và occluder layer/collider của source rồi quyết định theo hit gần camera nhất; không được raycast chỉ danh sách selectable vì tia có thể xuyên nắp/thân để chọn object phía sau. Nếu source có fallback overlap, chỉ chạy quanh first-hit point và giữ đúng radius/layer/filter. Nghiệm thu bằng gesture thật cho cả visible target dương tính và vùng trống/bị che âm tính với `requireEvalOk: true`."
+      "rule": "Khi port raycast selection, phải mang đủ selectable và occluder layer/collider của source rồi quyết định theo đúng thứ tự hit/sorting mà source dùng; không được raycast chỉ danh sách selectable vì tia có thể xuyên nắp/thân để chọn object phía sau. Collider runtime phải truy từ đúng owner mà spawner/manager thực sự tham chiếu, merge prefab-instance override, rồi áp mọi bước runtime như `Sprite.bounds`, pixels-per-unit, padding, scale và grid-to-world `cellSize`; không được lấy collider stale trên prefab hay object cùng tên nhưng inactive/UI sample. Nếu source có fallback overlap, chỉ chạy quanh first-hit point và giữ đúng radius/layer/filter. Oracle portable phải khóa owner reference, enum/type -> sprite, GUID/path, content hash, rect/PPU/bounds/padding/effective collider và coordinate mapping cho toàn bộ type trong scope. Nếu source có runtime/adaptive add-remove type, phải giữ đúng thuật toán, enumerate concrete reachable type set của mọi target level theo deterministic policy đã khóa rồi mở rộng oracle; base-collection union không đủ và universal collider fallback bị cấm. Nghiệm thu bằng gesture thật cho cả visible target dương tính và vùng trống/bị che âm tính với `requireEvalOk: true`."
     },
     {
       "id": "camera-input-parity",
       "rule": "Khi port camera controls, phải mang đủ chuỗi nguồn: normalized slider, min/max multiplier dùng khi reset, mapping real zoom, camera position/FOV/pitch và transform scale/rotation listener. Reset rotation phải theo source (ví dụ Quaternion.identity), không chụp một runtime rotation làm mặc định. Nếu Unity có handler hold/pick và handler rotate độc lập cùng đọc một pointer, Cocos phải giữ các state đó có thể đồng thời hoạt động: vượt drag threshold chỉ chặn click-release, không tự hủy hold đã active. Drag Space.World phải kiểm chứng riêng thao tác sang phải và lên bằng gesture thật; flow hold-then-drag phải dùng `gestureHoldBeforeMoveMs` và xác nhận hold vẫn active lúc rotation bắt đầu."
     },
     {
+      "id": "cocos-gesture-coordinate-space",
+      "rule": "Với real-gesture matrix trên Cocos `FIXED_HEIGHT`/`FIXED_WIDTH`, không reuse design-space normalized position làm DOM-canvas normalized coordinate khi preview và design khác aspect ratio. Phải resolve target authored qua active UI camera `worldToScreen` + DOM rect thực của canvas; khi target chỉ biết sau setup, `evalBefore` phải trả tọa độ runtime và matrix dùng `gestureFromEvalBefore` để dispatcher consume chính evidence đó, không chép số đo thành gesture hardcode. Sau đó khóa engine `TOUCH_START` + `TOUCH_END` và zero unexpected cancel trước khi kết luận gameplay. Nếu lifecycle đã đến nhưng selection miss, audit chuỗi source-equivalent screen→world→local trước khi sửa shared gesture dispatcher hoặc thêm offset/workaround.",
+      "agentContract": {
+        "appliesTo": [
+          "cocos-real-gesture-matrix"
+        ],
+        "fitModes": [
+          "FIXED_HEIGHT",
+          "FIXED_WIDTH"
+        ],
+        "targetMapping": [
+          "authored-world-target",
+          "active-ui-camera-worldToScreen",
+          "evalBefore-runtime-coordinate",
+          "gestureFromEvalBefore",
+          "actual-canvas-dom-rect"
+        ],
+        "requiredLifecycleEvidence": [
+          "engine-TOUCH_START",
+          "engine-TOUCH_END",
+          "unexpected-cancel-count=0"
+        ],
+        "selectionMissAudit": "source-equivalent-screen-to-world-to-local",
+        "prohibitedBeforeAudit": [
+          "reuse-design-normalized-as-dom-normalized",
+          "patch-shared-dispatcher",
+          "add-coordinate-offset"
+        ]
+      }
+    },
+    {
       "id": "ordered-animation-flow-parity",
       "rule": "Khi source nối tween/Animator/particle bằng callback hoặc animation event, phải port callback graph theo từng phase (prepare/roll, pre-attach, snap, feedback, close, exit, replacement) cùng duration/easing/VFX/SFX/haptic và điều kiện chuyển state; không được gộp thành một tween rồi mutate state cuối ngay. Mỗi phase async phải có generation/model guard và pending counter. Nghiệm thu bằng `verify.visual` với `requiredTrace` để chứng minh phase không thiếu, đúng thứ tự và replacement chỉ bắt đầu sau exit."
+    },
+    {
+      "id": "unity-slot-attachment-transform-callback-parity",
+      "rule": "Khi Unity đưa object vào holder/slot bằng chuỗi reparent + movement tween + animation callback, phải đọc toàn bộ closure sở hữu transform: parent trước/sau, `worldPositionStays`, sample prefab/RectTransform dùng để tính scale, CanvasScaler/camera conversion, movement duration, clip duration và callback bắt đầu phase drop/settle. Không thay source sample-scale bằng phép fit sprite/mesh vào bounds của slot, không dùng clip length thay movement duration, và không để một reflow/tween kế tiếp `stopAll` target trước khi callback sở hữu drop/settle chạy. Nếu port tách một source await thành nhiều phase, phase sau phải bỏ qua object còn flight-active hoặc chuyển ownership có chứng minh tương đương. Regression phải dùng ít nhất hai gesture thật đủ overlap, kiểm từng slot center, settled root/animated-child rotation, scale, source-derived rendered-size ratio ở viewport nguồn lẫn viewport thấp/rộng, ordered trace và console sạch.",
+      "agentContract": {
+        "appliesTo": [
+          "unity-holder-slot-attachment",
+          "unity-reparented-tween-callback-port"
+        ],
+        "sourceClosure": [
+          "source-parent-and-target-parent",
+          "world-position-stays",
+          "sample-prefab-transform",
+          "slot-rect-transform",
+          "canvas-scaler-or-camera-conversion",
+          "movement-duration",
+          "animation-clip-duration",
+          "drop-or-settle-callback"
+        ],
+        "preserve": [
+          "callback-ownership",
+          "phase-order",
+          "source-derived-attachment-scale",
+          "settled-local-transform"
+        ],
+        "requiredRegression": [
+          "two-overlapping-real-gestures",
+          "slot-center-error",
+          "root-and-animated-child-rotation",
+          "settled-scale",
+          "rendered-size-ratio",
+          "source-and-short-wide-viewports",
+          "ordered-trace",
+          "runtime-console-clean"
+        ],
+        "prohibitedFixes": [
+          "fit-renderer-bounds-when-source-uses-sample-transform",
+          "use-clip-length-as-movement-duration",
+          "cancel-owning-tween-before-settle-callback",
+          "screenshot-tuned-scale-or-rotation"
+        ]
+      }
     },
     {
       "id": "animation-curve-oracle-parity",
@@ -109,7 +541,7 @@
     },
     {
       "id": "audio-unlock-idempotence",
-      "rule": "Web Audio unlock có thể chạy trên mọi pointer, nhưng Cocos Web `AudioSource.play()` sẽ restart clip đang phát. Mọi `resumeBGM()`/unlock handler phải idempotent: chỉ gọi `play()` khi source paused/stopped và giữ nguyên `currentTime` khi `playing`. Nghiệm thu bằng ít nhất ba gesture touch độc lập trong cùng browser session với khoảng nghỉ đo được, assert BGM vẫn playing và `currentTime` tăng nghiêm ngặt qua từng tap; một gesture trên mỗi page reload không đủ phát hiện regression."
+      "rule": "Web Audio unlock có thể chạy trên mọi pointer, nhưng Cocos Web `AudioSource.play()` sẽ restart clip đang phát. Mọi `resumeBGM()`/unlock handler phải idempotent: chỉ gọi `play()` khi source paused/stopped và giữ nguyên `currentTime` khi `playing`. Nếu clip đã preload, lần `playBGM(path)` đầu phải resolve cache và gọi `AudioSource.play()` đồng bộ ngay trong user gesture; không đẩy cache hit qua `Promise.then` vì browser/webview nghiêm có thể mất autoplay authorization. Nghiệm thu bằng ít nhất ba gesture touch độc lập trong cùng browser session với khoảng nghỉ đo được, assert BGM vẫn playing và `currentTime` tăng nghiêm ngặt qua từng tap; một gesture trên mỗi page reload không đủ phát hiện regression."
     },
     {
       "id": "playable-core-first",
@@ -137,7 +569,15 @@
     },
     {
       "id": "portable-cross-pc-bootstrap",
-      "rule": "Trạng thái dùng chung phải sống trong Git: exact `playable-shared-kit` submodule commit, `capabilities.def.cjs`, skill source, global pinned Work Memory và registry/matrix/oracle/reference/watchFiles. Sau clone trên PC khác phải chạy `git submodule update --init --recursive`, `npm ci`, `ai:portable:doctor`, `ai:sync`, `ai:contract:verify` và `memory:doctor` trước port/resume. Không dùng absolute path, temp screenshot, user-local cache, mutation receipt hoặc resume packet từ máy cũ làm handoff truth; các state local phải regenerate và bind lại source hiện tại."
+      "rule": "Trạng thái dùng chung phải sống trong Git: exact `playable-shared-kit` submodule commit, `capabilities.def.cjs`, skill source, global pinned Work Memory và toàn bộ canonical regression closure gồm registry/matrix/eval/oracle/reference/watchFiles. `ai:portable:doctor` phải duyệt closure đó và fail khi dependency thiếu/untracked, không chỉ kiểm registry root; mọi audit tracked-file phải batch/cache Git query, không spawn một process Git cho từng file vì Codex Desktop Windows còn có review/status watcher riêng. Cache/source fingerprint không được chỉ tin size/mtime/ctime vì exFAT và filesystem coarse-timestamp có thể giữ nguyên cả ba sau same-size replacement; phải content-hash mọi text/Unity-serialized evidence cùng `.meta` mà scanner consume và invalidate schema khi stamp contract đổi. Regression timestamp phải dùng mốc từ 1980 trở đi, cách nhau quá độ phân giải exFAT; symlink/junction security case chỉ skip với explicit unsupported-filesystem error và vẫn phải chạy thật trên NTFS/Linux CI. Sau clone trên PC khác phải chạy `git submodule update --init --recursive`, `npm ci`, `ai:portable:doctor`, `ai:sync`, `ai:contract:verify` và `memory:doctor` trước port/resume. Không dùng absolute path, temp screenshot, user-local cache, mutation receipt hoặc resume packet từ máy cũ làm handoff truth; chỉ ba file `.ai/port/**/resume-packet.json`, `regression-receipt.json`, `static-scaffold.receipt.json` là local/regenerated, không ignore rộng `.ai`, core manifest hay wiring."
+    },
+    {
+      "id": "skeletal-export-path-portability",
+      "rule": "Skeletal/Spine export metadata được commit không được giữ `images`/`audio` path tuyệt đối của máy exporter. Trước khi normalize phải chứng minh atlas/texture/audio ownership và dependency runtime thật từ source + importer/AssetDB; chỉ sửa Cocos copy có evidence, rồi AssetDB reimport và kiểm lại asset type, dependency graph cùng runtime preview. Không xóa hoặc thay path chỉ dựa trên regex vì metadata có thể là dependency thật."
+    },
+    {
+      "id": "spine-slot-batching-parity",
+      "rule": "Khi Spine title/UI có slot/sibling bị che hoặc thiếu trong Cocos, phải đọc skeleton/atlas, draw order/slot ownership và exact Cocos runtime trước khi sửa scale, Z hay tách sprite. Nếu evidence chứng minh renderer batching quyết định thứ tự ghép slot, expose `sp.Skeleton.enableBatch` qua config và bật đúng skeleton trước khi implement workaround hình ảnh. Checkpoint phải khóa skeleton asset identity, batch state, authored position/scale/tint, tight ROI và console sạch; không được bật global cho mọi Spine hoặc dùng ảnh screenshot làm lý do duy nhất."
     },
     {
       "id": "meta-files",
@@ -206,7 +646,8 @@
           "stdout"
         ],
         "limits": [
-          "Component script hiện UUID thô, chưa giải ra tên class."
+          "Component script hiện UUID/class ID thô, chưa giải ra tên class.",
+          "Cocos scene có thể serialize custom script bằng compressed class ID thay vì full script UUID. Không được kết luận component thiếu chỉ vì grep `.scene` không thấy UUID; resolve qua AssetDB/MCP (hoặc decode class ID) và kiểm runtime registration trước khi attach."
         ],
         "verify": null,
         "status": "partial"
@@ -241,11 +682,12 @@
         ],
         "when": "Sau clone/npm ci hoặc trước khi một agent trên PC/project khác bắt đầu port hay resume.",
         "outputs": [
-          "stdout JSON bounded: exact submodule, generated contract, provider skills, Work Memory integrity, tracked regression inputs và local receipt disposition"
+          "stdout JSON bounded: exact submodule, generated contract, provider skills, Work Memory integrity, full tracked regression dependency closure và local receipt disposition"
         ],
         "limits": [
           "Read-only: không init submodule, không npm install, không sync/generate, không repair database và không tạo receipt.",
-          "Source/contract/skill/memory/regression input phải được Git-track; mutation receipt, cache và resume packet là state local phải regenerate/revalidate trên từng PC."
+          "Source/contract/skill/memory và toàn bộ regression closure (registry, matrix, eval/oracle, Unity reference, watchFiles) phải được Git-track; doctor dùng cùng canonical closure với regression gate, query Git theo batch thay vì spawn theo từng file, và trả diagnostic bounded.",
+          "Chỉ `resume-packet.json`, `regression-receipt.json` và `static-scaffold.receipt.json` dưới `.ai/port/**` là state local được ignore/regenerate. Không ignore rộng `.ai`, `core-gameplay.json` hoặc `static-scaffold.wiring.json`."
         ],
         "verify": null,
         "status": "partial"
@@ -320,6 +762,7 @@
           "--intent <kind>",
           "--target <logical-path-or-symbol>",
           "--profile <playable-core|full-project>",
+          "--dispositions <file>",
           "--unity <file>",
           "--mcp-url <url>",
           "--timeout-ms <n>",
@@ -330,7 +773,7 @@
         ],
         "when": "BƯỚC DUY NHẤT đầu tiên trước khi agent đọc Unity source hoặc chạy tool có ghi output. Mặc định chọn gameplay scene/closure, loại menu-shop-online khỏi implementation route, giữ full high audit và cấp receipt theo source state.",
         "outputs": [
-          "stdout JSON <=12 KiB: decision, coreGameplay entry/closure/exclusions/80-90 acceptance, core features, full obligationIndex, coreObligationIndex, routes và receiptId"
+          "stdout JSON <=12 KiB: decision, coreGameplay entry/closure/exclusions/80-90 acceptance, engineFeatureClosure, core features, full obligationIndex, coreObligationIndex, routes và receiptId"
         ],
         "limits": [
           "Mặc định không ghi Unity/Cocos project; receipt atomic <=4 KiB nằm trong user-local cache. Chỉ --bootstrap mới cài/reload Unity package.",
@@ -340,8 +783,11 @@
           "Receipt chỉ authorize source trong Assets hoặc embedded/local/exact PackageCache root do manifest chọn. Temp/UserSettings/arbitrary project file bị từ chối; closure staging ngoài project cần provenance exact-hash do port.closure sinh.",
           "Directory walker/cache fail-closed với symlink, reparse point, absolute/traversal path; mọi --dry-run dừng trước mkdir, meta, converter và output write.",
           "Live candidate disposition là all-or-nothing theo bounded request: resolved GUID phải có path + complete dependency mappings; serialized asset phải có complete SerializedObject/reference evidence. Missing/partial trở thành authoritative live high.",
+          "`--dispositions` chỉ chấp nhận Unity Editor-confirmed missing GUID còn nằm trong core/adapter; file JSON phải nằm ngoài Unity project, khóa exact state fingerprint + owner/field/source SHA-256 + proof SHA-256, và receipt tự stale khi file evidence đổi. Missing reference chỉ thuộc excluded playable-core path được route defer nhưng vẫn giữ trong full high audit.",
           "Brief giữ toàn bộ high code/count trong obligationIndex dù phải trim detail/evidence; chỉ query bounded khi evidenceQueries yêu cầu.",
           "Mặc định `--profile playable-core`: chỉ route gameplay closure và adapter cần cho playable; main menu/shop/meta/online SDK được explicit defer/replace nhưng vẫn nằm trong full high audit. Dùng `--profile full-project` chỉ khi brief thực sự yêu cầu.",
+          "`engineFeatureClosure` chỉ lấy evidence trong core + adapter closure. AnimatorController khóa `animation` + `skeletal-animation` + `marionette`; Spine và physics khóa parent + exact backend selector. Version Spine thiếu/mâu thuẫn/không hỗ trợ là hard blocker trước implementation.",
+          "Optional 3D feature chỉ được yêu cầu từ semantics reachable/active. Mesh đã serialize nhưng ParticleSystemRenderer không ở mesh mode, private debug helper không có call site và asset ngoài playable-core không được phép bật module.",
           "Fidelity 80-90 trong brief là acceptance target, không phải kết quả scan. Chỉ port.core.acceptance có runtime/build + checkpoint evidence mới được phép kết luận.",
           "Chỉ intent project (mặc định) cấp mutation receipt. Intent scene/prefab/script/shader/feature/diagnostic là focused analysis-only và không thể dùng để mở gate ghi output.",
           "Scanner edit-time đặt playModeCapture=false; object chỉ sinh runtime vẫn là coverage gap cần xác minh runtime."
@@ -357,18 +803,26 @@
         "optional": [
           "--provider <auto|static|unity-mcp>",
           "--bootstrap",
+          "--dispositions <file>",
+          "--cache-dir <dir>",
+          "--no-cache",
+          "--refresh-cache",
           "--manifest <file>",
+          "--target-scene <file.scene>",
           "--force",
           "--dry-run",
           "--json"
         ],
-        "when": "Bước đầu implementation core playable. Lệnh tự chạy preflight playable-core, khóa gameplay entry/closure và tạo manifest evidence nhỏ để agent không phải đọc lại toàn project.",
+        "when": "Bước đầu implementation core playable. Lệnh tự chạy preflight playable-core, khóa gameplay entry/closure, apply exact engineFeatureClosure vào active Cocos preview rồi mới tạo manifest evidence nhỏ.",
         "outputs": [
+          "Cocos Feature Cropping profile + active preview apply evidence khi source yêu cầu",
           "<CocosProjectRoot>/.ai/port/core-gameplay.json",
-          "stdout JSON compact core scope + next action"
+          "stdout JSON compact core scope + engine feature gate + next action"
         ],
         "limits": [
-          "Chỉ tạo manifest; không tự tuyên bố đã port gameplay. Refuse khi hard blocker hoặc gameplay entry còn mơ hồ.",
+          "Không tự tuyên bố đã port gameplay. Refuse trước manifest khi hard blocker/gameplay entry mơ hồ, feature selector chưa xác định hoặc active preview chưa apply đủ exact source closure.",
+          "Engine feature gate chạy trước gameplay artifact: chỉ bật module có evidence; backend Spine/Physics2D là selector exclusive và mọi backend thay thế phải bị loại khỏi include/cache.",
+          "Core init dùng cùng incremental index contract với direct preflight. Cache record chứa engineFeatureEvidence phải fingerprint detector producer; `--no-cache`/`--refresh-cache` chỉ là controls chẩn đoán, không thay thế invalidation đúng.",
           "`--dry-run` dừng trước mkdir/write. Không overwrite manifest nếu thiếu `--force`; force dùng lock + compare-and-swap và giữ nguyên concurrent edit.",
           "Manifest schema v3 khóa exact gameplay entry output, 9 checkpoint/weight/mandatory, gate 80/90, evidence contract và portable regression gate; agent không thể tự hạ rubric.",
           "Init/scaffold tự tạo `tools/port-regressions.json` nếu chưa có, suy requiredRisks nền từ feature nguồn nhưng để suites rỗng có chủ ý; agent phải thêm matrix/oracle/watchFiles trước core verify."
@@ -384,9 +838,14 @@
         "optional": [
           "--provider <static|auto|unity-mcp>",
           "--bootstrap",
+          "--dispositions <file>",
+          "--cache-dir <dir>",
+          "--no-cache",
+          "--refresh-cache",
           "--manifest <file>",
           "--wiring <file>",
           "--packet <file>",
+          "--target-scene <file.scene>",
           "--force",
           "--dry-run",
           "--json"
@@ -400,6 +859,7 @@
         ],
         "limits": [
           "Mặc định provider=static. Chỉ nâng lên auto/unity-mcp khi preflight có uncertainty cụ thể mà static evidence không giải quyết được.",
+          "Init phase phải hoàn tất engine feature closure trên active preview trước khi scaffold ghi scene/wiring. Nếu Editor cần reload, lệnh fail-closed để chạy lại sau khi preview đã apply; không đi tiếp bằng workaround trong gameplay code.",
           "Không overwrite target scene/wiring đang tồn tại; trạng thái một-nửa được report để agent đối chiếu trước khi regenerate.",
           "Scene và wiring chỉ được reuse khi receipt bind cùng Unity brief/state fingerprint và SHA-256 hiện tại của cả hai output.",
           "Static scene chỉ là geometry/component skeleton. Script, material, shader, prefab instance và runtime-only object vẫn phải xử lý theo wiring/obligation report.",
@@ -802,9 +1262,9 @@
       },
       {
         "id": "shader.chain",
-        "title": "Port prefab hoặc ScriptableObject material-set kèm shader + texture phụ thuộc (ENTRY POINT)",
-        "run": "node playable-shared-kit/tools/shader-compiler/unity-shader-compiler.cjs chain --src <file.prefab|file.asset> --unity-root <UnityAssetsFolder>",
-        "command": "node playable-shared-kit/tools/shader-compiler/unity-shader-compiler.cjs chain --src <file.prefab|file.asset> --unity-root <UnityAssetsFolder>",
+        "title": "Port scene, prefab hoặc ScriptableObject material-set kèm shader + texture phụ thuộc (ENTRY POINT)",
+        "run": "node playable-shared-kit/tools/shader-compiler/unity-shader-compiler.cjs chain --src <file.unity|file.prefab|file.asset> --unity-root <UnityAssetsFolder>",
+        "command": "node playable-shared-kit/tools/shader-compiler/unity-shader-compiler.cjs chain --src <file.unity|file.prefab|file.asset> --unity-root <UnityAssetsFolder>",
         "optional": [
           "--out-dir <assets/>",
           "--json",
@@ -812,7 +1272,7 @@
           "--max-closure-assets <n>",
           "--max-closure-depth <n>"
         ],
-        "when": "DÙNG ĐẦU TIÊN khi cần port một prefab hoặc ScriptableObject chứa material-set active/disabled. Tự đi hết chuỗi asset -> material -> shader -> texture, transpile luôn, và chỉ in ra phần cần quyết định. Đừng tự đọc YAML của prefab/.asset/.mat.",
+        "when": "DÙNG ĐẦU TIÊN khi cần port scene gameplay, prefab hoặc ScriptableObject chứa material-set active/disabled. Tự đi hết chuỗi scene/asset -> nested prefab -> material -> shader -> texture, transpile luôn, và chỉ in ra phần cần quyết định. Đừng tự đọc YAML của scene/prefab/.asset/.mat.",
         "outputs": [
           "<out-dir>/effects/*.effect",
           "<out-dir>/materials/*.mtl",
@@ -954,11 +1414,13 @@
           "--max-mcp-attempts <n>",
           "--mcp-url <url>",
           "--physics-backend <name>",
+          "--physics-2d-backend <name>",
+          "--spine-backend <name>",
           "--force-backend",
           "--dry-run",
           "--json"
         ],
-        "when": "Sau port hoặc khi preview báo thiếu engine feature/backend. Tool suy luận từ component/API thực dùng, thử Cocos-MCP Profile API tối đa 2 lượt, rồi mới fallback exact-backup + lock + CAS patch engine.json và restart bằng 1_open-project.bat.",
+        "when": "Core init/scaffold gọi gate từ Unity engineFeatureClosure trước gameplay implementation; sau port tool còn audit component/API Cocos thực dùng. Tool thử Cocos-MCP Profile API tối đa 2 lượt, rồi mới fallback exact-backup + lock + CAS patch engine.json và restart bằng 1_open-project.bat.",
         "outputs": [
           ".unity/engine-feature-report.json",
           ".unity/engine-feature-backups/* khi fallback",
@@ -966,8 +1428,12 @@
         ],
         "limits": [
           "Unity dùng PhysX không tự động ép Cocos dùng backend nặng: Builtin cho collider query/trigger đơn giản; Cannon cho rigid-body/mesh cơ bản; Bullet cho CCD, sweep, character controller, capsule động và constraint nâng cao.",
+          "Spine phải chọn exact backend từ skeleton JSON version (`spine-3.8` hoặc `spine-4.2`); Physics2D phải chọn exact backend parent option. Selector ghi parent `_option`, bật parent cache + đúng một backend child trong cache/include và loại toàn bộ backend thay thế. Cocos 3.8.8 có thể normalize parent khỏi includeModules; lúc đó selected child + parent cache/_option là authoritative. Preview biểu diễn Physics2D parent bằng `physics-2d-framework` và Spine version bằng generic `spine`, nên chỉ chấp nhận alias khi selector exact và preview mới hơn profile.",
           "Profile write hoặc engine.json patch chưa chứng minh runtime đã đổi. Chỉ complete khi active preview import-map chứa feature/backend yêu cầu.",
-          "Fallback không blind-insert tên module lạ; schema/version phải hợp lệ, mọi module phải có sẵn trong cache của Cocos profile.",
+          "Fallback không blind-insert tên module lạ; ID versioned chỉ chấp nhận dot giữa các segment alphanumeric hợp lệ, và mọi module/backend phải tồn tại trong cache của đúng Cocos profile.",
+          "Không suy optional 3D module bằng token scan: primitive cần primitive API hoặc ParticleSystemRenderer mesh mode đang active; debug-renderer cần call path reachable; evidence ngoài playable-core không được mở feature.",
+          "Unity source closure mang cả quyết định required và disabled. Ensure phải gỡ module optional đã bật bởi stale/false-positive khỏi cache + include, rồi chờ preview mới chứng minh feature không còn active; add-only repair không đạt complete.",
+          "Windows restart gọi exact batch path qua environment/PowerShell call operator để tránh cmd /s quote rewriting. Exit status khác 0 phải có error receipt và không được dùng port cũ để báo complete.",
           "Tool restart Editor nhưng không build game."
         ],
         "verify": null,
@@ -975,39 +1441,46 @@
       },
       {
         "id": "port.core.acceptance",
-        "title": "Cổng runnable + evidence-weighted core gameplay fidelity 80/90",
+        "title": "Cổng build hoặc preview + evidence-weighted core gameplay fidelity 80/90",
         "run": "npm run ai:port:core:verify -- --unity-project <UnityProjectRoot> --cocos-project <CocosProjectRoot>",
         "command": "node playable-shared-kit/tools/core-gameplay-port.cjs verify --json --unity-project <UnityProjectRoot> --cocos-project <CocosProjectRoot>",
         "optional": [
           "--manifest <file>",
+          "--preview-only",
+          "--preview-url <loopback-origin>",
           "--no-run-gates",
           "--json"
         ],
-        "when": "Cổng kết thúc port core. Tự chạy verify/lint/assets/regressions/build/runtime và chỉ accept khi score >=80, mọi mandatory behavior checkpoint có evidence.",
+        "when": "Cổng kết thúc port core. Mặc định chạy build acceptance; khi user cấm build, dùng --preview-only để nghiệm thu active Cocos editor preview mà không tạo/đọc build artifact.",
         "outputs": [
-          "stdout JSON compact: runnable gates, artifact presence, fidelity score/checkpoints, nextActions"
+          "stdout JSON compact: mode/status, build runnable hoặc preview-runnable, artifact presence, fidelity score/checkpoints, nextActions"
         ],
         "limits": [
           "Score là rubric parity có evidence, không phải pixel-perfect hoặc semantic proof tự động; target 90 và minimum accept 80.",
           "Compiler confidence, status boolean hoặc file tồn tại đơn lẻ không được tính điểm. Evidence schema v1 phải bind current brief/state/checkpoint và SHA-256 của từng Cocos target; target đổi làm evidence stale. Mandatory input/rules/win-lose chỉ nhận runtime, không nhận visual-only.",
-          "Mặc định chạy tuần tự `ai:verify`, `ai:lint`, `ai:verify:assets`, `ai:verify:regressions`, `build`, `ai:verify:runtime`; dừng ở gate đầu thất bại, timeout/output bounded và redacted. Regression gate buộc registry/matrix/oracle/watchFiles đã nằm trong Git và receipt khớp hash hiện tại. `--no-run-gates` không thể trả accepted/runnable."
+          "Mặc định chạy tuần tự `ai:verify`, `ai:lint`, `ai:verify:assets`, `ai:verify:regressions:check`, `build`, `ai:verify:runtime`; dừng ở gate đầu thất bại, timeout/output bounded và redacted. Full `ai:verify:regressions` phải chạy sau mỗi thay đổi watched target; core acceptance chỉ check receipt hash-bound hiện hành để không lặp playthrough dài hoặc false-timeout. Regression gate buộc registry/matrix/oracle/watchFiles đã nằm trong Git và receipt khớp hash hiện tại. `--no-run-gates` không thể trả accepted/runnable.",
+          "`--preview-only` bỏ build gate/builtHtml và gọi `ai:verify -- --skip-build-size` để không đọc/fail bởi HTML build cũ; vẫn giữ TS/config/feature/meta/import, lint, assets, regressions và runtime smoke với loopback editor URL. Kết quả chỉ được ghi `preview-accepted`/`preview-runnable`; `accepted=false`, build runnable=false và claim phải nói rõ build acceptance chưa chạy.",
+          "`--preview-url` chỉ nhận loopback http(s) origin không credentials/query/hash/path để argument Windows cmd không trở thành shell injection surface."
         ],
         "verify": null,
         "status": "partial"
       },
       {
         "id": "verify.all",
-        "title": "Cổng xác minh bắt buộc: TS, config, asset binding, meta, bundle size",
+        "title": "Cổng xác minh bắt buộc: TS, config, asset binding, meta, bundle size (trừ preview-only rõ ràng)",
         "run": "npm run ai:verify",
         "command": "node playable-shared-kit/tools/headless-verifier.cjs --json",
         "optional": [
-          "--json"
+          "--json",
+          "--skip-build-size"
         ],
         "when": "BẮT BUỘC sau mọi lần sửa code hoặc port. Phải sạch trước khi kết thúc lượt.",
         "outputs": [
           "stdout (JSON khi có --json)"
         ],
-        "limits": [],
+        "limits": [
+          "`--skip-build-size` chỉ dành cho workflow preview-only đã cấm build: headless verifier không đọc `build/` nhưng vẫn chạy đủ TS, Zero-GC, config/binding, engine feature, `.meta` và importer checks. Build acceptance không được dùng mode này."
+        ],
         "verify": null,
         "status": "ok"
       },
@@ -1026,14 +1499,15 @@
           "stdout (JSON khi có --json)"
         ],
         "limits": [
-          "Đối chiếu script bằng tiền tố 5 hex của UUID; trùng tiền tố thì chấp nhận (thà bỏ sót hơn báo sai)."
+          "Đối chiếu script bằng tiền tố 5 hex của UUID; trùng tiền tố thì chấp nhận (thà bỏ sót hơn báo sai).",
+          "Absence của full UUID trong raw `.scene` không chứng minh custom Component chưa attach vì Cocos dùng compressed class ID. Trước khi thêm component, phải resolve AssetDB/MCP hoặc decode class ID và xác nhận class đã register ở runtime; không duplicate attachment từ UUID grep."
         ],
         "verify": null,
         "status": "partial"
       },
       {
         "id": "verify.assets",
-        "title": "Kiểm tra Cocos có THỰC SỰ import được asset không",
+        "title": "Kiểm tra Cocos có THỰC SỰ import và dùng đúng asset không",
         "run": "npm run ai:verify:assets",
         "command": "node playable-shared-kit/tools/verify-assets.cjs --json",
         "optional": [
@@ -1041,13 +1515,15 @@
           "--json",
           "--quiet"
         ],
-        "when": "Ngay sau khi sinh/sửa asset (.effect, .mtl, .prefab, texture). Đây là check DUY NHẤT chứng minh editor chấp nhận asset — tsc/lint/build đều xanh mà playable vẫn trắng màn hình nếu importer từ chối.",
+        "when": "Ngay sau khi sinh/sửa asset (.effect, .mtl, .prefab, texture, JSON config). Ngoài importer state, tool đối chiếu plain JSON với cc.JsonAsset cache mà preview thực sự nạp để bắt cache cũ dù source/config type đã đúng.",
         "outputs": [
           "stdout (JSON khi có --json)"
         ],
         "limits": [
           "Đọc `\"imported\": false` trong .meta, nên chỉ có ý nghĩa khi Cocos Creator đã từng quét thư mục. Asset chưa có .meta thuộc về `verify.all` (check Meta Files Integrity).",
           "Duyệt đệ quy cả importer state trong `subMetas`; root `imported: true` không được che texture/mesh/material con đang `imported: false`.",
+          "Với plain JSON có importer=`json` và imported=true, khi project có `library/` tool so sánh semantic source với wrapper `cc.JsonAsset` theo UUID. Cache thiếu/hỏng/stale là FAIL và phải reimport qua Cocos AssetDB; không sửa `.meta` hay cache tay.",
+          "Fresh clone chưa có `library/` chỉ WARN vì chưa có cache để đối chiếu; phải mở Cocos/reimport rồi chạy lại trước khi dùng preview làm evidence.",
           "Lý do lỗi lấy từ log của editor; log bị xoay vòng khi khởi động lại nên có thể chỉ báo được \"chưa import\" mà không có message."
         ],
         "verify": null,
@@ -1120,6 +1596,7 @@
           "Chỉ nhận URL preview http(s), reload từng case trong browser session độc lập và không tìm/chạy build.",
           "Mỗi case có thể dùng evalBefore/eval/gesture; ưu tiên evalBeforeFile/evalFile trong manifest để tránh lỗi shell quoting và lưu lại đúng phép thử.",
           "Dùng `gestures` (2-8 gesture string) + `gestureGapMs` khi cần kiểm nhiều pointer lifecycle độc lập như rapid tap. Mỗi phần tử phải phát touchStart/touchMove/touchEnd riêng; không thay bằng một drag dài hoặc gọi thẳng method gameplay.",
+          "Với Cocos `FIXED_HEIGHT`/`FIXED_WIDTH`, không dùng lại design-space normalized coordinate làm DOM-canvas normalized coordinate khi aspect ratio khác nhau. Resolve target authored qua active UI camera `worldToScreen` rồi map vào DOM rect thực của canvas; receipt phải chứng minh engine nhận `TOUCH_START` + `TOUCH_END` và zero unexpected cancel trước khi diễn giải gameplay. Nếu phase đã đến nhưng selection miss, audit chuỗi source-equivalent screen→world→local trước khi sửa shared dispatcher hoặc thêm offset.",
           "Đặt previewDevice ở manifest hoặc từng case khi cần khóa device/aspect của Cocos preview. Đừng dùng windowSize như bằng chứng rằng canvas đã đổi aspect; evidence ghi device/canvas đã settle và receipt khôi phục device trước đó để case không làm bẩn Editor/case sau.",
           "Với input/camera/reset có oracle định lượng, đặt `requireEvalOk: true`; eval cuối phải trả `true` hoặc JSON `{ok:true}`. Ảnh đẹp nhưng hướng drag, normalized zoom hoặc reset quaternion sai sẽ làm checkpoint fail.",
           "Với animation/callback nhiều phase, khai báo `requiredTrace` (2-32 milestone unique) cùng `requireEvalOk: true`. Eval phải trả `{ok:true, animationTrace:[{phase,atMs}]}`; tool fail nếu thiếu phase, sai thứ tự hoặc timestamp không monotonic.",
@@ -1141,6 +1618,7 @@
           "--config <file>",
           "--receipt <file>",
           "--output <dir>",
+          "--suite <id>",
           "--no-refresh",
           "--json"
         ],
@@ -1154,14 +1632,15 @@
           "Mỗi risk có contract riêng: input cần real gesture + semantic eval; input-concurrency cần `gestures[]` + pre/post overlap/reservation metrics; hold-drag cần gestureHoldBeforeMoveMs; transparent hold cần gestureKeepPressed; raycast cần positive+negative gesture tags; animation cần requiredTrace; runtime-mesh-animation cần linear-path + curved-path, Unity reference, ordered trace và bounded metrics; visual cần Unity reference; level-lifecycle cần win tag và chạy ít nhất 2 rounds.",
           "`requiredEvalMetrics`/`requiredEvalBeforeMetrics` fail-closed nếu eval thiếu metric, không finite hoặc vượt min/max. Runtime mesh animation phải chứng minh actionStarted=0 trước gesture và >=1 sau gesture; evalBefore không được tự gọi action đang test. Dùng metric cho UV span/error, position, direction dot, root scale và thickness; `{ok:true}` đơn lẻ không đủ.",
           "Trước run, tool gọi Cocos `editorRuntime_reload_preview` với refreshAssets=true để tránh test bundle TypeScript cũ. `--no-refresh` chỉ dùng khi chủ ý và được ghi rõ trong receipt.",
-          "Receipt bind SHA-256 của registry, matrix, eval/reference và watchFiles; thay đổi byte sau PASS làm `check` fail stale. Tool không tự đánh giá pixel parity ngoài oracle/reference contract."
+          "Receipt bind SHA-256 của registry, matrix, eval/reference và watchFiles; thay đổi byte sau PASS làm `check` fail stale. Tool không tự đánh giá pixel parity ngoài oracle/reference contract.",
+          "`--suite <id>` chỉ re-run suite đã chọn rồi merge vào receipt base khi base cùng snapshot và đủ mọi suite còn lại; receipt thiếu/stale hoặc suite lạ phải fail trước preview. Không dùng selective rerun để bỏ qua suite fail."
         ],
         "verify": null,
         "status": "partial"
       },
       {
         "id": "verify.gc",
-        "title": "Lint Zero-GC và quy tắc playable",
+        "title": "Lint Zero-GC, module Component và quy tắc playable",
         "run": "npm run ai:lint",
         "command": "node playable-shared-kit/tools/zero-gc-linter.cjs --json",
         "optional": [
@@ -1171,7 +1650,11 @@
         "outputs": [
           "stdout (JSON khi có --json)"
         ],
-        "limits": [],
+        "limits": [
+          "Cocos Creator 3.8.x chỉ cho một `@ccclass` kế thừa `cc.Component` trên mỗi module TypeScript; linter resolve base qua local/relative import và tính cả Component re-export qua barrel.",
+          "`@ccclass` data/serializable không kế thừa `cc.Component` không bị tính. Mỗi Component concrete ở file riêng; shared base ở file riêng; marker/barrel phải Component-free và consumer import concrete module trực tiếp.",
+          "Cocos Creator 3.8.2+ đã deprecate `LabelOutline` và `LabelShadow`; linter fail khi TypeScript còn import hoặc truy cập hai Component này. Dùng trực tiếp `Label.enableOutline/outlineColor/outlineWidth` và `Label.enableShadow/shadowColor/shadowOffset/shadowBlur` để tránh warning runtime nhưng vẫn giữ exact styling nguồn."
+        ],
         "verify": null,
         "status": "ok"
       }
@@ -1403,7 +1886,9 @@
           "playable-shared-kit/ai/CAPABILITIES.json",
           "playable-shared-kit/ai/CORE.md"
         ],
-        "limits": [],
+        "limits": [
+          "`CC_PLAYABLE_AI_SYNC_PROJECT_ONLY=1` chỉ skip deploy skill vào user-home; mọi artifact/skill nằm trong project Git vẫn phải generate, copy và render đầy đủ. Mặc định vẫn deploy cả project lẫn user-home."
+        ],
         "verify": null,
         "status": "ok"
       },

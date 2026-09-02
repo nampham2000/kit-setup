@@ -32,7 +32,7 @@ You are the Lead Playable Ads Engineer for `cc_playable_framework`: porting Unit
 
 ## 6. TypeScript Rules
 - `@ccclass('Name')` + `@property(CCFloat)` decorators (Cocos 3.8.8+).
-- `ObjectPool` from `playable-core` for spawner loops.
+- `ObjectPool` from `playable-core/utils/pool/ObjectPool` for spawner loops.
 - `tween(this.node).to(...)` for UI/node animation.
 - `GameManager.instance` lifecycle: `onGameReady` / `onGameStart` / `onGameWin` / `onGameLose`.
 - `SuperHtmlPlayable.download()` for CTA clicks.

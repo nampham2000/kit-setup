@@ -1,13 +1,14 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 
 const { scanUnityProject } = require('./service.cjs');
-const { createUnityFixture } = require('./test-fixture.cjs');
+const { createUnityFixture, isLinkUnavailableError } = require('./test-fixture.cjs');
 const {
   PREFLIGHT_MAX_BYTES,
   RECEIPT_MAX_BYTES,
@@ -16,6 +17,7 @@ const {
   createReceipt,
   readReceipt,
   runUnityPortPreflight,
+  writeReceipt,
   writePortProvenance,
 } = require('./preflight.cjs');
 
@@ -79,6 +81,97 @@ test('static unresolved GUIDs require completion evidence while unknown highs st
   assert.equal(
     liveConfirmed.obligations.find(item => item.code === 'UNITY_REACHABLE_GUID_UNRESOLVED').hard,
     true,
+  );
+});
+
+test('preflight projects the exact engine feature closure before implementation', async t => {
+  const fixture = createUnityFixture(t);
+  const result = await scanUnityProject({ project: fixture.root, provider: 'static', cache: false });
+  const scene = result.snapshot.assets.records.find(item => item.assetPath === 'Assets/Game/Scenes/Main.unity');
+  scene.engineFeatureEvidence = [
+    { feature: 'animator-controller', signal: 'animator-with-controller' },
+    { feature: 'spine-runtime', signal: 'spine-runtime-reference' },
+    { feature: 'spine-version', signal: 'spine-skeleton-json-version', version: '4.2' },
+  ];
+  const brief = createImplementationBrief(result, { project: fixture.root, now: 0 });
+  assert.equal(brief.engineFeatureClosure.status, 'required');
+  assert.deepEqual(brief.engineFeatureClosure.requiredModules, [
+    'animation', 'skeletal-animation', 'marionette', 'spine', 'spine-4.2',
+  ]);
+  assert.equal(brief.engineFeatureClosure.selectors.spineBackend, 'spine-4.2');
+  assert.equal(brief.implementation[0].capabilityId, 'engine.features');
+  assert.equal(brief.decision.implementationAllowed, true);
+});
+
+test('preflight blocks when reachable Spine runtime evidence has no exact version', async t => {
+  const fixture = createUnityFixture(t);
+  const result = await scanUnityProject({ project: fixture.root, provider: 'static', cache: false });
+  const scene = result.snapshot.assets.records.find(item => item.assetPath === 'Assets/Game/Scenes/Main.unity');
+  scene.engineFeatureEvidence = [{ feature: 'spine-runtime', signal: 'spine-runtime-reference' }];
+  const brief = createImplementationBrief(result, { project: fixture.root, now: 0 });
+  assert.equal(brief.engineFeatureClosure.status, 'blocked');
+  assert.equal(brief.decision.implementationAllowed, false);
+  assert.equal(brief.obligationIndex.some(item => item[0] === 'UNITY_SPINE_VERSION_UNRESOLVED' && item[2] === 1), true);
+});
+
+test('live unresolved GUID routing defers non-core owners and accepts only hash-bound reviewed stale references', async t => {
+  const fixture = createUnityFixture(t);
+  const cacheDir = cacheFixture(t);
+  const result = await scanUnityProject({ project: fixture.root, provider: 'static', cache: false });
+  const coreGuid = '99999999999999999999999999999991';
+  const deferredGuid = '99999999999999999999999999999992';
+  result.snapshot.dependencies.unresolved.push(
+    {
+      guid: coreGuid, category: 'reachable-missing', confirmation: 'unity-editor-missing',
+      fields: ['AnimatorState.m_Motion'], sources: ['Assets/Game/Scenes/Main.unity'],
+      sourceEvidence: [{ source: 'Assets/Game/Scenes/Main.unity', fields: ['AnimatorState.m_Motion'] }],
+    },
+    {
+      guid: deferredGuid, category: 'reachable-missing', confirmation: 'unity-editor-missing',
+      fields: ['MonoBehaviour.m_Sprite'], sources: ['Assets/Plugins/Console.unity'],
+      sourceEvidence: [{ source: 'Assets/Plugins/Console.unity', fields: ['MonoBehaviour.m_Sprite'] }],
+    },
+  );
+  result.snapshot.diagnostics.push({
+    code: 'UNITY_REACHABLE_GUID_UNRESOLVED', severity: 'high', count: 2,
+    message: 'missing', action: 'restore', evidence: [coreGuid, deferredGuid], source: 'unity-mcp',
+  });
+  const hash = relative => crypto.createHash('sha256')
+    .update(fs.readFileSync(path.join(fixture.root, ...relative.split('/')))).digest('hex');
+  const dispositionFile = path.join(cacheDir, 'source-dispositions.json');
+  fs.writeFileSync(dispositionFile, JSON.stringify({
+    schemaVersion: 1,
+    kind: 'unity-port-source-dispositions',
+    project: { name: result.snapshot.project.name, stateFingerprint: result.snapshot.stateFingerprint },
+    profile: 'playable-core',
+    entries: [{
+      code: 'UNITY_REACHABLE_GUID_UNRESOLVED', key: coreGuid,
+      disposition: 'accept-stale-reference', basis: 'unreachable-from-target-runtime',
+      reason: 'The referenced controller state is not reachable from the reviewed playable runtime calls.',
+      owners: [{ path: 'Assets/Game/Scenes/Main.unity', field: 'AnimatorState.m_Motion', sha256: hash('Assets/Game/Scenes/Main.unity') }],
+      proof: [{ path: 'Assets/Game/Scripts/Gameplay.cs', sha256: hash('Assets/Game/Scripts/Gameplay.cs'), note: 'Reviewed runtime entry and confirmed it does not invoke the missing state.' }],
+    }],
+  }));
+
+  const brief = createImplementationBrief(result, {
+    project: fixture.root, sourceDispositions: dispositionFile, now: 0,
+  });
+  const obligation = brief.obligations.find(item => item.code === 'UNITY_REACHABLE_GUID_UNRESOLVED');
+  assert.equal(brief.decision.implementationAllowed, true);
+  assert.equal(obligation.hard, false);
+  assert.equal(obligation.coreDisposition, 'dispositioned');
+  assert.deepEqual(obligation.sourceDisposition, {
+    required: 0, adapter: 0, deferred: 1, dispositioned: 1, unindexed: 0,
+  });
+  assert.equal(brief.sourceDispositions.acceptedCount, 1);
+
+  const receipt = createReceipt(fixture.root, brief, { sourceDispositions: dispositionFile, now: 0 });
+  writeReceipt(fixture.root, receipt, { cacheDir });
+  assert.equal(assertUnityPortPreflight(fixture.assets, { cacheDir, now: 0 }).applicable, true);
+  fs.appendFileSync(dispositionFile, '\n');
+  assert.throws(
+    () => assertUnityPortPreflight(fixture.assets, { cacheDir, now: 0 }),
+    error => error.code === 'UNITY_SOURCE_DISPOSITION_STALE',
   );
 });
 
@@ -268,8 +361,8 @@ test('realpath project comparison rejects a source junction into another Unity p
   try {
     fs.symlinkSync(second.assets, junction, process.platform === 'win32' ? 'junction' : 'dir');
   } catch (error) {
-    if (error && (error.code === 'EPERM' || error.code === 'EACCES')) {
-      t.skip('Host does not allow directory symlinks/junctions.');
+    if (isLinkUnavailableError(error)) {
+      t.skip(`Host filesystem does not support directory symlinks/junctions: ${error.code}`);
       return;
     }
     throw error;
@@ -356,8 +449,8 @@ test('receipt cache rejects an existing symlink or junction that redirects into 
   try {
     fs.symlinkSync(fixture.root, redirect, process.platform === 'win32' ? 'junction' : 'dir');
   } catch (error) {
-    if (error && (error.code === 'EPERM' || error.code === 'EACCES')) {
-      t.skip('Host does not allow directory symlinks/junctions.');
+    if (isLinkUnavailableError(error)) {
+      t.skip(`Host filesystem does not support directory symlinks/junctions: ${error.code}`);
       return;
     }
     throw error;

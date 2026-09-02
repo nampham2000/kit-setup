@@ -25,14 +25,35 @@ npm run memory:doctor -- --json
 ```
 
 `ai:portable:doctor` là read-only và fail-closed khi submodule lệch commit, skill/contract generated bị stale,
-Work Memory corrupt, dependency chưa cài, regression registry chưa track hoặc registry chứa absolute path theo máy.
+Work Memory corrupt, dependency chưa cài, hoặc một file trong canonical regression closure bị thiếu/untracked. Closure này
+được lấy trực tiếp từ regression gate: registry, matrix, eval/oracle, Unity reference và watchFiles; không chỉ registry root.
 Sau `ai:sync`, chạy doctor lại nếu lượt đầu báo provider skill/contract stale.
 
+Trên Codex Desktop Windows, audit portability phải batch/cache `git ls-files` cho toàn bộ candidate thay vì spawn một
+process Git cho từng file. Desktop đã tự chạy review/status/diff watcher; per-file Git loops từ tool sẽ khuếch đại lỗi
+resource/process exhaustion của app. Nếu log `%LOCALAPPDATA%/Codex/Logs` có nhiều `git.command.complete` bị cancel/fail,
+không cố reproduce bằng vòng `git status`: dừng Git-heavy gate, giữ TEMP/TMP/cache trên ổ còn headroom, và chỉ resume sau
+khi Git/app ổn định. `ai:sync` không được tự gọi Git và generate unchanged phải idempotent để không đánh thức watcher vô ích.
+
 Phải Git-track `capabilities.def.cjs`, hai skill source, global pinned memory DB và toàn bộ regression input
-(`tools/port-regressions.json`, matrix, eval/oracle, Unity reference, watchFiles). `.ai/port` packet, mutation receipt,
-semantic cache, preview output và temp screenshot là state local; không copy chúng từ PC cũ để authorize mutation.
+(`tools/port-regressions.json`, matrix, eval/oracle, Unity reference, watchFiles). Chỉ
+`.ai/port/**/resume-packet.json`, `regression-receipt.json` và `static-scaffold.receipt.json` là local/regenerated;
+không ignore rộng `.ai`, `core-gameplay.json` hoặc `static-scaffold.wiring.json`. Mutation receipt, semantic cache,
+preview output và temp screenshot cũng là state local; không copy chúng từ PC cũ để authorize mutation.
 Trên máy mới, chạy `ai:port:core:resume` hoặc scaffold để revalidate source và sinh lại receipt. Không ghi đường dẫn
 ổ đĩa tuyệt đối vào registry/oracle/handoff; dùng project-relative path để một checkout khác chạy lại được.
+
+Nếu brief/user cấm build, nghiệm thu core bằng
+`npm run ai:port:core:verify -- --unity-project <UnityProjectRoot> --cocos-project <CocosProjectRoot> --preview-only`.
+Mode này vẫn chạy verify/lint/assets/regressions và runtime smoke trên editor preview nhưng không chạy build hoặc yêu cầu
+`build/common`; headless verify nhận `--skip-build-size` nên không đọc/fail bởi HTML build cũ nhưng vẫn giữ TS/config/
+feature/meta/import checks. Chỉ được báo `preview-accepted`/`preview-runnable`. `accepted=false` trong mode này là chủ ý và không
+được đổi wording thành build accepted/runnable.
+
+Với skeletal/Spine JSON, không commit `images`/`audio` path tuyệt đối của máy exporter. Trước khi normalize, trace
+source skeleton + atlas/texture/audio và importer/AssetDB để chứng minh dependency runtime thực. Chỉ normalize Cocos
+copy sau khi ownership đã rõ, rồi AssetDB reimport và kiểm lại asset type, dependency graph cùng runtime preview;
+không blind-rewrite bằng regex vì path đó có thể thật sự sở hữu dependency.
 
 Trước khi viết tay bất kỳ prefab / shader / script nào, dùng tool sẵn có.
 Với port mới, golden entry là:
@@ -76,7 +97,34 @@ và truyền `--unity-project <UnityProjectRoot>` cho `port.compile`; không cop
 Không đi vòng mutation gate qua symlink/reparse path. `--dry-run` phải hoàn toàn read-only; nếu thấy tool tạo
 folder, `.meta`, chạy converter hoặc ghi output thì coi là lỗi gate và dừng workflow.
 
-Sau khi porter sinh component/API mới, chạy `npm run engine:features -- ensure --project <CocosProjectRoot>`.
+Khi port/cache chạy trên exFAT hoặc filesystem có timestamp resolution thấp, không được dùng riêng
+`size + mtime + ctime` làm bằng chứng source chưa đổi. Text/Unity-serialized evidence và `.meta` mà scanner
+consume phải có content hash; đổi stamp contract phải invalidate cache schema. Test cần sắp thứ tự timestamp
+phải dùng mốc từ 1980 trở đi và khoảng cách lớn hơn resolution của exFAT. Security test cần symlink/junction
+chỉ được skip với explicit unsupported-filesystem error; vẫn phải chạy thật trên NTFS/Linux CI.
+
+Ngay sau preflight và trước khi viết gameplay code, đọc `engineFeatureClosure`. `port.core.init`/`scaffold` phải
+hoàn tất gate này trên active preview trước khi ghi manifest/scene: AnimatorController bật đồng thời `animation`,
+`skeletal-animation`, `marionette`; Spine bật `spine` + backend đúng version skeleton (`spine-3.8`/`spine-4.2`);
+Physics2D bật `physics-2d` + exact backend; Physics3D chọn backend theo hành vi. Parent `_option`, cache/include và
+active preview phải cùng khớp, đúng một backend được bật. Version thiếu/mâu thuẫn hoặc profile không có exact ID là
+blocker, không được workaround trong gameplay code.
+
+Cocos 3.8.8 có thể normalize option parent khỏi `includeModules`; chỉ chấp nhận khi parent cache bật, `_option`
+trỏ đúng child duy nhất và child nằm trong cache/include. Preview alias `physics-2d-framework` hoặc generic `spine`
+chỉ chứng minh exact backend khi selector khớp và preview mới hơn profile; không dùng alias để bỏ qua uncertainty.
+
+Giữ `primitive`, `occlusion-query`, `geometry-renderer`, `debug-renderer`, `terrain`, `light-probe` tắt mặc định;
+chỉ bật module có evidence active/reachable trong playable-core + adapter closure. `m_Mesh` dormant của particle
+billboard (không ở mesh render mode), private `Debug.DrawLine` helper không có call site và asset ngoài closure
+không phải evidence. Closure mang cả `requiredModules` và `disabledModules`: gate phải gỡ false-positive cũ khỏi
+profile cache/include rồi chờ preview mới chứng minh module không còn active; repair chỉ thêm feature là chưa đủ.
+Incremental Unity index cache lưu `engineFeatureEvidence`, vì vậy fingerprint cache bắt buộc bao gồm detector
+producer. Direct preflight và core init với cùng source/tool fingerprint phải cho cùng closure; khác nhau là cache
+corruption/staleness blocker, không được chọn kết quả “có vẻ đúng”. Khi code Cocos mới đã sinh thêm component/API, chạy lại
+`npm run engine:features -- ensure --project <CocosProjectRoot>` để audit target-induced feature, nhưng không dùng
+target token scan để thay thế Unity source closure.
+
 Không chọn physics backend chỉ theo tên engine nguồn. Dùng bằng chứng hành vi: Builtin cho query/trigger với
 Box/Sphere/Capsule đơn giản; Cannon cho MeshCollider hoặc rigid-body/constraint cơ bản; Bullet (`physics-ammo`)
 cho CCD, sweep, character controller, capsule động và constraint nâng cao. Unity PhysX chỉ là tín hiệu ưu tiên
@@ -146,6 +194,11 @@ chúng thành một enum state loại trừ nhau. Drag threshold chỉ chặn cl
 đến pointer-up trong khi rotation vẫn nhận touch move. Dùng `gestureHoldBeforeMoveMs` trong verify.visual để
 phát đúng chuỗi giữ đứng yên rồi kéo, và assert hold còn active ngay tại frame drag bắt đầu.
 
+Khi real-gesture target phụ thuộc viewport/layout runtime, `evalBefore` phải tính authored target qua active UI
+camera `worldToScreen` rồi trả tọa độ normalized theo canvas hiện tại. Khai báo `gestureFromEvalBefore` với bốn
+path `x1/y1/x2/y2` để preview dispatcher dùng trực tiếp kết quả đó. Không copy một lần các số runtime thành
+`gesture` tĩnh: đổi aspect ratio, CanvasScaler hoặc HUD scale sẽ làm positive case trượt dù gameplay vẫn đúng.
+
 Khi Unity chọn whole material từ ScriptableObject theo state/color (ví dụ `ActiveMaterial` và
 `DisableMaterial`), không được thay bằng một texture nhúng trong FBX rồi nhân tint. Chạy `shader.chain`
 trực tiếp trên file `.asset` để lấy đủ material/texture closure; ở Cocos phải đổi texture/material tương ứng
@@ -157,6 +210,19 @@ model instance đã sinh ra nó; chỉ kiểm tra `this.model != null` có thể
 `Node.destroy()` của Cocos được hoàn tất cuối frame, vì vậy sau khi gọi destroy phải xóa reference sở hữu ngay
 (`this.board = null`) trước mọi `update()`/await. Nếu input có nhiều pha peel/flight/box-close/box-appear,
 theo dõi từng pending phase; callback của một pha không được bật input trong khi pha khác còn chạy.
+
+Với object được đưa vào holder/slot qua reparent + tween + animation callback, đọc riêng transform sample mà
+Unity dùng để tính scale, `worldPositionStays`, CanvasScaler/camera conversion, movement duration và clip
+duration. Sample transform là contract khác với phép fit renderer vào bounds. Nếu port tách một source await
+thành flight rồi reflow, reflow không được stop tween sở hữu callback drop/settle; bỏ qua object còn flight-active
+hoặc chuyển ownership có evidence tương đương. Nghiệm thu bằng hai gesture thật có overlap, kiểm center/rotation/
+scale/size ratio khi đã settle ở viewport nguồn và viewport thấp-rộng, kèm ordered trace và console sạch.
+
+Với Unity `Image.Type.Sliced`, giữ nguyên `TextureImporter.spriteBorder` theo pixel của texture nguồn khi nhập
+vào Cocos. Không nhân các inset với CanvasScaler hay tỉ lệ 1080→720: Cocos dùng cùng `SpriteFrame.inset*` để
+tính UV cắt texture và vertex local, nên scale inset sẽ làm méo góc dù `Sprite.type` đã là `SLICED`. Khi cần đổi
+kích thước UI, tạo border node ở kích thước nguồn rồi scale node/parent. Qua AssetDB phải kiểm lại exact raw
+inset; regression kiểm runtime type, inset, node scale, rendered width/height ở viewport nguồn và thấp-rộng.
 
 Web Audio unlock thường được gọi từ mọi pointer để đáp ứng autoplay policy, nhưng `AudioSource.play()` của
 Cocos Web sẽ đưa clip đang phát về đầu. Vì vậy `resumeBGM()` phải idempotent: chỉ gọi `play()` khi source thực
@@ -224,7 +290,7 @@ và được `npm run ai:contract:verify` đối chiếu với CLI thật.
      ```
 2. **Node Pooling (`ObjectPool`)**:
    - Hypercasual games generate many particles, floating texts, coins, or obstacles.
-   - Use `playable-core/ObjectPool` or `NodePoolAdapter` instead of `instantiate()` during gameplay.
+   - Use `ObjectPool` from `playable-core/utils/pool/ObjectPool` or `NodePoolAdapter` instead of `instantiate()` during gameplay.
 3. **Cocos Event System**:
    - Use `this.node.on(NodeEventType.TOUCH_START, this.onTouchStart, this);`
    - Always unregister events in `onDestroy()`: `this.node.off(NodeEventType.TOUCH_START, this.onTouchStart, this);`
@@ -233,7 +299,7 @@ và được `npm run ai:contract:verify` đối chiếu với CLI thật.
 
 ## 4. Playable Ads Lifecycle Integration
 
-All game managers must inherit or wire into `GameManager` from `playable-core`:
+All game managers must inherit or wire into `GameManager` from the concrete module `playable-core/GameManager` (never a Component barrel):
 - `GameManager.instance.onGameReady()`: Ready for player input.
 - `GameManager.instance.onGameStart()`: Player performed first touch.
 - `GameManager.instance.onGameWin()`: Trigger EndCard & CTA button.

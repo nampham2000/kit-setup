@@ -23,3 +23,10 @@ tools/playable-cli.config.cjs
 # Synced Shared Kit Tools
 #//////////////////////////
 /[0-9]*_*.bat
+
+#//////////////////////////
+# Local Port Receipts / Resume Packets
+#//////////////////////////
+/.ai/port/**/resume-packet.json
+/.ai/port/**/regression-receipt.json
+/.ai/port/**/static-scaffold.receipt.json

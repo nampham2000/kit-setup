@@ -822,14 +822,33 @@
     "description": "Enable required Feature Cropping modules through Editor.Profile and rebuild the cropped engine. When data.status is restart-required, restart the exact project from an external supervisor and call get_features again; data.complete is true only after the active preview import map is verified.",
     "inputSchema": {
       "properties": {
-        "modules": {
+        "disabledModules": {
           "default": [],
+          "description": "Known Feature Cropping modules that this exact source closure requires to remain disabled.",
           "items": {
-            "pattern": "^[a-z0-9][a-z0-9-]*$",
+            "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*$",
             "type": "string"
           },
           "maxItems": 64,
           "type": "array"
+        },
+        "modules": {
+          "default": [],
+          "items": {
+            "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*$",
+            "type": "string"
+          },
+          "maxItems": 64,
+          "type": "array"
+        },
+        "physics2dBackend": {
+          "enum": [
+            "physics-2d-box2d",
+            "physics-2d-box2d-wasm",
+            "physics-2d-builtin",
+            "physics-2d-box2d-jsb"
+          ],
+          "type": "string"
         },
         "physicsBackend": {
           "enum": [
@@ -843,6 +862,13 @@
         "reload": {
           "default": true,
           "type": "boolean"
+        },
+        "spineBackend": {
+          "enum": [
+            "spine-3.8",
+            "spine-4.2"
+          ],
+          "type": "string"
         },
         "timeoutMs": {
           "default": 240000,

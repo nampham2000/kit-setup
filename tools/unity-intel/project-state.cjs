@@ -5,12 +5,11 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const { EXTRACTOR_FINGERPRINT, hashFile } = require('./cache.cjs');
+const { TEXT_EXTENSIONS } = require('./asset-reader.cjs');
 const { discoverPackageRoots } = require('./package-roots.cjs');
 
 const PROJECT_STATE_SCHEMA_VERSION = 1;
-const CONTENT_HASH_EXTENSIONS = new Set([
-  '.asmdef', '.asmref', '.cginc', '.compute', '.cs', '.hlsl', '.json', '.shader', '.tcp2shader', '.shadergraph',
-]);
+const CONTENT_HASH_EXTENSIONS = new Set(TEXT_EXTENSIONS);
 const MAX_CONTENT_HASH_BYTES = 2 * 1024 * 1024;
 
 function normalizedRealPath(value) {

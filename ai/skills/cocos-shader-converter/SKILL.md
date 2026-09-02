@@ -1,7 +1,7 @@
 ---
 name: cocos-shader-converter
 description: "Use when converting Unity ShaderLab/HLSL/ShaderGraph or generated .tcp2shader rendering dependencies into Cocos Creator 3.8.8+ effects and materials, with source-closure, live-import, runtime, and measured visual acceptance gates."
-argument-hint: "Unity prefab/material/shader source plus Unity project root and Cocos project root"
+argument-hint: "Unity scene/prefab/material/shader source plus Unity project root and Cocos project root"
 ---
 
 # Cocos Shader Conversion
@@ -24,16 +24,16 @@ Convert rendering behavior, not an isolated text file. A syntactically valid `.e
 
    If the result is `UNITY_MCP_TOOL_UNRESPONSIVE`, static preflight may support bounded analysis but cannot support a 90–95% visual claim. Fix/reload the Unity MCP scanner first. Confirm Cocos MCP is connected to the exact target project before any reimport.
 
-3. Resolve the full rendering dependency closure from the owner prefab or ScriptableObject:
+3. Resolve the full rendering dependency closure from the gameplay scene, owner prefab, or ScriptableObject:
 
    ```bash
    node playable-shared-kit/tools/shader-compiler/unity-shader-compiler.cjs chain \
-     --src <UnityPrefabOrAsset> \
+     --src <UnityScenePrefabOrAsset> \
      --unity-root <UnityProjectRoot>/Assets \
      --no-cache
    ```
 
-   The chain must be complete and include nested prefabs/assets, FBX external-material remaps, Assets, selected package roots, `.shader`, and generated `.tcp2shader` sources. An isolated `.mat` or screenshot is not a rendering closure.
+   The chain must be complete and include the root `.unity` scene when that scene owns the visible renderer path, nested prefabs/assets, FBX external-material remaps, Assets, selected package roots, `.shader`, and generated `.tcp2shader` sources. A scene result with zero visited dependencies is a detector failure when direct reachable materials exist; do not treat it as negative evidence. An isolated `.mat` or screenshot is not a rendering closure.
 
 4. Capture the source oracle through Unity MCP. For every visible renderer record:
 

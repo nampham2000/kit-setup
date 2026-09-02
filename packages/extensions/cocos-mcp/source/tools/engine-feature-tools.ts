@@ -12,6 +12,20 @@ const PHYSICS_BACKENDS = [
 
 type PhysicsBackend = typeof PHYSICS_BACKENDS[number];
 
+const SPINE_BACKENDS = ['spine-3.8', 'spine-4.2'] as const;
+type SpineBackend = typeof SPINE_BACKENDS[number];
+
+const PHYSICS_2D_BACKENDS = [
+    'physics-2d-box2d',
+    'physics-2d-box2d-wasm',
+    'physics-2d-builtin',
+    'physics-2d-box2d-jsb'
+] as const;
+type Physics2dBackend = typeof PHYSICS_2D_BACKENDS[number];
+
+const OPTION_PARENT_FEATURES = new Set(['spine', 'physics-2d']);
+const IMPORT_MAP_SILENT_FEATURES = new Set(['marionette']);
+
 function sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -35,7 +49,12 @@ function clone<T>(value: T): T {
 }
 
 function validFeatureName(value: unknown): value is string {
-    return typeof value === 'string' && /^[a-z0-9][a-z0-9-]*$/.test(value);
+    // Cocos 3.8.8 exposes versioned cache IDs such as `spine-4.2`.
+    // Dots are accepted only as separators between non-empty, lower-case
+    // alphanumeric/hyphen segments; paths, traversal and arbitrary punctuation
+    // remain invalid, and the profile cache is still the authority for names.
+    return typeof value === 'string'
+        && /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*$/.test(value);
 }
 
 function activeConfig(profile: any): any {
@@ -57,8 +76,39 @@ function snapshot(profile: any): any {
         configKey: key,
         includeModules: [...(config.includeModules || [])],
         physicsBackend: cache.physics?._option || null,
+        spineBackend: cache.spine?._option || null,
+        physics2dBackend: cache['physics-2d']?._option || null,
         enabled: Object.keys(cache).filter((name) => cache[name]?._value === true).sort()
     };
+}
+
+function profileSelectionIncludes(snapshotValue: any, moduleName: string): boolean {
+    if (snapshotValue.includeModules.includes(moduleName)) return true;
+    if (!OPTION_PARENT_FEATURES.has(moduleName)) return false;
+    const selected = moduleName === 'spine'
+        ? snapshotValue.spineBackend
+        : snapshotValue.physics2dBackend;
+    return snapshotValue.enabled.includes(moduleName)
+        && typeof selected === 'string'
+        && snapshotValue.enabled.includes(selected)
+        && snapshotValue.includeModules.includes(selected);
+}
+
+function appliedFeaturePresent(
+    receipt: AppliedFeatureReceipt,
+    moduleName: string,
+    previewFresh: boolean,
+    spineBackend?: SpineBackend
+): boolean {
+    if (receipt.features.includes(moduleName)) return true;
+    if (IMPORT_MAP_SILENT_FEATURES.has(moduleName)) return previewFresh;
+    if (moduleName === 'physics-2d') {
+        return previewFresh && receipt.features.includes('physics-2d-framework');
+    }
+    return previewFresh
+        && SPINE_BACKENDS.includes(moduleName as SpineBackend)
+        && spineBackend === moduleName
+        && receipt.features.includes('spine');
 }
 
 interface AppliedFeatureReceipt {
@@ -70,10 +120,24 @@ interface AppliedFeatureReceipt {
     error?: string;
 }
 
-function appliedSatisfies(receipt: AppliedFeatureReceipt, modules: string[], physicsBackend?: PhysicsBackend): boolean {
+function appliedSatisfies(
+    receipt: AppliedFeatureReceipt,
+    modules: string[],
+    disabledModules: string[],
+    physicsBackend?: PhysicsBackend,
+    spineBackend?: SpineBackend,
+    physics2dBackend?: Physics2dBackend,
+    minimumAppliedModifiedMs?: number | null
+): boolean {
     if (!receipt.available) return false;
-    if (modules.some((name) => !receipt.features.includes(name))) return false;
-    return !physicsBackend || receipt.features.includes(physicsBackend);
+    const previewFresh = Number.isFinite(receipt.importMapModifiedMs)
+        && Number.isFinite(minimumAppliedModifiedMs)
+        && Number(receipt.importMapModifiedMs) >= Number(minimumAppliedModifiedMs);
+    if (modules.some((name) => !appliedFeaturePresent(receipt, name, previewFresh, spineBackend))) return false;
+    if (disabledModules.some((name) => receipt.features.includes(name))) return false;
+    if (physicsBackend && !receipt.features.includes(physicsBackend)) return false;
+    if (spineBackend && !appliedFeaturePresent(receipt, spineBackend, previewFresh, spineBackend)) return false;
+    return !physics2dBackend || receipt.features.includes(physics2dBackend);
 }
 
 export class EngineFeatureTools implements ToolExecutor {
@@ -92,13 +156,34 @@ export class EngineFeatureTools implements ToolExecutor {
                     properties: {
                         modules: {
                             type: 'array',
-                            items: { type: 'string', pattern: '^[a-z0-9][a-z0-9-]*$' },
+                            items: {
+                                type: 'string',
+                                pattern: '^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*$'
+                            },
+                            maxItems: 64,
+                            default: []
+                        },
+                        disabledModules: {
+                            type: 'array',
+                            description: 'Known Feature Cropping modules that this exact source closure requires to remain disabled.',
+                            items: {
+                                type: 'string',
+                                pattern: '^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*$'
+                            },
                             maxItems: 64,
                             default: []
                         },
                         physicsBackend: {
                             type: 'string',
                             enum: [...PHYSICS_BACKENDS]
+                        },
+                        spineBackend: {
+                            type: 'string',
+                            enum: [...SPINE_BACKENDS]
+                        },
+                        physics2dBackend: {
+                            type: 'string',
+                            enum: [...PHYSICS_2D_BACKENDS]
                         },
                         reload: { type: 'boolean', default: true },
                         timeoutMs: { type: 'integer', minimum: 1000, maximum: 300000, default: 240000 }
@@ -185,6 +270,13 @@ export class EngineFeatureTools implements ToolExecutor {
         }
     }
 
+    private async readProfileModifiedMs(): Promise<number | null> {
+        const projectPath = (Editor as any).Project?.path;
+        if (!projectPath) return null;
+        const file = path.join(projectPath, 'settings', 'v2', 'packages', 'engine.json');
+        return (await fs.stat(file).catch(() => null))?.mtimeMs || null;
+    }
+
     private transactionPath(): string | null {
         const projectTmpDir = (Editor as any).Project?.tmpDir;
         return projectTmpDir ? path.join(projectTmpDir, 'cocos-mcp', 'engine-feature-transaction.json') : null;
@@ -214,12 +306,24 @@ export class EngineFeatureTools implements ToolExecutor {
 
     private async waitForAppliedFeatures(
         modules: string[],
+        disabledModules: string[],
         physicsBackend: PhysicsBackend | undefined,
-        timeoutMs: number
+        spineBackend: SpineBackend | undefined,
+        physics2dBackend: Physics2dBackend | undefined,
+        timeoutMs: number,
+        minimumAppliedModifiedMs?: number | null
     ): Promise<AppliedFeatureReceipt> {
         const deadline = Date.now() + timeoutMs;
         let receipt = await this.readAppliedPreviewFeatures();
-        while (!appliedSatisfies(receipt, modules, physicsBackend) && Date.now() < deadline) {
+        while (!appliedSatisfies(
+            receipt,
+            modules,
+            disabledModules,
+            physicsBackend,
+            spineBackend,
+            physics2dBackend,
+            minimumAppliedModifiedMs
+        ) && Date.now() < deadline) {
             await sleep(500);
             receipt = await this.readAppliedPreviewFeatures();
         }
@@ -307,13 +411,52 @@ export class EngineFeatureTools implements ToolExecutor {
     private async ensureFeatures(args: any): Promise<ToolResponse> {
         try {
             const requested: unknown[] = Array.isArray(args.modules) ? args.modules : [];
+            const requestedDisabled: unknown[] = Array.isArray(args.disabledModules) ? args.disabledModules : [];
             if (!requested.every(validFeatureName)) {
                 return { success: false, error: 'Every requested module must be a valid Cocos feature name.' };
             }
-            const modules: string[] = [...new Set(requested as string[])];
+            if (!requestedDisabled.every(validFeatureName)) {
+                return { success: false, error: 'Every disabled module must be a valid Cocos feature name.' };
+            }
+            const moduleSet = new Set(requested as string[]);
+            const disabledModules = [...new Set(requestedDisabled as string[])];
             const physicsBackend = args.physicsBackend as PhysicsBackend | undefined;
             if (physicsBackend && !PHYSICS_BACKENDS.includes(physicsBackend)) {
                 return { success: false, error: `Unsupported physics backend: ${physicsBackend}` };
+            }
+            const requestedSpineBackends = SPINE_BACKENDS.filter((backend) => moduleSet.has(backend));
+            const explicitSpineBackend = args.spineBackend as SpineBackend | undefined;
+            if (explicitSpineBackend && !SPINE_BACKENDS.includes(explicitSpineBackend)) {
+                return { success: false, error: `Unsupported Spine backend: ${explicitSpineBackend}` };
+            }
+            if (requestedSpineBackends.length > 1 ||
+                explicitSpineBackend && requestedSpineBackends.length === 1 && requestedSpineBackends[0] !== explicitSpineBackend) {
+                return { success: false, error: 'Requested Spine feature modules conflict with the selected Spine backend.' };
+            }
+            const spineBackend = explicitSpineBackend || requestedSpineBackends[0];
+            if (spineBackend) {
+                moduleSet.add('spine');
+                moduleSet.add(spineBackend);
+            }
+            const requestedPhysics2dBackends = PHYSICS_2D_BACKENDS.filter((backend) => moduleSet.has(backend));
+            const explicitPhysics2dBackend = args.physics2dBackend as Physics2dBackend | undefined;
+            if (explicitPhysics2dBackend && !PHYSICS_2D_BACKENDS.includes(explicitPhysics2dBackend)) {
+                return { success: false, error: `Unsupported Physics2D backend: ${explicitPhysics2dBackend}` };
+            }
+            if (requestedPhysics2dBackends.length > 1 ||
+                explicitPhysics2dBackend && requestedPhysics2dBackends.length === 1 &&
+                requestedPhysics2dBackends[0] !== explicitPhysics2dBackend) {
+                return { success: false, error: 'Requested Physics2D feature modules conflict with the selected Physics2D backend.' };
+            }
+            const physics2dBackend = explicitPhysics2dBackend || requestedPhysics2dBackends[0];
+            if (physics2dBackend) {
+                moduleSet.add('physics-2d');
+                moduleSet.add(physics2dBackend);
+            }
+            const modules: string[] = [...moduleSet];
+            const overlap = disabledModules.filter((moduleName) => moduleSet.has(moduleName));
+            if (overlap.length) {
+                return { success: false, error: `Features cannot be both required and disabled: ${overlap.join(', ')}` };
             }
 
             const beforeProfile = await this.readProfile();
@@ -326,10 +469,11 @@ export class EngineFeatureTools implements ToolExecutor {
             // trusting an orphan include entry would dereference/insert blindly.
             const knownModules = new Set<string>(Object.keys(config.cache || {}));
             const unknownModules = modules.filter((moduleName) => !knownModules.has(moduleName));
-            if (unknownModules.length) {
+            const unknownDisabledModules = disabledModules.filter((moduleName) => !knownModules.has(moduleName));
+            if (unknownModules.length || unknownDisabledModules.length) {
                 return {
                     success: false,
-                    error: `Refusing to add unknown Cocos engine modules: ${unknownModules.join(', ')}`,
+                    error: `Refusing to mutate unknown Cocos engine modules: ${[...unknownModules, ...unknownDisabledModules].join(', ')}`,
                     data: { complete: false, status: 'unknown-feature-module', before }
                 };
             }
@@ -340,6 +484,20 @@ export class EngineFeatureTools implements ToolExecutor {
                     data: { complete: false, status: 'unknown-physics-backend', before }
                 };
             }
+            if (spineBackend && (!knownModules.has('spine') || !knownModules.has(spineBackend))) {
+                return {
+                    success: false,
+                    error: `Spine feature/backend is not available in this Cocos profile: spine + ${spineBackend}`,
+                    data: { complete: false, status: 'unknown-spine-backend', before }
+                };
+            }
+            if (physics2dBackend && (!knownModules.has('physics-2d') || !knownModules.has(physics2dBackend))) {
+                return {
+                    success: false,
+                    error: `Physics2D feature/backend is not available in this Cocos profile: physics-2d + ${physics2dBackend}`,
+                    data: { complete: false, status: 'unknown-physics-2d-backend', before }
+                };
+            }
             let changed = false;
 
             for (const moduleName of modules) {
@@ -347,7 +505,7 @@ export class EngineFeatureTools implements ToolExecutor {
                     config.cache[moduleName]._value = true;
                     changed = true;
                 }
-                if (!include.has(moduleName)) {
+                if (!OPTION_PARENT_FEATURES.has(moduleName) && !include.has(moduleName)) {
                     include.add(moduleName);
                     changed = true;
                 }
@@ -371,6 +529,54 @@ export class EngineFeatureTools implements ToolExecutor {
                     else include.delete(backend);
                 }
             }
+            for (const moduleName of disabledModules) {
+                if (config.cache[moduleName]._value !== false) {
+                    config.cache[moduleName]._value = false;
+                    changed = true;
+                }
+                if (include.delete(moduleName)) changed = true;
+            }
+
+            if (spineBackend) {
+                config.cache.spine ||= {};
+                if (config.cache.spine._value !== true || config.cache.spine._option !== spineBackend) {
+                    config.cache.spine._value = true;
+                    config.cache.spine._option = spineBackend;
+                    changed = true;
+                }
+                for (const backend of SPINE_BACKENDS) {
+                    if (!knownModules.has(backend)) continue;
+                    const selected = backend === spineBackend;
+                    if (config.cache[backend]._value !== selected) {
+                        config.cache[backend]._value = selected;
+                        changed = true;
+                    }
+                    if (selected) include.add(backend);
+                    else include.delete(backend);
+                }
+                include.delete('spine');
+            }
+
+            if (physics2dBackend) {
+                config.cache['physics-2d'] ||= {};
+                if (config.cache['physics-2d']._value !== true ||
+                    config.cache['physics-2d']._option !== physics2dBackend) {
+                    config.cache['physics-2d']._value = true;
+                    config.cache['physics-2d']._option = physics2dBackend;
+                    changed = true;
+                }
+                for (const backend of PHYSICS_2D_BACKENDS) {
+                    if (!knownModules.has(backend)) continue;
+                    const selected = backend === physics2dBackend;
+                    if (config.cache[backend]._value !== selected) {
+                        config.cache[backend]._value = selected;
+                        changed = true;
+                    }
+                    if (selected) include.add(backend);
+                    else include.delete(backend);
+                }
+                include.delete('physics-2d');
+            }
 
             const ordered = [...include].sort();
             if (JSON.stringify(ordered) !== JSON.stringify(config.includeModules)) changed = true;
@@ -387,28 +593,51 @@ export class EngineFeatureTools implements ToolExecutor {
 
             const verifiedProfile = await this.readProfile();
             const after = snapshot(verifiedProfile);
-            const missing = modules.filter((name) => !after.includeModules.includes(name));
+            const missing = modules.filter((name) => !profileSelectionIncludes(after, name));
+            const unexpected = disabledModules.filter((name) =>
+                after.includeModules.includes(name) || after.enabled.includes(name));
             if (physicsBackend && after.physicsBackend !== physicsBackend) {
                 missing.push(`physics backend ${physicsBackend}`);
             }
-            if (missing.length) {
+            if (spineBackend && after.spineBackend !== spineBackend) {
+                missing.push(`Spine backend ${spineBackend}`);
+            }
+            if (physics2dBackend && after.physics2dBackend !== physics2dBackend) {
+                missing.push(`Physics2D backend ${physics2dBackend}`);
+            }
+            if (missing.length || unexpected.length) {
                 return {
                     success: false,
-                    error: `Feature Cropping write did not persist: ${missing.join(', ')}`,
+                    error: `Feature Cropping write did not persist: ${[
+                        ...missing,
+                        ...unexpected.map(name => `disabled ${name}`)
+                    ].join(', ')}`,
                     data: { complete: false, changed, before, after }
                 };
             }
 
             const appliedBefore = await this.readAppliedPreviewFeatures();
+            const profileModifiedMs = await this.readProfileModifiedMs();
             const signature = createHash('sha256').update(JSON.stringify({
                 modules: [...modules].sort(),
+                disabledModules: [...disabledModules].sort(),
                 physicsBackend: physicsBackend || null,
+                spineBackend: spineBackend || null,
+                physics2dBackend: physics2dBackend || null,
                 includeModules: after.includeModules,
                 configKey: after.configKey
             })).digest('hex');
             const pending = await this.readTransaction();
 
-            if (appliedSatisfies(appliedBefore, modules, physicsBackend)) {
+            if (!changed && appliedSatisfies(
+                appliedBefore,
+                modules,
+                disabledModules,
+                physicsBackend,
+                spineBackend,
+                physics2dBackend,
+                profileModifiedMs
+            )) {
                 await this.clearTransaction();
                 return {
                     success: true,
@@ -513,7 +742,13 @@ export class EngineFeatureTools implements ToolExecutor {
                 status: 'restart-required',
                 attempts: 1,
                 createdAt: new Date().toISOString(),
-                expected: { modules: [...modules].sort(), physicsBackend: physicsBackend || null },
+                expected: {
+                    modules: [...modules].sort(),
+                    disabledModules: [...disabledModules].sort(),
+                    physicsBackend: physicsBackend || null,
+                    spineBackend: spineBackend || null,
+                    physics2dBackend: physics2dBackend || null
+                },
                 before,
                 after,
                 appliedBefore,

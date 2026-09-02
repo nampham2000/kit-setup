@@ -30,6 +30,40 @@ test('port.plan full command contains each required operand once', () => {
   assert.equal((command.match(/<UnityProjectRoot>/g) || []).length, 1);
 });
 
+test('preview-only verification routes each flag to its owning CLI', () => {
+  const rule = CORE_RULES.find(item => item.id === 'verify-gate');
+  const direct = CAPABILITIES.find(item => item.id === 'verify.all');
+  const core = CAPABILITIES.find(item => item.id === 'port.core.acceptance');
+  assert.ok(rule);
+  assert.ok(direct);
+  assert.ok(core);
+
+  assert.deepEqual(rule.agentContract.directPreviewVerification, {
+    capabilityId: 'verify.all',
+    command: 'npm run ai:verify -- --skip-build-size',
+    ownedFlag: '--skip-build-size',
+  });
+  assert.deepEqual(rule.agentContract.corePreviewAcceptance, {
+    capabilityId: 'port.core.acceptance',
+    command: 'npm run ai:port:core:verify -- --unity-project <UnityProjectRoot> --cocos-project <CocosProjectRoot> --preview-only',
+    ownedFlag: '--preview-only',
+  });
+  assert.deepEqual(rule.agentContract.prohibitedFlagRouting, [
+    'ai:verify -- --preview-only',
+    'ai:port:core:verify -- --skip-build-size',
+  ]);
+
+  assert.equal(direct.npm, 'npm run ai:verify');
+  assert.ok(direct.optional.includes('--skip-build-size'));
+  assert.equal(direct.optional.includes('--preview-only'), false);
+  assert.ok(direct.expect.includes('--skip-build-size'));
+  assert.match(direct.cmd, /headless-verifier\.cjs/);
+  assert.equal(core.npm.startsWith('npm run ai:port:core:verify'), true);
+  assert.ok(core.optional.includes('--preview-only'));
+  assert.equal(core.optional.includes('--skip-build-size'), false);
+  assert.match(core.cmd, /core-gameplay-port\.cjs verify/);
+});
+
 test('unity preflight agent contract points only at declared compact capabilities', () => {
   const rule = CORE_RULES.find(item => item.id === 'unity-preflight');
   assert.ok(rule);
@@ -44,6 +78,39 @@ test('unity preflight agent contract points only at declared compact capabilitie
   for (const id of [...rule.agentContract.entrypoints, rule.agentContract.evidenceQuery]) {
     assert.equal(ids.has(id), true, id);
   }
+});
+
+test('Unity port bug fixes require bounded source evidence before fidelity changes', () => {
+  const rule = CORE_RULES.find(item => item.id === 'unity-port-source-evidence-first');
+  assert.ok(rule);
+  assert.deepEqual(rule.agentContract.appliesTo, [
+    'unity-port-bug-fix',
+    'unity-port-fidelity-fix',
+  ]);
+  assert.deepEqual(rule.agentContract.boundedSourceClosure, [
+    'script',
+    'prefab',
+    'data',
+    'material',
+    'clip',
+  ]);
+  assert.deepEqual(rule.agentContract.requiredRecord, [
+    'evidence',
+    'root-cause',
+    'fix',
+    'regression',
+  ]);
+  assert.deepEqual(rule.agentContract.prohibitedWhenSourceEvidenceExists, [
+    'guessed-offset',
+    'guessed-tint',
+    'guessed-timing',
+    'guessed-feature-toggle',
+    'appearance-only-workaround',
+  ]);
+  assert.equal(
+    rule.agentContract.missingClosurePolicy,
+    'explicit-evidence-gap-or-blocker-no-fidelity-claim',
+  );
 });
 
 test('shared-kit package template distributes every Unity intelligence and preflight alias', () => {

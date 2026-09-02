@@ -270,6 +270,50 @@ function checkUninitializedOutputSelfAssignments(code, program, diags) {
 }
 
 /**
+ * GLSL ES has no implicit vecN truncation/extension on assignment. Catch the
+ * high-confidence direct cases produced by a lowering bug, for example:
+ *
+ *   out vec2 v_uv;
+ *   v_uv = vec4(a_texCoord, 0.0, 0.0); // cannot compile
+ *
+ * This deliberately ignores arithmetic expressions whose result type would
+ * need a real compiler to infer.
+ */
+function checkVectorAssignmentDimensions(code, program, diags) {
+  const widths = new Map();
+  const declarations = /\b(?:(?:const|in|out|uniform|flat|smooth|centroid|sample|noperspective|lowp|mediump|highp)\s+)*(vec[234]|ivec[234]|uvec[234]|bvec[234])\s+([A-Za-z_]\w*)\b/g;
+  for (const declaration of code.matchAll(declarations)) {
+    const width = Number(declaration[1].match(/[234]$/)[0]);
+    widths.set(declaration[2], width);
+  }
+
+  const expressionWidth = expression => {
+    const value = String(expression || '').trim();
+    const constructor = /^(?:vec|ivec|uvec|bvec)([234])\s*\([\s\S]*\)\s*(?:\.([xyzwrgba]{1,4}))?$/.exec(value);
+    if (constructor) return constructor[2] ? constructor[2].length : Number(constructor[1]);
+    const identifier = /^([A-Za-z_]\w*)(?:\.([xyzwrgba]{1,4}))?$/.exec(value);
+    if (!identifier || !widths.has(identifier[1])) return null;
+    return identifier[2] ? identifier[2].length : widths.get(identifier[1]);
+  };
+
+  const lines = code.split('\n');
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+    const assignments = lines[lineIndex].matchAll(/(?<![<>=!])\b([A-Za-z_]\w*)(?:\.([xyzwrgba]{1,4}))?\s*=\s*([^;]+);/g);
+    for (const assignment of assignments) {
+      if (!widths.has(assignment[1])) continue;
+      const leftWidth = assignment[2] ? assignment[2].length : widths.get(assignment[1]);
+      const rightWidth = expressionWidth(assignment[3]);
+      if (!rightWidth || leftWidth === rightWidth) continue;
+      diags.push({
+        severity: 'high', code: 'GLSL_VECTOR_ASSIGNMENT_WIDTH_MISMATCH', program,
+        line: lineIndex + 1,
+        message: `'${assignment[1]}' is ${leftWidth} components wide but the direct assignment supplies ${rightWidth}; GLSL ES does not implicitly truncate or extend vectors. Add the authored destination-width swizzle or constructor.`,
+      });
+    }
+  }
+}
+
+/**
  * A material UBO is one linked interface shared by the vertex and fragment
  * programs. In GLSL ES, an unqualified float/vector/matrix member inherits the
  * program's default float precision. Therefore these two visually identical
@@ -436,6 +480,16 @@ function checkResidualsAndScope(code, program, diags, extraDeclared) {
     offset += line.length + 1;
     if (/^\s*#/.test(line)) continue;
 
+    // Cocos compiles material effects for its WebGL1/GLES100 fallback too.
+    // textureSize() is lowered to unsupported texture2DSize there and causes
+    // EFX2406, rejecting the whole effect even if the WebGL2 variant is valid.
+    if (/\btextureSize\s*\(/.test(line)) {
+      diags.push({
+        severity: 'high', code: 'GLSL_WEBGL1_TEXTURE_SIZE_UNSUPPORTED', program, line: i + 1,
+        message: 'textureSize() is unavailable in the Cocos WebGL1/GLES100 effect variant. Bind an explicit texel-size vec4 uniform from the actual texture dimensions.',
+      });
+    }
+
     // 4. residual Unity identifiers -- these are never valid Cocos GLSL
     for (const m of line.matchAll(/\b(UNITY_[A-Z0-9_]+|unity_[A-Za-z]\w*|_[A-Z]\w*)\b/g)) {
       const name = m[1];
@@ -517,13 +571,19 @@ function checkPropertyBinding(effectText, effectYaml, diags) {
     declaredProps.add(t[1]);
   }
   const members = new Set();
+  const builtinLocalSamplers = new Set();
+  for (const sampler of effectText.matchAll(
+    /#pragma\s+builtin\s*\(\s*local\s*\)\s*\n\s*(?:layout\s*\([^)]*\)\s*)?uniform\s+sampler\w+\s+([A-Za-z_]\w*)\s*;/g,
+  )) {
+    builtinLocalSamplers.add(sampler[1]);
+  }
   for (const blk of effectText.matchAll(/uniform\s+\w+\s*\{([\s\S]*?)\}/g)) {
     for (const mm of blk[1].matchAll(/^\s*(?:lowp|mediump|highp\s+)?[A-Za-z_]\w*\s+([A-Za-z_]\w*)\s*(?:\[[^\]]*\])?\s*;/gm)) {
       members.add(mm[1]);
     }
   }
   for (const s of effectText.matchAll(/uniform\s+sampler\w+\s+([A-Za-z_]\w*)\s*;/g)) {
-    members.add(s[1]);
+    if (!builtinLocalSamplers.has(s[1])) members.add(s[1]);
   }
   for (const name of members) {
     if (declaredProps.has(name)) continue;
@@ -575,6 +635,7 @@ function analyzeEffect(effectText) {
     checkCallArity(code, p.name, diags);
     checkDuplicateFunctionLocals(code, p.name, diags);
     checkUninitializedOutputSelfAssignments(code, p.name, diags);
+    checkVectorAssignmentDimensions(code, p.name, diags);
     checkResidualsAndScope(code, p.name, diags, linkedDeclarations);
   }
   checkUniformBlockAbi(programs, diags);

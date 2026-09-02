@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "generatedAt": "2026-08-31T12:33:35.992Z",
+    "generatedAt": "2026-09-02T03:52:24.585Z",
     "description": "Compact project manifest for AI Agents. Use this instead of scanning file trees.",
     "project": {
       "projectName": "cc_playable_framework",
@@ -22,218 +22,43 @@
     {
       "name": "Gameplay",
       "path": "assets/Gameplay.scene",
-      "sizeKb": 11.9
+      "sizeKb": 11.1
     },
     {
-      "name": "GameplayScene",
-      "path": "assets/GameplayScene.scene",
-      "sizeKb": 11.8
+      "name": "HarvestTile",
+      "path": "assets/HarvestTile.scene",
+      "sizeKb": 50.8
     }
   ],
   "prefabs": [
     {
-      "name": "Level_4",
-      "path": "assets/resources/tapejam/levels/Level_4.prefab",
-      "sizeKb": 697.7
+      "name": "par_merge_small",
+      "path": "assets/resources/harvest/imported-vfx/par_merge_small.prefab",
+      "sizeKb": 229
     },
     {
-      "name": "Level_5",
-      "path": "assets/resources/tapejam/levels/Level_5.prefab",
-      "sizeKb": 473.4
+      "name": "slot-source",
+      "path": "assets/resources/harvest/imported-vfx/slot-source.prefab",
+      "sizeKb": 425.1
     },
     {
-      "name": "Level_6",
-      "path": "assets/resources/tapejam/levels/Level_6.prefab",
-      "sizeKb": 391
+      "name": "par_mergetiles_final",
+      "path": "assets/resources/harvest/imported-vfx/par_mergetiles_final.prefab",
+      "sizeKb": 500.9
     },
     {
-      "name": "Level_7",
-      "path": "assets/resources/tapejam/levels/Level_7.prefab",
-      "sizeKb": 1044.6
+      "name": "par_merge_big",
+      "path": "assets/resources/harvest/imported-vfx/par_merge_big.prefab",
+      "sizeKb": 407.2
     },
     {
-      "name": "Level_8",
-      "path": "assets/resources/tapejam/levels/Level_8.prefab",
-      "sizeKb": 567.9
-    },
-    {
-      "name": "Level_9",
-      "path": "assets/resources/tapejam/levels/Level_9.prefab",
-      "sizeKb": 662.1
-    },
-    {
-      "name": "Level_11",
-      "path": "assets/resources/tapejam/levels/Level_11.prefab",
-      "sizeKb": 640.3
-    },
-    {
-      "name": "Level_12",
-      "path": "assets/resources/tapejam/levels/Level_12.prefab",
-      "sizeKb": 594.2
-    },
-    {
-      "name": "Level_13",
-      "path": "assets/resources/tapejam/levels/Level_13.prefab",
-      "sizeKb": 649.5
-    },
-    {
-      "name": "Level_14",
-      "path": "assets/resources/tapejam/levels/Level_14.prefab",
-      "sizeKb": 606.1
-    },
-    {
-      "name": "Level_15",
-      "path": "assets/resources/tapejam/levels/Level_15.prefab",
-      "sizeKb": 662.4
-    },
-    {
-      "name": "Level_1",
-      "path": "assets/resources/tapejam/levels/Level_1.prefab",
-      "sizeKb": 94.2
-    },
-    {
-      "name": "Level_16",
-      "path": "assets/resources/tapejam/levels/Level_16.prefab",
-      "sizeKb": 609
-    },
-    {
-      "name": "Level_17",
-      "path": "assets/resources/tapejam/levels/Level_17.prefab",
-      "sizeKb": 582.8
-    },
-    {
-      "name": "Level_18",
-      "path": "assets/resources/tapejam/levels/Level_18.prefab",
-      "sizeKb": 454.9
-    },
-    {
-      "name": "Level_19",
-      "path": "assets/resources/tapejam/levels/Level_19.prefab",
-      "sizeKb": 791
-    },
-    {
-      "name": "Level_20",
-      "path": "assets/resources/tapejam/levels/Level_20.prefab",
-      "sizeKb": 865
-    },
-    {
-      "name": "Level_21",
-      "path": "assets/resources/tapejam/levels/Level_21.prefab",
-      "sizeKb": 691.3
-    },
-    {
-      "name": "Level_22",
-      "path": "assets/resources/tapejam/levels/Level_22.prefab",
-      "sizeKb": 598
-    },
-    {
-      "name": "Level_23",
-      "path": "assets/resources/tapejam/levels/Level_23.prefab",
-      "sizeKb": 543.3
-    },
-    {
-      "name": "Level_24",
-      "path": "assets/resources/tapejam/levels/Level_24.prefab",
-      "sizeKb": 573.9
-    },
-    {
-      "name": "Level_25",
-      "path": "assets/resources/tapejam/levels/Level_25.prefab",
-      "sizeKb": 531
-    },
-    {
-      "name": "Level_26",
-      "path": "assets/resources/tapejam/levels/Level_26.prefab",
-      "sizeKb": 801.9
-    },
-    {
-      "name": "Level_27",
-      "path": "assets/resources/tapejam/levels/Level_27.prefab",
-      "sizeKb": 602.7
-    },
-    {
-      "name": "Level_28",
-      "path": "assets/resources/tapejam/levels/Level_28.prefab",
-      "sizeKb": 716.5
-    },
-    {
-      "name": "Level_29",
-      "path": "assets/resources/tapejam/levels/Level_29.prefab",
-      "sizeKb": 982.3
-    },
-    {
-      "name": "Level_30",
-      "path": "assets/resources/tapejam/levels/Level_30.prefab",
-      "sizeKb": 819.6
-    },
-    {
-      "name": "Level_10",
-      "path": "assets/resources/tapejam/levels/Level_10.prefab",
-      "sizeKb": 621.8
-    },
-    {
-      "name": "Level_2",
-      "path": "assets/resources/tapejam/levels/Level_2.prefab",
-      "sizeKb": 271
-    },
-    {
-      "name": "Level_3",
-      "path": "assets/resources/tapejam/levels/Level_3.prefab",
-      "sizeKb": 638.9
-    },
-    {
-      "name": "Box",
-      "path": "assets/resources/tapejam/gameplay/Box.prefab",
-      "sizeKb": 37
-    },
-    {
-      "name": "Tray",
-      "path": "assets/resources/tapejam/gameplay/Tray.prefab",
-      "sizeKb": 2.5
-    },
-    {
-      "name": "TapeRoll",
-      "path": "assets/resources/tapejam/gameplay/TapeRoll.prefab",
-      "sizeKb": 7.1
-    },
-    {
-      "name": "TrayVisual",
-      "path": "assets/resources/tapejam/gameplay/TrayVisual.prefab",
-      "sizeKb": 10.5
-    },
-    {
-      "name": "TapeFlyAttachSlot",
-      "path": "assets/resources/tapejam/gameplay/TapeFlyAttachSlot.prefab",
-      "sizeKb": 2.1
-    },
-    {
-      "name": "TapeTap_Circle",
-      "path": "assets/resources/tapejam/gameplay/TapeTap_Circle.prefab",
-      "sizeKb": 20
-    },
-    {
-      "name": "TapeTap_NewBox",
-      "path": "assets/resources/tapejam/gameplay/TapeTap_NewBox.prefab",
-      "sizeKb": 91.4
-    },
-    {
-      "name": "Tape_vfx_Basket_close",
-      "path": "assets/resources/tapejam/gameplay/Tape_vfx_Basket_close.prefab",
-      "sizeKb": 86
-    },
-    {
-      "name": "TapeTap_Blink",
-      "path": "assets/resources/tapejam/gameplay/TapeTap_Blink.prefab",
-      "sizeKb": 60.9
-    },
-    {
-      "name": "ZoomProgress",
-      "path": "assets/resources/tapejam/ui/ZoomProgress.prefab",
-      "sizeKb": 12.4
+      "name": "par_merge_tiles",
+      "path": "assets/resources/harvest/imported-vfx/par_merge_tiles.prefab",
+      "sizeKb": 373.7
     }
   ],
   "scripts": {
-    "count": 33,
+    "count": 46,
     "byDir": [
       {
         "dir": "assets/script/shared/sdk/analytics",
@@ -304,14 +129,32 @@
         ]
       },
       {
-        "dir": "assets/script/tapejam",
+        "dir": "assets/script/harvest/core",
         "names": [
-          "GameManager",
-          "TapeBlock",
-          "TapeJamModel",
-          "TapeJamTypes",
-          "TapeLevel",
-          "TapeObject"
+          "HarvestSeededRandom",
+          "HarvestTileModel",
+          "HarvestTileTypes",
+          "HarvestTypeAssignment",
+          "index"
+        ]
+      },
+      {
+        "dir": "assets/script/harvest",
+        "names": [
+          "HarvestAssetStore",
+          "HarvestAudioBus",
+          "HarvestConfettiVFXAdapter",
+          "HarvestConfig",
+          "HarvestGameplayVFXAdapter",
+          "HarvestLevelFactory",
+          "HarvestParticleAdapterBase",
+          "HarvestPresentationParticles",
+          "HarvestSeedGenerator",
+          "HarvestSheetBurstVFXAdapter",
+          "HarvestStickyFallVFXAdapter",
+          "HarvestTileApp",
+          "HarvestTileView",
+          "HarvestTransitionVFXAdapter"
         ]
       },
       {
@@ -326,112 +169,102 @@
     ]
   },
   "assetsSummary": {
-    "audioCount": 9,
+    "audioCount": 46,
     "audio": {
-      "count": 9,
-      "totalKb": 351.9,
+      "count": 46,
+      "totalKb": 4154,
       "sample": [
-        "assets/resources/sound/tapejam/sfx_box_appear.mp3",
-        "assets/resources/sound/tapejam/sfx_box_close.mp3",
-        "assets/resources/sound/tapejam/sfx_box_disappear.mp3",
-        "assets/resources/sound/tapejam/sfx_button.mp3",
-        "assets/resources/sound/tapejam/sfx_fail.mp3",
-        "assets/resources/sound/tapejam/sfx_tape_attach.mp3"
+        "assets/resources/harvest/audio/Btn_back_sfx.mp3",
+        "assets/resources/harvest/audio/Coin_collected_sfx.mp3",
+        "assets/resources/harvest/audio/GiftBoxProgress_Full_sfx.mp3",
+        "assets/resources/harvest/audio/GiftBoxProgress_update_sfx.mp3",
+        "assets/resources/harvest/audio/SFX_Button_Play.mp3",
+        "assets/resources/harvest/audio/Shuffle_booster_sfx.mp3"
       ],
-      "truncated": 3
+      "truncated": 40
     },
-    "modelCount": 33,
+    "modelCount": 0,
     "models": {
-      "count": 33,
-      "totalKb": 14233.5,
-      "sample": [
-        "assets/unity_imported/_Game/3DAssets/Level FBX/level_2.fbx",
-        "assets/unity_imported/_Game/3DAssets/Level FBX/level_3.fbx",
-        "assets/unity_imported/_Game/3DAssets/Level FBX/level_4.fbx",
-        "assets/unity_imported/_Game/3DAssets/Level FBX/level_5.fbx",
-        "assets/unity_imported/_Game/3DAssets/Level FBX/level_6.fbx",
-        "assets/unity_imported/_Game/3DAssets/Level FBX/level_7.fbx"
-      ],
-      "truncated": 27
+      "count": 0,
+      "totalKb": 0,
+      "sample": [],
+      "truncated": 0
     },
-    "shaderCount": 4,
+    "shaderCount": 2,
     "shaders": {
-      "count": 4,
-      "totalKb": 31.2,
+      "count": 2,
+      "totalKb": 6.2,
       "sample": [
-        "assets/effects/UnitySpriteRendererColor.effect",
-        "assets/effects/TCP2HybridShader2.effect",
-        "assets/effects/TapeUnlit.effect",
-        "assets/effects/URPLit.effect"
+        "assets/effects/harvest/kawase-blur.effect",
+        "assets/effects/UnitySpriteRendererColor.effect"
       ],
       "truncated": 0
     },
     "materials": {
-      "count": 17,
-      "totalKb": 19.6,
+      "count": 11,
+      "totalKb": 9,
       "sample": [
+        "assets/resources/harvest/materials/kawase-blur.mtl",
         "assets/materials/UnitySpriteRendererColor.mtl",
         "assets/materials/UnitySpriteRendererColorOpaque.mtl",
         "assets/materials/UnitySpriteRendererGlow.mtl",
-        "assets/unity_imported/_Game/3DAssets/Level FBX/materials/mtl_carton.mtl",
-        "assets/unity_imported/_Game/3DAssets/Tape/Material/mtl_tape_active_blue.mtl",
-        "assets/unity_imported/_Game/3DAssets/Box/mat/mat_tray.mtl"
+        "assets/unity_imported/_Game/_VFX/Texture/Materials/magic_orb.mtl",
+        "assets/unity_imported/_Game/_VFX/Texture/Materials/glow1.mtl"
       ],
-      "truncated": 11
+      "truncated": 5
     },
     "textures": {
-      "count": 47,
-      "totalKb": 3517,
+      "count": 185,
+      "totalKb": 24186.9,
       "sample": [
-        "assets/resources/tapejam/ui/icon_target.png",
-        "assets/resources/tapejam/ui/hud/bg_progress_play.png",
-        "assets/resources/tapejam/ui/hud/full_progress_play.png",
-        "assets/resources/tapejam/box-colors/tex_box_red.png",
-        "assets/resources/tapejam/box-colors/tex_box_yellow.png",
-        "assets/resources/tapejam/box-colors/tex_box_blue.png"
+        "assets/resources/harvest/textures/tiles/10_Ice.png",
+        "assets/resources/harvest/textures/tiles/11_Eggplant.png",
+        "assets/resources/harvest/textures/tiles/12_Grape.png",
+        "assets/resources/harvest/textures/tiles/13_Almond.png",
+        "assets/resources/harvest/textures/tiles/14_Lemon.png",
+        "assets/resources/harvest/textures/tiles/15_Mango.png"
       ],
-      "truncated": 41
+      "truncated": 179
     },
     "animations": {
-      "count": 8,
-      "totalKb": 55,
+      "count": 12,
+      "totalKb": 303.2,
       "sample": [
-        "assets/animations/box/Box_close_idle.anim",
-        "assets/animations/box/Box_close.anim",
-        "assets/animations/box/Box_unlock.anim",
-        "assets/animations/box/Box_appear.anim",
-        "assets/animations/box/Box_TapeIntoBox.anim",
-        "assets/animations/box/Box_unlock_idle.anim"
+        "assets/resources/harvest/animations/tile-drop.anim",
+        "assets/resources/harvest/animations/tile-final-merge.anim",
+        "assets/resources/harvest/animations/tile-fly.anim",
+        "assets/resources/harvest/animations/tile-move-up.anim",
+        "assets/resources/harvest/animations/tile-moving-to-slot.anim",
+        "assets/resources/harvest/animations/tile-scale-show.anim"
       ],
-      "truncated": 2
+      "truncated": 6
     },
     "prefabsInAssets": {
-      "count": 40,
-      "totalKb": 19108.2,
+      "count": 5,
+      "totalKb": 1935.9,
       "sample": [
-        "assets/resources/tapejam/levels/Level_4.prefab",
-        "assets/resources/tapejam/levels/Level_5.prefab",
-        "assets/resources/tapejam/levels/Level_6.prefab",
-        "assets/resources/tapejam/levels/Level_7.prefab",
-        "assets/resources/tapejam/levels/Level_8.prefab",
-        "assets/resources/tapejam/levels/Level_9.prefab"
+        "assets/resources/harvest/imported-vfx/par_merge_small.prefab",
+        "assets/resources/harvest/imported-vfx/slot-source.prefab",
+        "assets/resources/harvest/imported-vfx/par_mergetiles_final.prefab",
+        "assets/resources/harvest/imported-vfx/par_merge_big.prefab",
+        "assets/resources/harvest/imported-vfx/par_merge_tiles.prefab"
       ],
-      "truncated": 34
+      "truncated": 0
     },
     "unityImported": {
       "exists": true,
       "root": "assets/unity_imported",
-      "count": 67,
-      "totalKb": 16262.5,
+      "count": 14,
+      "totalKb": 1546.1,
       "sample": [
-        "assets/unity_imported/_Game/3DAssets/Level FBX/level_2.fbx",
-        "assets/unity_imported/_Game/3DAssets/Level FBX/materials/mtl_carton.mtl",
-        "assets/unity_imported/_Game/3DAssets/Level FBX/level_3.fbx",
-        "assets/unity_imported/_Game/3DAssets/Level FBX/level_4.fbx",
-        "assets/unity_imported/_Game/3DAssets/Level FBX/level_5.fbx",
-        "assets/unity_imported/_Game/3DAssets/Level FBX/level_6.fbx"
+        "assets/unity_imported/_Game/_VFX/Texture/magic_orb.png",
+        "assets/unity_imported/_Game/_VFX/Texture/Materials/magic_orb.mtl",
+        "assets/unity_imported/_Game/_VFX/Texture/Materials/glow1.mtl",
+        "assets/unity_imported/_Game/_VFX/Texture/Materials/cube_brake.mtl",
+        "assets/unity_imported/_Game/_VFX/Texture/Materials/cycle.mtl",
+        "assets/unity_imported/_Game/_VFX/Texture/Materials/aura_soft01.mtl"
       ],
-      "truncated": 61
+      "truncated": 8
     }
   },
   "configSummary": {
@@ -455,7 +288,9 @@
     "gameplayKeys": [
       "targetTaps",
       "autoWinTimer",
-      "difficulty"
+      "difficulty",
+      "startLevel",
+      "endLevel"
     ],
     "cameraKeys": [
       "defaultMode",
@@ -465,50 +300,39 @@
       "presets"
     ],
     "customKeys": [
-      "tapeJam"
+      "harvestTile"
     ],
     "rawPreview": {
       "cta": {
-        "googlePlayUrl": "https://play.google.com/store/apps/details?id=com.playable.ad",
-        "appStoreUrl": "https://apps.apple.com/app/id123456789",
-        "enableButtonPulse": true,
+        "googlePlayUrl": "",
+        "appStoreUrl": "",
+        "enableButtonPulse": false,
         "autoRedirectDelay": 0,
-        "pulseScaleMultiplier": 1.08,
+        "pulseScaleMultiplier": 1,
         "pulseDuration": 0.6
       },
       "audio": {
         "autoPlayBgm": true,
-        "bgmVolume": 1,
-        "sfxVolume": 1,
-        "bgmSoundPath": "sound/tapejam/bgm_default",
-        "clickSoundPath": "sound/tapejam/sfx_button",
-        "successSoundPath": "sound/tapejam/sfx_tape_attach",
-        "winSoundPath": "sound/tapejam/sfx_win"
+        "bgmVolume": 0.6,
+        "sfxVolume": 0.4,
+        "bgmSoundPath": "harvest/audio/bg_music",
+        "clickSoundPath": "harvest/audio/pick_tile_sfx",
+        "successSoundPath": "harvest/audio/match3_sfx",
+        "winSoundPath": "harvest/audio/win_screen_sfx"
       },
       "gameplay": {
         "targetTaps": 0,
         "autoWinTimer": 0,
-        "difficulty": "source"
+        "difficulty": "deterministic-source-compatible",
+        "startLevel": 3,
+        "endLevel": 7
       },
       "camera": {
         "defaultMode": 0,
-        "transitionDuration": 0.5,
+        "transitionDuration": 0,
         "fovPortrait": 55,
         "fovLandscape": 45,
-        "presets": [
-          {
-            "position": {
-              "x": 0,
-              "y": 5.5,
-              "z": 7.5
-            },
-            "eulerRotation": {
-              "x": -32,
-              "y": 0,
-              "z": 0
-            }
-          }
-        ]
+        "presets": []
       }
     }
   },
@@ -590,7 +414,7 @@
     "port.closure": "npm run port:closure -- --prefab <file.prefab> --unity-root <UnityAssetsFolder>",
     "port.compile": "npm run port:compile -- --src <csharp_path> --out assets/script/",
     "port.script": "npm run port:script -- --src <csharp_path> --out assets/script/",
-    "shader.chain": "node playable-shared-kit/tools/shader-compiler/unity-shader-compiler.cjs chain --src <file.prefab|file.asset> --unity-root <UnityAssetsFolder>",
+    "shader.chain": "node playable-shared-kit/tools/shader-compiler/unity-shader-compiler.cjs chain --src <file.unity|file.prefab|file.asset> --unity-root <UnityAssetsFolder>",
     "shader.convert": "node playable-shared-kit/tools/shader-compiler/unity-shader-compiler.cjs convert --src <unity.shader> --out <assets/effects/X.effect>",
     "shader.batch": "node playable-shared-kit/tools/shader-compiler/unity-shader-compiler.cjs batch --dir <unity_shader_dir> --out-dir <assets/effects>",
     "shader.material": "node playable-shared-kit/tools/shader-compiler/unity-shader-compiler.cjs convert-mat --src <UnityMaterial.mat> --out <assets/materials/X.mtl>",

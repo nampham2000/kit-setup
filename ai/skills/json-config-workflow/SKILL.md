@@ -92,7 +92,7 @@ Always query parameters through `PlayableConfigManager.instance`:
 
 ```typescript
 import { _decorator, Component } from 'cc';
-import { PlayableConfigManager } from '../shared';
+import { PlayableConfigManager } from '../shared/core/config/PlayableConfigManager';
 
 const { ccclass, property } = _decorator;
 

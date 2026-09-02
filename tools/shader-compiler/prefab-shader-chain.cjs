@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Unity YAML asset -> material -> shader dependency closure.
+ * Unity scene/YAML asset -> material -> shader dependency closure.
  *
  * Porting "a prefab with a couple of materials on it" is three lookups deep:
  * the prefab references material GUIDs, each material references a shader GUID
@@ -29,7 +29,7 @@ const SHADER_REF_RE = /m_Shader:\s*\{fileID:\s*-?\d+,\s*guid:\s*([0-9a-f]{32})/;
 const TEXTURE_EXT = /\.(png|jpg|jpeg|tga|psd|exr|hdr|tif|tiff|bmp|gif)$/i;
 const MESH_EXT = /\.(fbx|obj|blend|dae|3ds)$/i;
 const SHADER_SOURCE_EXT = /\.(shader|tcp2shader)$/i;
-const YAML_CLOSURE_EXT = /\.(prefab|asset)$/i;
+const YAML_CLOSURE_EXT = /\.(unity|prefab|asset)$/i;
 const DEFAULT_MAX_CLOSURE_ASSETS = 4096;
 const DEFAULT_MAX_CLOSURE_DEPTH = 32;
 
@@ -406,6 +406,7 @@ function resolveChain(prefabPath, unityAssetsRoot, options = {}) {
     sourceAsset: prefabPath,
     sourceKind: sourceExtension === '.prefab' ? 'prefab'
       : sourceExtension === '.asset' ? 'scriptable-object'
+        : sourceExtension === '.unity' ? 'scene'
         : 'unity-yaml',
     materialSetDetected: sourceExtension === '.asset' && materials.length > 1,
     materials,

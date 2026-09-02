@@ -469,6 +469,11 @@ public class Win32Console {
     $consoleHwnd = [Win32Console]::GetConsoleWindow()
 
     Write-Host ""
+    if ($env:PLAYABLE_AUTOMATION_MODE -eq '1') {
+        Write-Host "Done. Automation restart completed." -ForegroundColor DarkGray
+        [Environment]::Exit(0)
+    }
+
     Write-Host "Done. Closing in 5 seconds..." -ForegroundColor DarkGray
     Start-Sleep -Seconds 5
 

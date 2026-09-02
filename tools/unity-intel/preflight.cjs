@@ -15,6 +15,7 @@ const { stableStringify } = require('./live-schema.cjs');
 const { discoverPackageRoots } = require('./package-roots.cjs');
 const { findUnityProjectRoot } = require('./project-index.cjs');
 const { computeUnityProjectState, normalizedRealPath, projectKey } = require('./project-state.cjs');
+const { buildUnityEngineFeatureClosure } = require('./engine-feature-closure.cjs');
 
 const PREFLIGHT_SCHEMA_VERSION = 2;
 const PREFLIGHT_POLICY_VERSION = 2;
@@ -27,6 +28,10 @@ const PORT_PROVENANCE_FILE = '.unity-port-provenance.json';
 const PORT_PROVENANCE_MAX_FILES = 10_000;
 const PORT_PROVENANCE_MAX_BYTES = 2 * 1024 * 1024;
 const SOURCE_BINDING_POLICY_VERSION = 1;
+const SOURCE_DISPOSITION_SCHEMA_VERSION = 1;
+const SOURCE_DISPOSITION_KIND = 'unity-port-source-dispositions';
+const SOURCE_DISPOSITION_MAX_BYTES = 64 * 1024;
+const SOURCE_DISPOSITION_MAX_ENTRIES = 128;
 const WORKFLOW_FILES = [
   'preflight.cjs',
   'project-state.cjs',
@@ -47,6 +52,7 @@ const WORKFLOW_FILES = [
   'unity-bootstrap.cjs',
   'unity-bootstrap-footprint.cjs',
   'feature-sketch.cjs',
+  'engine-feature-closure.cjs',
   'core-gameplay-scope.cjs',
   'compact-projection.cjs',
   path.join('..', 'lib', 'path-boundary.cjs'),
@@ -170,6 +176,158 @@ function preflightError(code, message, details = null) {
   error.code = code;
   if (details) error.details = details;
   return error;
+}
+
+function unresolvedSourcePaths(item) {
+  const values = [];
+  for (const evidence of item && item.sourceEvidence || []) {
+    const value = String(evidence && evidence.source || '').replace(/\\/g, '/');
+    if (value && !values.includes(value)) values.push(value);
+  }
+  for (const source of item && item.sources || []) {
+    const value = String(source || '').replace(/\\/g, '/');
+    if (value && !values.includes(value)) values.push(value);
+  }
+  if (item && item.source) {
+    const value = String(item.source).replace(/\\/g, '/');
+    if (value && !values.includes(value)) values.push(value);
+  }
+  return values.sort();
+}
+
+function unresolvedCoreRoute(item, coreScope) {
+  if (!coreScope || coreScope.profile === 'full-project') return 'required';
+  const sources = unresolvedSourcePaths(item);
+  if (!sources.length) return 'required';
+  if (sources.some(source => coreScope.pathSet.has(source))) return 'required';
+  if (sources.some(source => coreScope.adapterPathSet.has(source))) return 'adapter';
+  return 'deferred';
+}
+
+function logicalSourceFile(projectRoot, logicalPath) {
+  const normalized = String(logicalPath || '').replace(/\\/g, '/').replace(/^\.\//, '');
+  if (!/^(?:Assets|Packages)\//.test(normalized) || normalized.includes('/../') || normalized.endsWith('/..')) {
+    throw preflightError('UNITY_SOURCE_DISPOSITION_PATH_INVALID', 'Disposition evidence phải là logical path trong Assets/Packages.');
+  }
+  for (const root of allowedSourceRoots(projectRoot)) {
+    if (normalized !== root.logicalPrefix && !normalized.startsWith(`${root.logicalPrefix}/`)) continue;
+    const relative = normalized.slice(root.logicalPrefix.length).replace(/^\//, '');
+    const candidate = path.resolve(root.physicalRoot, ...relative.split('/'));
+    if (!pathIsInside(root.physicalRoot, candidate) || !fs.existsSync(candidate) || !fs.statSync(candidate).isFile()) {
+      throw preflightError('UNITY_SOURCE_DISPOSITION_PATH_INVALID', `Disposition evidence không tồn tại: ${normalized}`);
+    }
+    const real = fs.realpathSync.native(candidate);
+    if (!pathIsInside(root.physicalRoot, real)) {
+      throw preflightError('UNITY_SOURCE_DISPOSITION_PATH_ESCAPE', `Disposition evidence thoát source root: ${normalized}`);
+    }
+    return real;
+  }
+  throw preflightError('UNITY_SOURCE_DISPOSITION_PATH_INVALID', `Disposition evidence không thuộc source root đã khai báo: ${normalized}`);
+}
+
+function validateDispositionHash(projectRoot, record, label) {
+  if (!record || typeof record !== 'object') {
+    throw preflightError('UNITY_SOURCE_DISPOSITION_INVALID', `${label} phải là object.`);
+  }
+  const logicalPath = String(record.path || '').replace(/\\/g, '/');
+  const expected = String(record.sha256 || '').toLowerCase();
+  if (!/^[0-9a-f]{64}$/.test(expected)) {
+    throw preflightError('UNITY_SOURCE_DISPOSITION_HASH_INVALID', `${label} thiếu SHA-256 hợp lệ.`);
+  }
+  const file = logicalSourceFile(projectRoot, logicalPath);
+  const actual = sha256File(file);
+  if (actual !== expected) {
+    throw preflightError('UNITY_SOURCE_DISPOSITION_STALE', `${label} đã đổi sau khi disposition được review.`, {
+      path: logicalPath,
+    });
+  }
+  return { path: logicalPath, sha256: expected };
+}
+
+function loadSourceDispositions(projectRoot, snapshot, coreScope, input = {}, stateFingerprint) {
+  if (!input.sourceDispositions) {
+    return { acceptedKeys: new Set(), projection: null, receiptBinding: null };
+  }
+  const requested = path.resolve(String(input.sourceDispositions));
+  let stat;
+  try { stat = fs.lstatSync(requested); } catch (_) {
+    throw preflightError('UNITY_SOURCE_DISPOSITION_FILE_INVALID', 'Không tìm thấy source disposition file.');
+  }
+  if (stat.isSymbolicLink() || !stat.isFile() || stat.size > SOURCE_DISPOSITION_MAX_BYTES) {
+    throw preflightError('UNITY_SOURCE_DISPOSITION_FILE_INVALID', 'Source disposition phải là file thường <=64 KiB, không phải symlink.');
+  }
+  const file = fs.realpathSync.native(requested);
+  if (pathIsInside(projectRoot, file)) {
+    throw preflightError('UNITY_SOURCE_DISPOSITION_INSIDE_PROJECT', 'Source disposition phải nằm ngoài Unity project để không tự làm stale source fingerprint.');
+  }
+  let manifest;
+  try { manifest = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_) {
+    throw preflightError('UNITY_SOURCE_DISPOSITION_FILE_INVALID', 'Source disposition JSON không đọc được.');
+  }
+  if (!manifest || manifest.schemaVersion !== SOURCE_DISPOSITION_SCHEMA_VERSION ||
+      manifest.kind !== SOURCE_DISPOSITION_KIND || manifest.profile !== coreScope.profile ||
+      !manifest.project || manifest.project.name !== (snapshot.project && snapshot.project.name) ||
+      manifest.project.stateFingerprint !== stateFingerprint || !Array.isArray(manifest.entries) ||
+      manifest.entries.length < 1 || manifest.entries.length > SOURCE_DISPOSITION_MAX_ENTRIES) {
+    throw preflightError('UNITY_SOURCE_DISPOSITION_INVALID', 'Source disposition sai schema/profile/project/state fingerprint hoặc entry count.');
+  }
+
+  const unresolved = new Map((snapshot.dependencies && snapshot.dependencies.unresolved || [])
+    .filter(item => item && item.category === 'reachable-missing')
+    .map(item => [String(item.guid || '').toLowerCase(), item]));
+  const acceptedKeys = new Set();
+  for (const entry of manifest.entries) {
+    const key = String(entry && entry.key || '').toLowerCase();
+    if (!entry || entry.code !== 'UNITY_REACHABLE_GUID_UNRESOLVED' || !/^[0-9a-f]{32}$/.test(key) ||
+        entry.disposition !== 'accept-stale-reference' ||
+        !['unreachable-from-target-runtime', 'replaced-in-playable'].includes(entry.basis) ||
+        typeof entry.reason !== 'string' || entry.reason.trim().length < 20 || entry.reason.length > 600 ||
+        !Array.isArray(entry.owners) || !entry.owners.length || entry.owners.length > 8 ||
+        !Array.isArray(entry.proof) || !entry.proof.length || entry.proof.length > 8 ||
+        acceptedKeys.has(key)) {
+      throw preflightError('UNITY_SOURCE_DISPOSITION_INVALID', 'Source disposition entry không hợp lệ hoặc bị trùng GUID.');
+    }
+    const item = unresolved.get(key);
+    if (!item || item.confirmation !== 'unity-editor-missing') {
+      throw preflightError('UNITY_SOURCE_DISPOSITION_NOT_LIVE_CONFIRMED', `GUID ${key} không còn là Unity Editor-confirmed missing reference.`);
+    }
+    if (unresolvedCoreRoute(item, coreScope) === 'deferred') {
+      throw preflightError('UNITY_SOURCE_DISPOSITION_REDUNDANT', `GUID ${key} đã được playable-core route ra ngoài scope; không cần stale-reference waiver.`);
+    }
+    const expectedSources = unresolvedSourcePaths(item);
+    const ownerSources = [];
+    for (const owner of entry.owners) {
+      const validated = validateDispositionHash(projectRoot, owner, `Owner của ${key}`);
+      if (typeof owner.field !== 'string' || !owner.field || !(item.fields || []).includes(owner.field)) {
+        throw preflightError('UNITY_SOURCE_DISPOSITION_OWNER_MISMATCH', `Owner field của ${key} không khớp live evidence.`);
+      }
+      if (!ownerSources.includes(validated.path)) ownerSources.push(validated.path);
+    }
+    ownerSources.sort();
+    if (stableStringify(ownerSources) !== stableStringify(expectedSources)) {
+      throw preflightError('UNITY_SOURCE_DISPOSITION_OWNER_MISMATCH', `Owner paths của ${key} không khớp đầy đủ live evidence.`);
+    }
+    for (const proof of entry.proof) {
+      validateDispositionHash(projectRoot, proof, `Proof của ${key}`);
+      if (typeof proof.note !== 'string' || proof.note.trim().length < 12 || proof.note.length > 500) {
+        throw preflightError('UNITY_SOURCE_DISPOSITION_INVALID', `Proof note của ${key} phải mô tả evidence đã review.`);
+      }
+    }
+    acceptedKeys.add(key);
+  }
+  const digest = sha256File(file);
+  return {
+    acceptedKeys,
+    projection: {
+      schemaVersion: SOURCE_DISPOSITION_SCHEMA_VERSION,
+      kind: SOURCE_DISPOSITION_KIND,
+      digest,
+      stateFingerprint,
+      acceptedCount: acceptedKeys.size,
+      acceptedKeys: [...acceptedKeys].sort(),
+    },
+    receiptBinding: { file, digest },
+  };
 }
 
 function normalizeIntent(projectRoot, input = {}) {
@@ -364,6 +522,28 @@ function buildObligations(snapshot, intent, scope) {
   return obligations.sort((left, right) => left.code.localeCompare(right.code));
 }
 
+function engineFeatureObligations(closure) {
+  return (closure && closure.blockers || []).map(blocker => {
+    const evidence = (blocker.evidence || []).filter(Boolean).slice(0, 3);
+    const core = {
+      code: blocker.code,
+      count: Math.max(1, evidence.length),
+      class: 'engine-feature-closure',
+      gate: 'implementation',
+    };
+    return {
+      id: compactId('obl', { ...core, evidence }),
+      ...core,
+      action: String(blocker.message || 'Resolve exact Unity engine feature evidence before implementation.').slice(0, 240),
+      capabilities: ['engine.features', 'unity.intel.query'],
+      verify: ['engine.features', 'unity.intel.scan'],
+      evidence,
+      hard: true,
+      coreDisposition: 'required',
+    };
+  });
+}
+
 function buildFeatures(snapshot, intent, scope, sourceFeatures) {
   const candidates = (sourceFeatures || snapshot.features && snapshot.features.sketch || []).filter(feature => {
     if (!scope.paths) return true;
@@ -381,13 +561,20 @@ function buildFeatures(snapshot, intent, scope, sourceFeatures) {
   }));
 }
 
-function implementationSteps(obligations, features, coreScope) {
+function obligationNeedsCoreDisposition(obligation) {
+  return obligation.coreDisposition === 'required' || obligation.coreDisposition === 'adapter';
+}
+
+function implementationSteps(obligations, features, coreScope, engineFeatureClosure = null) {
   const steps = new Map();
   function add(capabilityId, reason, satisfies) {
     if (!steps.has(capabilityId)) steps.set(capabilityId, { capabilityId, reasons: [], satisfies: [] });
     const step = steps.get(capabilityId);
     if (reason && step.reasons.length < 3 && !step.reasons.includes(reason)) step.reasons.push(reason);
     if (satisfies && !step.satisfies.includes(satisfies)) step.satisfies.push(satisfies);
+  }
+  if (engineFeatureClosure && engineFeatureClosure.requiredModules && engineFeatureClosure.requiredModules.length) {
+    add('engine.features', 'unity-engine-feature-closure-before-gameplay-code', null);
   }
   if (coreScope && coreScope.profile === 'playable-core' && coreScope.entry.primary) {
     add('port.core.init', 'lock-core-scope-and-acceptance', null);
@@ -397,7 +584,7 @@ function implementationSteps(obligations, features, coreScope) {
       add('port.compile', 'core-gameplay-scripts', null);
     }
   }
-  for (const obligation of obligations.filter(item => !item.hard && item.coreDisposition !== 'deferred')) {
+  for (const obligation of obligations.filter(item => !item.hard && obligationNeedsCoreDisposition(item))) {
     for (const capability of obligation.capabilities) add(capability, obligation.code, obligation.id);
   }
   for (const feature of features) {
@@ -409,7 +596,7 @@ function implementationSteps(obligations, features, coreScope) {
 
 function verificationSteps(obligations, features, coreScope) {
   const values = new Set(['verify.all', 'verify.gc']);
-  for (const item of obligations.filter(obligation => obligation.coreDisposition !== 'deferred')) {
+  for (const item of obligations.filter(obligationNeedsCoreDisposition)) {
     for (const value of item.verify) values.add(value);
   }
   for (const feature of features) {
@@ -437,6 +624,42 @@ function coreDisposition(obligation, coreScope) {
   if (evidence.some(item => coreScope.pathSet.has(item))) return 'required';
   if (evidence.some(item => coreScope.adapterPathSet.has(item))) return 'adapter';
   return 'deferred';
+}
+
+function routeReachableMissingObligation(obligation, snapshot, coreScope, dispositionContext) {
+  if (obligation.code !== 'UNITY_REACHABLE_GUID_UNRESOLVED') return null;
+  const items = (snapshot.dependencies && snapshot.dependencies.unresolved || [])
+    .filter(item => item && item.category === 'reachable-missing');
+  if (!items.length) return null;
+  const counts = { required: 0, adapter: 0, deferred: 0, dispositioned: 0, unindexed: 0 };
+  const requiredEvidence = [];
+  for (const item of items) {
+    const route = unresolvedCoreRoute(item, coreScope);
+    const key = String(item.guid || '').toLowerCase();
+    if (route !== 'deferred' && dispositionContext.acceptedKeys.has(key)) {
+      counts.dispositioned += 1;
+      continue;
+    }
+    counts[route] += 1;
+    if (route !== 'deferred') {
+      for (const source of unresolvedSourcePaths(item)) {
+        if (!requiredEvidence.includes(source) && requiredEvidence.length < 3) requiredEvidence.push(source);
+      }
+    }
+  }
+  counts.unindexed = Math.max(0, Number(obligation.count) - items.length);
+  const pendingRequired = counts.required + counts.adapter + counts.unindexed;
+  let disposition = 'deferred';
+  if (counts.required || counts.unindexed) disposition = 'required';
+  else if (counts.adapter) disposition = 'adapter';
+  else if (counts.dispositioned) disposition = 'dispositioned';
+  return {
+    ...obligation,
+    hard: obligation.hard && pendingRequired > 0,
+    evidence: requiredEvidence.length ? requiredEvidence : obligation.evidence,
+    coreDisposition: disposition,
+    sourceDisposition: counts,
+  };
 }
 
 function trimBrief(brief) {
@@ -476,6 +699,20 @@ function trimBrief(brief) {
     feature.evidence.pop();
     brief.truncated.evidence += 1;
   }
+  while (jsonBytes(brief) > bodyLimit && brief.engineFeatureClosure &&
+      brief.engineFeatureClosure.evidence.some(item => item.sources && item.sources.length > 1)) {
+    const item = [...brief.engineFeatureClosure.evidence].reverse()
+      .find(entry => entry.sources && entry.sources.length > 1);
+    item.sources.pop();
+    brief.truncated.engineFeatureEvidence += 1;
+  }
+  while (jsonBytes(brief) > bodyLimit && brief.engineFeatureClosure &&
+      brief.engineFeatureClosure.evidence.some(item => item.signals && item.signals.length > 1)) {
+    const item = [...brief.engineFeatureClosure.evidence].reverse()
+      .find(entry => entry.signals && entry.signals.length > 1);
+    item.signals.pop();
+    brief.truncated.engineFeatureEvidence += 1;
+  }
   while (jsonBytes(brief) > bodyLimit && brief.features.length) {
     brief.features.pop();
     brief.truncated.features += 1;
@@ -505,10 +742,19 @@ function createImplementationBrief(scanResult, input = {}) {
   const intent = normalizeIntent(projectRoot, input);
   const scope = resolveIntentScope(snapshot, intent);
   const coreScope = buildCoreGameplayScope(snapshot, { profile: intent.profile });
-  const obligations = buildObligations(snapshot, intent, scope).map(obligation => ({
-    ...obligation,
-    coreDisposition: coreDisposition(obligation, coreScope),
-  }));
+  const engineFeatureClosure = buildUnityEngineFeatureClosure(snapshot, coreScope);
+  const stateFingerprint = snapshot.stateFingerprint || computeUnityProjectState(projectRoot).fingerprint;
+  const dispositionContext = loadSourceDispositions(
+    projectRoot, snapshot, coreScope, input, stateFingerprint,
+  );
+  const obligations = [...buildObligations(snapshot, intent, scope), ...engineFeatureObligations(engineFeatureClosure)].map(obligation => {
+    if (obligation.coreDisposition) return obligation;
+    const routed = routeReachableMissingObligation(
+      obligation, snapshot, coreScope, dispositionContext,
+    );
+    if (routed) return routed;
+    return { ...obligation, coreDisposition: coreDisposition(obligation, coreScope) };
+  });
   const featureSource = intent.kind === 'project' && coreScope.profile === 'playable-core'
     ? coreScope.features
     : null;
@@ -518,9 +764,8 @@ function createImplementationBrief(scanResult, input = {}) {
       .find(([, ids]) => ids.includes(feature.id))?.[0] || 'core',
   }));
   const hard = obligations.filter(item => item.hard);
-  const coreObligations = obligations.filter(item => item.coreDisposition !== 'deferred');
+  const coreObligations = obligations.filter(obligationNeedsCoreDisposition);
   const status = hard.length ? 'blocked' : obligations.length ? 'ready-with-obligations' : 'ready';
-  const stateFingerprint = snapshot.stateFingerprint || computeUnityProjectState(projectRoot).fingerprint;
   const projectFingerprint = snapshot.projectFingerprint || snapshot.live && snapshot.live.projectFingerprint || snapshot.fingerprint;
   const brief = {
     schemaVersion: PREFLIGHT_SCHEMA_VERSION,
@@ -564,14 +809,16 @@ function createImplementationBrief(scanResult, input = {}) {
     },
     diagnosticCounts: scanResult.summary && scanResult.summary.diagnosticCounts || null,
     features,
+    engineFeatureClosure,
     coreGameplay: coreGameplayProjection(coreScope),
     obligations,
+    sourceDispositions: dispositionContext.projection || undefined,
     obligationIndexSchema: ['code', 'count', 'hard', 'gate', 'class'],
     obligationIndex: obligations.map(item => [item.code, item.count, item.hard ? 1 : 0, item.gate, item.class]),
     coreObligationIndexSchema: ['code', 'disposition'],
     coreObligationIndex: obligations.map(item => [item.code, item.coreDisposition]),
     obligationRoutes: { compact: COMPACT_OBLIGATION_ROUTE },
-    implementation: implementationSteps(obligations, features, coreScope),
+    implementation: implementationSteps(obligations, features, coreScope, engineFeatureClosure),
     verification: verificationSteps(obligations, features, coreScope),
     coverageGaps: snapshot.live && snapshot.live.capabilities && snapshot.live.capabilities.playModeCapture
       ? []
@@ -582,7 +829,7 @@ function createImplementationBrief(scanResult, input = {}) {
         'npm run unity:intel:setup -- --project <UnityProjectRoot>',
       ]
       : [],
-    truncated: { coreEvidence: 0, features: 0, evidence: 0, implementation: 0, obligationDetails: 0, obligations: 0 },
+    truncated: { coreEvidence: 0, features: 0, evidence: 0, engineFeatureEvidence: 0, implementation: 0, obligationDetails: 0, obligations: 0 },
   };
   trimBrief(brief);
   const semantic = semanticBriefBody(brief);
@@ -937,6 +1184,19 @@ function createReceipt(projectRoot, brief, options = {}) {
   if (brief.intent.kind !== 'project' || !brief.receiptId) return null;
   const createdMs = options.now === undefined ? Date.now() : Number(options.now);
   const hardCodes = brief.obligationIndex.filter(item => item[2] === 1).map(item => item[0]);
+  let sourceDisposition = null;
+  if (brief.sourceDispositions) {
+    const requested = path.resolve(String(options.sourceDispositions || ''));
+    if (!options.sourceDispositions || !fs.existsSync(requested) || fs.lstatSync(requested).isSymbolicLink()) {
+      throw preflightError('UNITY_SOURCE_DISPOSITION_FILE_INVALID', 'Disposition file đã mất trước khi ghi receipt.');
+    }
+    const file = fs.realpathSync.native(requested);
+    const digest = sha256File(file);
+    if (digest !== brief.sourceDispositions.digest) {
+      throw preflightError('UNITY_SOURCE_DISPOSITION_STALE', 'Disposition file đổi giữa brief và receipt.');
+    }
+    sourceDisposition = { file, digest };
+  }
   const semantic = {
     schemaVersion: PREFLIGHT_SCHEMA_VERSION,
     policyVersion: PREFLIGHT_POLICY_VERSION,
@@ -962,6 +1222,7 @@ function createReceipt(projectRoot, brief, options = {}) {
       obligationCount: brief.obligationIndex.length,
       obligationDigest: sha256(stableStringify(brief.obligationIndex)).slice(0, 24),
     },
+    sourceDisposition,
     createdAt: new Date(createdMs).toISOString(),
     expiresAt: new Date(createdMs + (options.maxAgeMs || DEFAULT_RECEIPT_MAX_AGE_MS)).toISOString(),
   };
@@ -1031,6 +1292,17 @@ function validateReceipt(projectRoot, receipt, options = {}) {
       `Preflight chặn implement vì source evidence chưa đủ${codes.length ? `: ${codes.join(', ')}${omitted ? ` (+${omitted})` : ''}` : ''}. Chạy query/setup được ghi trong implementation brief.`,
       { receiptId: receipt.receiptId, hardBlockerCodes: codes },
     );
+  }
+  if (receipt.sourceDisposition) {
+    const file = path.resolve(String(receipt.sourceDisposition.file || ''));
+    let stat;
+    try { stat = fs.lstatSync(file); } catch (_) {
+      throw preflightError('UNITY_SOURCE_DISPOSITION_STALE', 'Disposition file gắn với receipt không còn tồn tại.');
+    }
+    if (stat.isSymbolicLink() || !stat.isFile() || stat.size > SOURCE_DISPOSITION_MAX_BYTES ||
+        pathIsInside(projectRoot, file) || sha256File(file) !== receipt.sourceDisposition.digest) {
+      throw preflightError('UNITY_SOURCE_DISPOSITION_STALE', 'Disposition file gắn với receipt đã đổi hoặc không còn hợp lệ.');
+    }
   }
   return { applicable: true, projectRoot, receipt, state };
 }
@@ -1124,6 +1396,9 @@ module.exports = {
   PORT_PROVENANCE_MAX_FILES,
   PORT_PROVENANCE_MAX_BYTES,
   SOURCE_BINDING_POLICY_VERSION,
+  SOURCE_DISPOSITION_SCHEMA_VERSION,
+  SOURCE_DISPOSITION_KIND,
+  SOURCE_DISPOSITION_MAX_BYTES,
   HARD_DIAGNOSTIC_CODES,
   DIAGNOSTIC_ROUTES,
   FEATURE_ROUTES,

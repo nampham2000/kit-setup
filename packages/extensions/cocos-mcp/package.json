@@ -9,6 +9,7 @@
         "preinstall": "node ./scripts/preinstall.js",
         "build": "node ./scripts/source-dist-manifest.cjs clean && tsc && node ./scripts/source-dist-manifest.cjs write",
         "verify:dist": "node ./scripts/source-dist-manifest.cjs verify",
+        "test:component": "node --test ./scripts/component-tools.test.cjs",
         "watch": "tsc -w"
     },
     "description": "i18n:cocos-mcp-server.description",

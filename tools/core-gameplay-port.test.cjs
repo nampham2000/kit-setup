@@ -5,11 +5,14 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
+const { isLinkUnavailableError } = require('./unity-intel/test-fixture.cjs');
 
 const {
   EVIDENCE_KIND,
   EVIDENCE_SCHEMA_VERSION,
   DEFAULT_RESUME_PACKET,
+  DEFAULT_PREVIEW_URL,
+  PREVIEW_REQUIRED_SCRIPTS,
   RESUME_PACKET_KIND,
   REQUIRED_SCRIPTS,
   atomicWriteJson,
@@ -103,6 +106,55 @@ function freshReceipt() {
   return { receipt: { receiptId: 'rcp:test', briefId: 'brf:test', stateFingerprint: 'state' } };
 }
 
+test('core port parser forwards an explicit source disposition file', () => {
+  const parsed = parseArgs([
+    'init', '--unity-project', 'D:/UnityGame', '--dispositions', 'tools/source-dispositions.json',
+    '--target-scene', 'assets/HarvestTile.scene',
+  ]);
+  assert.equal(parsed.dispositions, 'tools/source-dispositions.json');
+  assert.equal(parsed.targetScene, 'assets/HarvestTile.scene');
+});
+
+test('core port parser keeps preview-only explicit and loopback-only', () => {
+  const parsed = parseArgs([
+    'verify', '--unity-project', 'D:/UnityGame', '--preview-only', '--preview-url', 'http://localhost:7456/',
+  ]);
+  assert.equal(parsed.previewOnly, true);
+  assert.equal(parsed.previewUrl, 'http://localhost:7456/');
+  assert.equal(parseArgs(['verify', '--unity-project', 'D:/UnityGame', '--preview-only']).previewUrl, DEFAULT_PREVIEW_URL);
+  assert.throws(() => parseArgs(['verify', '--unity-project', 'D:/UnityGame', '--preview-url', DEFAULT_PREVIEW_URL]),
+    error => error.code === 'CORE_PORT_PREVIEW_MODE_INVALID');
+  assert.throws(() => parseArgs(['verify', '--unity-project', 'D:/UnityGame', '--preview-only', '--preview-url', 'https://example.com/']),
+    error => error.code === 'CORE_PORT_PREVIEW_URL_INVALID');
+  assert.throws(() => parseArgs(['init', '--unity-project', 'D:/UnityGame', '--preview-only']),
+    error => error.code === 'CORE_PORT_PREVIEW_MODE_INVALID');
+});
+
+test('core port forwards the same Unity index-cache controls as direct preflight', async t => {
+  const parsed = parseArgs([
+    'init', '--unity-project', 'D:/UnityGame', '--cache-dir', 'D:/Cache/UnityIndex',
+    '--no-cache', '--refresh-cache',
+  ]);
+  assert.equal(parsed.cacheDir, 'D:/Cache/UnityIndex');
+  assert.equal(parsed.cache, false);
+  assert.equal(parsed.refreshCache, true);
+
+  const fixture = projectFixture(t);
+  let preflightInput;
+  await initCorePort({
+    unityProject: fixture.unity,
+    cocosProject: fixture.cocos,
+    cacheDir: 'D:/Cache/UnityIndex',
+    cache: false,
+    refreshCache: true,
+  }, {
+    runPreflight: async input => { preflightInput = input; return { brief: fakeBrief() }; },
+  });
+  assert.equal(preflightInput.cache, false);
+  assert.equal(preflightInput.indexCacheDir, 'D:/Cache/UnityIndex');
+  assert.equal(preflightInput.refreshCache, true);
+});
+
 test('init dry-run is write-free and real init writes a compact manifest inside Cocos root', async t => {
   const fixture = projectFixture(t);
   const dependencies = { runPreflight: async () => ({ brief: fakeBrief() }) };
@@ -112,7 +164,7 @@ test('init dry-run is write-free and real init writes a compact manifest inside 
   assert.equal(dry.ok, true);
   assert.equal(fs.existsSync(path.join(fixture.cocos, '.ai')), false);
   const created = await initCorePort({
-    unityProject: fixture.unity, cocosProject: fixture.cocos, provider: 'static',
+    unityProject: fixture.unity, cocosProject: fixture.cocos, provider: 'static', targetScene: 'assets/HarvestTile.scene',
   }, dependencies);
   assert.equal(created.manifest, '.ai/port/core-gameplay.json');
   const manifestFile = path.join(fixture.cocos, created.manifest);
@@ -120,7 +172,7 @@ test('init dry-run is write-free and real init writes a compact manifest inside 
   const manifest = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
   assert.equal(manifest.checkpoints.length, 9);
   assert.equal(manifest.schemaVersion, 3);
-  assert.equal(manifest.delivery.targetEntryScene, 'assets/Gameplay.scene');
+  assert.equal(manifest.delivery.targetEntryScene, 'assets/HarvestTile.scene');
   assert.equal(manifest.checkpoints.find(item => item.id === 'input-response').sourceEvidence[0], 'Assets/Game/Gameplay.cs');
   const regressionFile = path.join(fixture.cocos, 'tools', 'port-regressions.json');
   assert.equal(fs.existsSync(regressionFile), true);
@@ -156,6 +208,24 @@ test('fidelity score counts only checkpoints grounded by source, target and chec
   assert.equal(missing.mandatoryPassed, false);
 });
 
+test('checkpoint target hashes use locale-independent ordering for mixed-case paths', async t => {
+  const fixture = projectFixture(t);
+  await initCorePort({ unityProject: fixture.unity, cocosProject: fixture.cocos }, {
+    runPreflight: async () => ({ brief: fakeBrief() }),
+  });
+  const nestedTarget = path.join(fixture.cocos, 'assets', 'script', 'core', 'Model.ts');
+  fs.mkdirSync(path.dirname(nestedTarget), { recursive: true });
+  fs.writeFileSync(nestedTarget, 'export class Model {}\n');
+  const manifestFile = path.join(fixture.cocos, '.ai', 'port', 'core-gameplay.json');
+  const manifest = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
+  const checkpoint = manifest.checkpoints.find(item => item.id === 'input-response');
+  checkpoint.status = 'pass';
+  checkpoint.sourceEvidence = ['Assets/Game/Gameplay.cs'];
+  checkpoint.targetEvidence = ['assets/script/Gameplay.ts', 'assets/script/core/Model.ts'];
+  checkpoint.verificationEvidence = [writeCheckpointEvidence(fixture, manifest, checkpoint)];
+  assert.equal(evaluateFidelity(manifest, fixture.unity, fixture.cocos).items[0].grounded, true);
+});
+
 test('verify accepts only a fresh matching receipt, all runtime gates, artifacts and >=80 fidelity', async t => {
   const fixture = projectFixture(t);
   await initCorePort({ unityProject: fixture.unity, cocosProject: fixture.cocos }, {
@@ -182,6 +252,50 @@ test('verify accepts only a fresh matching receipt, all runtime gates, artifacts
   assert.equal(result.fidelity.score, 100);
 });
 
+test('preview-only verify can pass preview gates without build artifact or build acceptance', async t => {
+  const fixture = projectFixture(t);
+  await initCorePort({ unityProject: fixture.unity, cocosProject: fixture.cocos }, {
+    runPreflight: async () => ({ brief: fakeBrief() }),
+  });
+  const manifestFile = path.join(fixture.cocos, '.ai', 'port', 'core-gameplay.json');
+  const manifest = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
+  fs.mkdirSync(path.join(fixture.cocos, '.ai', 'port', 'evidence'), { recursive: true });
+  for (const checkpoint of manifest.checkpoints) {
+    checkpoint.status = 'pass';
+    if (checkpoint.id !== 'playable-lifecycle-cta') checkpoint.sourceEvidence = ['Assets/Game/Gameplay.cs'];
+    checkpoint.targetEvidence = ['assets/script/Gameplay.ts'];
+    checkpoint.verificationEvidence = [writeCheckpointEvidence(fixture, manifest, checkpoint)];
+  }
+  fs.writeFileSync(manifestFile, JSON.stringify(manifest));
+  fs.rmSync(path.join(fixture.cocos, 'build', 'common', 'index.html'));
+  let gateOptions;
+  const result = verifyCorePort({
+    unityProject: fixture.unity,
+    cocosProject: fixture.cocos,
+    runGates: true,
+    previewOnly: true,
+    previewUrl: DEFAULT_PREVIEW_URL,
+  }, {
+    assertPreflight: () => ({ receipt: {
+      receiptId: 'rcp:test', briefId: 'brf:test', stateFingerprint: 'state',
+    } }),
+    runGates: (_root, options) => {
+      gateOptions = options;
+      return PREVIEW_REQUIRED_SCRIPTS.map(item => ({ id: item.id, ok: true }));
+    },
+  });
+  assert.equal(gateOptions.previewOnly, true);
+  assert.equal(result.ok, true);
+  assert.equal(result.status, 'preview-accepted');
+  assert.equal(result.previewAccepted, true);
+  assert.equal(result.previewRunnable.status, 'preview-runnable');
+  assert.equal(result.accepted, false);
+  assert.equal(result.runnable.passed, false);
+  assert.equal(Object.hasOwn(result.runnable.artifacts, 'builtHtml'), false);
+  assert.match(result.claim, /build acceptance was not run and is not claimed/);
+  assert.equal(result.nextActions.includes('Create/import builtHtml'), false);
+});
+
 test('manifest validation pins the exact 80/90 rubric and evidence paths', async t => {
   const fixture = projectFixture(t);
   await initCorePort({ unityProject: fixture.unity, cocosProject: fixture.cocos }, {
@@ -201,6 +315,43 @@ test('manifest validation pins the exact 80/90 rubric and evidence paths', async
   fs.writeFileSync(manifestFile, JSON.stringify(manifest));
   assert.throws(() => validateManifest(fixture.cocos, manifestFile),
     error => error.code === 'CORE_PORT_MANIFEST_INVALID' && /Verification evidence/.test(error.message));
+});
+
+test('manifest validation rejects a missing or non-exclusive engine feature selector', async t => {
+  const fixture = projectFixture(t);
+  await initCorePort({ unityProject: fixture.unity, cocosProject: fixture.cocos }, {
+    runPreflight: async () => ({ brief: fakeBrief() }),
+  });
+  const manifestFile = path.join(fixture.cocos, '.ai', 'port', 'core-gameplay.json');
+  const manifest = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
+  manifest.engineFeatures = {
+    schemaVersion: 1,
+    status: 'required',
+    requiredModules: ['physics-2d', 'physics-2d-box2d', 'physics-2d-builtin'],
+    selectors: { physicsBackend: null, physics2dBackend: 'physics-2d-box2d', spineBackend: null },
+    evidence: [
+      { module: 'physics-2d', sources: ['Assets/Game/Gameplay.cs'], signals: ['unity-physics-2d-runtime'] },
+      { module: 'physics-2d-box2d', sources: ['Assets/Game/Gameplay.cs'], signals: ['unity-physics-2d-runtime'] },
+      { module: 'physics-2d-builtin', sources: ['Assets/Game/Gameplay.cs'], signals: ['tampered-backend'] },
+    ],
+    blockers: [],
+  };
+  fs.writeFileSync(manifestFile, JSON.stringify(manifest));
+  assert.throws(() => validateManifest(fixture.cocos, manifestFile),
+    error => error.code === 'CORE_PORT_MANIFEST_INVALID' && /physics2dBackend/.test(error.message));
+
+  manifest.engineFeatures.requiredModules = ['physics-2d', 'physics-2d-box2d'];
+  manifest.engineFeatures.selectors.physics2dBackend = null;
+  manifest.engineFeatures.evidence.pop();
+  fs.writeFileSync(manifestFile, JSON.stringify(manifest));
+  assert.throws(() => validateManifest(fixture.cocos, manifestFile),
+    error => error.code === 'CORE_PORT_MANIFEST_INVALID' && /physics2dBackend/.test(error.message));
+
+  manifest.engineFeatures.selectors.physics2dBackend = 'physics-2d-box2d';
+  manifest.engineFeatures.disabledModules = ['physics-2d'];
+  fs.writeFileSync(manifestFile, JSON.stringify(manifest));
+  assert.throws(() => validateManifest(fixture.cocos, manifestFile),
+    error => error.code === 'CORE_PORT_MANIFEST_INVALID' && /required vua disabled/.test(error.message));
 });
 
 test('checkpoint evidence is stale after target mutation and visual-only cannot satisfy mandatory behavior', async t => {
@@ -380,6 +531,64 @@ test('gate runner bounds failures and redacts project paths and credentials', t 
   assert.equal(result[0].output.includes('alsosecret'), false);
 });
 
+test('init verifies the Unity-derived Cocos feature closure before writing gameplay artifacts', async t => {
+  const fixture = projectFixture(t);
+  const brief = fakeBrief();
+  brief.engineFeatureClosure = {
+    schemaVersion: 1,
+    status: 'required',
+    requiredModules: ['animation', 'skeletal-animation', 'marionette', 'spine', 'spine-4.2'],
+    disabledModules: ['primitive', 'debug-renderer'],
+    selectors: { physicsBackend: null, physics2dBackend: null, spineBackend: 'spine-4.2' },
+    evidence: ['animation', 'skeletal-animation', 'marionette', 'spine', 'spine-4.2'].map(module => ({
+      module,
+      sources: ['Assets/Scenes/Gameplay.unity'],
+      signals: [module.startsWith('spine') ? 'unity-spine-4.2' : 'unity-animator-controller'],
+    })),
+    blockers: [],
+  };
+  let ensured = 0;
+  const dependencies = {
+    runPreflight: async () => ({ brief }),
+    async ensureEngineFeatures(_root, options) {
+      ensured += 1;
+      assert.equal(fs.existsSync(path.join(fixture.cocos, '.ai', 'port', 'core-gameplay.json')), false);
+      assert.deepEqual(options.requiredModules, brief.engineFeatureClosure.requiredModules);
+      assert.deepEqual(options.disabledModules, brief.engineFeatureClosure.disabledModules);
+      assert.equal(options.spineBackend, 'spine-4.2');
+      return { complete: true };
+    },
+  };
+  const result = await initCorePort({ unityProject: fixture.unity, cocosProject: fixture.cocos }, dependencies);
+  assert.equal(result.engineFeatures.complete, true);
+  assert.equal(ensured, 1);
+  const manifest = JSON.parse(fs.readFileSync(path.join(fixture.cocos, result.manifest), 'utf8'));
+  assert.equal(manifest.engineFeatures.selectors.spineBackend, 'spine-4.2');
+  assert.deepEqual(manifest.engineFeatures.disabledModules, ['primitive', 'debug-renderer']);
+});
+
+test('init fails closed before manifest write when the active preview has not applied required features', async t => {
+  const fixture = projectFixture(t);
+  const brief = fakeBrief();
+  brief.engineFeatureClosure = {
+    schemaVersion: 1,
+    status: 'required',
+    requiredModules: ['primitive'],
+    disabledModules: ['debug-renderer'],
+    selectors: { physicsBackend: null, physics2dBackend: null, spineBackend: null },
+    evidence: [{ module: 'primitive', sources: ['Assets/Scenes/Gameplay.unity'], signals: ['unity-builtin-primitive'] }],
+    blockers: [],
+  };
+  await assert.rejects(
+    initCorePort({ unityProject: fixture.unity, cocosProject: fixture.cocos }, {
+      runPreflight: async () => ({ brief }),
+      ensureEngineFeatures: async () => ({ complete: false, status: 'restart-required' }),
+    }),
+    error => error.code === 'CORE_PORT_ENGINE_FEATURES_PENDING',
+  );
+  assert.equal(fs.existsSync(path.join(fixture.cocos, '.ai', 'port', 'core-gameplay.json')), false);
+});
+
 test('gate runner invokes npm.cmd through cmd.exe on Windows without enabling shell mode', t => {
   const fixture = projectFixture(t);
   const invocations = [];
@@ -398,6 +607,33 @@ test('gate runner invokes npm.cmd through cmd.exe on Windows without enabling sh
   assert.equal(invocations[0].options.shell, false);
 });
 
+test('preview-only gate runner omits build and sends a fixed loopback URL to runtime smoke', t => {
+  const fixture = projectFixture(t);
+  const invocations = [];
+  const result = runRequiredGates(fixture.cocos, {
+    previewOnly: true,
+    previewUrl: DEFAULT_PREVIEW_URL,
+    platform: 'win32',
+    comspec: 'C:\\Windows\\System32\\cmd.exe',
+    spawnSync: (executable, args, options) => {
+      invocations.push({ executable, args, options });
+      return { status: 0, stdout: '', stderr: '' };
+    },
+  });
+  assert.equal(result.length, PREVIEW_REQUIRED_SCRIPTS.length);
+  assert.equal(result.some(item => item.id === 'build.playable'), false);
+  assert.deepEqual(invocations[0].args, [
+    '/d', '/s', '/c', 'npm.cmd', 'run', 'ai:verify', '--', '--skip-build-size',
+  ]);
+  assert.deepEqual(invocations.find(invocation => invocation.args.includes('ai:verify:regressions:check')).args, [
+    '/d', '/s', '/c', 'npm.cmd', 'run', 'ai:verify:regressions:check',
+  ]);
+  assert.deepEqual(invocations.at(-1).args, [
+    '/d', '/s', '/c', 'npm.cmd', 'run', 'ai:verify:runtime', '--', '--url', DEFAULT_PREVIEW_URL,
+  ]);
+  assert.equal(invocations.at(-1).options.shell, false);
+});
+
 test('manifest and evidence paths fail closed on traversal', t => {
   const fixture = projectFixture(t);
   assert.throws(() => resolveContained(fixture.cocos, '../outside.json'), error => error.code === 'CORE_PORT_PATH_ESCAPE');
@@ -410,7 +646,15 @@ test('manifest and evidence paths reject an intermediate symlink or junction', t
   const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'core-port-outside-'));
   t.after(() => fs.rmSync(outside, { recursive: true, force: true }));
   const redirected = path.join(fixture.cocos, '.ai');
-  fs.symlinkSync(outside, redirected, process.platform === 'win32' ? 'junction' : 'dir');
+  try {
+    fs.symlinkSync(outside, redirected, process.platform === 'win32' ? 'junction' : 'dir');
+  } catch (error) {
+    if (isLinkUnavailableError(error)) {
+      t.skip(`Host filesystem does not support the required symlink/junction: ${error.code}`);
+      return;
+    }
+    throw error;
+  }
   assert.throws(() => resolveContained(fixture.cocos, '.ai/port/evidence/input.json'),
     error => error.code === 'CORE_PORT_PATH_ESCAPE');
 });

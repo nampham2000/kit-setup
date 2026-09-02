@@ -294,17 +294,17 @@ function checkBuildSize() {
   return result;
 }
 
-function runVerificationSuite() {
+function runVerificationSuite(options = {}, dependencies = {}) {
   const checks = [
-    checkTypeScript(),
-    checkZeroGC(),
-    checkConfigIntegrity(),
-    checkAssetBindings(),
-    checkEngineFeatureCropping(),
-    checkMetaIntegrity(),
-    checkAssetImport(),
-    checkBuildSize()
+    (dependencies.checkTypeScript || checkTypeScript)(),
+    (dependencies.checkZeroGC || checkZeroGC)(),
+    (dependencies.checkConfigIntegrity || checkConfigIntegrity)(),
+    (dependencies.checkAssetBindings || checkAssetBindings)(),
+    (dependencies.checkEngineFeatureCropping || checkEngineFeatureCropping)(),
+    (dependencies.checkMetaIntegrity || checkMetaIntegrity)(),
+    (dependencies.checkAssetImport || checkAssetImport)(),
   ];
+  if (!options.skipBuildSize) checks.push((dependencies.checkBuildSize || checkBuildSize)());
 
   const hasFail = checks.some((c) => c.status === 'FAIL');
   const totalErrors = checks.reduce((acc, c) => acc + (c.errors ? c.errors.length : 0), 0);
@@ -326,24 +326,35 @@ Usage:
   node playable-shared-kit/tools/headless-verifier.cjs [options]
 
 Options:
-  --json    Emit the full report as JSON (dùng cho AI agent / CI).
-  --help    Show this help and exit without running any check.
+  --json             Emit the full report as JSON (dùng cho AI agent / CI).
+  --skip-build-size  Do not read build/ or enforce HTML size; intended for explicit preview-only verification.
+  --help             Show this help and exit without running any check.
 
 Checks: TypeScript compilation, Zero-GC rules, config schema, config asset
 bindings, .meta integrity, playable bundle size.
 Exit code 1 when any check fails.`;
 
+function parseArgs(args) {
+  const options = { json: false, help: false, skipBuildSize: false };
+  for (const argument of args) {
+    if (argument === '--json') options.json = true;
+    else if (argument === '--skip-build-size') options.skipBuildSize = true;
+    else if (argument === '--help' || argument === '-h') options.help = true;
+    else throw new Error(`Unknown option: ${argument}`);
+  }
+  return options;
+}
+
 function main() {
-  const args = process.argv.slice(2);
-  if (args.includes('--help') || args.includes('-h')) {
+  const options = parseArgs(process.argv.slice(2));
+  if (options.help) {
     console.log(USAGE);
     return;
   }
-  const isJson = args.includes('--json');
 
-  const report = runVerificationSuite();
+  const report = runVerificationSuite(options);
 
-  if (isJson) {
+  if (options.json) {
     console.log(JSON.stringify(report, null, 2));
   } else {
     console.log(`\n======================================================`);
@@ -380,4 +391,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { runVerificationSuite, checkEngineFeatureCropping };
+module.exports = { parseArgs, runVerificationSuite, checkEngineFeatureCropping };

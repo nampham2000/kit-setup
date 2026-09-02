@@ -39,3 +39,13 @@ public class TapeLevel : MonoBehaviour
   assert.equal((result.tsCode.match(/@property\(\[CCFloat\]\)/g) || []).length, 2);
   assert.doesNotMatch(result.tsCode, /\[Number\]/);
 });
+
+test('generated scripts import shared Components and services from concrete modules', () => {
+  const result = scaffoldCSharpToTypeScript('public class PortedGame : MonoBehaviour {}');
+
+  assert.match(result.tsCode, /from 'playable-core\/GameManager'/);
+  assert.match(result.tsCode, /from 'playable-core\/config\/PlayableConfigManager'/);
+  assert.match(result.tsCode, /from 'playable-sdk\/platform\/SuperHtmlPlayable'/);
+  assert.doesNotMatch(result.tsCode, /from 'playable-core';/);
+  assert.doesNotMatch(result.tsCode, /from 'playable-sdk';/);
+});
