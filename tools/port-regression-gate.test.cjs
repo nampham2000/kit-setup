@@ -80,6 +80,7 @@ test('init writes a tracked portable starter but does not pretend it is ready', 
   assert.deepEqual(saved.requiredRisks, ['hold-drag-composition', 'level-lifecycle']);
   assert.deepEqual(saved.suites, []);
   assert.ok(saved.instructions.supportedRisks.includes('raycast-occlusion'));
+  assert.ok(saved.instructions.supportedRisks.includes('particle-vfx'));
 });
 
 test('CLI is explicit about refresh and rejects unknown options', () => {
@@ -174,6 +175,39 @@ test('visual and ordered animation risks fail closed without source reference or
   }], ['animation-callback-flow']);
   assert.throws(() => validateRegistry(root, animation, { configFile: file }),
     error => error.code === 'REGRESSION_ANIMATION_TRACE_MISSING');
+});
+
+test('particle VFX requires bounded pixels and explicit spatial bands across risk viewports', t => {
+  const root = fixture(t);
+  const matrix = 'tools/qa/particle-vfx.json';
+  const spatialMetrics = ['leftVisible', 'centerVisible', 'rightVisible'];
+  const cases = ['720x1280', '500x416'].map((windowSize, index) => ({
+    name: `particle distribution ${index}`,
+    windowSize,
+    eval: '({ok:true})',
+    requireEvalOk: true,
+    requiredEvalMetrics: {
+      leftVisible: { min: 1, max: 30 },
+      centerVisible: { min: 1, max: 30 },
+      rightVisible: { min: 1, max: 30 },
+    },
+    requiredSpatialMetrics: spatialMetrics,
+    screenshotRegion: { x: 0, y: 0, width: 1, height: 0.8 },
+    requiredScreenshotMetrics: { brightPixelRatio: { min: 0.01, max: 0.98 } },
+    regressionTags: ['spatial-distribution'],
+  }));
+  writeMatrix(root, matrix, cases);
+  const source = registry([{
+    id: 'particle-distribution', risks: ['particle-vfx'], matrix,
+    watchFiles: ['assets/script/Game.ts'],
+  }], ['particle-vfx']);
+  const file = writeRegistry(root, source);
+  assert.doesNotThrow(() => validateRegistry(root, source, { configFile: file }));
+
+  delete cases[1].requiredEvalMetrics.centerVisible.max;
+  writeMatrix(root, matrix, cases);
+  assert.throws(() => validateRegistry(root, source, { configFile: file }),
+    error => error.code === 'REGRESSION_PARTICLE_SPATIAL_ORACLE_MISSING');
 });
 
 test('responsive layout accepts a source reference plus a metric-bound short viewport', t => {

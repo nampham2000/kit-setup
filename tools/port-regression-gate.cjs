@@ -45,6 +45,7 @@ const RISKS = Object.freeze([
   'transparent-hold-state',
   'animation-callback-flow',
   'animation-curve-fidelity',
+  'particle-vfx',
   'runtime-mesh-animation',
   'attachment-layout',
   'font-ui-layout',
@@ -71,6 +72,7 @@ const SEMANTIC_RISKS = new Set([
   'camera-transform',
   'attachment-layout',
   'transparent-hold-state',
+  'particle-vfx',
   'runtime-mesh-animation',
   'progress-ui-state',
   'responsive-layout',
@@ -285,6 +287,48 @@ function caseHasResponsiveLayoutMetrics(entry) {
     && metricBoundAtMost(entry.requiredEvalMetrics, 'slicedBorderInsetError', 0.001);
 }
 
+function metricHasFiniteRange(contract, metric) {
+  const minimum = Number(contract?.[metric]?.min);
+  const maximum = Number(contract?.[metric]?.max);
+  return Number.isFinite(minimum) && Number.isFinite(maximum) && maximum >= minimum;
+}
+
+function caseHasBoundedParticlePixels(entry) {
+  const screenshotMetrics = entry?.requiredScreenshotMetrics;
+  return caseHasEval(entry)
+    && entry.screenshotRegion && typeof entry.screenshotRegion === 'object'
+    && screenshotMetrics && typeof screenshotMetrics === 'object'
+    && Object.keys(screenshotMetrics).some(metric => metricHasFiniteRange(screenshotMetrics, metric));
+}
+
+function validateParticleVfxOracle(suite, matrix) {
+  if (!matrix.cases.some(caseHasBoundedParticlePixels)) {
+    throw regressionError('REGRESSION_PARTICLE_VFX_ORACLE_MISSING',
+      `${suite.id}: particle-vfx cần semantic eval, screenshotRegion và ít nhất một `
+      + 'requiredScreenshotMetrics có cả min/max để chặn VFX vô hình lẫn quá dày.');
+  }
+  const spatialCases = matrix.cases.filter(entry =>
+    (entry.regressionTags || []).includes('spatial-distribution'));
+  if (!spatialCases.length) return;
+  const viewports = new Set(spatialCases.map(entry => String(entry.windowSize || matrix.windowSize || '').trim()));
+  if (viewports.size < 2 || viewports.has('')) {
+    throw regressionError('REGRESSION_PARTICLE_SPATIAL_ORACLE_MISSING',
+      `${suite.id}: spatial-distribution cần ít nhất hai viewport explicit khác nhau.`);
+  }
+  for (const entry of spatialCases) {
+    const metrics = entry.requiredSpatialMetrics;
+    if (!caseHasBoundedParticlePixels(entry)
+      || !Array.isArray(metrics) || metrics.length < 3
+      || new Set(metrics).size !== metrics.length
+      || metrics.some(metric => typeof metric !== 'string' || !metric.trim()
+        || !metricHasFiniteRange(entry.requiredEvalMetrics, metric))) {
+      throw regressionError('REGRESSION_PARTICLE_SPATIAL_ORACLE_MISSING',
+        `${suite.id}/${entry.name}: spatial-distribution cần >=3 requiredSpatialMetrics unique; `
+        + 'mỗi metric phải có min/max finite trong requiredEvalMetrics cùng bounded screenshot metrics.');
+    }
+  }
+}
+
 function validateResponsiveLayoutOracle(suite, matrix) {
   const sourceCase = matrix.cases.find(entry =>
     (entry.regressionTags || []).includes('source-viewport')
@@ -426,6 +470,9 @@ function validateMatrixPolicy(projectRoot, suite, matrix, matrixFile) {
       throw regressionError('REGRESSION_ANIMATION_CURVE_ORACLE_MISSING',
         `${suite.id}: animation-curve-fidelity cần animationOracle + Unity reference + ordered trace và metric bounds `
         + 'cho cross-axis, curve extrema, one-shot phase count, timing và oracle clip count.');
+    }
+    if (risk === 'particle-vfx') {
+      validateParticleVfxOracle(suite, matrix);
     }
     if (risk === 'runtime-mesh-animation') {
       const missingPathCases = ['linear-path', 'curved-path'].filter(tag => !matrix.cases.some(entry =>
