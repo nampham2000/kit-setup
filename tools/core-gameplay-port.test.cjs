@@ -486,6 +486,39 @@ test('resume refuses to reuse static outputs after their source-bound hashes cha
   assert.equal(packet.nextActions.some(item => item.includes('không reuse mù')), true);
 });
 
+test('resume lets complete hash-bound implementation evidence supersede stale scaffold provenance', async t => {
+  const fixture = projectFixture(t);
+  await initCorePort({ unityProject: fixture.unity, cocosProject: fixture.cocos }, {
+    runPreflight: async () => ({ brief: fakeBrief() }),
+  });
+  const manifestFile = path.join(fixture.cocos, '.ai', 'port', 'core-gameplay.json');
+  const manifest = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
+  for (const checkpoint of manifest.checkpoints) {
+    checkpoint.status = 'pass';
+    checkpoint.targetEvidence = ['assets/Gameplay.scene'];
+    checkpoint.verificationEvidence = [`.ai/port/evidence/${checkpoint.id}.json`];
+  }
+  fs.writeFileSync(manifestFile, `${JSON.stringify(manifest, null, 2)}\n`);
+  const wiringFile = path.join(fixture.cocos, '.ai', 'port', 'static-scaffold.wiring.json');
+  fs.mkdirSync(path.dirname(wiringFile), { recursive: true });
+  fs.writeFileSync(wiringFile, JSON.stringify({
+    stats: { nodes: 1, unresolvedTotal: 1, distinctTasks: 1 },
+    unresolved: {},
+    todo: [{ kind: 'script', label: 'StaleScaffoldScript', nodeCount: 1 }],
+  }));
+
+  const result = resumeCorePort({
+    command: 'resume', unityProject: fixture.unity, cocosProject: fixture.cocos,
+  }, { assertPreflight: freshReceipt });
+  assert.equal(result.ok, true);
+  assert.equal(result.packet.staticFirst.status, 'partial');
+  assert.equal(result.packet.staticFirst.receipt.code, 'CORE_PORT_STATIC_RECEIPT_MISSING');
+  assert.equal(result.packet.phase, 'ready-for-acceptance');
+  assert.equal(result.packet.nextActions.some(item => item.includes('regenerate')), false);
+  assert.equal(result.packet.nextActions.some(item => item.includes('StaleScaffoldScript')), false);
+  assert.equal(result.packet.nextActions.some(item => item.includes('ai:port:core:verify')), true);
+});
+
 test('resume marks source stale instead of opening raw Unity files again', async t => {
   const fixture = projectFixture(t);
   await initCorePort({ unityProject: fixture.unity, cocosProject: fixture.cocos }, {

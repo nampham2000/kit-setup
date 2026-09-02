@@ -1435,7 +1435,7 @@ const CORE_RULES = [
   },
   {
     id: 'ordered-animation-flow-parity',
-    rule: 'Khi source nối tween/Animator/particle bằng callback hoặc animation event, phải port callback graph theo từng phase (prepare/roll, pre-attach, snap, feedback, close, exit, replacement) cùng duration/easing/VFX/SFX/haptic và điều kiện chuyển state; không được gộp thành một tween rồi mutate state cuối ngay. Mỗi phase async phải có generation/model guard và pending counter. Nghiệm thu bằng `verify.visual` với `requiredTrace` để chứng minh phase không thiếu, đúng thứ tự và replacement chỉ bắt đầu sau exit.',
+    rule: 'Khi source nối tween/Animator/particle bằng callback hoặc animation event, phải port callback graph theo từng phase (prepare/roll, pre-attach, snap, feedback, close, exit, replacement) cùng duration/easing/VFX/SFX/haptic và điều kiện chuyển state; không được gộp thành một tween rồi mutate state cuối ngay. Nếu source tạo một Sequence cho từng phần tử trong group, phải giữ callback theo đúng index, payload và thứ tự side effect của phần tử đó; không batch toàn bộ VFX rồi mới commit group. Đặc biệt, nếu source commit/SFX/combo ở callback phần tử áp chót thì VFX phần tử cuối được phép xảy ra sau combo và phải giữ đúng như vậy. Mỗi phase async phải có generation/model guard và pending counter. Nghiệm thu bằng `verify.visual` với `requiredTrace` có timestamp, đồng thời khóa parity số lần SFX/combo với số source commit để chứng minh phase không thiếu, đúng thứ tự và replacement chỉ bắt đầu sau exit.',
   },
   {
     id: 'unity-slot-attachment-transform-callback-parity',
@@ -1470,7 +1470,7 @@ const CORE_RULES = [
   },
   {
     id: 'static-first-resume',
-    rule: 'Port mới bắt đầu bằng `ai:port:core:scaffold` (static provider mặc định); lượt tiếp tục bắt đầu bằng `ai:port:core:resume`. Agent phải đọc resume packet + wiring/report digest trước raw source, chỉ query bounded evidence cần thiết, và chạy resume `--write` trước interruption/handoff để lưu phase, blockers và nextActions.',
+    rule: 'Port mới bắt đầu bằng `ai:port:core:scaffold` (static provider mặc định); lượt tiếp tục bắt đầu bằng `ai:port:core:resume`. Agent phải đọc resume packet + wiring/report digest trước raw source, chỉ query bounded evidence cần thiết, và chạy resume `--write` trước interruption/handoff để lưu phase, blockers và nextActions. Static scaffold provenance stale vẫn phải hiện trong packet, nhưng khi mọi checkpoint đã `pass`, có targetEvidence + verificationEvidence hash-bound và port report không invalid/high thì implementation evidence được supersede scaffold cũ: resume không được block hoặc phát lại wiring todo stale. Source/receipt stale và report invalid/high vẫn fail-closed.',
     agentContract: {
       newPortEntrypoint: 'port.core.scaffold',
       resumeEntrypoint: 'port.core.resume',

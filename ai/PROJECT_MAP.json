@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "generatedAt": "2026-09-02T03:52:24.585Z",
+    "generatedAt": "2026-09-02T07:06:52.870Z",
     "description": "Compact project manifest for AI Agents. Use this instead of scanning file trees.",
     "project": {
       "projectName": "cc_playable_framework",
@@ -193,7 +193,7 @@
     "shaderCount": 2,
     "shaders": {
       "count": 2,
-      "totalKb": 6.2,
+      "totalKb": 5.7,
       "sample": [
         "assets/effects/harvest/kawase-blur.effect",
         "assets/effects/UnitySpriteRendererColor.effect"

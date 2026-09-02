@@ -730,15 +730,19 @@ function buildResumePacket(options, dependencies = {}) {
   const config = existingContainedFile(cocosRoot, 'assets/resources/playable-config.json');
   const scripts = hasArtifact(path.join(cocosRoot, 'assets', 'script'), item => /\.(?:ts|js)$/i.test(item));
   const checkpoints = checkpointSummary(manifest);
+  const implementationEvidenceComplete = checkpoints.total > 0 &&
+    checkpoints.pass === checkpoints.total &&
+    checkpoints.targetBound === checkpoints.total &&
+    checkpoints.verificationBound === checkpoints.total;
   const staticScaffold = targetScene && wiring.found && !wiring.invalid && scaffoldReceipt.valid
     ? 'complete'
     : targetScene || wiring.found ? 'partial' : 'pending';
   let phase = 'implement-core';
   if (!freshness.fresh) phase = 'stale-source';
-  else if (staticScaffold !== 'complete') phase = 'static-scaffold';
   else if (report.invalid || report.counts.high > 0) phase = 'repair-static-output';
+  else if (implementationEvidenceComplete) phase = 'ready-for-acceptance';
+  else if (staticScaffold !== 'complete') phase = 'static-scaffold';
   else if (checkpoints.targetBound === checkpoints.total && checkpoints.verificationBound < checkpoints.total) phase = 'collect-evidence';
-  else if (checkpoints.verificationBound === checkpoints.total && checkpoints.pass === checkpoints.total) phase = 'ready-for-acceptance';
 
   const nextActions = [];
   const addAction = value => {
@@ -746,7 +750,7 @@ function buildResumePacket(options, dependencies = {}) {
   };
   if (!freshness.fresh) {
     addAction('Unity source/receipt đã đổi: chạy lại ai:port:core:scaffold với --force trước khi tiếp tục implementation.');
-  } else if (targetScene && wiring.found && !scaffoldReceipt.valid) {
+  } else if (!implementationEvidenceComplete && targetScene && wiring.found && !scaffoldReceipt.valid) {
     addAction(`Scene/wiring không có provenance hợp lệ (${scaffoldReceipt.code}); không reuse mù. Đối chiếu output rồi regenerate trên target sạch.`);
   } else if (!targetScene && !wiring.found) {
     addAction('Chạy ai:port:core:scaffold để sinh scene khung và wiring report bằng static parser.');
@@ -755,7 +759,9 @@ function buildResumePacket(options, dependencies = {}) {
   } else if (!targetScene && wiring.found) {
     addAction('Wiring tồn tại nhưng target scene thiếu; kiểm tra thay đổi ngoài luồng trước khi scaffold lại.');
   }
-  for (const item of wiring.todo) addAction(`Wiring ${item.kind} (${item.nodeCount} node): ${item.label}`);
+  if (!implementationEvidenceComplete) {
+    for (const item of wiring.todo) addAction(`Wiring ${item.kind} (${item.nodeCount} node): ${item.label}`);
+  }
   for (const item of report.codes.filter(entry => entry.severity === 'high')) addAction(`${item.code} (${item.count}x): ${item.action}`);
   for (const item of report.codes.filter(entry => entry.severity === 'medium')) addAction(`${item.code} (${item.count}x): ${item.action}`);
   if (!config) addAction('Tạo assets/resources/playable-config.json và chuyển toàn bộ tuning/gameplay/CTA vào config.');
@@ -887,7 +893,13 @@ function resumeCorePort(options, dependencies = {}) {
   const packetPath = options.packet || DEFAULT_RESUME_PACKET;
   const written = options.write === true && options.dryRun !== true;
   if (written) persistResumePacket(cocosRoot, packetPath, packet);
-  return { ok: packet.sourceFresh.fresh && packet.staticFirst.status === 'complete' && !(packet.reports.port.invalid || packet.reports.port.counts.high > 0), command: 'resume', packet: { ...packet, persisted: written, path: packetPath } };
+  const checkpoints = packet.implementation.checkpoints;
+  const implementationEvidenceComplete = checkpoints.total > 0 &&
+    checkpoints.pass === checkpoints.total &&
+    checkpoints.targetBound === checkpoints.total &&
+    checkpoints.verificationBound === checkpoints.total;
+  const staticProvenanceSatisfied = packet.staticFirst.status === 'complete' || implementationEvidenceComplete;
+  return { ok: packet.sourceFresh.fresh && staticProvenanceSatisfied && !(packet.reports.port.invalid || packet.reports.port.counts.high > 0), command: 'resume', packet: { ...packet, persisted: written, path: packetPath } };
 }
 
 function readJsonBounded(file, maxBytes, code) {
