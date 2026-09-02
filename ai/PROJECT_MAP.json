@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "generatedAt": "2026-09-02T12:43:28.217Z",
+    "generatedAt": "2026-09-02T13:58:48.001Z",
     "description": "Compact project manifest for AI Agents. Use this instead of scanning file trees.",
     "project": {
       "projectName": "cc_playable_framework",
@@ -412,6 +412,7 @@
     "port.report": "npm run ai:port:report",
     "port.prefab": "node playable-shared-kit/tools/unity-cocos-port.cjs port --src <unity_prefab_or_dir> --out <cocos_prefab_or_dir>",
     "font.convert": "node playable-shared-kit/tools/font-converter.cjs --src <font> --out <assets/.../font.ttf>",
+    "font.subset": "npm run ai:font:subset -- --config tools/font-subsets.json --verify",
     "port.smart": "npm run port:smart -- --src <unity_dir> --out assets/",
     "port.closure": "npm run port:closure -- --prefab <file.prefab> --unity-root <UnityAssetsFolder>",
     "port.compile": "npm run port:compile -- --src <csharp_path> --out assets/script/",

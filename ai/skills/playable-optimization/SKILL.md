@@ -55,13 +55,29 @@ Before building, always run the automated asset optimization tools:
    ```bash
    node playable-shared-kit/tools/strip-fbx-textures.cjs <file.fbx>
    ```
-5. **Inspect size and multilingual font coverage**:
+5. **Enforce the portable 80/100 KiB TTF budget**:
    ```bash
    npm run stats
+   npm run font:subset -- --config tools/font-subsets.json --unity-project <UnityProjectRoot>
+   npm run font:subset -- --config tools/font-subsets.json --unity-project <UnityProjectRoot> --write
+   npm run font:subset -- --config tools/font-subsets.json --verify
    ```
-   Review `fontDiagnostics`: it contains only font assets currently referenced
-   by authoring data or mapped into the build. Subset multilingual fonts only
-   after checking the actual character inventory and verifying every glyph.
+   Active playable TTF files target 80 KiB and must not exceed the hard 100 KiB
+   gate. Before writing a subset, trace the exact font owner through the Unity
+   prefab/TMP font asset/source TTF and collect every reachable label string,
+   including ScriptableObject, JSON/config, and dynamic text. For an
+   English-only playable, prefer subsetting the exact source font to printable
+   Basic Latin U+0020-U+007E plus any additional reachable characters. Keep the
+   manifest project-relative and source-hash-bound; never infer the inventory
+   from one screenshot or one sample string.
+
+   If the game carries two fonts, remove one only when it is dormant in the
+   playable closure. Consolidating a live label onto the smaller family requires
+   explicit user authorization plus glyph-metric and tight text-ROI acceptance;
+   file size alone is not evidence of parity. `--write` preserves the Cocos
+   `.meta`/UUID. After it runs, wait for AssetDB reimport, then require
+   `font:subset --verify`, `ai:verify:assets`, the relevant visual regression,
+   and a clean `npm run stats` font budget report.
 6. **Clean Unused Assets**:
    ```bash
    node playable-shared-kit/tools/unused-asset-cleanup.cjs scan --clean

@@ -27,6 +27,8 @@ require('./lib/auto-strip-ansi.cjs');
 const fs = require('fs');
 const path = require('path');
 
+const FONT_MAX_BYTES = 100 * 1024;
+
 const USAGE = `Asset Import Gate
 
 Usage:
@@ -219,6 +221,8 @@ function run (options = {}) {
         logsRead: [],
         jsonCacheStatesScanned: 0,
         staleJsonAssets: [],
+        fontFilesScanned: 0,
+        overBudgetFonts: [],
     };
 
     if (!fs.existsSync(scanRoot)) {
@@ -245,8 +249,19 @@ function run (options = {}) {
             notImported.push({ metaFile, meta: failure.meta, subPath: failure.subPath });
         }
 
+        const assetFile = metaFile.slice(0, -'.meta'.length);
+        if (path.extname(assetFile).toLowerCase() === '.ttf' && fs.existsSync(assetFile)) {
+            result.fontFilesScanned += 1;
+            const size = fs.statSync(assetFile).size;
+            if (size > FONT_MAX_BYTES) {
+                const asset = path.relative(projectRoot, assetFile).replace(/\\/g, '/');
+                result.overBudgetFonts.push({ asset, size, maxBytes: FONT_MAX_BYTES });
+                result.errors.push(`${asset} — FONT OVER BUDGET — ${(size / 1024).toFixed(1)} KiB vượt hard limit 100 KiB. `
+                    + 'Tạo subset source-bound bằng font:subset và verify glyph/visual trước preview.');
+            }
+        }
+
         if (libraryAvailable) {
-            const assetFile = metaFile.slice(0, -'.meta'.length);
             const cacheState = inspectJsonAssetCache(projectRoot, assetFile, meta);
             if (cacheState) {
                 result.jsonCacheStatesScanned += 1;
@@ -293,9 +308,9 @@ function run (options = {}) {
     if (result.errors.length) result.status = 'FAIL';
     result.details = result.status === 'PASS'
         ? `${result.scanned} asset / ${result.importerStatesScanned} importer state đã import sạch; `
-            + `${result.jsonCacheStatesScanned} cc.JsonAsset cache khớp source.`
+            + `${result.jsonCacheStatesScanned} cc.JsonAsset cache khớp source; ${result.fontFilesScanned} TTF trong budget.`
         : `${result.failed.length} importer state lỗi, ${result.staleJsonAssets.length} JSON cache lỗi `
-            + `trong ${result.scanned} asset.`;
+            + `và ${result.overBudgetFonts.length} font quá budget trong ${result.scanned} asset.`;
     return result;
 }
 
@@ -332,4 +347,4 @@ function main () {
 
 if (require.main === module) main();
 
-module.exports = { run, collectImportFailures, inspectJsonAssetCache, stableJsonStringify };
+module.exports = { FONT_MAX_BYTES, run, collectImportFailures, inspectJsonAssetCache, stableJsonStringify };

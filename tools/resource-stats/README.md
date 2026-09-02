@@ -50,7 +50,8 @@
 - **Font đang dùng có coverage đa ngôn ngữ**:
   - Chỉ phân tích font được map vào build hoặc được scene/prefab tham chiếu.
   - Đọc Unicode `cmap` của TTF/OTF/WOFF1 và character table của BMFont, báo các script ngoài Basic Latin, glyph thừa so với text được phát hiện và cơ hội subset ước tính.
-  - Đây là cảnh báo để tối ưu về sau; phải verify glyph sau khi tạo subset, không tự cắt font mù.
+  - Font reachable được nhận từ scene/prefab, `playable-config.json`, build map và `tools/font-subsets.json`. TTF target 80 KiB và hard-fail ở 100 KiB qua `ai:verify:assets`.
+  - Dùng `npm run font:subset -- --config tools/font-subsets.json --unity-project <UnityProjectRoot> --write`, sau đó `--verify`; manifest phải bind SHA-256 nguồn, character closure thật và giữ nguyên `.meta`.
 - **Unused Engine Modules**:
   - Phát hiện module 3D Physics hoặc Skeletal Animation được bật trong `engine.json` nhưng không có node nào trong project sử dụng, gợi ý tắt để giảm $200\text{KB} - 400\text{KB}$ engine code.
 
