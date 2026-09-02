@@ -177,6 +177,43 @@ test('visual and ordered animation risks fail closed without source reference or
     error => error.code === 'REGRESSION_ANIMATION_TRACE_MISSING');
 });
 
+test('first-use performance requires repeated cold real-gesture runs with an armed timing oracle', t => {
+  const root = fixture(t);
+  const matrix = 'tools/qa/first-use-performance.json';
+  const cases = [{
+    name: 'first feedback on a cold page',
+    evalBefore: '({ok:true, firstUseProbeArmed:1})',
+    requireEvalBeforeOk: true,
+    requiredEvalBeforeMetrics: { firstUseProbeArmed: { min: 1, max: 1 } },
+    gesture: '0.5,0.5,0.5,0.5,30,1',
+    eval: '({ok:true})',
+    requireEvalOk: true,
+    requiredTrace: ['feedback:first', 'semantic:next'],
+    requiredEvalMetrics: {
+      firstUseLongTaskCount: { max: 0 },
+      firstUseMaxFrameGapMs: { max: 45 },
+      firstFeedbackToNextSemanticMs: { max: 150 },
+    },
+    regressionTags: ['cold-start'],
+  }];
+  writeMatrix(root, matrix, cases);
+  const source = registry([{
+    id: 'first-use', risks: ['first-use-performance'], runs: 2, matrix,
+    watchFiles: ['assets/script/Game.ts'],
+  }], ['first-use-performance']);
+  const file = writeRegistry(root, source);
+  assert.doesNotThrow(() => validateRegistry(root, source, { configFile: file }));
+
+  source.suites[0].runs = 1;
+  assert.throws(() => validateRegistry(root, source, { configFile: file }),
+    error => error.code === 'REGRESSION_FIRST_USE_ROUNDS_REQUIRED');
+  source.suites[0].runs = 2;
+  delete cases[0].requiredEvalBeforeMetrics.firstUseProbeArmed;
+  writeMatrix(root, matrix, cases);
+  assert.throws(() => validateRegistry(root, source, { configFile: file }),
+    error => error.code === 'REGRESSION_FIRST_USE_ORACLE_MISSING');
+});
+
 test('particle VFX requires bounded pixels and explicit spatial bands across risk viewports', t => {
   const root = fixture(t);
   const matrix = 'tools/qa/particle-vfx.json';

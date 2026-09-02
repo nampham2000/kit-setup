@@ -45,6 +45,7 @@ const RISKS = Object.freeze([
   'transparent-hold-state',
   'animation-callback-flow',
   'animation-curve-fidelity',
+  'first-use-performance',
   'particle-vfx',
   'runtime-mesh-animation',
   'attachment-layout',
@@ -72,6 +73,7 @@ const SEMANTIC_RISKS = new Set([
   'camera-transform',
   'attachment-layout',
   'transparent-hold-state',
+  'first-use-performance',
   'particle-vfx',
   'runtime-mesh-animation',
   'progress-ui-state',
@@ -281,6 +283,19 @@ function caseHasInputConcurrencyOracle(entry) {
     && metricBoundAtMost(entry.requiredEvalMetrics, 'reservationCollisionCount', 0);
 }
 
+function caseHasFirstUsePerformanceOracle(entry) {
+  return caseHasInputGesture(entry) && caseHasEval(entry)
+    && entry.requireEvalBeforeOk === true && !!(entry.evalBefore || entry.evalBeforeFile)
+    && entry.requireEvalOk === true
+    && (entry.regressionTags || []).includes('cold-start')
+    && Array.isArray(entry.requiredTrace) && entry.requiredTrace.length >= 2
+    && metricBoundAtLeast(entry.requiredEvalBeforeMetrics, 'firstUseProbeArmed', 1)
+    && metricBoundAtMost(entry.requiredEvalBeforeMetrics, 'firstUseProbeArmed', 1)
+    && metricBoundAtMost(entry.requiredEvalMetrics, 'firstUseLongTaskCount', 0)
+    && metricBoundAtMost(entry.requiredEvalMetrics, 'firstUseMaxFrameGapMs', 50)
+    && metricBoundAtMost(entry.requiredEvalMetrics, 'firstFeedbackToNextSemanticMs', 200);
+}
+
 function caseHasResponsiveLayoutMetrics(entry) {
   return caseHasEval(entry)
     && metricBoundAtMost(entry.requiredEvalMetrics, 'layoutOverlapMax', 0.01)
@@ -470,6 +485,17 @@ function validateMatrixPolicy(projectRoot, suite, matrix, matrixFile) {
       throw regressionError('REGRESSION_ANIMATION_CURVE_ORACLE_MISSING',
         `${suite.id}: animation-curve-fidelity cần animationOracle + Unity reference + ordered trace và metric bounds `
         + 'cho cross-axis, curve extrema, one-shot phase count, timing và oracle clip count.');
+    }
+    if (risk === 'first-use-performance') {
+      if (suite.runs < 2) {
+        throw regressionError('REGRESSION_FIRST_USE_ROUNDS_REQUIRED',
+          `${suite.id}: first-use-performance cần ít nhất 2 cold runs để loại cache/timing false positive.`);
+      }
+      if (!matrix.cases.some(caseHasFirstUsePerformanceOracle)) {
+        throw regressionError('REGRESSION_FIRST_USE_ORACLE_MISSING',
+          `${suite.id}: first-use-performance cần cold-start real gesture, probe cài trước input, ordered trace `
+          + 'và bounds cho long task, frame gap, feedback-to-semantic delay.');
+      }
     }
     if (risk === 'particle-vfx') {
       validateParticleVfxOracle(suite, matrix);
