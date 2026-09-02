@@ -2,7 +2,7 @@
 
 const path = require('node:path');
 
-const SCRIPT_INDEX_SCHEMA_VERSION = 1;
+const SCRIPT_INDEX_SCHEMA_VERSION = 2;
 
 /**
  * Names which commonly occur in C# source but do not identify a project-owned
@@ -62,6 +62,72 @@ function sortedUnique(values) {
   return [...new Set(values)].sort(compareText);
 }
 
+function stripCommentsPreserveStrings(source) {
+  return String(source || '')
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/\/\/[^\n\r\u2028\u2029]*/g, ' ');
+}
+
+function extractResourceLoadPaths(text) {
+  const source = stripCommentsPreserveStrings(text);
+  const paths = [];
+  const pattern = /\bResources\s*\.\s*Load(?:Async)?(?:\s*<[^>{}]+>)?\s*\(\s*@?"((?:""|\\.|[^"\\])*)"/g;
+  for (const match of source.matchAll(pattern)) {
+    const value = match[1]
+      .replace(/""/g, '"')
+      .replace(/\\([\\"'])/g, '$1')
+      .replace(/\\\//g, '/')
+      .replace(/\\n|\\r|\\t/g, '')
+      .replace(/\\/g, '/');
+    const normalized = normalizeAssetPath(value).replace(/^\/+|\/+$/g, '');
+    if (normalized) paths.push(normalized);
+  }
+  return sortedUnique(paths);
+}
+
+function splitTopLevelCommaList(value) {
+  const parts = [];
+  let start = 0;
+  let depth = 0;
+  const text = String(value || '');
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index];
+    if (character === '<' || character === '(' || character === '[') depth += 1;
+    else if (character === '>' || character === ')' || character === ']') depth = Math.max(0, depth - 1);
+    else if (character === ',' && depth === 0) {
+      parts.push(text.slice(start, index));
+      start = index + 1;
+    }
+  }
+  parts.push(text.slice(start));
+  return parts;
+}
+
+function extractBaseTypeName(value) {
+  const text = String(value || '').trim().replace(/^global::/, '');
+  const match = /^([A-Za-z_][\w]*(?:(?:\s*\.\s*|::)[A-Za-z_][\w]*)*)/.exec(text);
+  if (!match) return null;
+  return match[1].split(/\s*\.\s*|::/).filter(Boolean).pop() || null;
+}
+
+function extractDeclaredTypeBases(source) {
+  const entries = new Map();
+  const declarationPattern = /\b(?:class|struct|interface|record(?:\s+(?:class|struct))?)\s+([A-Za-z_][\w]*)(?:\s*<[^{};]*?>)?([^{};]*?)\{/g;
+  for (const match of source.matchAll(declarationPattern)) {
+    const typeName = match[1];
+    const tail = match[2] || '';
+    const colon = tail.indexOf(':');
+    let baseTypes = [];
+    if (colon >= 0) {
+      const baseClause = tail.slice(colon + 1).replace(/\bwhere\b[\s\S]*$/i, '');
+      baseTypes = splitTopLevelCommaList(baseClause).map(extractBaseTypeName).filter(Boolean);
+    }
+    if (!entries.has(typeName)) entries.set(typeName, []);
+    entries.set(typeName, sortedUnique([...entries.get(typeName), ...baseTypes]));
+  }
+  return objectFromSortedEntries(entries.entries());
+}
+
 /**
  * Extract compact, cache-safe evidence from one C# source file. Raw C# text is
  * intentionally not returned: project-index may persist this result directly.
@@ -83,7 +149,9 @@ function analyzeCSharpSource(text) {
 
   return {
     declaredTypes: sortedUnique(declaredTypes),
+    declaredTypeBases: extractDeclaredTypeBases(source),
     identifierCandidates: sortedUnique(identifierCandidates),
+    resourceLoadPaths: extractResourceLoadPaths(text),
   };
 }
 
@@ -117,10 +185,24 @@ function analyzeAsmdefSource(text, assetPath = '') {
 function evidenceForScript(record) {
   const evidence = record && record.scriptEvidence;
   if (evidence && Array.isArray(evidence.declaredTypes) && Array.isArray(evidence.identifierCandidates)) {
+    const declaredTypeBases = {};
+    if (evidence.declaredTypeBases && typeof evidence.declaredTypeBases === 'object') {
+      for (const typeName of Object.keys(evidence.declaredTypeBases).sort(compareText)) {
+        declaredTypeBases[typeName] = sortedUnique(
+          (Array.isArray(evidence.declaredTypeBases[typeName]) ? evidence.declaredTypeBases[typeName] : [])
+            .filter(value => typeof value === 'string' && value),
+        );
+      }
+    }
     return {
       declaredTypes: sortedUnique(evidence.declaredTypes.filter(value => typeof value === 'string' && value)),
+      declaredTypeBases,
       identifierCandidates: sortedUnique(
         evidence.identifierCandidates.filter(value => typeof value === 'string' && value && !NON_PROJECT_TYPES.has(value)),
+      ),
+      resourceLoadPaths: sortedUnique(
+        (Array.isArray(evidence.resourceLoadPaths) ? evidence.resourceLoadPaths : [])
+          .filter(value => typeof value === 'string' && value).map(normalizeAssetPath),
       ),
     };
   }
@@ -271,7 +353,9 @@ function buildScriptIndex(inputRecords = []) {
       assemblyDefinition: assembly.definitionPath,
       editorOnly: assembly.editorOnly,
       declaredTypes: evidence.declaredTypes,
+      declaredTypeBases: evidence.declaredTypeBases,
       identifierCandidates: evidence.identifierCandidates,
+      resourceLoadPaths: evidence.resourceLoadPaths,
     };
     workingScripts.push(script);
     for (const typeName of script.declaredTypes) {
@@ -281,6 +365,33 @@ function buildScriptIndex(inputRecords = []) {
   }
 
   for (const paths of declarations.values()) paths.sort(compareAssetPaths);
+
+  const declaredTypeBases = new Map();
+  for (const script of workingScripts) {
+    for (const typeName of script.declaredTypes) {
+      const existing = declaredTypeBases.get(typeName) || [];
+      declaredTypeBases.set(typeName, sortedUnique([
+        ...existing,
+        ...(script.declaredTypeBases[typeName] || []),
+      ]));
+    }
+  }
+  const scriptableObjectMemo = new Map();
+  function isScriptableObjectType(typeName, visiting = new Set()) {
+    if (typeName === 'ScriptableObject') return true;
+    if (scriptableObjectMemo.has(typeName)) return scriptableObjectMemo.get(typeName);
+    if (visiting.has(typeName)) return false;
+    const nextVisiting = new Set(visiting);
+    nextVisiting.add(typeName);
+    const result = (declaredTypeBases.get(typeName) || []).some(baseType =>
+      baseType === 'ScriptableObject' || isScriptableObjectType(baseType, nextVisiting));
+    scriptableObjectMemo.set(typeName, result);
+    return result;
+  }
+  const scriptableObjectDeclarations = new Map();
+  for (const [typeName, paths] of declarations.entries()) {
+    if (isScriptableObjectType(typeName)) scriptableObjectDeclarations.set(typeName, [...paths]);
+  }
 
   const guidEntries = new Map();
   const scripts = workingScripts.map(script => {
@@ -309,6 +420,9 @@ function buildScriptIndex(inputRecords = []) {
       assemblyDefinition: script.assemblyDefinition,
       editorOnly: script.editorOnly,
       declaredTypes: script.declaredTypes,
+      declaredTypeBases: script.declaredTypeBases,
+      scriptableObjectTypes: script.declaredTypes.filter(isScriptableObjectType),
+      resourceLoadPaths: script.resourceLoadPaths,
       referencedProjectTypes: sortedUnique(referencedProjectTypes),
     };
   });
@@ -324,6 +438,10 @@ function buildScriptIndex(inputRecords = []) {
     typeDeclarations: objectFromSortedEntries(
       [...declarations.entries()].map(([typeName, paths]) => [typeName, [...paths]]),
     ),
+    declaredTypeBases: objectFromSortedEntries(
+      [...declaredTypeBases.entries()].map(([typeName, baseTypes]) => [typeName, [...baseTypes]]),
+    ),
+    scriptableObjectTypes: objectFromSortedEntries(scriptableObjectDeclarations.entries()),
     scripts,
     assemblies,
     diagnostics,
@@ -336,6 +454,7 @@ module.exports = {
   normalizeAssetPath,
   normalizeGuid,
   stripCommentsAndStrings,
+  extractResourceLoadPaths,
   analyzeCSharpSource,
   analyzeAsmdefSource,
   resolveAssemblyForScript,

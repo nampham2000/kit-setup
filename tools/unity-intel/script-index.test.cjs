@@ -8,6 +8,7 @@ const {
   analyzeAsmdefSource,
   buildScriptIndex,
 } = require('./script-index.cjs');
+const { buildDependencyGraph } = require('./dependency-graph.cjs');
 
 const GUIDS = {
   playerA: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
@@ -28,10 +29,76 @@ test('analyzeCSharpSource emits compact evidence and ignores strings/comments/BC
   const evidence = analyzeCSharpSource(source);
 
   assert.deepEqual(evidence.declaredTypes, ['MoveResult', 'PlayerController']);
+  assert.deepEqual(evidence.declaredTypeBases, { PlayerController: ['MonoBehaviour'] });
+  assert.deepEqual(evidence.resourceLoadPaths, []);
   assert.deepEqual(evidence.identifierCandidates, ['BoardState', 'MoveResult', 'PlayerController', 'Score']);
   assert.equal(Object.prototype.hasOwnProperty.call(evidence, 'text'), false);
   assert.equal(JSON.stringify(evidence).includes('StringOnlyType'), false);
   assert.equal(JSON.stringify(evidence).includes('FakeType'), false);
+});
+
+test('Resources.Load TextAsset strings become exact dependency edges while comment decoys stay excluded', () => {
+  const script = {
+    assetPath: 'Assets/Game/GameplayConfigLoader.cs',
+    guid: '7'.repeat(32),
+    scope: 'runtime',
+    text: [
+      '// Resources.Load<TextAsset>("Gameplay/fake")',
+      'public class GameplayConfigLoader : MonoBehaviour {',
+      '  TextAsset Load() => Resources.Load<TextAsset>("Gameplay/levels");',
+      '}',
+    ].join('\n'),
+  };
+  const data = {
+    assetPath: 'Assets/Resources/Gameplay/levels.json',
+    guid: '8'.repeat(32),
+    scope: 'runtime',
+  };
+  const index = buildScriptIndex([script, data]);
+  const graph = buildDependencyGraph([script, data], { byGuid: new Map() }, { scriptIndex: index }).toJSON();
+  assert.deepEqual(index.scripts[0].resourceLoadPaths, ['Gameplay/levels']);
+  assert.equal(graph.edges.some(edge => edge.from === script.assetPath && edge.to === data.assetPath &&
+    edge.kind === 'resource-load' && edge.provider === 'csharp-resource-load'), true);
+  assert.equal(graph.edges.some(edge => edge.fieldPath === 'Gameplay/fake'), false);
+});
+
+test('ScriptableObject inheritance is resolved through indirect generic project types without lexical decoys', () => {
+  const records = [
+    {
+      assetPath: 'Assets/Framework/GoogleSheetConfigSO.cs',
+      text: 'public abstract class GoogleSheetConfigSO<T> : UnityEngine.ScriptableObject {}',
+      guid: '4'.repeat(32),
+    },
+    {
+      assetPath: 'Assets/Game/LevelConfigSO.cs',
+      text: [
+        '// FakeConfigSO : ScriptableObject must not be indexed.',
+        'public sealed class LevelConfigSO : GoogleSheetConfigSO<LevelConfig>, IConfigSource {}',
+        'public sealed class PlainConfig {}',
+        'public static class TextDecoy { const string Value = "AudioSfxConfigurationSO : ScriptableObject"; }',
+      ].join('\n'),
+      guid: '5'.repeat(32),
+    },
+    {
+      assetPath: 'Assets/Game/AudioSfxConfigurationSO.cs',
+      text: 'public class AudioSfxConfigurationSO : ScriptableObject {}',
+      guid: '6'.repeat(32),
+    },
+  ];
+
+  const index = buildScriptIndex(records);
+  assert.deepEqual(index.scriptableObjectTypes, {
+    AudioSfxConfigurationSO: ['Assets/Game/AudioSfxConfigurationSO.cs'],
+    GoogleSheetConfigSO: ['Assets/Framework/GoogleSheetConfigSO.cs'],
+    LevelConfigSO: ['Assets/Game/LevelConfigSO.cs'],
+  });
+  assert.deepEqual(
+    index.scripts.find(script => script.assetPath.endsWith('/LevelConfigSO.cs')).scriptableObjectTypes,
+    ['LevelConfigSO'],
+  );
+  assert.deepEqual(index.declaredTypeBases.LevelConfigSO, ['GoogleSheetConfigSO', 'IConfigSource']);
+  assert.equal(Object.prototype.hasOwnProperty.call(index.scriptableObjectTypes, 'FakeConfigSO'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(index.scriptableObjectTypes, 'PlainConfig'), false);
 });
 
 test('buildScriptIndex supports cached evidence, partial declarations and deterministic references', () => {

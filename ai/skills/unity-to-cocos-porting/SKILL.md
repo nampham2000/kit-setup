@@ -92,6 +92,25 @@ Chỉ nâng provider lên `auto`/`unity-mcp` khi static preflight nêu đúng un
 
 Luôn hoàn tất rule generated `unity-preflight`: đọc compact `decision`, `features`, `obligationIndex`, `obligations`
 và chỉ mở evidence slice được brief yêu cầu trước khi implement.
+Ngay sau đó, trước gameplay implementation, chạy feedback/spec closure từ mọi bootstrap, persistent và gameplay entry:
+
+```bash
+npm run ai:port:feedback:closure -- --project <UnityProjectRoot> --entry Assets/Scenes/Loading.unity --entry Assets/Scenes/Gameplay.unity --out tools/<game>/oracles/feedback-closure.json
+```
+
+Không chỉ tìm prefab/clip theo tên. Scanner phải resolve ScriptableObject kế thừa trực tiếp lẫn gián tiếp/generic,
+serialized GUID, `Resources.Load<T>("literal")`, JSON/CSV/TextAsset và tiếp tục theo asset key/path chứa trong data.
+ScriptableObject và data file là executable gameplay specification: lưu hash + field/key nguồn, rồi map từng field đã
+implement sang Cocos config, runtime consumer và regression. Asset binding-reachable chưa chứng minh behavior chạy; mọi
+candidate cần disposition `implemented`, `replaced`, `deferred` hoặc `dormant`, và `--check` phải fail-closed khi thiếu.
+
+Dùng VFX/SFX tìm được làm observable checkpoint để walkthrough lại gameplay theo ordered phase, không audit effect riêng
+lẻ: input/condition -> state mutation -> animation/tween callback -> particle -> SFX/haptic -> transition/replacement.
+Đối chiếu owner C# + ScriptableObject/JSON field với Cocos callsite. Nếu effect xuất hiện nhưng callback commit, combo,
+replacement hoặc transition bị thiếu/sai thứ tự thì vẫn là lỗi implementation high. Regression dùng gesture thật,
+`requiredTrace` có timestamp, exact số lần VFX/SFX, bounded visible-pixel metrics và console sạch. Một inventory asset hoặc
+một screenshot không đủ để kết luận feedback/gameplay parity.
+
 Khi `port.closure --copy-to` tạo staging ngoài Unity project, giữ nguyên `.unity-port-provenance.json`
 và truyền `--unity-project <UnityProjectRoot>` cho `port.compile`; không copy/ghép thêm source vào staging đã ký.
 Không đi vòng mutation gate qua symlink/reparse path. `--dry-run` phải hoàn toàn read-only; nếu thấy tool tạo

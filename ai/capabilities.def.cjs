@@ -388,6 +388,35 @@ const CAPABILITIES = [
     expect: ['--src', '--unity-root', '--out', '--max-clips', '--compact'],
   },
   {
+    id: 'port.feedback.closure',
+    group: 'port',
+    title: 'Dò closure ScriptableObject/JSON/TextAsset và feedback-guided gameplay flow từ bootstrap Unity',
+    npm: 'npm run ai:port:feedback:closure -- --project <UnityProjectRoot> --entry <AssetPath>',
+    cmd: `node ${TOOLS}/unity-feedback-closure.cjs`,
+    args: ['--project <UnityProjectRoot>'],
+    optional: [
+      '--entry <AssetPath> (repeatable)', '--profile <playable-core|full-project>', '--dispositions <file>', '--out <closure.json>', '--check',
+      '--no-cache', '--refresh-cache', '--json',
+    ],
+    when: 'Ngay sau preflight/scaffold và trước gameplay implementation; chạy lại khi bootstrap scene, ScriptableObject, JSON/TextAsset, particle/audio asset hoặc feedback callback graph thay đổi.',
+    outputs: [
+      'JSON deterministic: binding-reachable ScriptableObject, gameplay spec data, audio, VFX prefab, material/texture và shortest source chain',
+      'JSON spec SHA-256/top-level fields/exact asset reference; Resources.Load<T>(literal) được nối từ script index',
+      'Disposition/walkthrough gate: Unity owner + state mutation + animation/VFX/SFX + Cocos callsite + regression',
+    ],
+    limits: [
+      'Static closure chỉ chứng minh binding reachability; không được tự suy behavioral reachability từ asset tồn tại hoặc tên file.',
+      'ScriptableObject phải resolve cả kế thừa gián tiếp/generic; comment/string decoy không được tạo type hoặc Resources.Load edge.',
+      'JSON/TextAsset là executable gameplay specification: implemented phải có fieldBindings, Cocos consumer và regression; asset key/path trong JSON phải tiếp tục được resolve.',
+      'Feedback-guided walkthrough phải đi theo ordered gameplay phase; effect có nhưng state/callback thiếu vẫn là implementation gap.',
+      '--check read-only và fail-closed khi thiếu implemented/replaced/deferred/dormant disposition hoặc walkthrough evidence.',
+    ],
+    status: 'partial',
+    probe: 'help',
+    probeCmd: `node ${TOOLS}/unity-feedback-closure.cjs`,
+    expect: ['--project', '--entry', '--profile', '--dispositions', '--out', '--check', '--no-cache'],
+  },
+  {
     id: 'mesh.path.audit',
     group: 'port',
     title: 'Đo phép đổi hệ tọa độ giữa Unity runtime path và Cocos mesh',
@@ -1369,6 +1398,19 @@ const CORE_RULES = [
   {
     id: 'particle-source-oracle-parity',
     rule: 'Không sửa VFX particle bằng cách đoán root scale/alpha/depth để làm ảnh trông gần đúng. Phải đọc prefab instance override + source particle prefab + material/texture + renderer state + camera layer/depth + animation event time; lưu SHA-256 và effective values vào oracle. `ParticleSystemRenderer.enabled=false` không chứng minh particle vô hình nếu UIParticle/UI bridge khác sở hữu việc render; phải trace bridge reference, scale và renderer ownership trước khi exclude. Runtime giữ authored local transform nếu source không có adapter riêng, rồi regression kiểm start size/lifetime/simulation speed/capacity/curve, local transform, active particle và bounded visible pixels ở đúng thời điểm.',
+  },
+  {
+    id: 'unity-feedback-spec-closure',
+    rule: 'Sau Unity preflight và trước gameplay implementation, phải chạy `port.feedback.closure` từ mọi bootstrap/persistent/gameplay entry trong scope. Coi ScriptableObject và JSON/CSV/TextAsset là executable gameplay specification: resolve direct + indirect generic ScriptableObject inheritance, serialized GUID, `Resources.Load<T>` literal và asset key/path nằm trong data; lưu source hash, field/key và shortest owner chain. Binding-reachable không đồng nghĩa behavioral-reachable: mọi candidate phải có disposition implemented/replaced/deferred/dormant. Với implemented data phải khóa field -> Cocos config -> runtime consumer -> regression. Sau đó dùng VFX/SFX làm observable checkpoints để walkthrough ordered gameplay callback graph: input/condition -> state mutation -> animation -> particle -> sound/haptic -> transition/replacement. Effect có mặt nhưng callback/state phase thiếu vẫn là high implementation gap. Nghiệm thu bằng real gesture, requiredTrace/timestamp, exact SFX/VFX counts, bounded visible-pixel metrics và console sạch; không kết luận chỉ từ asset inventory hoặc một screenshot.',
+    agentContract: {
+      entryClosure: ['bootstrap-scene', 'persistent-manager', 'gameplay-scene', 'resources-load', 'pool-registration'],
+      specificationSources: ['scriptable-object-direct', 'scriptable-object-indirect-generic', 'json', 'csv', 'text-asset'],
+      requiredDisposition: ['implemented', 'replaced', 'deferred', 'dormant'],
+      implementedDataEvidence: ['source-hash', 'source-field-or-key', 'cocos-config-field', 'runtime-consumer', 'regression'],
+      walkthroughPhase: ['unity-owner', 'condition', 'state-mutation', 'animation', 'vfx', 'sfx-or-haptic', 'transition', 'cocos-callsite', 'regression'],
+      verification: ['real-gesture', 'ordered-trace-with-timestamp', 'exact-feedback-counts', 'bounded-visible-pixels', 'runtime-console-clean'],
+      prohibitedConclusions: ['asset-exists-means-used', 'binding-reachable-means-behavioral', 'screenshot-only-feedback-parity'],
+    },
   },
   {
     id: 'runtime-material-swap-parity',

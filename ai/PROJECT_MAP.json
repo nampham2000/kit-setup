@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "generatedAt": "2026-09-02T07:06:52.870Z",
+    "generatedAt": "2026-09-02T08:51:44.342Z",
     "description": "Compact project manifest for AI Agents. Use this instead of scanning file trees.",
     "project": {
       "projectName": "cc_playable_framework",
@@ -58,7 +58,7 @@
     }
   ],
   "scripts": {
-    "count": 46,
+    "count": 47,
     "byDir": [
       {
         "dir": "assets/script/shared/sdk/analytics",
@@ -148,6 +148,7 @@
           "HarvestGameplayVFXAdapter",
           "HarvestLevelFactory",
           "HarvestParticleAdapterBase",
+          "HarvestPointerVFXAdapter",
           "HarvestPresentationParticles",
           "HarvestSeedGenerator",
           "HarvestSheetBurstVFXAdapter",
@@ -214,8 +215,8 @@
       "truncated": 5
     },
     "textures": {
-      "count": 185,
-      "totalKb": 24186.9,
+      "count": 186,
+      "totalKb": 24216.9,
       "sample": [
         "assets/resources/harvest/textures/tiles/10_Ice.png",
         "assets/resources/harvest/textures/tiles/11_Eggplant.png",
@@ -224,7 +225,7 @@
         "assets/resources/harvest/textures/tiles/14_Lemon.png",
         "assets/resources/harvest/textures/tiles/15_Mango.png"
       ],
-      "truncated": 179
+      "truncated": 180
     },
     "animations": {
       "count": 12,
@@ -406,6 +407,7 @@
     "port.plan": "npm run ai:port:plan -- --project <UnityProjectRoot>",
     "port.scene": "npm run port:scene -- --scene <file.unity> --unity-root <UnityAssetsFolder> --out assets/<Name>.scene",
     "port.animation.oracle": "npm run ai:port:animation:oracle -- --src <UnityAnimOrDirectory> --unity-root <UnityProjectRoot> --out <oracle.json>",
+    "port.feedback.closure": "npm run ai:port:feedback:closure -- --project <UnityProjectRoot> --entry <AssetPath>",
     "mesh.path.audit": "node playable-shared-kit/tools/runtime-mesh-path-audit.cjs --config <audit.json>",
     "port.report": "npm run ai:port:report",
     "port.prefab": "node playable-shared-kit/tools/unity-cocos-port.cjs port --src <unity_prefab_or_dir> --out <cocos_prefab_or_dir>",

@@ -89,6 +89,17 @@ function buildDependencyGraph(records, guidIndex, options = {}) {
   let ambiguousCodeReferences = 0;
   if (scriptIndex && Array.isArray(scriptIndex.scripts)) {
     const scriptByPath = new Map(scriptIndex.scripts.map(script => [script.assetPath, script]));
+    const resourcesByKey = new Map();
+    for (const record of records) {
+      const match = /(?:^|\/)Resources\/(.+)$/i.exec(record.assetPath || '');
+      if (!match) continue;
+      const key = match[1].replace(/\.[^/.]+$/, '').toLowerCase();
+      if (!resourcesByKey.has(key)) resourcesByKey.set(key, []);
+      resourcesByKey.get(key).push(record);
+    }
+    for (const targets of resourcesByKey.values()) {
+      targets.sort((left, right) => left.assetPath.localeCompare(right.assetPath));
+    }
     for (const script of scriptIndex.scripts) {
       if (script.scope !== 'runtime' || script.editorOnly) continue;
       for (const typeName of script.referencedProjectTypes || []) {
@@ -124,6 +135,31 @@ function buildDependencyGraph(records, guidIndex, options = {}) {
           }
           addToMapSet(outgoing, script.assetPath, targetPath);
           addToMapSet(codeOutgoing, script.assetPath, targetPath);
+          addToMapSet(incoming, targetPath, script.assetPath);
+        }
+      }
+      for (const resourcePath of script.resourceLoadPaths || []) {
+        for (const target of resourcesByKey.get(String(resourcePath).toLowerCase()) || []) {
+          const targetPath = target.assetPath;
+          const edgeKey = [script.assetPath, targetPath, target.guid || '', 'resource-load', '', resourcePath,
+            'csharp-resource-load'].join('\0');
+          if (!edgeGroups.has(edgeKey)) {
+            edgeGroups.set(edgeKey, {
+              from: script.assetPath,
+              to: targetPath,
+              guid: target.guid || null,
+              kind: 'resource-load',
+              resolution: 'exact',
+              objectId: null,
+              classId: null,
+              fieldPath: resourcePath,
+              occurrences: 1,
+              provider: 'csharp-resource-load',
+              evidenceLines: [],
+            });
+          }
+          addToMapSet(outgoing, script.assetPath, targetPath);
+          addToMapSet(assetOutgoing, script.assetPath, targetPath);
           addToMapSet(incoming, targetPath, script.assetPath);
         }
       }
