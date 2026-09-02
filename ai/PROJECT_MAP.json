@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "generatedAt": "2026-09-02T08:51:44.342Z",
+    "generatedAt": "2026-09-02T12:43:28.217Z",
     "description": "Compact project manifest for AI Agents. Use this instead of scanning file trees.",
     "project": {
       "projectName": "cc_playable_framework",

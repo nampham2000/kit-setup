@@ -61,6 +61,7 @@ function loadSoundManager() {
       this.playing = false;
       this.playCount = 0;
       this.stopCount = 0;
+      this.oneShotCalls = [];
       this.node = null;
     }
 
@@ -79,7 +80,9 @@ function loadSoundManager() {
       this.playing = false;
     }
 
-    playOneShot() {}
+    playOneShot(clip, volume) {
+      this.oneShotCalls.push({ clip, volume });
+    }
   }
 
   class MockTween {
@@ -172,4 +175,25 @@ test('preloaded BGM starts synchronously with source-backed fade and unlock resu
   manager.resumeBGM();
   assert.equal(source.playCount, 2, 'paused BGM may resume once');
   assert.ok(stoppedTweenTargets.includes(source), 'fade ownership must be cancellable by later controls');
+});
+
+test('preloaded SFX cache hits invoke playOneShot synchronously and report actual playback', () => {
+  const { SoundManager, MockAudioClip } = loadSoundManager();
+  const manager = new SoundManager();
+  manager.onLoad();
+  manager.setSFXVolume(0.4);
+
+  const clip = new MockAudioClip();
+  manager._audioCache.set('audio/lose', clip);
+  const played = manager.playSFX('audio/lose', 1, false);
+
+  const source = manager._sfxAudioSource;
+  assert.equal(played, true, 'a cache hit must report the actual engine playback call');
+  assert.equal(source.oneShotCalls.length, 1, 'a cache hit must not wait for Promise.then');
+  assert.equal(source.oneShotCalls[0].clip, clip);
+  assert.equal(source.oneShotCalls[0].volume, 0.4);
+
+  const deferred = manager.playSFX('audio/not-preloaded', 1, false);
+  assert.equal(deferred, false, 'a cache miss is only a deferred request, not playback evidence');
+  assert.equal(source.oneShotCalls.length, 1, 'a cache miss must not masquerade as synchronous playback');
 });

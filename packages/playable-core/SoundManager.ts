@@ -170,14 +170,23 @@ export class SoundManager extends Component {
     return this._bgmAudioSource?.currentTime ?? 0;
   }
 
-  public playSFX(pathOrClip: string | AudioClip, volume: number = 1.0, loop: boolean = false): void {
-    if (!pathOrClip || !this._sfxAudioSource || this._sfxMuted) return;
+  /**
+   * Plays an SFX and reports whether the engine playback call happened now.
+   *
+   * Preloaded string paths intentionally resolve from the cache synchronously.
+   * Besides preserving source callback order, this lets gameplay QA distinguish
+   * an actual AudioSource call from a request that was only queued for loading.
+   */
+  public playSFX(pathOrClip: string | AudioClip, volume: number = 1.0, loop: boolean = false): boolean {
+    if (!pathOrClip || !this._sfxAudioSource || this._sfxMuted) return false;
 
     if (typeof pathOrClip === 'string') {
+      const cached = this._audioCache.get(pathOrClip);
+      if (cached) return this.playSFX(cached, volume, loop);
       this.preload(pathOrClip)
         .then((clip) => this.playSFX(clip, volume, loop))
         .catch(() => undefined);
-      return;
+      return false;
     }
 
     const clip = pathOrClip;
@@ -189,10 +198,11 @@ export class SoundManager extends Component {
         this._sfxAudioSource.volume = this._sfxVolume * volume;
         this._sfxAudioSource.play();
       }
-      return;
+      return true;
     }
 
     this._sfxAudioSource.playOneShot(clip, this._sfxVolume * volume);
+    return true;
   }
 
   /**
