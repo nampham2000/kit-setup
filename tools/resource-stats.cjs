@@ -40,6 +40,7 @@ const zlib = require('zlib');
 const crypto = require('crypto');
 const { inspectFontFile } = require('./resource-stats/font-inspector.cjs');
 const { charactersForEntry, DEFAULT_MAX_BYTES } = require('./font-subsetter.cjs');
+const { auditResourceBoundary } = require('./resource-boundary.cjs');
 
 // ==========================================
 // CLI ARGUMENTS & CONFIGURATION
@@ -806,6 +807,7 @@ class PlayableResourceStats {
     this.systemFontFamilies = new Set();
     this.runtimeFontPaths = new Set();
     this.fontRequiredCharactersByPath = new Map();
+    this.resourceCatalogPathMap = new Map();
 
     this.buildInfo = {
       hasBuild: false,
@@ -840,6 +842,7 @@ class PlayableResourceStats {
       fontDiagnostics: [],
       fontBudgetViolations: [],
       fontUsage: { usedAssetFonts: 0, multilingualAssetFonts: 0, overBudgetAssetFonts: 0, systemFontFamilies: [] },
+      resourceBoundary: null,
       engineDiagnostics: {
         enabledModules: [],
         unusedModules: [],
@@ -854,6 +857,7 @@ class PlayableResourceStats {
     this.indexBuildOutput();
     this.scanMetaFiles();
     this.scanAssetFiles();
+    this.scanResourceBoundary();
     this.scanEngineSettings();
     this.scanScenesAndPrefabs();
     this.scanRuntimeFontUsage();
@@ -1286,11 +1290,39 @@ class PlayableResourceStats {
   resolveRuntimeFontPath(value) {
     const input = String(value || '').trim().replace(/\\/g, '/').replace(/^db:\/\//, '');
     if (!input) return '';
+    const catalogPath = this.resourceCatalogPathMap.get(input);
+    if (catalogPath && this.pathMap.has(catalogPath)) return catalogPath;
     const base = input.startsWith('assets/') ? input : `assets/resources/${input}`;
     const candidates = path.extname(base)
       ? [base]
       : ['.ttf', '.otf', '.woff', '.fnt'].map((ext) => `${base}${ext}`);
     return candidates.find((candidate) => this.pathMap.has(candidate)) || '';
+  }
+
+  scanResourceBoundary() {
+    const manifest = path.join(this.projectRoot, 'tools', 'resource-boundary.json');
+    if (!fs.existsSync(manifest)) return;
+    try {
+      const report = auditResourceBoundary(this.projectRoot, 'tools/resource-boundary.json');
+      for (const entry of report.entries || []) {
+        this.resourceCatalogPathMap.set(entry.key, entry.asset);
+        if (entry.type === 'cc.TTFFont') this.runtimeFontPaths.add(entry.asset);
+      }
+      this.stats.resourceBoundary = {
+        status: report.status,
+        manifestSha256: report.manifestSha256,
+        dynamicRootCount: report.dynamicRootCount,
+        dynamicFileCount: report.dynamicFileCount,
+        staticCatalogEntryCount: report.staticCatalogEntryCount,
+        misplacedStaticCount: report.misplacedStatic.length,
+        unclassifiedCount: report.unclassified.length,
+        catalog: report.catalog,
+        moveStates: report.moveStates,
+        errors: report.errors,
+      };
+    } catch (error) {
+      this.stats.resourceBoundary = { status: 'FAIL', errors: [error.message] };
+    }
   }
 
   scanRuntimeFontUsage() {
@@ -1983,6 +2015,18 @@ function renderCliReport(stats, options) {
     if (hasBuild && stats.categories.engine.buildSize) {
       console.log(`  ${gr}${'Cocos Engine JS Runtime'.padEnd(30)} ${'1 runtime'.padEnd(16)} ${'-'.padStart(10)} ${formatBytes(stats.categories.engine.buildSize).padStart(12)} ${''.padStart(8)}${colors.reset}`);
       console.log(`  ${b}${cy}${'TOTAL WEB BUNDLE PAYLOAD'.padEnd(30)} ${''.padEnd(16)} ${formatBytes(totalRawSize + stats.categories.engine.buildSize).padStart(10)} ${formatBytes(totalBuildWithEngine).padStart(12)} ${`-${totalAssetsRatio}%`.padStart(8)}${colors.reset}`);
+    }
+
+    if (stats.resourceBoundary) {
+      const boundary = stats.resourceBoundary;
+      const boundaryColor = boundary.status === 'PASS' ? g : r;
+      console.log(`\n${b}🧭 RESOURCES DYNAMIC-ROOT BOUNDARY:${colors.reset}`);
+      console.log(`  ${boundaryColor}${b}${boundary.status}${colors.reset} | ${boundary.dynamicRootCount || 0} dynamic roots / ${boundary.dynamicFileCount || 0} files | ${boundary.staticCatalogEntryCount || 0} serialized static dependencies`);
+      console.log(`  Catalog: ${boundary.catalog?.prefab || 'unresolved'} (${boundary.catalog?.status || 'missing'})`);
+      if (boundary.status !== 'PASS') {
+        for (const error of (boundary.errors || []).slice(0, 8)) console.log(`  ${r}• ${error}${colors.reset}`);
+        console.log(`  ${cy}Run: npm run ai:resources:boundary -- --verify${colors.reset}`);
+      }
     }
 
     // SECTION: Oversized Textures vs Node Transforms

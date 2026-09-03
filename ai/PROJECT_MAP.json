@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "generatedAt": "2026-09-02T13:58:48.001Z",
+    "generatedAt": "2026-09-03T13:54:27.033Z",
     "description": "Compact project manifest for AI Agents. Use this instead of scanning file trees.",
     "project": {
       "projectName": "cc_playable_framework",
@@ -32,33 +32,38 @@
   ],
   "prefabs": [
     {
+      "name": "static-assets",
+      "path": "assets/resources/harvest/static-assets.prefab",
+      "sizeKb": 40.6
+    },
+    {
       "name": "par_merge_small",
-      "path": "assets/resources/harvest/imported-vfx/par_merge_small.prefab",
+      "path": "assets/harvest/imported-vfx/par_merge_small.prefab",
       "sizeKb": 229
     },
     {
       "name": "slot-source",
-      "path": "assets/resources/harvest/imported-vfx/slot-source.prefab",
+      "path": "assets/harvest/imported-vfx/slot-source.prefab",
       "sizeKb": 425.1
     },
     {
       "name": "par_mergetiles_final",
-      "path": "assets/resources/harvest/imported-vfx/par_mergetiles_final.prefab",
+      "path": "assets/harvest/imported-vfx/par_mergetiles_final.prefab",
       "sizeKb": 500.9
     },
     {
       "name": "par_merge_big",
-      "path": "assets/resources/harvest/imported-vfx/par_merge_big.prefab",
+      "path": "assets/harvest/imported-vfx/par_merge_big.prefab",
       "sizeKb": 407.2
     },
     {
       "name": "par_merge_tiles",
-      "path": "assets/resources/harvest/imported-vfx/par_merge_tiles.prefab",
+      "path": "assets/harvest/imported-vfx/par_merge_tiles.prefab",
       "sizeKb": 373.7
     }
   ],
   "scripts": {
-    "count": 47,
+    "count": 48,
     "byDir": [
       {
         "dir": "assets/script/shared/sdk/analytics",
@@ -111,6 +116,7 @@
           "PlayableEntry",
           "PlayableTrackingController",
           "PlayableUIHUD",
+          "StaticAssetCatalog",
           "index"
         ]
       },
@@ -205,12 +211,12 @@
       "count": 11,
       "totalKb": 9,
       "sample": [
-        "assets/resources/harvest/materials/kawase-blur.mtl",
         "assets/materials/UnitySpriteRendererColor.mtl",
         "assets/materials/UnitySpriteRendererColorOpaque.mtl",
         "assets/materials/UnitySpriteRendererGlow.mtl",
         "assets/unity_imported/_Game/_VFX/Texture/Materials/magic_orb.mtl",
-        "assets/unity_imported/_Game/_VFX/Texture/Materials/glow1.mtl"
+        "assets/unity_imported/_Game/_VFX/Texture/Materials/glow1.mtl",
+        "assets/unity_imported/_Game/_VFX/Texture/Materials/cube_brake.mtl"
       ],
       "truncated": 5
     },
@@ -218,12 +224,12 @@
       "count": 186,
       "totalKb": 24216.9,
       "sample": [
-        "assets/resources/harvest/textures/tiles/10_Ice.png",
-        "assets/resources/harvest/textures/tiles/11_Eggplant.png",
-        "assets/resources/harvest/textures/tiles/12_Grape.png",
-        "assets/resources/harvest/textures/tiles/13_Almond.png",
-        "assets/resources/harvest/textures/tiles/14_Lemon.png",
-        "assets/resources/harvest/textures/tiles/15_Mango.png"
+        "assets/unity_imported/_Game/_VFX/Texture/magic_orb.png",
+        "assets/unity_imported/_Game/_VFX/Texture/glow1.png",
+        "assets/unity_imported/_Game/_VFX/Texture/cube_brake.png",
+        "assets/unity_imported/_Game/_VFX/Texture/cycle.png",
+        "assets/unity_imported/_Game/_VFX/Texture/aura_soft01.png",
+        "assets/unity_imported/_Game/_VFX/Texture/hoa.png"
       ],
       "truncated": 180
     },
@@ -231,24 +237,25 @@
       "count": 12,
       "totalKb": 303.2,
       "sample": [
-        "assets/resources/harvest/animations/tile-drop.anim",
-        "assets/resources/harvest/animations/tile-final-merge.anim",
-        "assets/resources/harvest/animations/tile-fly.anim",
-        "assets/resources/harvest/animations/tile-move-up.anim",
-        "assets/resources/harvest/animations/tile-moving-to-slot.anim",
-        "assets/resources/harvest/animations/tile-scale-show.anim"
+        "assets/harvest/animations/tile-drop.anim",
+        "assets/harvest/animations/tile-final-merge.anim",
+        "assets/harvest/animations/tile-fly.anim",
+        "assets/harvest/animations/tile-move-up.anim",
+        "assets/harvest/animations/tile-moving-to-slot.anim",
+        "assets/harvest/animations/tile-scale-show.anim"
       ],
       "truncated": 6
     },
     "prefabsInAssets": {
-      "count": 5,
-      "totalKb": 1935.9,
+      "count": 6,
+      "totalKb": 1976.5,
       "sample": [
-        "assets/resources/harvest/imported-vfx/par_merge_small.prefab",
-        "assets/resources/harvest/imported-vfx/slot-source.prefab",
-        "assets/resources/harvest/imported-vfx/par_mergetiles_final.prefab",
-        "assets/resources/harvest/imported-vfx/par_merge_big.prefab",
-        "assets/resources/harvest/imported-vfx/par_merge_tiles.prefab"
+        "assets/resources/harvest/static-assets.prefab",
+        "assets/harvest/imported-vfx/par_merge_small.prefab",
+        "assets/harvest/imported-vfx/slot-source.prefab",
+        "assets/harvest/imported-vfx/par_mergetiles_final.prefab",
+        "assets/harvest/imported-vfx/par_merge_big.prefab",
+        "assets/harvest/imported-vfx/par_merge_tiles.prefab"
       ],
       "truncated": 0
     },
@@ -436,6 +443,7 @@
     "model.import-policy": "npm run ai:model:optimize",
     "model.fbx-normalize": "npm run ai:fbx:normalize -- --src <Unity.fbx> --out <Cocos.fbx>",
     "audio.optimize": "npm run sound:optimize",
+    "resources.boundary": "npm run ai:resources:boundary",
     "assets.cleanup": "npm run cleanup:unused",
     "stats.resources": "npm run stats",
     "build.playable": "npm run build",

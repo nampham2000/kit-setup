@@ -1049,6 +1049,27 @@ const CAPABILITIES = [
     expect: ['--write', '--doctor'],
   },
   {
+    id: 'resources.boundary',
+    group: 'optimize',
+    title: 'Giữ resources chỉ cho dynamic root và serialize static dependency catalog',
+    npm: 'npm run ai:resources:boundary',
+    cmd: `node ${TOOLS}/resource-boundary.cjs --json`,
+    args: [],
+    optional: ['--project <dir>', '--config <file>', '--write-catalog', '--check', '--verify', '--verbose'],
+    when: 'Sau khi trace runtime load path và trước unused cleanup; bắt buộc khi resources đang chứa font/sprite/model/material/effect/animation/Spine dependency cố định.',
+    outputs: ['stdout JSON bounded dynamic roots + move states + catalog closure', '<catalog.prefab> khi có --write-catalog'],
+    limits: [
+      'Manifest `tools/resource-boundary.json` phải Git-track và ghi reason cho từng dynamic root/static move. Asset type không thay thế evidence từ callsite + path producer + reachable runtime selection.',
+      '`--write-catalog` chỉ ghi catalog prefab deterministic/idempotent; không move asset, không sửa `.meta`. Reimport catalog và apply move qua Cocos AssetDB/MCP, rồi chạy --verify.',
+      '`--check`/`--verify` read-only và fail trên pending/conflicting move, static/unclassified file trong resources, catalog/digest/importer/UUID/sub-UUID drift.',
+      'Catalog/file PASS không chứng minh runtime; phải preview đường deferred animation/VFX/end-screen sau move.',
+    ],
+    status: 'ok',
+    probe: 'help',
+    probeCmd: `node ${TOOLS}/resource-boundary.cjs --help`,
+    expect: ['--write-catalog', '--verify', 'never moves assets', 'Cocos Resources Boundary'],
+  },
+  {
     id: 'assets.cleanup',
     group: 'optimize',
     title: 'Tìm asset không được tham chiếu',
@@ -1059,6 +1080,7 @@ const CAPABILITIES = [
     when: 'Trước khi build bản cuối, để cắt bundle.',
     outputs: ['stdout'],
     limits: [
+      'Chạy `resources.boundary --verify` trước; `resources` chỉ làm dynamic API boundary, không phải vùng miễn audit cho mọi asset.',
       'NGUY HIỂM: asset vừa port nhưng chưa được scene/prefab nào tham chiếu sẽ bị liệt kê là unused.',
       'KHÔNG chạy `--delete` ngay sau khi port.',
     ],
@@ -1299,6 +1321,19 @@ const CORE_RULES = [
   {
     id: 'portable-asset-optimization',
     rule: 'Policy tối ưu asset phải portable và idempotent qua shared kit, không phụ thuộc thao tác Inspector trên một máy. PNG/JPG/JPEG phải dùng đúng preset WebP quality 50; audio mặc định MP3 quality 30 và giữ nguyên mono/stereo của từng nguồn; model phải giữ/export/import FBX trực tiếp, không dùng glTF/GLB để che lỗi importer. Nếu Cocos converter từ chối FBX gốc thì dùng `model.fbx-normalize` theo thứ tự preserve trước, static chỉ khi oracle chứng minh không dùng skeleton; static vẫn phải giữ mọi bone mà runtime scale/rotate qua `--preserve-anchor`, không được làm mất deformation anchor. Mọi FBX bật Mesh Optimize (cache/fetch/overdraw), Mesh Simplify ratio 0.8 và Mesh Compress compress-only theo `model.import-policy`. Mọi đổi importer/path/UUID phải qua Cocos Asset DB/MCP, đọc lại verify và tuyệt đối không sửa `.meta` trực tiếp. `stats.resources` phải báo font asset đang dùng có coverage đa ngôn ngữ để cân nhắc subset cho playable một ngôn ngữ.',
+  },
+  {
+    id: 'cocos-resources-dynamic-root-boundary',
+    rule: '`assets/resources` là API boundary cho dynamic root thật, không phải thư mục gom mọi asset. Trước khi phân loại phải trace mọi `resources.load/loadDir` cùng ScriptableObject/JSON/config path producer; asset type không tự chứng minh dynamic. Chỉ giữ config/audio/prefab/sprite thật sự được chọn bằng path và một catalog prefab nhỏ nếu cần. Font, SpriteFrame, AnimationClip, material/effect, FBX/model, Spine atlas/texture và dependency cố định phải ra ngoài resources, được sở hữu bởi scene/prefab/`StaticAssetCatalog` serialize để Cocos đóng gói theo dependency graph. Mọi project dùng policy này phải Git-track `tools/resource-boundary.json`; `resources.boundary --write-catalog` chỉ generate catalog deterministic, còn move/reimport bắt buộc qua AssetDB/MCP và giữ root UUID + sub-UUID. `resources.boundary --verify` và `ai:verify:assets` phải fail khi còn static asset trong resources, file không phân loại, move conflict/pending, catalog/digest/importer/UUID drift. Sau move phải preview deferred animation/VFX/end-screen; file gate không đủ để claim runnable.',
+    agentContract: {
+      manifest: 'tools/resource-boundary.json',
+      dynamicEvidence: ['resources-load-callsite', 'path-producer-scriptableobject-json-config', 'reachable-runtime-selection'],
+      typicalDynamicRoots: ['playable-config-json', 'sfx-bgm', 'runtime-selected-prefab', 'runtime-selected-sprite', 'static-catalog-prefab'],
+      typicalStaticDependencies: ['font', 'sprite-frame', 'animation-clip', 'material-effect', 'fbx-model', 'spine-atlas-texture'],
+      serializedOwners: ['entry-scene', 'prefab', 'StaticAssetCatalog'],
+      prohibited: ['asset-type-only-classification', 'all-assets-under-resources', 'manual-meta-edit', 'filesystem-move-without-assetdb', 'catalog-file-pass-as-runtime-proof'],
+      gates: ['resources.boundary --verify', 'ai:verify:assets', 'preview-deferred-paths'],
+    },
   },
   {
     id: 'severity',

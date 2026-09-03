@@ -26,6 +26,7 @@ require('./lib/auto-strip-ansi.cjs');
 
 const fs = require('fs');
 const path = require('path');
+const { auditResourceBoundary } = require('./resource-boundary.cjs');
 
 const FONT_MAX_BYTES = 100 * 1024;
 
@@ -223,6 +224,7 @@ function run (options = {}) {
         staleJsonAssets: [],
         fontFilesScanned: 0,
         overBudgetFonts: [],
+        resourceBoundary: null,
     };
 
     if (!fs.existsSync(scanRoot)) {
@@ -305,10 +307,35 @@ function run (options = {}) {
         result.status = 'FAIL';
     }
 
+    const boundaryManifest = path.join(projectRoot, 'tools', 'resource-boundary.json');
+    if (fs.existsSync(boundaryManifest)) {
+        try {
+            const boundary = auditResourceBoundary(projectRoot, 'tools/resource-boundary.json');
+            result.resourceBoundary = {
+                status: boundary.status,
+                manifestSha256: boundary.manifestSha256,
+                dynamicRootCount: boundary.dynamicRootCount,
+                dynamicFileCount: boundary.dynamicFileCount,
+                staticCatalogEntryCount: boundary.staticCatalogEntryCount,
+                catalog: boundary.catalog,
+                moveStates: boundary.moveStates,
+                misplacedStaticCount: boundary.misplacedStatic.length,
+                unclassifiedCount: boundary.unclassified.length,
+            };
+            for (const error of boundary.errors) {
+                result.errors.push(`RESOURCE BOUNDARY — ${error}`);
+            }
+        } catch (error) {
+            result.resourceBoundary = { status: 'FAIL', error: error.message };
+            result.errors.push(`RESOURCE BOUNDARY — ${error.message}`);
+        }
+    }
+
     if (result.errors.length) result.status = 'FAIL';
     result.details = result.status === 'PASS'
         ? `${result.scanned} asset / ${result.importerStatesScanned} importer state đã import sạch; `
-            + `${result.jsonCacheStatesScanned} cc.JsonAsset cache khớp source; ${result.fontFilesScanned} TTF trong budget.`
+            + `${result.jsonCacheStatesScanned} cc.JsonAsset cache khớp source; ${result.fontFilesScanned} TTF trong budget; `
+            + `${result.resourceBoundary?.staticCatalogEntryCount || 0} static asset qua resource boundary.`
         : `${result.failed.length} importer state lỗi, ${result.staleJsonAssets.length} JSON cache lỗi `
             + `và ${result.overBudgetFonts.length} font quá budget trong ${result.scanned} asset.`;
     return result;
