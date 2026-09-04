@@ -11,6 +11,6 @@
     "./platform/PlayableAdDownloadEvent": "./platform/PlayableAdDownloadEvent.ts"
   },
   "dependencies": {
-    "gameanalytics": "^5.0.0"
+    "gameanalytics": "^4.4.7"
   }
 }

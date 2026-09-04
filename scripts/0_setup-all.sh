@@ -67,7 +67,7 @@ node -e "const fs=require('fs'),path=require('path');const root=process.argv[1],
 
 # 4) Install root packages
 echo "==> Installing root npm packages..."
-(cd "$ROOT" && npm install)
+(cd "$ROOT" && npm install --no-audit --no-fund --prefer-offline)
 
 # 4.5) Sync shared kit extensions
 if [ -d "$SHARED_KIT/packages/extensions" ]; then
@@ -88,7 +88,7 @@ if [ -d "$ROOT/extensions" ]; then
     for ext_dir in "$ROOT/extensions"/*; do
         if [ -d "$ext_dir" ] && [ -f "$ext_dir/package.json" ]; then
             echo "==> Installing extension: $(basename "$ext_dir")"
-            (cd "$ext_dir" && npm install)
+            (cd "$ext_dir" && npm install --no-audit --no-fund --prefer-offline)
         fi
     done
 fi

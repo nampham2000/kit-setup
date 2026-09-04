@@ -418,6 +418,11 @@ function Sync-CodexConfig($Servers) {
     $Raw = if (Test-Path -LiteralPath $ConfigPath) { Get-Content -LiteralPath $ConfigPath -Raw } else { "" }
     $Updated = $Raw
 
+    # Strip any conflicting inline env under [mcp_servers.node_repl] if [mcp_servers.node_repl.env] exists
+    if ($Updated -match '\[mcp_servers\.node_repl\.env\]') {
+        $Updated = [regex]::Replace($Updated, '(?m)^(\[mcp_servers\.node_repl\][\r\n]+(?:(?!\[)[^\r\n]*[\r\n]+)*?)env\s*=\s*\{[^\r\n]*\}\s*[\r\n]*', '$1')
+    }
+
     foreach ($Server in $Servers) {
         $TomlKey = $Server.Name -replace '-', '_'
         $SectionHeader = "[mcp_servers.$TomlKey]"
@@ -511,10 +516,10 @@ function Invoke-McpVerification($Servers) {
 $Resolved = Resolve-McpCatalog
 $AllServers = $Resolved.Servers
 
-# node_repl is an internal runtime sandbox specifically for OpenAI Codex.
-# Exclude it from all standard AI providers (Claude, Antigravity/Gemini, VSCode/Copilot, JetBrains).
+# node_repl is an internal runtime sandbox specifically for OpenAI Codex, managed natively by Codex Desktop.
+# Exclude it from all AI clients so we don't overwrite Codex's native [mcp_servers.node_repl.env] settings.
 $StandardServers = @($AllServers | Where-Object { $_.Name -ne 'node_repl' })
-$CodexServers = $AllServers
+$CodexServers = $StandardServers
 
 if ($VerifyOnly) {
     foreach ($Note in $Resolved.Skipped) { Write-Host "  [skip] $Note" -ForegroundColor Yellow }

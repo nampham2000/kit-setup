@@ -62,10 +62,61 @@ function generateNetlifyToml() {
 /**
  * Check if Netlify CLI or credentials are ready
  */
-function checkNetlifyEnv() {
-  const token = process.env.NETLIFY_AUTH_TOKEN || process.env.NETLIFY_TOKEN || '';
-  const siteId = process.env.NETLIFY_SITE_ID || '';
-  return { token, siteId, hasToken: Boolean(token) };
+function checkNetlifyEnv(rootDir = null) {
+  let token = process.env.NETLIFY_AUTH_TOKEN || process.env.NETLIFY_TOKEN || '';
+  let siteId = process.env.NETLIFY_SITE_ID || '';
+  let siteName = '';
+
+  const projectRoot = rootDir || path.resolve(__dirname, '../../..');
+  const envFile = path.join(projectRoot, '.env');
+  const envLocalFile = path.join(projectRoot, '.env.local');
+  const configFile = path.join(projectRoot, 'configs', 'netlify.json');
+
+  function parseEnv(filePath) {
+    if (!fs.existsSync(filePath)) return {};
+    const content = fs.readFileSync(filePath, 'utf8');
+    const res = {};
+    for (const rawLine of content.split('\n')) {
+      const line = rawLine.trim();
+      if (!line || line.startsWith('#')) continue;
+      const eqIdx = line.indexOf('=');
+      if (eqIdx !== -1) {
+        let val = line.slice(eqIdx + 1).trim();
+        if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+          val = val.slice(1, -1);
+        }
+        res[line.slice(0, eqIdx).trim()] = val;
+      }
+    }
+    return res;
+  }
+
+  if (!token) {
+    const local = parseEnv(envLocalFile);
+    token = local.NETLIFY_AUTH_TOKEN || local.NETLIFY_TOKEN || '';
+  }
+  if (!token) {
+    const envVars = parseEnv(envFile);
+    token = envVars.NETLIFY_AUTH_TOKEN || envVars.NETLIFY_TOKEN || '';
+  }
+
+  if (fs.existsSync(configFile)) {
+    try {
+      const config = JSON.parse(fs.readFileSync(configFile, 'utf8'));
+      const def = config.sites && config.sites[config.defaultSite];
+      if (def) {
+        if (!siteId) siteId = def.siteId || '';
+        siteName = def.siteName || '';
+      }
+    } catch (e) {}
+  }
+
+  if (!siteId) {
+    siteId = '48f004b4-b065-4481-a005-73011c809140';
+    siteName = 'cat-smash-gp-normal';
+  }
+
+  return { token, siteId, siteName, hasToken: Boolean(token) };
 }
 
 /**
@@ -83,16 +134,13 @@ function deployToNetlify(options) {
     warn = console.warn,
   } = options;
 
-  const env = checkNetlifyEnv();
-  const normalizedProjectName = (siteNameOverride || projectName || 'playable')
+  const env = checkNetlifyEnv(rootDir);
+  const normalizedProjectName = (siteNameOverride || env.siteName || projectName || 'cat-smash-gp-normal')
     .toLowerCase()
     .replace(/[^a-z0-9]/g, '-')
     .replace(/^-+|-+$/g, '');
 
-  let siteSubdomain = normalizedProjectName;
-  if (env.siteId && env.siteId.length > 20) {
-    siteSubdomain = normalizedProjectName;
-  }
+  let siteSubdomain = env.siteName || normalizedProjectName;
   let publicBaseUrl = `https://${siteSubdomain}.netlify.app/`;
 
   // 1. Discover Playable Artifacts

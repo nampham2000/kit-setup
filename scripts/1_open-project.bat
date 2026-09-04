@@ -110,7 +110,7 @@ function Sync-CocosMcpExtension {
         Write-Host "  [mcp] Installing Cocos MCP runtime deps..." -ForegroundColor DarkGray
         Push-Location $Destination
         try {
-            cmd /c "npm install --omit=dev"
+            cmd /c "npm install --omit=dev --no-audit --no-fund --prefer-offline"
             if ($LASTEXITCODE -ne 0) { throw "npm install failed in $Destination." }
         } finally {
             Pop-Location

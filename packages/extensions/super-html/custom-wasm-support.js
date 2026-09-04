@@ -104,8 +104,65 @@ function runtimeScript(wasmResources) {
     window.__superHtmlWasmSupportInstalled = true;
 
     var NativeFetch = window.fetch;
-    var wasmResources = ${JSON.stringify(wasmResources)};
-    window.__superHtmlWasmResources = Object.assign(window.__superHtmlWasmResources || {}, wasmResources);
+    var embeddedWasmResources = ${JSON.stringify(wasmResources)};
+    var wasmResources = window.__superHtmlWasmResources || Object.create(null);
+    var wasmByteCache = window.__superHtmlWasmByteCache || Object.create(null);
+    var wasmModuleCache = window.__superHtmlWasmModuleCache || Object.create(null);
+    var perfReport = window.__superHtmlPerformance || {
+        version: 2,
+        bootStartedAt: typeof performance !== "undefined" && performance.now
+            ? performance.now() : Date.now(),
+        wasm: { eager: true, resources: Object.create(null), decodeMs: 0,
+            compileMs: 0, instantiateMs: 0, decodedBytes: 0, errors: 0 }
+    };
+    Object.assign(wasmResources, embeddedWasmResources);
+    embeddedWasmResources = null;
+    window.__superHtmlWasmResources = wasmResources;
+    window.__superHtmlWasmByteCache = wasmByteCache;
+    window.__superHtmlWasmModuleCache = wasmModuleCache;
+    window.__superHtmlPerformance = perfReport;
+    perfReport.wasm = perfReport.wasm || { eager: true, resources: Object.create(null),
+        decodeMs: 0, compileMs: 0, instantiateMs: 0, decodedBytes: 0, errors: 0 };
+    perfReport.wasm.resources = perfReport.wasm.resources || Object.create(null);
+    perfReport.longTasks = perfReport.longTasks || { count: 0, totalMs: 0, maxMs: 0 };
+
+    if (typeof PerformanceObserver === "function" && !perfReport.longTaskObserver) {
+        try {
+            perfReport.longTaskObserver = new PerformanceObserver(function (list) {
+                list.getEntries().forEach(function (entry) {
+                    var duration = Number(entry.duration) || 0;
+                    perfReport.longTasks.count++;
+                    perfReport.longTasks.totalMs += duration;
+                    perfReport.longTasks.maxMs = Math.max(perfReport.longTasks.maxMs, duration);
+                });
+            });
+            perfReport.longTaskObserver.observe({ type: "longtask", buffered: true });
+        } catch (error) {
+            perfReport.longTaskObserver = null;
+        }
+    }
+
+    function now() {
+        return typeof performance !== "undefined" && performance.now
+            ? performance.now() : Date.now();
+    }
+
+    function metricFor(key) {
+        var resources = perfReport.wasm.resources;
+        return resources[key] || (resources[key] = {
+            decodeMs: 0, compileMs: 0, instantiateMs: 0,
+            decodedBytes: 0, compileCount: 0, instantiateCount: 0,
+            cacheHits: 0, status: "embedded"
+        });
+    }
+
+    function reportError(key, phase, error) {
+        var metric = metricFor(key || "unknown");
+        metric.status = "error";
+        metric.errorPhase = phase;
+        metric.error = String(error && (error.message || error) || "unknown");
+        perfReport.wasm.errors++;
+    }
 
     function cleanUrl(value) {
         value = String(value == null ? "" : value).replace(/\\\\/g, "/");
@@ -125,38 +182,75 @@ function runtimeScript(wasmResources) {
         return list;
     }
 
-    function lookupMap(map, input) {
+    function ensureEngineCcAlias(map) {
+        if (!map || map["cocos-js/cc.js"]) return;
+        for (var key in map) {
+            if (key.indexOf("cocos-js/_virtual_cc-") !== -1 || key.indexOf("_virtual_cc-") !== -1) {
+                map["cocos-js/cc.js"] = map[key];
+                break;
+            }
+        }
+    }
+
+    function lookupMapEntry(map, input) {
         if (!map) return null;
+        ensureEngineCcAlias(map);
         var candidates = candidateUrls(input);
         for (var i = 0; i < candidates.length; i++) {
-            if (Object.prototype.hasOwnProperty.call(map, candidates[i])) return map[candidates[i]];
+            if (Object.prototype.hasOwnProperty.call(map, candidates[i])) {
+                return { key: candidates[i], value: map[candidates[i]] };
+            }
         }
 
         var clean = candidates[0] || "";
         for (var key in map) {
-            if (clean === key || clean.slice(-key.length - 1) === "/" + key) return map[key];
+            if (clean === key || clean.slice(-key.length - 1) === "/" + key) {
+                return { key: key, value: map[key] };
+            }
+        }
+
+        if (clean === "cocos-js/cc.js" || clean.endsWith("/cocos-js/cc.js") || clean === "cc.js") {
+            for (var key in map) {
+                if (key.indexOf("cocos-js/_virtual_cc-") !== -1 || key.indexOf("_virtual_cc-") !== -1) {
+                    map["cocos-js/cc.js"] = map[key];
+                    return { key: key, value: map[key] };
+                }
+            }
         }
 
         return null;
     }
 
+    function lookupMap(map, input) {
+        var entry = lookupMapEntry(map, input);
+        return entry ? entry.value : null;
+    }
+
     function lookupResource(input) {
-        var value = lookupMap(window.__superHtmlWasmResources, input);
-        if (value != null) return { value: value, wasm: true };
+        ensureEngineCcAlias(window.__res);
+        var entry = lookupMapEntry(wasmByteCache, input);
+        if (entry) {
+            metricFor(entry.key).cacheHits++;
+            return { key: entry.key, value: entry.value, wasm: true };
+        }
+        entry = lookupMapEntry(wasmResources, input);
+        if (entry) return { key: entry.key, value: entry.value, wasm: true };
 
         if (typeof window.getRes === "function") {
             var candidates = candidateUrls(input);
             for (var i = 0; i < candidates.length; i++) {
                 try {
-                    value = window.getRes(candidates[i]);
-                    if (value != null) return { value: value, wasm: /\\.wasm$/i.test(candidates[i]) };
+                    var value = window.getRes(candidates[i]);
+                    if (value != null) return { key: candidates[i], value: value,
+                        wasm: /\\.wasm$/i.test(candidates[i]) };
                 } catch (error) {}
             }
         }
 
-        value = lookupMap(window.__res, input);
-        if (value != null) {
-            return { value: value, wasm: /\\.wasm$/i.test(cleanUrl(input && input.url ? input.url : input)) };
+        entry = lookupMapEntry(window.__res, input);
+        if (entry) {
+            return { key: entry.key, value: entry.value,
+                wasm: /\\.wasm$/i.test(cleanUrl(input && input.url ? input.url : input)) };
         }
 
         return null;
@@ -193,18 +287,45 @@ function runtimeScript(wasmResources) {
         var value = resource.value;
         if (typeof value !== "string") return value;
         if (value.indexOf("data:") === 0) return dataUriToBytes(value);
-        if (mime === "application/wasm") return base64ToBytes(value);
+        if (mime === "application/wasm") {
+            var key = resource.key || "unknown";
+            var cached = wasmByteCache[key];
+            if (cached) {
+                metricFor(key).cacheHits++;
+                return cached;
+            }
+            var startedAt = now();
+            var bytes = base64ToBytes(value);
+            var elapsed = now() - startedAt;
+            var metric = metricFor(key);
+            metric.decodeMs += elapsed;
+            metric.decodedBytes = bytes.byteLength;
+            metric.status = "decoded";
+            perfReport.wasm.decodeMs += elapsed;
+            perfReport.wasm.decodedBytes += bytes.byteLength;
+            wasmByteCache[key] = bytes;
+            // The Uint8Array is the compact canonical copy. Drop the 4/3-sized
+            // base64 string before Cocos starts allocating the scene and Bullet heap.
+            delete wasmResources[key];
+            return bytes;
+        }
         return value;
     }
 
     function responseFor(input, resource) {
         var url = input && input.url ? input.url : input;
         var mime = mimeForUrl(url, resource.wasm);
-        return new Response(bodyForResource(resource, mime), {
+        var body = bodyForResource(resource, mime);
+        var response = new Response(body, {
             status: 200,
             statusText: "OK",
             headers: { "Content-Type": mime }
         });
+        if (resource.wasm) {
+            response.__superHtmlWasmKey = resource.key;
+            response.__superHtmlWasmBytes = body;
+        }
+        return response;
     }
 
     if (typeof Response === "function") {
@@ -219,6 +340,50 @@ function runtimeScript(wasmResources) {
     if (typeof WebAssembly !== "undefined") {
         var nativeCompileStreaming = WebAssembly.compileStreaming;
         var nativeInstantiateStreaming = WebAssembly.instantiateStreaming;
+        var nativeInstantiate = WebAssembly.instantiate;
+        var wasmModuleKeys = typeof WeakMap === "function" ? new WeakMap() : new Map();
+
+        function compileEmbedded(key, bytes) {
+            var cached = wasmModuleCache[key];
+            if (cached) {
+                metricFor(key).cacheHits++;
+                return cached;
+            }
+            var startedAt = now();
+            var metric = metricFor(key);
+            metric.compileCount++;
+            metric.status = "compiling";
+            var promise;
+            try {
+                promise = WebAssembly.compile(bytes).then(function (module) {
+                    var elapsed = now() - startedAt;
+                    metric.compileMs += elapsed;
+                    metric.status = "compiled";
+                    perfReport.wasm.compileMs += elapsed;
+                    wasmModuleKeys.set(module, key);
+                    return module;
+                }, function (error) {
+                    delete wasmModuleCache[key];
+                    reportError(key, "compile", error);
+                    throw error;
+                });
+            } catch (error) {
+                reportError(key, "compile", error);
+                throw error;
+            }
+            wasmModuleCache[key] = promise;
+            // Eager compilation may finish before the engine requests the module.
+            // Attach a rejection handler now so unsupported runtimes do not emit an
+            // unhandled rejection; the engine request still receives the same failure.
+            promise.catch(function () {});
+            return promise;
+        }
+
+        function compileEmbeddedResponse(response) {
+            var key = response && response.__superHtmlWasmKey;
+            var bytes = response && response.__superHtmlWasmBytes;
+            return key && bytes ? compileEmbedded(key, bytes) : null;
+        }
 
         function compileFromResponse(response) {
             return Promise.resolve(response)
@@ -229,13 +394,33 @@ function runtimeScript(wasmResources) {
         function instantiateFromResponse(response, imports) {
             return Promise.resolve(response)
                 .then(function (resolved) { return resolved.arrayBuffer(); })
-                .then(function (buffer) { return WebAssembly.instantiate(buffer, imports); });
+                .then(function (buffer) { return nativeInstantiate.call(WebAssembly, buffer, imports); });
         }
+
+        WebAssembly.instantiate = function superHtmlInstantiate(moduleOrBytes, imports) {
+            var key = wasmModuleKeys.get(moduleOrBytes);
+            if (!key) return nativeInstantiate.call(WebAssembly, moduleOrBytes, imports);
+            var startedAt = now();
+            var metric = metricFor(key);
+            metric.instantiateCount++;
+            return nativeInstantiate.call(WebAssembly, moduleOrBytes, imports).then(function (result) {
+                var elapsed = now() - startedAt;
+                metric.instantiateMs += elapsed;
+                metric.status = "instantiated";
+                perfReport.wasm.instantiateMs += elapsed;
+                return result;
+            }, function (error) {
+                reportError(key, "instantiate", error);
+                throw error;
+            });
+        };
 
         WebAssembly.compileStreaming = function superHtmlCompileStreaming(source) {
             return Promise.resolve(source).then(function (response) {
-                var backup = response && response.clone ? response.clone() : response;
+                var embedded = compileEmbeddedResponse(response);
+                if (embedded) return embedded;
                 if (nativeCompileStreaming) {
+                    var backup = response && response.clone ? response.clone() : response;
                     return nativeCompileStreaming.call(WebAssembly, Promise.resolve(response)).catch(function () {
                         return compileFromResponse(backup);
                     });
@@ -246,8 +431,27 @@ function runtimeScript(wasmResources) {
 
         WebAssembly.instantiateStreaming = function superHtmlInstantiateStreaming(source, imports) {
             return Promise.resolve(source).then(function (response) {
-                var backup = response && response.clone ? response.clone() : response;
+                var key = response && response.__superHtmlWasmKey;
+                var embedded = compileEmbeddedResponse(response);
+                if (embedded) {
+                    var startedAt = now();
+                    var metric = metricFor(key);
+                    metric.instantiateCount++;
+                    return embedded.then(function (module) {
+                        return nativeInstantiate.call(WebAssembly, module, imports).then(function (instance) {
+                            var elapsed = now() - startedAt;
+                            metric.instantiateMs += elapsed;
+                            metric.status = "instantiated";
+                            perfReport.wasm.instantiateMs += elapsed;
+                            return { module: module, instance: instance };
+                        });
+                    }).catch(function (error) {
+                        reportError(key, "instantiate", error);
+                        throw error;
+                    });
+                }
                 if (nativeInstantiateStreaming) {
+                    var backup = response && response.clone ? response.clone() : response;
                     return nativeInstantiateStreaming.call(WebAssembly, Promise.resolve(response), imports).catch(function () {
                         return instantiateFromResponse(backup, imports);
                     });
@@ -255,6 +459,19 @@ function runtimeScript(wasmResources) {
                 return instantiateFromResponse(response, imports);
             });
         };
+
+        // Begin compilation before Cocos boot. Engine requests reuse these exact
+        // promises, so this never compiles a module twice and keeps the work out of
+        // the first gameplay/impact frame.
+        Object.keys(wasmResources).forEach(function (key) {
+            try {
+                var resource = { key: key, value: wasmResources[key], wasm: true };
+                compileEmbedded(key, bodyForResource(resource, "application/wasm"));
+            } catch (error) {
+                reportError(key, "eager", error);
+            }
+        });
+        perfReport.wasm.eagerQueuedAt = now();
     }
     /* ${END_MARKER} */
 })();`;
@@ -343,4 +560,5 @@ module.exports = {
     restoreWasmFiles,
     cleanupHiddenWasmFiles,
     patchGeneratedHtml,
+    runtimeScript,
 };

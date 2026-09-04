@@ -452,48 +452,125 @@ function extractUuid(dump) {
 }
 
 /**
+ * Get the host <ui-panel> custom element for this inspector
+ */
+function getHostPanel(self) {
+  if (self && self.tagName === 'UI-PANEL') return self;
+  if (self && self.$this && self.$this.tagName) return self.$this;
+  if (self && self.$ && self.$.container) {
+    const root = self.$.container.getRootNode ? self.$.container.getRootNode() : null;
+    if (root && root.host) return root.host;
+    if (self.$.container.closest) {
+      const p = self.$.container.closest('ui-panel');
+      if (p) return p;
+    }
+    if (self.$.container.parentElement) return self.$.container.parentElement;
+  }
+  return null;
+}
+
+/**
+ * Inject global CSS to completely hide Cocos default JSON code preview
+ */
+function injectGlobalHideStyle(host) {
+  try {
+    const doc = (host && host.ownerDocument) ? host.ownerDocument : document;
+    const roots = [doc];
+    if (host) {
+      const rootNode = host.getRootNode ? host.getRootNode() : null;
+      if (rootNode && rootNode !== doc && !roots.includes(rootNode)) roots.push(rootNode);
+      if (host.parentElement && host.parentElement.getRootNode) {
+        const parentRoot = host.parentElement.getRootNode();
+        if (parentRoot && !roots.includes(parentRoot)) roots.push(parentRoot);
+      }
+    }
+
+    roots.forEach((root) => {
+      if (!root) return;
+      const existing = root.querySelector ? root.querySelector('#cc-hide-default-json-preview') : null;
+      if (!existing) {
+        const style = doc.createElement('style');
+        style.id = 'cc-hide-default-json-preview';
+        style.textContent = `
+          .content-section > ui-panel[src*="json.js"],
+          .content-section > ui-panel[src*="assets/json"],
+          .content-section > ui-panel[src*="assets\\\\json"],
+          .asset-json,
+          .content-header {
+            display: none !important;
+          }
+        `;
+        if (root.head) root.head.appendChild(style);
+        else if (root.appendChild) root.appendChild(style);
+      }
+    });
+  } catch (e) {}
+}
+
+/**
  * Automatically hides Cocos Creator default read-only code preview and header elements
  */
 function hideDefaultPreview(self) {
   try {
-    const container = self.$.container;
-    if (!container) return;
+    const host = getHostPanel(self);
+    if (!host) return;
 
-    // Traverse ancestors up to 5 levels
-    let current = container.parentElement;
-    let depth = 0;
-    while (current && depth < 5 && current !== document.body) {
-      const children = Array.from(current.children);
+    injectGlobalHideStyle(host);
+
+    const hideSiblings = () => {
+      const parent = host.parentElement;
+      if (!parent) return;
+
+      const children = Array.from(parent.children || []);
       for (const child of children) {
-        if (child !== container && !container.contains(child)) {
-          const tag = (child.tagName || '').toLowerCase();
-          const cls = child.className || '';
-          if (
-            tag.includes('preview') ||
-            tag.includes('code') ||
-            cls.includes('preview') ||
-            cls.includes('code') ||
-            cls.includes('readonly') ||
-            cls.includes('header') ||
-            child.querySelector('pre, code, ui-code, .preview, .monaco-editor, textarea[readonly]')
-          ) {
-            child.style.display = 'none';
-          }
+        if (child !== host && !host.contains(child)) {
+          child.style.setProperty('display', 'none', 'important');
         }
       }
-      current = current.parentElement;
-      depth++;
+
+      host.style.setProperty('display', 'block', 'important');
+      host.style.setProperty('flex', '1', 'important');
+      host.style.setProperty('height', '100%', 'important');
+      host.style.setProperty('min-height', '0', 'important');
+
+      parent.style.setProperty('display', 'flex', 'important');
+      parent.style.setProperty('flex-direction', 'column', 'important');
+      parent.style.setProperty('height', '100%', 'important');
+
+      const grandParent = parent.parentElement;
+      if (grandParent) {
+        const contentHeader = grandParent.querySelector ? grandParent.querySelector('.content-header') : null;
+        if (contentHeader) {
+          contentHeader.style.setProperty('display', 'none', 'important');
+        }
+      }
+    };
+
+    hideSiblings();
+
+    const parent = host.parentElement;
+    if (parent && !parent.__jsonInspectorHideObserver) {
+      const observer = new MutationObserver(() => {
+        hideSiblings();
+      });
+      observer.observe(parent, { childList: true, subtree: true });
+      parent.__jsonInspectorHideObserver = observer;
     }
 
-    // Shadow DOM / Root query
-    const root = container.getRootNode ? container.getRootNode() : document;
-    if (root && root.querySelectorAll) {
-      const defaultElements = root.querySelectorAll('ui-asset-preview, .preview, .code-preview, .text-preview, ui-section[name="preview"], .monaco-editor, pre');
-      defaultElements.forEach(el => {
-        if (!container.contains(el) && el !== container) {
-          el.style.display = 'none';
-        }
-      });
+    // Traverse root / ancestor tree to hide any other .asset-json or ui-code
+    let cur = host;
+    let depth = 0;
+    while (cur && depth < 10) {
+      if (cur.querySelectorAll) {
+        const previews = cur.querySelectorAll('.asset-json, ui-panel[src*="json.js"], ui-panel[src*="assets/json"], ui-panel[src*="assets\\\\json"]');
+        previews.forEach((p) => {
+          if (p !== host && !host.contains(p)) {
+            p.style.setProperty('display', 'none', 'important');
+          }
+        });
+      }
+      cur = cur.parentElement || (cur.getRootNode && cur.getRootNode().host);
+      depth++;
     }
   } catch (e) {
     // ignore
@@ -508,8 +585,10 @@ exports.ready = function () {
   self.originalData = null;
 
   hideDefaultPreview(self);
-  setTimeout(() => hideDefaultPreview(self), 50);
-  setTimeout(() => hideDefaultPreview(self), 200);
+  setTimeout(() => hideDefaultPreview(self), 30);
+  setTimeout(() => hideDefaultPreview(self), 100);
+  setTimeout(() => hideDefaultPreview(self), 300);
+  setTimeout(() => hideDefaultPreview(self), 600);
 
   // Save Button
   if (self.$.btnSave) {
@@ -673,7 +752,10 @@ exports.update = function (dump) {
   }
 
   hideDefaultPreview(self);
-  setTimeout(() => hideDefaultPreview(self), 50);
+  setTimeout(() => hideDefaultPreview(self), 30);
+  setTimeout(() => hideDefaultPreview(self), 100);
+  setTimeout(() => hideDefaultPreview(self), 300);
+  setTimeout(() => hideDefaultPreview(self), 600);
 
   self.loadAssetData(rawJson);
 };

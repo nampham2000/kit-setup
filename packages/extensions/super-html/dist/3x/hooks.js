@@ -3,8 +3,12 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.onAfterBuild = void 0;
 
+const path = require("path");
 const CocosMain = require("../platform/cocos/cocos_main").default;
+const buildCache = require("../platform/cocos/cache").default;
 const wasmSupport = require("../../custom-wasm-support");
+const buildPolicy = require("../../custom-build-policy");
+const engineSupport = require("../../custom-engine-support");
 
 function isWebBuild(options) {
     return options && (options.platform === "web-mobile" || options.platform === "web-desktop");
@@ -54,7 +58,13 @@ function runSuperHtml(buildDir) {
         }
 
         try {
-            new CocosMain(Editor.App.version, buildDir, finish);
+            const projectRoot = Editor.Project.path;
+            const obfuscate = buildPolicy.readProjectPolicy(projectRoot);
+            if (obfuscate !== undefined) {
+                console.log(`[super-html] JavaScript obfuscation: ${obfuscate} (playable-config.json); minification unchanged.`);
+            }
+            buildPolicy.withObfuscationPolicy(buildCache, obfuscate,
+                () => new CocosMain(Editor.App.version, buildDir, finish));
         } catch (error) {
             fail(error);
         }
@@ -67,6 +77,11 @@ exports.onAfterBuild = async function onAfterBuild(options, result) {
     const buildDir = result && result.dest;
     if (!buildDir) return;
 
+    const engineAliasState = engineSupport.prepareEngineAlias(buildDir);
+    if (engineAliasState) {
+        console.log(`[super-html] engine alias prepared: cc.js -> ${engineAliasState.virtualCcName}`);
+    }
+
     const hiddenWasmFiles = wasmSupport.hideWasmFiles(buildDir);
 
     try {
@@ -75,6 +90,7 @@ exports.onAfterBuild = async function onAfterBuild(options, result) {
         console.error(error);
     } finally {
         wasmSupport.restoreWasmFiles(hiddenWasmFiles);
+        engineSupport.restoreEngineAlias(engineAliasState);
     }
 
     try {
@@ -88,5 +104,17 @@ exports.onAfterBuild = async function onAfterBuild(options, result) {
         console.error("[super-html] wasm support patch failed", error);
     } finally {
         wasmSupport.cleanupHiddenWasmFiles(hiddenWasmFiles);
+    }
+
+    try {
+        const superHtmlDir = path.join(path.dirname(buildDir), "super-html");
+        const enginePatched = await engineSupport.patchAllBuildOutputs(superHtmlDir);
+        if (enginePatched.html || enginePatched.zip) {
+            console.log(
+                `[super-html] engine alias: patched ${enginePatched.html} html file(s), ${enginePatched.zip} zip file(s).`
+            );
+        }
+    } catch (error) {
+        console.error("[super-html] engine alias patch failed", error);
     }
 };

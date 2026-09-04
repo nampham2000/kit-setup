@@ -101,6 +101,10 @@ if exist "%~2\playable-cli.config_TEMPLATE.cjs" (
     call :copyFileIfExists "%~2\playable-cli.config.cjs" "%~3\tools\playable-build\playable-cli.config.cjs" "playable-cli.config.cjs"
 )
 if !errorlevel! neq 0 exit /b !errorlevel!
+if exist "%~2\.npmrc" (
+    call :copyFileIfExists "%~2\.npmrc" "%~1\.npmrc" ".npmrc"
+)
+if !errorlevel! neq 0 exit /b !errorlevel!
 echo [ok] template config applied
 exit /b 0
 
@@ -132,7 +136,7 @@ if not exist "%~1\" (
     exit /b 0
 )
 if not exist "%~2\" mkdir "%~2"
-call node -e "const fs=require('fs'),path=require('path');const source=process.argv[1],target=process.argv[2],label=process.argv[3];const isObj=v=>Boolean(v)&&typeof v==='object'&&Array.isArray(v)===false;const merge=(tmpl,proj)=>{if(isObj(tmpl)===false||isObj(proj)===false)return proj;const out={...tmpl};for(const [k,v] of Object.entries(proj))out[k]=Object.prototype.hasOwnProperty.call(tmpl,k)?merge(tmpl[k],v):v;return out};let copied=0,merged=0,skipped=0;function walk(dir){for(const ent of fs.readdirSync(dir,{withFileTypes:true})){const src=path.join(dir,ent.name);const rel=path.relative(source,src);const dst=path.join(target,rel);if(ent.isDirectory()){fs.mkdirSync(dst,{recursive:true});walk(src);continue}fs.mkdirSync(path.dirname(dst),{recursive:true});if(fs.existsSync(dst)===false){fs.copyFileSync(src,dst);copied++;continue}if(path.extname(ent.name).toLowerCase()==='.json'){const tmpl=JSON.parse(fs.readFileSync(src,'utf8').replace(/^\uFEFF/,''));const proj=JSON.parse(fs.readFileSync(dst,'utf8').replace(/^\uFEFF/,''));fs.writeFileSync(dst,JSON.stringify(merge(tmpl,proj),null,2)+'\n');merged++;continue}skipped++}}walk(source);console.log('[ok] '+label+' merged project-wins (copied='+copied+' merged='+merged+' skipped='+skipped+')');" "%~1" "%~2" "%~3"
+call node -e "const fs=require('fs'),path=require('path');const source=process.argv[1],target=process.argv[2],label=process.argv[3];const isObj=v=>Boolean(v)&&typeof v==='object'&&Array.isArray(v)===false;const merge=(tmpl,proj)=>{if(isObj(tmpl)===false||isObj(proj)===false)return proj;const out={...tmpl};for(const [k,v] of Object.entries(proj))out[k]=Object.prototype.hasOwnProperty.call(tmpl,k)?merge(tmpl[k],v):v;return out};let copied=0,merged=0,skipped=0;function walk(dir){for(const ent of fs.readdirSync(dir,{withFileTypes:true})){const src=path.join(dir,ent.name);const rel=path.relative(source,src);const dst=path.join(target,rel);if(ent.isDirectory()){fs.mkdirSync(dst,{recursive:true});walk(src);continue}fs.mkdirSync(path.dirname(dst),{recursive:true});if(fs.existsSync(dst)===false){fs.copyFileSync(src,dst);copied++;continue}if(path.extname(ent.name).toLowerCase()==='.json'){try{const tmpl=JSON.parse(fs.readFileSync(src,'utf8').replace(/^\uFEFF/,''));const projRaw=fs.readFileSync(dst,'utf8').replace(/^\uFEFF/,'');const proj=JSON.parse(projRaw);const next=JSON.stringify(merge(tmpl,proj),null,2)+'\n';if(next.trim()===projRaw.trim()){skipped++;continue}fs.writeFileSync(dst,next);merged++;}catch(e){skipped++;}continue}skipped++}}walk(source);console.log('[ok] '+label+' merged project-wins (copied='+copied+' merged='+merged+' skipped='+skipped+')');" "%~1" "%~2" "%~3"
 if errorlevel 1 (
     echo [ERROR] Failed to merge %~3.
     if /I not "%SETUP_ALL_NO_PAUSE%"=="1" pause
@@ -266,7 +270,7 @@ if not exist "%~1\package.json" (
 echo.
 echo ==^> Installing: %~2
 pushd "%~1"
-call npm install
+call npm install --no-audit --no-fund --prefer-offline
 set "INSTALL_EXIT=!errorlevel!"
 popd
 if !INSTALL_EXIT! neq 0 (
