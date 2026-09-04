@@ -12,6 +12,30 @@ try {
     } catch (e2) {}
 }
 
+let UglifyJS = null;
+try {
+    UglifyJS = require("uglify-js");
+} catch (e) {}
+
+const ENGINE_COMPANIONS = [
+    {
+        family: "meshopt",
+        importPrefix: "meshopt_decoder.wasm-",
+        sourceJs: ["native", "external", "emscripten", "meshopt", "meshopt_decoder.wasm.js"],
+        sourceWasm: ["native", "external", "emscripten", "meshopt", "meshopt_decoder.wasm.wasm"],
+        assetPrefix: "meshopt_decoder.wasm-",
+        fallbackAssetName: "meshopt_decoder.wasm.wasm",
+    },
+    {
+        family: "bullet",
+        importPrefix: "bullet.release.wasm-",
+        sourceJs: ["native", "external", "emscripten", "bullet", "bullet.release.wasm.js"],
+        sourceWasm: ["native", "external", "emscripten", "bullet", "bullet.release.wasm.wasm"],
+        assetPrefix: "bullet.release.wasm-",
+        fallbackAssetName: "bullet.release.wasm.wasm",
+    },
+];
+
 function ensureDir(dir) {
     fs.mkdirSync(dir, { recursive: true });
 }
@@ -57,11 +81,164 @@ function findVirtualCcInDir(dir) {
     return files.find((f) => f.startsWith("_virtual_cc-") && f.endsWith(".js")) || null;
 }
 
+function findDynamicEngineImports(code) {
+    const result = [];
+    const seen = new Set();
+    const pattern = /\.import\(["']\.\/([^"']+\.js)["']\)/g;
+    let match;
+    while ((match = pattern.exec(code))) {
+        const name = match[1];
+        if (name !== path.basename(name) || seen.has(name)) continue;
+        seen.add(name);
+        result.push(name);
+    }
+    return result;
+}
+
+function candidateEngineRoots(explicitRoot) {
+    const bases = [];
+    if (explicitRoot) bases.push(explicitRoot);
+    if (typeof Editor !== "undefined" && Editor && Editor.App && Editor.App.path) {
+        bases.push(Editor.App.path);
+    }
+    if (typeof process !== "undefined") {
+        if (process.resourcesPath) bases.push(process.resourcesPath);
+        if (process.execPath) bases.push(path.dirname(process.execPath));
+    }
+
+    const candidates = [];
+    const seen = new Set();
+    for (const base of bases) {
+        for (const candidate of [
+            base,
+            path.join(base, "resources", "resources", "3d", "engine"),
+            path.join(base, "resources", "3d", "engine"),
+            path.join(base, "..", "resources", "resources", "3d", "engine"),
+        ]) {
+            const resolved = path.resolve(candidate);
+            if (seen.has(resolved)) continue;
+            seen.add(resolved);
+            candidates.push(resolved);
+        }
+    }
+    return candidates;
+}
+
+function findEngineRoot(explicitRoot) {
+    return candidateEngineRoots(explicitRoot).find((candidate) =>
+        fs.existsSync(path.join(candidate, "native", "external", "emscripten"))) || null;
+}
+
+function minifyEngineSource(source, label) {
+    if (!UglifyJS) return source;
+    const result = UglifyJS.minify(source, {
+        compress: true,
+        mangle: true,
+        output: { comments: false },
+    });
+    if (result.error) {
+        throw new Error(`[super-html] failed to minify ${label}: ${result.error.message}`);
+    }
+    return result.code;
+}
+
+function createEngineGlueModule(family, source) {
+    if (family === "meshopt") {
+        const body = source.replace(/export\s+default\s+MeshoptDecoder\s*;?\s*$/, "");
+        if (body === source) {
+            throw new Error("[super-html] unsupported meshopt decoder source: default export not found");
+        }
+        const code = minifyEngineSource(body, "meshopt decoder");
+        return `System.register([],function(e){"use strict";return{execute:function(){${code};e("default",MeshoptDecoder)}}});`;
+    }
+
+    if (family === "bullet") {
+        const code = minifyEngineSource(source, "Bullet runtime");
+        return `System.register([],function(e){"use strict";return{execute:function(){var module={exports:{}},exports=module.exports;${code};var runtime=module.exports&&Object.keys(module.exports).length?module.exports:Bullet;e("b",Object.freeze({__proto__:null,default:runtime}))}}});`;
+    }
+
+    throw new Error(`[super-html] unsupported engine companion family: ${family}`);
+}
+
+function createEngineAssetModule(assetRelative) {
+    return `System.register([],function(e){"use strict";return{execute:function(){e("default",${JSON.stringify(assetRelative)})}}});`;
+}
+
+function ensureEngineWasmAsset(cocosJsDir, config, engineRoot) {
+    const assetsDir = path.join(cocosJsDir, "assets");
+    ensureDir(assetsDir);
+    const existing = fs.readdirSync(assetsDir).find((name) =>
+        name.startsWith(config.assetPrefix) && name.endsWith(".wasm"));
+    if (existing) return `assets/${existing}`;
+
+    const source = path.join(engineRoot, ...config.sourceWasm);
+    if (!fs.existsSync(source)) {
+        throw new Error(`[super-html] missing ${config.family} wasm source: ${source}`);
+    }
+    const target = path.join(assetsDir, config.fallbackAssetName);
+    fs.copyFileSync(source, target);
+    return `assets/${config.fallbackAssetName}`;
+}
+
+function prepareEngineCompanions(cocosJsDir, virtualCcName, options = {}) {
+    const virtualPath = path.join(cocosJsDir, virtualCcName);
+    const imports = findDynamicEngineImports(fs.readFileSync(virtualPath, "utf8"));
+    const missing = imports.filter((name) => !fs.existsSync(path.join(cocosJsDir, name)));
+    if (!missing.length) return { created: [], imports, engineRoot: null };
+
+    const relevantConfigs = ENGINE_COMPANIONS.filter((config) =>
+        missing.some((name) => name.startsWith(config.importPrefix)));
+    if (!relevantConfigs.length) return { created: [], imports, engineRoot: null };
+
+    const engineRoot = findEngineRoot(options.engineRoot);
+    if (!engineRoot) {
+        throw new Error(
+            `[super-html] cannot restore missing engine modules (${missing.join(", ")}): Cocos engine root not found`
+        );
+    }
+
+    const created = [];
+    for (const config of relevantConfigs) {
+        const familyImports = imports.filter((name) => name.startsWith(config.importPrefix));
+        if (familyImports.length < 2) {
+            throw new Error(`[super-html] unsupported ${config.family} import layout in ${virtualCcName}`);
+        }
+
+        const glueName = familyImports[0];
+        const assetModuleName = familyImports[1];
+        const gluePath = path.join(cocosJsDir, glueName);
+        const assetModulePath = path.join(cocosJsDir, assetModuleName);
+        const assetRelative = ensureEngineWasmAsset(cocosJsDir, config, engineRoot);
+
+        if (!fs.existsSync(gluePath)) {
+            const sourcePath = path.join(engineRoot, ...config.sourceJs);
+            if (!fs.existsSync(sourcePath)) {
+                throw new Error(`[super-html] missing ${config.family} JavaScript source: ${sourcePath}`);
+            }
+            const source = fs.readFileSync(sourcePath, "utf8");
+            fs.writeFileSync(gluePath, createEngineGlueModule(config.family, source), "utf8");
+            created.push(glueName);
+        }
+
+        if (!fs.existsSync(assetModulePath)) {
+            fs.writeFileSync(assetModulePath, createEngineAssetModule(assetRelative), "utf8");
+            created.push(assetModuleName);
+        }
+    }
+
+    const unresolved = imports.filter((name) => !fs.existsSync(path.join(cocosJsDir, name)));
+    if (unresolved.length) {
+        throw new Error(`[super-html] unresolved dynamic engine modules: ${unresolved.join(", ")}`);
+    }
+
+    return { created, imports, engineRoot };
+}
+
 /**
  * Prepares engine files in buildDir/cocos-js:
  * Ensures BOTH `cc.js` (SystemJS wrapper) AND `_virtual_cc-<hash>.js` (engine payload) exist.
  */
-function prepareEngineAlias(buildDir) {
+function prepareEngineAlias(buildDir, options = {}) {
     if (!buildDir || !fs.existsSync(buildDir)) return null;
 
     const cocosJsDir = path.join(buildDir, "cocos-js");
@@ -87,11 +264,14 @@ function prepareEngineAlias(buildDir) {
         }
     }
 
+    const engineModules = prepareEngineCompanions(cocosJsDir, virtualCcName, options);
+
     return {
         buildDir,
         cocosJsDir,
         virtualCcName,
         ccJsPath,
+        engineModules,
     };
 }
 
@@ -279,6 +459,11 @@ async function patchAllBuildOutputs(outputDir) {
 }
 
 module.exports = {
+    findDynamicEngineImports,
+    findEngineRoot,
+    createEngineGlueModule,
+    createEngineAssetModule,
+    prepareEngineCompanions,
     getCcWrapperCode,
     prepareEngineAlias,
     restoreEngineAlias,

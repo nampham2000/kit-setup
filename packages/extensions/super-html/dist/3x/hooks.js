@@ -80,6 +80,11 @@ exports.onAfterBuild = async function onAfterBuild(options, result) {
     const engineAliasState = engineSupport.prepareEngineAlias(buildDir);
     if (engineAliasState) {
         console.log(`[super-html] engine alias prepared: cc.js -> ${engineAliasState.virtualCcName}`);
+        if (engineAliasState.engineModules.created.length) {
+            console.log(
+                `[super-html] restored engine companion modules: ${engineAliasState.engineModules.created.join(", ")}`
+            );
+        }
     }
 
     const hiddenWasmFiles = wasmSupport.hideWasmFiles(buildDir);
