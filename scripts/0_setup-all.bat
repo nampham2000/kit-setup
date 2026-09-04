@@ -30,6 +30,8 @@ if !errorlevel! neq 0 exit /b !errorlevel!
 call :ensureDependencies "%ROOT%" "%SHARED_KIT%"
 if !errorlevel! neq 0 exit /b !errorlevel!
 
+call :warnIfCocosRunning
+
 call :applyTemplateConfig "%ROOT%" "%SHARED_KIT%\template-config" "%SHARED_KIT%"
 if !errorlevel! neq 0 exit /b !errorlevel!
 
@@ -46,6 +48,12 @@ call :syncExtensions "%ROOT%" "%SHARED_KIT%"
 if !errorlevel! neq 0 exit /b !errorlevel!
 
 call :install "%ROOT%" "root"
+if exist "%SHARED_KIT%\packages\playable-sdk\node_modules\" (
+    rmdir /s /q "%SHARED_KIT%\packages\playable-sdk\node_modules" >nul 2>&1
+)
+if exist "%SHARED_KIT%\packages\playable-core\node_modules\" (
+    rmdir /s /q "%SHARED_KIT%\packages\playable-core\node_modules" >nul 2>&1
+)
 
 if exist "%ROOT%\extensions\" (
     for /d %%D in ("%ROOT%\extensions\*") do (
@@ -106,6 +114,18 @@ if exist "%~2\.npmrc" (
 )
 if !errorlevel! neq 0 exit /b !errorlevel!
 echo [ok] template config applied
+exit /b 0
+
+:warnIfCocosRunning
+tasklist /FI "IMAGENAME eq CocosCreator.exe" 2>nul | find /I "CocosCreator.exe" >nul
+if !errorlevel! equ 0 (
+    echo.
+    echo [WARN] Cocos Creator is currently running.
+    echo        Modifying profiles and installing packages while the editor is open
+    echo        can cause file lock errors ^(e.g. scene.json^) or script compilation issues.
+    echo        For best results, close Cocos Creator before running setup.
+    echo.
+)
 exit /b 0
 
 :installVscodeMcpAutostart
@@ -221,6 +241,12 @@ if not exist "%~2\packages\playable-sdk\package.json" (
 if not exist "%~2\packages\playable-core\package.json" (
     echo [skip] playable-core package source not found.
     exit /b 0
+)
+if exist "%~2\packages\playable-sdk\node_modules\" (
+    rmdir /s /q "%~2\packages\playable-sdk\node_modules" >nul 2>&1
+)
+if exist "%~2\packages\playable-core\node_modules\" (
+    rmdir /s /q "%~2\packages\playable-core\node_modules" >nul 2>&1
 )
 echo.
 echo ==^> Ensuring root dependencies and scripts
