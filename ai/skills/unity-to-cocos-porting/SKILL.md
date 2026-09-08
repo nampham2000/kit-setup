@@ -326,6 +326,16 @@ simulation may initially overlap the target but will drift when its owner transf
 If the converter was fixed after an asset was generated, re-port or migrate that
 prefab and audit every emitter; a newer porter does not repair committed old output.
 
+Do not infer a lifetime from a looping hint's particle duration. When Unity calls
+`SetParticleLoop(effect, true)` and stores the instance on its `FindableObject`,
+the target owns that effect: it intentionally remains visible until
+`TryMarkFound -> ClearHintEffect -> StopEmittingAndClear`, or until level teardown
+destroys the owner. Preserve those release paths in the Cocos pool instead of
+adding a timeout. Runtime acceptance should activate the hint, tap the exact hinted
+target through the normal input path, and prove the target reference, active-effect
+registry, node activity, and emitter playback are all cleared; also verify level
+change clears an untouched hint.
+
 Unity UI Particle uses `CanvasRenderer`, so its Canvas sorting can place it over
 HUD graphics. Parenting a Cocos `ParticleSystem` under a Canvas does not provide
 the same order: the 3D particle pass still runs before the UI batch. When the
