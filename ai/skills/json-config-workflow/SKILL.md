@@ -125,6 +125,15 @@ export class MyGameplayController extends Component {
 
 ## 4. Visual Inspector Editing Workflow
 
+For a playable with level-to-level transition popups and a separate final-win
+screen, keep one imported sliced button/font treatment and assign behavior from
+session state. The transition state labels it `Next` and advances the sequence;
+the terminal win state labels it from config and calls `PlayableCTAController`
+with a stable source name. Store URLs must come from the top-level `cta` config.
+Resolve the real package/store listing when possible, clear an unknown platform
+URL so the controller can fall back to the known one, and never ship template
+package IDs or fabricated App Store IDs.
+
 1. In Cocos Creator **Assets** panel, click on `assets/resources/playable-config.json`.
 2. The **Inspector** panel will render the custom `json-scriptable-inspector` UI:
    - Visual groups for **CTA**, **AUDIO**, **GAMEPLAY**, **CAMERA**, **HERO**, **TRACKING**, and **CUSTOM**.
