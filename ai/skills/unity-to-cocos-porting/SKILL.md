@@ -276,3 +276,11 @@ bursts with one-shot launch rays. For Unity built-in particle shaders, only
 an unused alpha of zero will erase the Cocos particle or trail. Before emitting
 a shared runtime helper, search the complete `assets/script` subtree for the
 same ccclass and reuse it to avoid duplicate class and UUID registration.
+
+Unity UI Particle uses `CanvasRenderer`, so its Canvas sorting can place it over
+HUD graphics. Parenting a Cocos `ParticleSystem` under a Canvas does not provide
+the same order: the 3D particle pass still runs before the UI batch. When the
+effect must cross over HUD sprites, render only that effect through a dedicated
+custom layer and an orthographic depth-only camera with priority above the UI
+camera. Keep the background on a different layer and match the UI camera's
+position, ortho height, near plane, and far plane.
