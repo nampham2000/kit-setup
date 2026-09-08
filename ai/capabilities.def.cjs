@@ -98,7 +98,7 @@ const CAPABILITIES = [
     id: 'unity.intel.doctor',
     group: 'onboarding',
     title: 'Kiểm tra Unity Editor, project lock và Unity-MCP endpoint',
-    npm: 'npm run unity:intel:doctor -- --project <UnityProjectRoot>',
+    npm: 'npm run unity:intel:doctor -- -- --project <UnityProjectRoot>',
     cmd: `node ${TOOLS}/unity-intel-cli.cjs doctor`,
     args: ['--project <UnityProjectRoot>'],
     optional: ['--unity <file>', '--mcp-url <url>', '--timeout-ms <n>', '--json'],
@@ -119,7 +119,7 @@ const CAPABILITIES = [
     id: 'unity.intel.setup',
     group: 'port',
     title: 'Cài Unity-side compact scanner + Unity-MCP và reload tự động',
-    npm: 'npm run unity:intel:setup -- --project <UnityProjectRoot>',
+    npm: 'npm run unity:intel:setup -- -- --project <UnityProjectRoot>',
     cmd: `node ${TOOLS}/unity-intel-cli.cjs setup`,
     args: ['--project <UnityProjectRoot>'],
     optional: [
@@ -151,7 +151,7 @@ const CAPABILITIES = [
     id: 'port.preflight',
     group: 'port',
     title: 'Unity port preflight: playable-core brief + full high audit + fresh mutation receipt',
-    npm: 'npm run ai:port:preflight -- --project <UnityProjectRoot>',
+    npm: 'npm run ai:port:preflight -- -- --project <UnityProjectRoot>',
     cmd: `node ${TOOLS}/unity-intel-cli.cjs preflight --json`,
     args: ['--project <UnityProjectRoot>'],
     optional: [
@@ -252,7 +252,7 @@ const CAPABILITIES = [
     id: 'unity.intel.scan',
     group: 'port',
     title: 'Scan compact Unity project qua static + Unity-MCP live provider',
-    npm: 'npm run ai:unity:scan -- --project <UnityProjectRoot>',
+    npm: 'npm run ai:unity:scan -- -- --project <UnityProjectRoot>',
     cmd: `node ${TOOLS}/unity-intel-cli.cjs scan --json`,
     args: ['--project <UnityProjectRoot>'],
     optional: [
@@ -279,7 +279,7 @@ const CAPABILITIES = [
     id: 'unity.intel.query',
     group: 'port',
     title: 'Đọc một slice Unity index có cursor và payload giới hạn',
-    npm: 'npm run ai:unity:query -- --project <UnityProjectRoot> --section <name>',
+    npm: 'npm run ai:unity:query -- -- --project <UnityProjectRoot> --section <name>',
     cmd: `node ${TOOLS}/unity-intel-cli.cjs query --json`,
     args: ['--project <UnityProjectRoot>', '--section <name>'],
     optional: [
@@ -301,7 +301,7 @@ const CAPABILITIES = [
     id: 'port.plan',
     group: 'port',
     title: 'Phân tích project Unity và lập kế hoạch port',
-    npm: 'npm run ai:port:plan -- --project <UnityProjectRoot>',
+    npm: 'npm run ai:port:plan -- -- --project <UnityProjectRoot>',
     cmd: `node ${TOOLS}/port-plan.cjs`,
     args: ['--project <UnityProjectRoot>'],
     optional: [
@@ -449,12 +449,14 @@ const CAPABILITIES = [
       'Nếu Cocos Creator không mở, UUID sub-asset của sprite/model chưa nối được: report ghi rõ, mở editor rồi chạy lại.',
       'Cache theo phạm vi --src: sửa MỘT file trong phạm vi sẽ khiến cả phạm vi port lại (đổi lấy việc không bao giờ trả output cũ sai).',
       'Font không được mặc định rơi về system font: porter lần theo TTF/webfont qua TMP hoặc Unity Font dependency, copy + wire UUID; font không được Cocos nạp trực tiếp sẽ qua font.convert. Chỉ fallback system font sau khi resolver/converter thất bại, giữ Bold/Italic/Underline/Shadow/Outline/alignment/wrapping và ghi `high` vào report.',
+      'Unity Image `m_Type: 1` phải thành Cocos SLICED và mang `spriteBorder` từ TextureImporter sang borderLeft/Bottom/Right/Top của SpriteFrame. Khi asset đích đã tồn tại, vẫn refresh importer metadata; clone sâu subMetas trước khi so sánh để thay đổi nested border thực sự được ghi.',
       'Stripped Transform của nested PrefabInstance chỉ chứa link + m_Modifications. Mọi field transform/name/layer/active không được override phải kế thừa source prefab thật; không dùng identity/default parser làm base vì sẽ âm thầm reset scale/position/rotation của VFX/model con.',
       'Sau khi ghi asset, porter yêu cầu Cocos-MCP refresh `db://assets/unity_imported`, rồi kiểm tra cả importer state ở root và mọi `subMetas`; còn trạng thái `imported: false` thì fail thay vì để preview dùng asset hỏng. `--no-import-wait` chỉ dùng khi chủ ý tách bước import/finalize.',
       'Sau khi ghi output, porter tự chạy engine.features một lần cho cả batch: Profile API trước, guarded engine.json fallback sau; chỉ complete khi preview import map đã apply. Dùng --no-engine-feature-repair chỉ khi chủ ý tách bước này.',
       'Không tự áp Unity maxTextureSize cho mọi ảnh. Texture-only đã xác minh có thể khai báo custom.assetImport.textureMaxSizes trong playable-config.json (key tương đối Assets/, value max px); cần sharp. Giữ alpha/UUID và cache theo source/output/cap; đổi cap vô hiệu prefab cache. Sliced/UI sprite cần remap pixel rect và logical size riêng.',
       'Sprite animation (m_PPtrCurves) hỗ trợ whole-image sprite; frame chưa resolve hoặc sprite slice báo high. Particle UV Sprites chỉ tự xử lý một whole-image sprite bằng material riêng; nhiều sprite/slice cần bake atlas, không thay bằng grid tiles.',
       'Unity moveWithTransform là enum Local=0/World=1, ngược Cocos. Custom simulation space vẫn cần gán transform. Runtime helper sinh vào assets/script; chỉ tự di chuyển output assets/scripts cũ khi nội dung còn khớp template và UUID không xung đột, nếu không sẽ báo high.',
+      'ParticleSystemRenderer dùng material slot 0 cho particle và slot 1 cho trail; slot 1 phải dùng Cocos builtin-particle-trail và texture riêng. Giữ loop theo từng emitter. Với Unity built-in particle shader chỉ map _TintColor, không lấy _Color vendor dư thừa có alpha 0. Runtime helper phải reuse cùng ccclass đã có trong mọi subfolder assets/script để tránh duplicate UUID/class.',
     ],
     status: 'partial',
     verify: 'npm run ai:verify',
@@ -1285,7 +1287,7 @@ const CORE_RULES = [
   },
   {
     id: 'unity-preflight',
-    rule: 'Trước khi agent đọc raw Unity source hoặc chạy bất kỳ port tool có ghi output, BẮT BUỘC chạy `npm run ai:port:preflight -- --project <UnityProjectRoot>` (hoặc MCP `scanUnityProject`) và đọc `decision`, `coreGameplay`, `features`, `obligationIndex`, `coreObligationIndex`, `obligations`. Chỉ query evidence bounded khi brief yêu cầu. Hard blocker chặn implement; source high trong core/adapter phải được giải quyết, source high deferred phải có explicit out-of-scope disposition. Mutation receipt chỉ áp dụng cho Assets/package root đã khai báo; closure staging ngoài project phải có exact provenance và explicit --unity-project.',
+    rule: 'Trước khi agent đọc raw Unity source hoặc chạy bất kỳ port tool có ghi output, BẮT BUỘC chạy `npm run ai:port:preflight -- -- --project <UnityProjectRoot>` (hoặc MCP `scanUnityProject`) và đọc `decision`, `coreGameplay`, `features`, `obligationIndex`, `coreObligationIndex`, `obligations`. Chỉ query evidence bounded khi brief yêu cầu. Hard blocker chặn implement; source high trong core/adapter phải được giải quyết, source high deferred phải có explicit out-of-scope disposition. Mutation receipt chỉ áp dụng cho Assets/package root đã khai báo; closure staging ngoài project phải có exact provenance và explicit --unity-project.',
     agentContract: {
       entrypoints: ['port.preflight'],
       mcpEntrypoint: 'scanUnityProject',

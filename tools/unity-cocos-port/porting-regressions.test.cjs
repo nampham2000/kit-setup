@@ -9,7 +9,7 @@ const createAnimationPorter = require('./animation-porter');
 const createColliderPorter = require('./collider-porter');
 const createRuntimePorter = require('./runtime-component-porter');
 const createParticlePorter = require('./particle-porter');
-const { applyUnityParticleDataToCocos } = require('./particle-system-converter');
+const { applyParticleRendererMaterial, applyUnityParticleDataToCocos } = require('./particle-system-converter');
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'hidden-suspect-port-regressions-'));
 test.after(() => {
   assert.ok(path.resolve(temp).startsWith(path.resolve(os.tmpdir()) + path.sep));
@@ -89,6 +89,36 @@ test('cache from before the parity repairs cannot hide newly corrected output',(
 function particleBuilder() {
   return {objects:[{}, {_textureAnimationModule:{__id__:2},renderer:{__id__:3}}, {_enable:false,_numTilesX:1,_numTilesY:1},{}],addParticleSystemFromTemplate:()=>1};
 }
+test('particle trail material is preserved in Cocos material slot 1',()=>{
+  const b=particleBuilder();
+  applyParticleRendererMaterial(b,1,'particle-mat','particle-texture');
+  applyParticleRendererMaterial(b,1,'trail-mat','',1);
+  assert.equal(b.objects[1]._materials[0].__uuid__,'particle-mat');
+  assert.equal(b.objects[1]._materials[1].__uuid__,'trail-mat');
+  assert.equal(b.objects[3]._cpuMaterial.__uuid__,'particle-mat');
+  assert.equal(b.objects[3]._mainTexture.__uuid__,'particle-texture');
+});
+test('particle porter resolves Unity renderer material 1 for enabled trails',()=>{
+  const db=new Map([
+    ['particle-mat',{guid:'particle-mat',path:'particle.mat',relativePath:'particle.mat'}],
+    ['trail-mat',{guid:'trail-mat',path:'trail.mat',relativePath:'trail.mat'}],
+  ]);
+  const usages=[];
+  const porter=createParticlePorter({resolveUnityParticleMaterial:(a,_o,_d,_r,_n,_s,usage)=>{usages.push(usage||'particle');return {materialUuid:`cocos-${a.guid}`};}});
+  const renderer=`ParticleSystemRenderer:
+  m_Materials:
+  - {fileID: 2100000, guid: particle-mat, type: 2}
+  - {fileID: 2100000, guid: trail-mat, type: 2}`;
+  const doc=`ParticleSystem:
+  TrailModule:
+    enabled: 1`;
+  const b=particleBuilder(),r=reports();
+  porter.emitParticleSystem(0,1,doc,{name:'Firework'},b,r,{},db,{},renderer);
+  assert.equal(b.objects[1]._materials[0].__uuid__,'cocos-particle-mat');
+  assert.equal(b.objects[1]._materials[1].__uuid__,'cocos-trail-mat');
+  assert.deepEqual(usages,['particle','trail']);
+  assert.ok(r.entries.some(e=>e.args[0]==='PARTICLE_TRAIL_MATERIAL_CONVERTED'));
+});
 test('Sprites UV mode never reuses stale grid tile counts',()=>{
   const b=particleBuilder();applyUnityParticleDataToCocos(b,1,{UVModule:{enabled:1,mode:1,tilesX:2,tilesY:3}});
   assert.equal(b.objects[2]._enable,false);assert.equal(b.objects[2]._numTilesX,1);assert.equal(b.objects[2]._numTilesY,1);
@@ -118,6 +148,30 @@ test('runtime helper migrates to canonical script path while retaining UUID',()=
   assert.ok(fs.readFileSync(output,'utf8').includes('class UnityParticleRateOverDistanceEmitter'));
   assert.equal(JSON.parse(fs.readFileSync(output+'.meta')).uuid,'old-stable-uuid');
   assert.ok(!fs.existsSync(legacy));
+});
+test('runtime helper reuses an existing assets/script subfolder class without registering a duplicate',()=>{
+  const root=path.join(temp,'runtime-existing'),name='UnityParticleHierarchyTransformSync';
+  const template=path.join(__dirname,'runtime',`${name}.ts`);
+  const existing=path.join(root,'assets/script/unity-adapters',`${name}.ts`);
+  fs.mkdirSync(path.dirname(existing),{recursive:true});fs.copyFileSync(template,existing);
+  fs.writeFileSync(existing+'.meta',JSON.stringify({uuid:'existing-adapter-uuid',importer:'typescript'}));
+  const porter=createRuntimePorter({ensureDirectoryMetas:()=>{}});
+  porter.ensureParticleHierarchyTransformSyncScript({cocosRoot:root},reports());
+  assert.ok(fs.existsSync(existing));
+  assert.ok(!fs.existsSync(path.join(root,'assets/script',`${name}.ts`)));
+});
+test('runtime helper removes an Editor-remapped duplicate that shares the existing script UUID',()=>{
+  const root=path.join(temp,'runtime-remapped'),name='UnityParticleHierarchyTransformSync';
+  const template=path.join(__dirname,'runtime',`${name}.ts`);
+  const existing=path.join(root,'assets/script/unity-adapters',`${name}.ts`);
+  const duplicate=path.join(root,'assets/script',`${name}.ts`);
+  fs.mkdirSync(path.dirname(existing),{recursive:true});fs.copyFileSync(template,existing);fs.copyFileSync(template,duplicate);
+  for(const file of [existing,duplicate])fs.writeFileSync(file+'.meta',JSON.stringify({uuid:'82583f58-8309-4153-91e6-2c8a3e8e6347',importer:'typescript'}));
+  fs.mkdirSync(path.join(root,'assets/resources'),{recursive:true});
+  fs.writeFileSync(path.join(root,'assets/resources/ref.prefab'),'825839YgwlBU5HmLIo+jmNH');
+  const porter=createRuntimePorter({ensureDirectoryMetas:()=>{}});
+  porter.ensureParticleHierarchyTransformSyncScript({cocosRoot:root},reports());
+  assert.ok(fs.existsSync(existing));assert.ok(!fs.existsSync(duplicate));assert.ok(!fs.existsSync(duplicate+'.meta'));
 });
 test('nested GameObject inactive override is serialized against the descendant node fileId',()=>{
   const {portPrefab,parseArgs}=require('../unity-cocos-port.cjs');

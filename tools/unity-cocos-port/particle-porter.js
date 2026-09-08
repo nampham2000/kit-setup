@@ -22,10 +22,10 @@ module.exports = function createParticlePorter(deps = {}) {
     unityRefFileId,
   } = deps;
 
-  function firstRendererMaterialRef(rendererDoc) {
+  function rendererMaterialRefs(rendererDoc) {
     const rendererData = parseUnityRendererDoc(rendererDoc);
     const materials = Array.isArray(rendererData.m_Materials) ? rendererData.m_Materials : [];
-    return materials.find((item) => item && typeof item === 'object' && String(item.guid || '').trim()) || null;
+    return materials.filter((item) => item && typeof item === 'object' && String(item.guid || '').trim());
   }
 
   function isUnityDefaultParticleSystemMaterial(materialRef) {
@@ -118,7 +118,8 @@ module.exports = function createParticlePorter(deps = {}) {
         );
       }
 
-      const materialRef = firstRendererMaterialRef(rendererDoc);
+      const materialRefs = rendererMaterialRefs(rendererDoc);
+      const materialRef = materialRefs[0] || null;
       const usedBuiltInDefaultParticleMaterial = isUnityDefaultParticleSystemMaterial(materialRef);
       if (usedBuiltInDefaultParticleMaterial) {
         applyParticleRendererMaterial(builder, particleId, COCOS_PARTICLE_ADD_MATERIAL_UUID);
@@ -158,6 +159,36 @@ module.exports = function createParticlePorter(deps = {}) {
           gameObject?.name || '',
           'Unity particle material was converted and wired to the Cocos ParticleSystemRenderer CPU material slot',
           particleMaterial.file || particleMaterial.materialUuid,
+        );
+      }
+      const particleData = parseUnityParticleDoc(doc);
+      const trailMaterialRef = Number(particleData.TrailModule?.enabled) !== 0 ? materialRefs[1] : null;
+      const trailMaterialAsset = trailMaterialRef?.guid && unityDb?.get
+        ? unityDb.get(String(trailMaterialRef.guid))
+        : null;
+      const trailMaterial = resolveUnityParticleMaterial && trailMaterialAsset
+        ? resolveUnityParticleMaterial(trailMaterialAsset, options, unityDb, reporter, gameObject?.name || '', null, 'trail')
+        : null;
+      if (trailMaterial?.materialUuid && applyParticleRendererMaterial(
+        builder,
+        particleId,
+        trailMaterial.materialUuid,
+        '',
+        1,
+      )) {
+        reporter.low(
+          'PARTICLE_TRAIL_MATERIAL_CONVERTED',
+          trailMaterialAsset.relativePath,
+          gameObject?.name || '',
+          'Unity ParticleSystemRenderer trail material was converted and wired to Cocos material slot 1',
+          trailMaterial.file || trailMaterial.materialUuid,
+        );
+      } else if (trailMaterialRef) {
+        reporter.high(
+          'PARTICLE_TRAIL_MATERIAL_UNRESOLVED',
+          trailMaterialAsset?.relativePath || '',
+          gameObject?.name || '',
+          'Unity particle trails require renderer material slot 1, but the trail material could not be converted',
         );
       }
       reporter.low(

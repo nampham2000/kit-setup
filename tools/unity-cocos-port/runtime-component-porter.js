@@ -72,6 +72,39 @@ function scriptRuntimeSeed(script) {
   return `unity-cocos-port-runtime-script:${script.className}`;
 }
 
+function findRuntimeScriptAlternatives(cocosRoot, script, targetFile) {
+  const scriptRoot = path.join(cocosRoot, SCRIPT_TARGET_DIR);
+  if (!fs.existsSync(scriptRoot)) return [];
+  const result = [];
+  const visit = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const absolute = path.join(dir, entry.name);
+      if (entry.isDirectory()) visit(absolute);
+      else if (entry.isFile() && entry.name === `${script.className}.ts` && path.resolve(absolute) !== path.resolve(targetFile)) result.push(absolute);
+    }
+  };
+  visit(scriptRoot);
+  return result;
+}
+
+function assetTreeReferencesScriptUuid(cocosRoot, uuid) {
+  if (!uuid) return false;
+  const classId = compressUuid(uuid);
+  const assetsRoot = path.join(cocosRoot, 'assets');
+  const visit = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const absolute = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (visit(absolute)) return true;
+      } else if (entry.isFile() && /\.(prefab|scene)$/i.test(entry.name)) {
+        if (fs.readFileSync(absolute, 'utf8').includes(classId)) return true;
+      }
+    }
+    return false;
+  };
+  return fs.existsSync(assetsRoot) && visit(assetsRoot);
+}
+
 function readRuntimeScriptClassId(script, cocosDb) {
   const scriptRecord = cocosDb?.findScriptClass?.(script.className);
   if (scriptRecord?.classId) return scriptRecord.classId;
@@ -99,6 +132,32 @@ function writeStableRuntimeScript(script, options, reporter, ensureDirectoryMeta
   const legacyMeta = readJsonIfExists(legacyMetaFile) || {};
   const targetMetaFile = `${targetFile}.meta`;
   const targetMeta = readJsonIfExists(targetMetaFile) || {};
+  const alternatives = findRuntimeScriptAlternatives(options.cocosRoot, script, targetFile);
+
+  if (alternatives.length > 0) {
+    if (targetMeta.uuid && sourceText === (fs.existsSync(targetFile) ? fs.readFileSync(targetFile, 'utf8') : '')) {
+      const alternativeMeta = readJsonIfExists(`${alternatives[0]}.meta`) || {};
+      const sharesExistingUuid = Boolean(alternativeMeta.uuid && alternativeMeta.uuid === targetMeta.uuid);
+      if (!sharesExistingUuid && assetTreeReferencesScriptUuid(options.cocosRoot, targetMeta.uuid)) {
+        reporter?.high(
+          'RUNTIME_SCRIPT_DUPLICATE_CLASS_REFERENCED',
+          targetFile,
+          alternatives[0],
+          `Generated ${script.className} duplicates an existing ccclass and is still referenced by a prefab; migrate those references before removing it`,
+        );
+        return;
+      }
+      fs.unlinkSync(targetFile);
+      fs.unlinkSync(targetMetaFile);
+    }
+    reporter?.low(
+      'RUNTIME_SCRIPT_EXISTING_CANONICAL_REUSED',
+      alternatives[0],
+      targetFile,
+      `Reused existing ${script.className} under assets/script and skipped a duplicate ccclass registration`,
+    );
+    return;
+  }
 
   if (legacyMeta.uuid && targetMeta.uuid && legacyMeta.uuid !== targetMeta.uuid) {
     reporter?.high(

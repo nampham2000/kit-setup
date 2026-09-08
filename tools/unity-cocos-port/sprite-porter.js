@@ -85,9 +85,22 @@ module.exports = function createSpritePorter(deps) {
     for (const attempt of attempts) {
       const importedDest = importedUnityAssetPath(attempt.asset, options);
       let copiedDest = '';
-      let spriteUuid = importedDest && fs.existsSync(importedDest)
+      const existingSpriteUuid = importedDest && fs.existsSync(importedDest)
         ? waitForCurrentSpriteFrameUuid(importedDest, options)
         : '';
+      // Refresh an existing copied sprite as well. This keeps importer data such
+      // as Unity's 9-slice border in sync instead of returning the old UUID
+      // before copyUnityAssetToCocos has a chance to update its Cocos meta.
+      if (attempt.allowCopy && options.copyAssets && importedDest && fs.existsSync(importedDest)) {
+        copiedDest = copyUnityAssetToCocos(attempt.asset, options, reporter, 'image', 'medium', {
+          deferNeedsImportReport: true,
+          imageType: 'sprite-frame',
+        });
+      }
+      let spriteUuid = (copiedDest || importedDest) && fs.existsSync(copiedDest || importedDest)
+        ? waitForCurrentSpriteFrameUuid(copiedDest || importedDest, options)
+        : '';
+      if (!spriteUuid) spriteUuid = existingSpriteUuid;
       if (!spriteUuid) spriteUuid = cocosDb.resolveSpriteByStem(attempt.asset.stem);
       if (!spriteUuid && attempt.allowCopy) {
         copiedDest = copyUnityAssetToCocos(attempt.asset, options, reporter, 'image', 'medium', {

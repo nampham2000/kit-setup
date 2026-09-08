@@ -2299,8 +2299,8 @@ function resolveUnityMaterialUuid(materialAsset, options, unityDb, cocosDb, repo
   return resolveUnityMaterialUuidImpl(materialAsset, options, unityDb, cocosDb, reporter, gameObjectName);
 }
 
-function resolveUnityParticleMaterial(materialAsset, options, unityDb, reporter, gameObjectName, spriteTextureAsset = null) {
-  return resolveUnityParticleMaterialImpl(materialAsset, options, unityDb, reporter, gameObjectName, spriteTextureAsset);
+function resolveUnityParticleMaterial(materialAsset, options, unityDb, reporter, gameObjectName, spriteTextureAsset = null, materialUsage = 'particle') {
+  return resolveUnityParticleMaterialImpl(materialAsset, options, unityDb, reporter, gameObjectName, spriteTextureAsset, materialUsage);
 }
 
 function resolveBuiltinPrimitiveMeshUuid(...hints) {
@@ -2404,6 +2404,12 @@ function ensureImageAssetMeta(assetFile, config = {}) {
     : 'auto';
   const wrapModeS = cocosWrapMode(config.wrapModeS);
   const wrapModeT = cocosWrapMode(config.wrapModeT);
+  const spriteBorder = config.spriteBorder || {};
+  const borderTop = Number.isFinite(Number(spriteBorder.top)) ? Number(spriteBorder.top) : 0;
+  const borderBottom = Number.isFinite(Number(spriteBorder.bottom)) ? Number(spriteBorder.bottom) : 0;
+  const borderLeft = Number.isFinite(Number(spriteBorder.left)) ? Number(spriteBorder.left) : 0;
+  const borderRight = Number.isFinite(Number(spriteBorder.right)) ? Number(spriteBorder.right) : 0;
+  const pixelsToUnit = Number.isFinite(Number(config.pixelsToUnit)) ? Number(config.pixelsToUnit) : 100;
   const requestedImageType = String(config.imageType || '').toLowerCase();
   const wantsTextureType = isParticleTexture || requestedImageType === 'texture';
   const wantsSpriteFrameType = requestedImageType === 'sprite-frame' || !wantsTextureType;
@@ -2413,8 +2419,10 @@ function ensureImageAssetMeta(assetFile, config = {}) {
     imported: existing.imported ?? true,
     uuid: existing.uuid || randomUuid(),
     files: Array.isArray(existing.files) && existing.files.length ? existing.files : ['.json', ext],
-    subMetas: { ...(existing.subMetas || {}) },
-    userData: { ...(existing.userData || {}) },
+    // Importer updates mutate nested sprite-frame and texture records. Keep a
+    // detached copy so the final equality check can detect those changes.
+    subMetas: JSON.parse(JSON.stringify(existing.subMetas || {})),
+    userData: JSON.parse(JSON.stringify(existing.userData || {})),
   };
 
   let changed = !existing.uuid;
@@ -2512,12 +2520,12 @@ function ensureImageAssetMeta(assetFile, config = {}) {
         height,
         rawWidth: width,
         rawHeight: height,
-        borderTop: 0,
-        borderBottom: 0,
-        borderLeft: 0,
-        borderRight: 0,
+        borderTop,
+        borderBottom,
+        borderLeft,
+        borderRight,
         packable: true,
-        pixelsToUnit: 100,
+        pixelsToUnit,
         pivotX: 0.5,
         pivotY: 0.5,
         meshType: 0,
@@ -2541,6 +2549,11 @@ function ensureImageAssetMeta(assetFile, config = {}) {
     existingSpriteFrame.userData = {
       ...(existingSpriteFrame.userData || {}),
       trimType: spriteTrimType,
+      borderTop,
+      borderBottom,
+      borderLeft,
+      borderRight,
+      pixelsToUnit,
     };
     if (spriteTrimType === 'none') {
       const { width, height } = getImageDimensions(assetFile);

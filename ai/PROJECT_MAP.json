@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "generatedAt": "2026-09-08T09:53:03.069Z",
+    "generatedAt": "2026-09-08T11:02:29.360Z",
     "description": "Compact project manifest for AI Agents. Use this instead of scanning file trees.",
     "project": {
       "projectName": "cc_playable_framework",
@@ -64,7 +64,7 @@
     {
       "name": "GameplayUIAnimationRewardHandler",
       "path": "assets/resources/hidden-suspect/ui/GameplayUIAnimationRewardHandler.prefab",
-      "sizeKb": 22
+      "sizeKb": 22.5
     },
     {
       "name": "hud",
@@ -94,7 +94,7 @@
     {
       "name": "Sparkle_Coin",
       "path": "assets/resources/hidden-suspect/ui/Sparkle_Coin.prefab",
-      "sizeKb": 21.3
+      "sizeKb": 30.9
     },
     {
       "name": "Star_trail_gameplay",
@@ -104,7 +104,7 @@
     {
       "name": "UIparticleHit",
       "path": "assets/resources/hidden-suspect/ui/UIparticleHit.prefab",
-      "sizeKb": 85.9
+      "sizeKb": 124.3
     },
     {
       "name": "VFXTargetTrail",
@@ -114,12 +114,12 @@
     {
       "name": "win",
       "path": "assets/resources/hidden-suspect/ui/win.prefab",
-      "sizeKb": 185.9
+      "sizeKb": 224.9
     },
     {
       "name": "celebration",
       "path": "assets/resources/hidden-suspect/vfx/celebration.prefab",
-      "sizeKb": 862
+      "sizeKb": 888
     },
     {
       "name": "flash",
@@ -288,30 +288,30 @@
       "truncated": 0
     },
     "materials": {
-      "count": 22,
-      "totalKb": 18.4,
+      "count": 23,
+      "totalKb": 18.8,
       "sample": [
         "assets/materials/HiddenSuspectTutorialGlow.mtl",
         "assets/materials/UnitySpriteRendererColor.mtl",
         "assets/materials/UnitySpriteRendererColorOpaque.mtl",
         "assets/materials/UnitySpriteRendererGlow.mtl",
         "assets/unity_imported/JMO Assets/Cartoon FX Remaster/CFXR Assets/Graphics/cfxr star blurred add.mtl",
-        "assets/unity_imported/PackageCache/com.unity.render-pipelines.universal/Runtime/Materials/Sprite-Unlit-Default.sprite.mtl"
+        "assets/unity_imported/JMO Assets/Cartoon FX Remaster/CFXR Assets/Graphics/cfxr stretch trait blur add.trail.mtl"
       ],
-      "truncated": 16
+      "truncated": 17
     },
     "textures": {
-      "count": 81,
-      "totalKb": 8103.9,
+      "count": 82,
+      "totalKb": 8112.4,
       "sample": [
         "assets/resources/hidden-suspect/backgrounds/end.jpg",
         "assets/resources/hidden-suspect/backgrounds/game.jpg",
         "assets/unity_imported/JMO Assets/Cartoon FX Remaster/CFXR Assets/Graphics/cfxr star blurred.png",
+        "assets/unity_imported/JMO Assets/Cartoon FX Remaster/CFXR Assets/Graphics/cfxr stretch trait blur.png",
         "assets/unity_imported/Module/ModuleAdBreak/UI/AdBreakGamePlay/ads_break_1.png",
-        "assets/unity_imported/Module/ModuleAdBreak/UI/AdBreakGamePlay/ads_break_2.png",
-        "assets/unity_imported/ThirdParties/Hovl Studio/Magic effects pack/Textures/Circle.png"
+        "assets/unity_imported/Module/ModuleAdBreak/UI/AdBreakGamePlay/ads_break_2.png"
       ],
-      "truncated": 75
+      "truncated": 76
     },
     "animations": {
       "count": 12,
@@ -328,7 +328,7 @@
     },
     "prefabsInAssets": {
       "count": 27,
-      "totalKb": 2487.4,
+      "totalKb": 2600.9,
       "sample": [
         "assets/resources/hidden-suspect/levels/artstudio.prefab",
         "assets/resources/hidden-suspect/levels/guestroom.prefab",
@@ -342,17 +342,17 @@
     "unityImported": {
       "exists": true,
       "root": "assets/unity_imported",
-      "count": 110,
-      "totalKb": 12258.2,
+      "count": 113,
+      "totalKb": 12293.3,
       "sample": [
         "assets/unity_imported/JMO Assets/Cartoon FX Remaster/CFXR Assets/Graphics/cfxr star blurred add.mtl",
         "assets/unity_imported/JMO Assets/Cartoon FX Remaster/CFXR Assets/Graphics/cfxr star blurred.png",
+        "assets/unity_imported/JMO Assets/Cartoon FX Remaster/CFXR Assets/Graphics/cfxr stretch trait blur add.trail.mtl",
+        "assets/unity_imported/JMO Assets/Cartoon FX Remaster/CFXR Assets/Graphics/cfxr stretch trait blur.png",
         "assets/unity_imported/Module/ModuleAdBreak/UI/AdBreakGamePlay/ads_break_1.png",
-        "assets/unity_imported/Module/ModuleAdBreak/UI/AdBreakGamePlay/ads_break_2.png",
-        "assets/unity_imported/PackageCache/com.unity.render-pipelines.universal/Runtime/Materials/Sprite-Unlit-Default.sprite.mtl",
-        "assets/unity_imported/ThirdParties/Hovl Studio/Magic effects pack/Materials/Circle.mtl"
+        "assets/unity_imported/Module/ModuleAdBreak/UI/AdBreakGamePlay/ads_break_2.png"
       ],
-      "truncated": 104
+      "truncated": 107
     }
   },
   "configSummary": {
@@ -492,29 +492,44 @@
     "map.generate": "npm run ai:map",
     "scene.inspect": "npm run ai:scene -- <sceneName>",
     "memory.query": "npm run memory:query -- <keyword>",
-    "unity.intel.doctor": "npm run unity:intel:doctor -- --project <UnityProjectRoot>",
-    "unity.intel.setup": "npm run unity:intel:setup -- --project <UnityProjectRoot>",
-    "unity.intel.scan": "npm run ai:unity:scan -- --project <UnityProjectRoot>",
-    "unity.intel.query": "npm run ai:unity:query -- --project <UnityProjectRoot> --section <name>",
-    "port.plan": "npm run ai:port:plan -- --project <UnityProjectRoot>",
+    "portable.workflow.doctor": "npm run ai:portable:doctor",
+    "unity.intel.doctor": "npm run unity:intel:doctor -- -- --project <UnityProjectRoot>",
+    "unity.intel.setup": "npm run unity:intel:setup -- -- --project <UnityProjectRoot>",
+    "port.preflight": "npm run ai:port:preflight -- -- --project <UnityProjectRoot>",
+    "port.core.init": "npm run ai:port:core:init -- --unity-project <UnityProjectRoot> --cocos-project <CocosProjectRoot>",
+    "port.core.scaffold": "npm run ai:port:core:scaffold -- --unity-project <UnityProjectRoot> --cocos-project <CocosProjectRoot>",
+    "port.core.resume": "npm run ai:port:core:resume -- --unity-project <UnityProjectRoot> --cocos-project <CocosProjectRoot>",
+    "unity.intel.scan": "npm run ai:unity:scan -- -- --project <UnityProjectRoot>",
+    "unity.intel.query": "npm run ai:unity:query -- -- --project <UnityProjectRoot> --section <name>",
+    "port.plan": "npm run ai:port:plan -- -- --project <UnityProjectRoot>",
     "port.scene": "npm run port:scene -- --scene <file.unity> --unity-root <UnityAssetsFolder> --out assets/<Name>.scene",
+    "port.animation.oracle": "npm run ai:port:animation:oracle -- --src <UnityAnimOrDirectory> --unity-root <UnityProjectRoot> --out <oracle.json>",
+    "mesh.path.audit": "node playable-shared-kit/tools/runtime-mesh-path-audit.cjs --config <audit.json>",
     "port.report": "npm run ai:port:report",
     "port.prefab": "node playable-shared-kit/tools/unity-cocos-port.cjs port --src <unity_prefab_or_dir> --out <cocos_prefab_or_dir>",
+    "font.convert": "node playable-shared-kit/tools/font-converter.cjs --src <font> --out <assets/.../font.ttf>",
     "port.smart": "npm run port:smart -- --src <unity_dir> --out assets/",
     "port.closure": "npm run port:closure -- --prefab <file.prefab> --unity-root <UnityAssetsFolder>",
     "port.compile": "npm run port:compile -- --src <csharp_path> --out assets/script/",
     "port.script": "npm run port:script -- --src <csharp_path> --out assets/script/",
-    "shader.chain": "node playable-shared-kit/tools/shader-compiler/unity-shader-compiler.cjs chain --src <file.prefab> --unity-root <UnityAssetsFolder>",
+    "shader.chain": "node playable-shared-kit/tools/shader-compiler/unity-shader-compiler.cjs chain --src <file.prefab|file.asset> --unity-root <UnityAssetsFolder>",
     "shader.convert": "node playable-shared-kit/tools/shader-compiler/unity-shader-compiler.cjs convert --src <unity.shader> --out <assets/effects/X.effect>",
     "shader.batch": "node playable-shared-kit/tools/shader-compiler/unity-shader-compiler.cjs batch --dir <unity_shader_dir> --out-dir <assets/effects>",
     "shader.material": "node playable-shared-kit/tools/shader-compiler/unity-shader-compiler.cjs convert-mat --src <UnityMaterial.mat> --out <assets/materials/X.mtl>",
     "shader.validate": "node playable-shared-kit/tools/shader-compiler/unity-shader-compiler.cjs validate <assets/effects/X.effect>",
     "fbx.strip": "npm run fbx:strip -- <file.fbx>",
+    "engine.features": "npm run engine:features -- ensure --project <CocosProjectRoot>",
+    "port.core.acceptance": "npm run ai:port:core:verify -- --unity-project <UnityProjectRoot> --cocos-project <CocosProjectRoot>",
     "verify.all": "npm run ai:verify",
     "verify.prefab": "npm run ai:verify:prefab",
     "verify.assets": "npm run ai:verify:assets",
     "verify.runtime": "npm run ai:verify:runtime",
+    "verify.visual": "npm run ai:verify:visual -- --config <matrix.json>",
+    "verify.regressions": "npm run ai:verify:regressions",
     "verify.gc": "npm run ai:lint",
+    "texture.compress-policy": "npm run ai:texture:compress",
+    "model.import-policy": "npm run ai:model:optimize",
+    "model.fbx-normalize": "npm run ai:fbx:normalize -- --src <Unity.fbx> --out <Cocos.fbx>",
     "audio.optimize": "npm run sound:optimize",
     "assets.cleanup": "npm run cleanup:unused",
     "stats.resources": "npm run stats",
@@ -523,6 +538,9 @@
     "deploy.preview": "npm run deploy",
     "ai.sync": "npm run ai:sync",
     "ai.contract": "npm run ai:contract:verify",
-    "memory.remember": "npm run memory:stats"
+    "memory.remember": "npm run memory:remember -- --memory-file <file.json>",
+    "memory.doctor": "npm run memory:doctor -- --json",
+    "memory.correct": "npm run memory:correct -- --id <memory-id> --scope <repo|global> --title <title> --content-file <file>",
+    "memory.repair": "npm run memory:repair -- --scope <repo|global> --dry-run --json"
   }
 }

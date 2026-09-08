@@ -809,6 +809,7 @@ module.exports = function createAnimationPorter(deps) {
         states.set(doc.fileId, {
           fileId: doc.fileId,
           name: String(getField(doc, 'm_Name', 'State')),
+          speed: finiteNumber(getField(doc, 'm_Speed', 1), 1),
           motionGuid: unityRefGuid(motionRef),
           motionFileId: unityRefFileId(motionRef),
           transitionIds: deps.getNestedList(doc, 'm_Transitions').map(unityRefFileId).filter(Boolean),
@@ -894,6 +895,7 @@ module.exports = function createAnimationPorter(deps) {
       const motionId = add({
         __type__: 'cc.animation.Motion',
         name: motionName,
+        speed: state.speed,
         motion: clipUuid
           ? {
             __type__: 'cc.animation.ClipMotion',

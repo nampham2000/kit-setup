@@ -1556,14 +1556,19 @@ function applyRenderer(builder, particle, data) {
   return true;
 }
 
-function applyParticleRendererMaterial(builder, particleId, materialUuid, textureUuid = '') {
+function applyParticleRendererMaterial(builder, particleId, materialUuid, textureUuid = '', materialSlot = 0) {
   const particle = builder?.objects?.[particleId];
   if (!particle || !materialUuid) return false;
 
   const renderer = refObject(builder.objects, particle.renderer);
   const materialRef = uuidRef(materialUuid, 'cc.Material');
-  particle._materials = [materialRef];
-  if (renderer) {
+  const slot = Math.max(0, Math.floor(num(materialSlot, 0)));
+  // Slot 0 starts a fresh renderer assignment. This prevents a reused template
+  // or an earlier port from leaking an obsolete trail material into emitters
+  // whose Unity TrailModule is disabled.
+  if (slot === 0 || !Array.isArray(particle._materials)) particle._materials = [];
+  particle._materials[slot] = materialRef;
+  if (renderer && slot === 0) {
     renderer._cpuMaterial = materialRef;
     renderer._gpuMaterial = null;
     renderer._useGPU = false;

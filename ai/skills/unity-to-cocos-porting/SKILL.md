@@ -256,7 +256,23 @@ sprite FTUE animation, nested HUD prefabs, mirrored hidden objects, or particles
 It explains which serialized values are easy to misinterpret and how to check
 the actual runtime path. Keep project-specific sizing in JSON.
 
+AnimationClip sample rate and stop time do not include `AnimatorState.m_Speed`.
+Preserve that field on the generated Cocos Motion state. If project runtime
+disables AnimationController and calls `cc.Animation.play()` directly, read the
+source state speed from game config and assign it through `getState().speed`;
+`play()` returns void. Compare every tutorial controller because different hand
+and arrow states may intentionally use different speeds.
+
 When a reported defect comes from reusable conversion code, fix that porter path
 and add a focused regression alongside the project repair. Do not count a local
 workaround as a repaired porter. After tool changes, sync generated AI guidance
 and run contract verification; never edit generated command blocks by hand.
+
+For Unity ParticleSystem trails, renderer material slot 0 is the particle and
+slot 1 is the trail. Convert slot 1 with Cocos `builtin-particle-trail`, keep its
+own texture, and preserve loop per emitter; an EOL prefab may mix looping color
+bursts with one-shot launch rays. For Unity built-in particle shaders, only
+`_TintColor` is shader input. Do not reuse stale vendor `_Color` values, because
+an unused alpha of zero will erase the Cocos particle or trail. Before emitting
+a shared runtime helper, search the complete `assets/script` subtree for the
+same ccclass and reuse it to avoid duplicate class and UUID registration.

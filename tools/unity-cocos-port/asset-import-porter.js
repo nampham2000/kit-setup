@@ -6,6 +6,28 @@ const { copyAssetIfChanged, ensureDir, randomUuid, toPosix } = require('./core-u
 const { exportUnityMeshAssetToFbx } = require('./unity-mesh-fbx-exporter');
 const { textureImportLimit, copyTextureWithLimit } = require('./texture-import-limit');
 
+function unitySpriteImportData(text) {
+  const border = /^\s*spriteBorder:\s*\{x:\s*([^,]+),\s*y:\s*([^,]+),\s*z:\s*([^,]+),\s*w:\s*([^}]+)\}/m.exec(text);
+  const pixelsToUnit = /^\s*spritePixelsToUnits:\s*([^\r\n]+)/m.exec(text);
+  if (!border && !pixelsToUnit) return {};
+  const number = (value, fallback = 0) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  };
+  return {
+    ...(border ? {
+      // Unity Sprite.border is left, bottom, right, top.
+      spriteBorder: {
+        left: number(border[1]),
+        bottom: number(border[2]),
+        right: number(border[3]),
+        top: number(border[4]),
+      },
+    } : {}),
+    ...(pixelsToUnit ? { pixelsToUnit: number(pixelsToUnit[1], 100) } : {}),
+  };
+}
+
 module.exports = function createAssetImportPorter(deps) {
   const {
     ensureDirectoryMetas,
@@ -75,6 +97,7 @@ module.exports = function createAssetImportPorter(deps) {
       spriteTrimType: meshType && Number(meshType[1]) === 0 ? 'none' : 'auto',
       wrapModeS: unityWrapMode(text, 'wrapU'),
       wrapModeT: unityWrapMode(text, 'wrapV'),
+      ...unitySpriteImportData(text),
     };
   }
 
@@ -115,6 +138,22 @@ module.exports = function createAssetImportPorter(deps) {
       ? { ...unityTextureImporterConfig(unityAsset.path), ...config }
       : config;
     ensureAssetMeta(dest, kind, importConfig);
+    if (kind === 'image' && importConfig.spriteBorder
+      && Object.values(importConfig.spriteBorder).some((value) => Number(value) > 0)) {
+      const writtenMeta = JSON.parse(fs.readFileSync(`${dest}.meta`, 'utf8'));
+      const spriteFrame = Object.values(writtenMeta.subMetas || {}).find((entry) => entry?.importer === 'sprite-frame');
+      const actual = spriteFrame?.userData || {};
+      const expected = importConfig.spriteBorder;
+      const matches = Number(actual.borderLeft) === Number(expected.left)
+        && Number(actual.borderBottom) === Number(expected.bottom)
+        && Number(actual.borderRight) === Number(expected.right)
+        && Number(actual.borderTop) === Number(expected.top);
+      reporter.add(matches ? 'low' : 'high', matches ? 'SPRITE_BORDER_IMPORTED' : 'SPRITE_BORDER_WRITE_FAILED',
+        unityAsset.relativePath, toPosix(path.relative(options.cocosRoot, dest)),
+        matches
+          ? `Unity 9-slice border mapped to Cocos: left=${expected.left}, bottom=${expected.bottom}, right=${expected.right}, top=${expected.top}`
+          : `Expected Unity 9-slice border left=${expected.left}, bottom=${expected.bottom}, right=${expected.right}, top=${expected.top}; Cocos meta kept left=${actual.borderLeft}, bottom=${actual.borderBottom}, right=${actual.borderRight}, top=${actual.borderTop}`);
+    }
     if (kind === 'model') recoverModelMetaFromLibrary(dest, options);
     if (!deferNeedsImportReport) {
       reporter.add(severity, 'ASSET_COPIED_NEEDS_IMPORT', unityAsset.relativePath, toPosix(path.relative(options.cocosRoot, dest)), 'Unity asset copied to Cocos; refresh/import is required before it can be wired');
@@ -237,3 +276,5 @@ module.exports = function createAssetImportPorter(deps) {
     handleMissingModel,
   };
 };
+
+module.exports.unitySpriteImportData = unitySpriteImportData;

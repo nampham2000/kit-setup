@@ -30,6 +30,7 @@ const COCOS_PARTICLE_TECHNIQUE_ALPHA_BLEND = 1;
 const COCOS_PARTICLE_TECHNIQUE_ADD_MULTIPLY = 2;
 const COCOS_PARTICLE_TECHNIQUE_ADD_SMOOTH = 3;
 const COCOS_PARTICLE_TECHNIQUE_PREMULTIPLY_BLEND = 4;
+const BUILTIN_PARTICLE_TRAIL_EFFECT_UUID = '17debcc3-0a6b-4b8a-b00b-dc58b885581e';
 const INVISIBLE_SHADOW_RECEIVER_EFFECT_TEMPLATE = path.join(__dirname, 'invisible-shadow-receiver.effect');
 const INVISIBLE_SHADOW_RECEIVER_EFFECT_PATH = path.join('assets', 'effects', 'InvisibleShadowReceiver.effect');
 const TCP2_HYBRID_SHADER_2_EFFECT_TEMPLATE = path.join(__dirname, 'tcp2-hybrid-shader-2.effect');
@@ -760,7 +761,7 @@ module.exports = function createMaterialPorter(deps) {
       || techniqueIndex === COCOS_PARTICLE_TECHNIQUE_ADD_MULTIPLY;
   }
 
-  function convertUnityParticleMaterialToCocos(materialAsset, options, unityDb, reporter, spriteTextureAsset = null) {
+  function convertUnityParticleMaterialToCocos(materialAsset, options, unityDb, reporter, spriteTextureAsset = null, materialUsage = 'particle') {
     if (!materialAsset?.path || !fs.existsSync(materialAsset.path)) return null;
 
     const materialDoc = readUnityMaterialDoc(materialAsset.path);
@@ -771,6 +772,7 @@ module.exports = function createMaterialPorter(deps) {
 
     let convertedDest = convertedUnityParticleMaterialAssetPath(materialAsset, options);
     if (convertedDest && spriteTextureAsset) convertedDest = convertedDest.replace(/\.mtl$/i, `_sprite-${spriteTextureAsset.guid}.mtl`);
+    if (convertedDest && materialUsage === 'trail') convertedDest = convertedDest.replace(/\.mtl$/i, '.trail.mtl');
     if (!convertedDest) return null;
 
     const particleShaderRef = getField(materialDoc, 'm_Shader', null);
@@ -813,7 +815,14 @@ module.exports = function createMaterialPorter(deps) {
       reporter,
       { particleTexture: true },
     );
-    const mainColor = firstDefinedMaterialValue(colors, ['_TintColor', '_Color', '_BaseColor'], {
+    // Unity built-in particle shaders expose _TintColor. Vendor materials can
+    // retain unrelated serialized _Color values (including alpha 0) from a
+    // previous custom shader; feeding that stale value into Cocos multiplies
+    // the complete particle/trail output to zero.
+    const particleTintColorKeys = particleShaderGuid === UNITY_BUILTIN_SHADER_GUID
+      ? ['_TintColor']
+      : ['_TintColor', '_Color', '_BaseColor'];
+    const mainColor = firstDefinedMaterialValue(colors, particleTintColorKeys, {
       r: COCOS_PARTICLE_DEFAULT_TINT,
       g: COCOS_PARTICLE_DEFAULT_TINT,
       b: COCOS_PARTICLE_DEFAULT_TINT,
@@ -865,7 +874,7 @@ module.exports = function createMaterialPorter(deps) {
       // authored _TintColor carries over verbatim. Forcing the default here used
       // to flatten every additive material to 0.5 - a material authored at 1.0
       // came out half as bright as Unity.
-      if (hasUnityMaterialColor(colors, ['_TintColor', '_Color', '_BaseColor'])) {
+      if (hasUnityMaterialColor(colors, particleTintColorKeys)) {
         props.tintColor = materialColor(mainColor);
       }
       // No authored tint: Unity's own shader default is 0.5, which is already the
@@ -878,7 +887,10 @@ module.exports = function createMaterialPorter(deps) {
       _objFlags: 0,
       __editorExtras__: {},
       _native: '',
-      _effectAsset: cocosUuid(tcp2ParticleEffectUuid || BUILTIN_PARTICLE_EFFECT_UUID, 'cc.EffectAsset'),
+      _effectAsset: cocosUuid(
+        materialUsage === 'trail' ? BUILTIN_PARTICLE_TRAIL_EFFECT_UUID : (tcp2ParticleEffectUuid || BUILTIN_PARTICLE_EFFECT_UUID),
+        'cc.EffectAsset',
+      ),
       _techIdx: techniqueIndex,
       _defines: [{}, {}],
       _states: [emptyParticlePassState(), emptyParticlePassState()],
@@ -913,11 +925,12 @@ module.exports = function createMaterialPorter(deps) {
     };
   }
 
-  function resolveUnityParticleMaterial(materialAsset, options, unityDb, reporter, gameObjectName, spriteTextureAsset = null) {
+  function resolveUnityParticleMaterial(materialAsset, options, unityDb, reporter, gameObjectName, spriteTextureAsset = null, materialUsage = 'particle') {
     if (!materialAsset) return null;
 
-    const converted = convertUnityParticleMaterialToCocos(materialAsset, options, unityDb, reporter, spriteTextureAsset);
-    const convertedDest = converted?.file || convertedUnityParticleMaterialAssetPath(materialAsset, options);
+    const converted = convertUnityParticleMaterialToCocos(materialAsset, options, unityDb, reporter, spriteTextureAsset, materialUsage);
+    const baseDest = convertedUnityParticleMaterialAssetPath(materialAsset, options);
+    const convertedDest = converted?.file || (materialUsage === 'trail' ? baseDest.replace(/\.mtl$/i, '.trail.mtl') : baseDest);
     let materialUuid = resolveStandaloneMaterialAssetUuid(convertedDest, options);
 
     if (!materialUuid && convertedDest && fs.existsSync(convertedDest)) {
