@@ -156,7 +156,7 @@ module.exports = function createColliderPorter(deps) {
       center: {
         x: finiteNumber(center?.x, 0),
         y: finiteNumber(center?.y, 0),
-        z: finiteNumber(center?.z, 0),
+        z: -finiteNumber(center?.z, 0),
       },
       radius,
       height,
@@ -181,7 +181,7 @@ module.exports = function createColliderPorter(deps) {
       center: {
         x: finiteNumber(center?.x, 0),
         y: finiteNumber(center?.y, 0),
-        z: finiteNumber(center?.z, 0),
+        z: -finiteNumber(center?.z, 0),
       },
       radius: Math.abs(finiteNumber(getField(doc, 'm_Radius', 0.5), 0.5)),
       materialUuid: physicsMaterialUuid,
@@ -206,7 +206,7 @@ module.exports = function createColliderPorter(deps) {
       center: {
         x: finiteNumber(center?.x, 0),
         y: finiteNumber(center?.y, 0),
-        z: finiteNumber(center?.z, 0),
+        z: -finiteNumber(center?.z, 0),
       },
       radius: radius,
       cylinderHeight: cylinderHeight,
@@ -365,7 +365,7 @@ module.exports = function createColliderPorter(deps) {
       center: {
         x: finiteNumber(center?.x, 0),
         y: finiteNumber(center?.y, 0),
-        z: finiteNumber(center?.z, 0),
+        z: -finiteNumber(center?.z, 0),
       },
       size: {
         x: Math.abs(finiteNumber(size?.x, 1)),

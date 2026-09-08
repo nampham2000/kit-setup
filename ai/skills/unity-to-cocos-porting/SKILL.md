@@ -233,12 +233,14 @@ và được `npm run ai:contract:verify` đối chiếu với CLI thật.
 
 ## 4. Playable Ads Lifecycle Integration
 
-All game managers must inherit or wire into `GameManager` from `playable-core`:
-- `GameManager.instance.onGameReady()`: Ready for player input.
-- `GameManager.instance.onGameStart()`: Player performed first touch.
-- `GameManager.instance.onGameWin()`: Trigger EndCard & CTA button.
-- `GameManager.instance.onGameLose()`: Trigger EndCard & CTA retry.
-- `SuperHtmlPlayable.download()`: Redirect player to App Store / Google Play.
+Read the current `GameManager` implementation before wiring lifecycle. Its API is
+`init`, `setHooks`, `loadLevel`, `startGame`, `pause`, `resume`, `endGame`, and
+`unloadLevel`; do not invent `onGameReady/onGameWin` methods from old examples.
+
+Honor the user's offline scope. If online services, tracking, purchases, or CTA
+are excluded, do not start those services through a framework singleton. A local
+session controller may own gameplay, transition, final win, and retry. Distinguish
+completion of one level from completion of the configured level sequence.
 
 ---
 
@@ -246,3 +248,15 @@ All game managers must inherit or wire into `GameManager` from `playable-core`:
 
 <!-- BEGIN:GENERATED:core-rules -->
 <!-- END:GENERATED:core-rules -->
+
+## 6. Visual and runtime parity traps
+
+Use [references/visual-parity.md](references/visual-parity.md) when debugging
+sprite FTUE animation, nested HUD prefabs, mirrored hidden objects, or particles.
+It explains which serialized values are easy to misinterpret and how to check
+the actual runtime path. Keep project-specific sizing in JSON.
+
+When a reported defect comes from reusable conversion code, fix that porter path
+and add a focused regression alongside the project repair. Do not count a local
+workaround as a repaired porter. After tool changes, sync generated AI guidance
+and run contract verification; never edit generated command blocks by hand.

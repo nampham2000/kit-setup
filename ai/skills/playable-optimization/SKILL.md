@@ -97,3 +97,33 @@ Before building, always run the automated asset optimization tools:
 4. **Window Focus / Blur**:
    - Mute BGM and pause timer when `document.hidden` or window loses focus.
    - Handled automatically by `playable-core/SoundManager` and `playable-sdk/SuperHtmlPlayable`.
+
+## 4. Startup latency in editor preview
+
+Measure from the config-loaded callback to the first gameplay draw, not just the
+`ready` log. Record each `resources.load` start/end and network transfer sizes;
+increase the browser Resource Timing buffer before navigation (its default can
+hide late, large requests). Compare repeated runs with the same cache policy.
+Do not change concurrency limits before identifying the actual bottleneck.
+
+Unity source texture dimensions are not its imported/runtime dimensions. Read
+TextureImporter `maxTextureSize` and applicable platform `overridden` settings.
+Hidden Suspect's five 6000 px map textures transferred about 274 MB in preview;
+applying its Editor/default 2048 px cap reduced those transfers to about 32 MB.
+Editor native PNGs can be larger than the files in `assets/`.
+
+For verified texture-only paths, the porter supports explicit
+`custom.assetImport.textureMaxSizes` in `assets/resources/playable-config.json`:
+keys are Unity paths relative to `Assets/`, values are maximum dimensions.
+`texture-import-limit.js` uses sharp, preserves alpha/aspect ratio, never upscales,
+keeps UUID metadata, and caches by source/output hashes plus the cap. Prefab cache
+also observes these settings, so subsequent ports cannot restore oversized copies.
+Do not apply this to sliced/UI sprites without remapping sprite rectangles and
+logical dimensions. Unconfigured images remain byte-identical; import caps are
+not inferred globally from one project's settings.
+
+Load independent prefab, audio and background groups concurrently. Keep one
+readiness barrier when immediate taps, popups and transitions need all assets;
+deferred loading requires explicit readiness/error handling, not missing sounds
+or effects. Validate visuals, the first interaction and a complete level flow
+after optimizing. Browser timing is not a build-size or low-end-device benchmark.

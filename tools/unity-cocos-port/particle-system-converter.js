@@ -1389,6 +1389,14 @@ function applyColorModule(builder, particle, data) {
 function applyTextureAnimationModule(builder, particle, data) {
   const module = refObject(builder.objects, particle?._textureAnimationModule);
   if (!module || !data || typeof data !== 'object') return false;
+  if (Number(data.mode) === 1 && bool(data.enabled, false)) {
+    // Sprite lists do not use tilesX/Y. The porter resolves a single full-image
+    // sprite as a scoped material; sliced/multiple sprites require atlas baking.
+    setKnown(module, ['_enable', 'enable'], false);
+    setKnown(module, ['_numTilesX', 'numTilesX'], 1);
+    setKnown(module, ['_numTilesY', 'numTilesY'], 1);
+    return true;
+  }
   const tileCount = num(data.tilesX, 1) * num(data.tilesY, 1);
   const cycleCount = num(data.cycles, module.cycleCount ?? 1);
   setKnown(module, ['_enable', 'enable'], bool(data.enabled, false));
@@ -1619,7 +1627,10 @@ function applyUnityParticleDataToCocos(builder, particleId, data = {}, rendererD
     applied += 1;
   }
   if (data.moveWithTransform != null) {
-    particle._simulationSpace = bool(data.moveWithTransform, false) ? 1 : 0;
+    // Unity serializes its enum in this misleadingly named field: Local=0,
+    // World=1, Custom=2. Cocos uses World=0, Local=1, Custom=2.
+    const space = Number(data.moveWithTransform);
+    particle._simulationSpace = space === 0 ? 1 : space === 1 ? 0 : 2;
     applied += 1;
   }
   if (data.scalingMode != null) {

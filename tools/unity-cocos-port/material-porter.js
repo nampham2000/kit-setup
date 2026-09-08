@@ -760,7 +760,7 @@ module.exports = function createMaterialPorter(deps) {
       || techniqueIndex === COCOS_PARTICLE_TECHNIQUE_ADD_MULTIPLY;
   }
 
-  function convertUnityParticleMaterialToCocos(materialAsset, options, unityDb, reporter) {
+  function convertUnityParticleMaterialToCocos(materialAsset, options, unityDb, reporter, spriteTextureAsset = null) {
     if (!materialAsset?.path || !fs.existsSync(materialAsset.path)) return null;
 
     const materialDoc = readUnityMaterialDoc(materialAsset.path);
@@ -769,7 +769,8 @@ module.exports = function createMaterialPorter(deps) {
       return null;
     }
 
-    const convertedDest = convertedUnityParticleMaterialAssetPath(materialAsset, options);
+    let convertedDest = convertedUnityParticleMaterialAssetPath(materialAsset, options);
+    if (convertedDest && spriteTextureAsset) convertedDest = convertedDest.replace(/\.mtl$/i, `_sprite-${spriteTextureAsset.guid}.mtl`);
     if (!convertedDest) return null;
 
     const particleShaderRef = getField(materialDoc, 'm_Shader', null);
@@ -802,7 +803,9 @@ module.exports = function createMaterialPorter(deps) {
     const colors = parseUnitySerializedScalarMap(materialDoc, 'm_Colors');
     const texEnvs = parseUnityTextureEnvMap(materialDoc);
     const env = firstDefinedMaterialValue(texEnvs, UNITY_PARTICLE_MATERIAL_TEXTURE_KEYS, null);
-    const mainTextureUuid = resolveUnityMaterialTextureUuid(
+    const mainTextureUuid = spriteTextureAsset
+      ? resolveUnityTextureUuid(spriteTextureAsset, options, reporter, { particleTexture: true })
+      : resolveUnityMaterialTextureUuid(
       texEnvs,
       UNITY_PARTICLE_MATERIAL_TEXTURE_KEYS,
       unityDb,
@@ -816,8 +819,8 @@ module.exports = function createMaterialPorter(deps) {
       b: COCOS_PARTICLE_DEFAULT_TINT,
       a: COCOS_PARTICLE_DEFAULT_TINT,
     });
-    const scale = env?.m_Scale || { x: 1, y: 1 };
-    const offset = env?.m_Offset || { x: 0, y: 0 };
+    const scale = !spriteTextureAsset && env?.m_Scale || { x: 1, y: 1 };
+    const offset = !spriteTextureAsset && env?.m_Offset || { x: 0, y: 0 };
     const customRenderQueue = Number(getField(materialDoc, 'm_CustomRenderQueue', -1) || -1);
     const transparent = Number(firstDefinedMaterialValue(floats, ['_Surface', '_Mode', '_RenderingMode'], 0) || 0) > 0
       || customRenderQueue >= 3000
@@ -896,7 +899,7 @@ module.exports = function createMaterialPorter(deps) {
     syncImportedMaterialLibraryCache(materialData, meta, options);
 
     const legacyDest = legacyUnityParticleMaterialAssetPath(materialAsset, options);
-    if (legacyDest && legacyDest !== convertedDest && fs.existsSync(legacyDest)) {
+    if (!spriteTextureAsset && legacyDest && legacyDest !== convertedDest && fs.existsSync(legacyDest)) {
       const legacyData = readJsonIfExists(legacyDest);
       if (legacyData?.__type__ === 'cc.Material' && legacyData?._effectAsset?.__uuid__ === BUILTIN_PARTICLE_EFFECT_UUID) {
         fs.unlinkSync(legacyDest);
@@ -910,10 +913,10 @@ module.exports = function createMaterialPorter(deps) {
     };
   }
 
-  function resolveUnityParticleMaterial(materialAsset, options, unityDb, reporter, gameObjectName) {
+  function resolveUnityParticleMaterial(materialAsset, options, unityDb, reporter, gameObjectName, spriteTextureAsset = null) {
     if (!materialAsset) return null;
 
-    const converted = convertUnityParticleMaterialToCocos(materialAsset, options, unityDb, reporter);
+    const converted = convertUnityParticleMaterialToCocos(materialAsset, options, unityDb, reporter, spriteTextureAsset);
     const convertedDest = converted?.file || convertedUnityParticleMaterialAssetPath(materialAsset, options);
     let materialUuid = resolveStandaloneMaterialAssetUuid(convertedDest, options);
 

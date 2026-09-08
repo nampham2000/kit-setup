@@ -17,12 +17,23 @@ When starting a new task or encountering a tricky bug in Cocos 3.8:
   npm run memory:stats
   npm run memory:query -- "shader"
   ```
+  Query text may contain hyphenated terms such as `world-position`; the CLI
+  quotes tokens before FTS prefix matching so punctuation is treated as text,
+  not SQLite query syntax. Keep this regression in `test-memory-cli.cjs`.
 
 ---
 
 ## 2. How to Save New Lessons / Traps
 
 Whenever you resolve a tricky bug or discover a reusable porting pattern:
+Prefer a structured CLI write when the task requests a memory update:
+`node playable-shared-kit/tools/work-memory.cjs remember-auto --memory-file <json-file>`.
+The JSON can contain one object or an array. Use global scope for general porter
+semantics and repo scope for game choices/tuning. Include symptom, root cause,
+fix path, source evidence, and the actual validation scope. Query the saved title
+after writing; a hidden comment alone is not confirmation that SQLite was updated.
+Do not record subjective visual approval as a quantified parity percentage.
+
 1. **Via MCP Tool**: Call `rememberWorkMemory` with category, title, content, tags, and importance (0.0 - 1.0).
 2. **Via HTML Comment in Chat**:
    Append a single-line hidden HTML comment to your response:

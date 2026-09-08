@@ -51,6 +51,7 @@ module.exports = function createAnimationPorter(deps) {
     unityRefGuid,
     unityRefFileId,
     ensureDirectoryMetas,
+    resolveUnitySpriteFrame,
   } = deps;
 
   function getIndentedBlock(doc, key) {
@@ -104,14 +105,14 @@ module.exports = function createAnimationPorter(deps) {
   function parseUnityCurveKeyframes(entryLines) {
     const keyframes = [];
     for (let i = 0; i < entryLines.length; i++) {
-      const timeMatch = /^\s*time:\s*(.*)$/.exec(entryLines[i]);
+      const timeMatch = /^\s*(?:-\s*)?time:\s*(.*)$/.exec(entryLines[i]);
       if (!timeMatch) continue;
       const keyframe = {
         time: unityNumber(timeMatch[1]),
         value: null,
       };
       for (let j = i + 1; j < entryLines.length; j++) {
-        if (/^\s*time:\s*/.test(entryLines[j])) break;
+        if (/^\s*(?:-\s*)?time:\s*/.test(entryLines[j])) break;
         const valueMatch = /^\s*value:\s*(.*)$/.exec(entryLines[j]);
         if (valueMatch) keyframe.value = parseUnityScalar(valueMatch[1]);
         const inSlopeMatch = /^\s*inSlope:\s*(.*)$/.exec(entryLines[j]);
@@ -307,12 +308,12 @@ module.exports = function createAnimationPorter(deps) {
     };
   }
 
-  function cocosObjectTrack(unityPath, property, keyframes, convertValue) {
+  function cocosObjectTrack(unityPath, property, keyframes, convertValue, component = '') {
     return {
       __type__: 'cc.animation.ObjectTrack',
       _binding: {
         __type__: 'cc.animation.TrackBinding',
-        path: cocosTrackPathForUnityPath(unityPath, property),
+        path: cocosTrackPathForUnityPath(unityPath, property, component),
       },
       _channel: {
         __type__: 'cc.animation.Channel',
@@ -611,6 +612,32 @@ module.exports = function createAnimationPorter(deps) {
     for (const entry of parseUnityVectorCurveEntries(doc, 'm_PositionCurves')) tracks.push(cocosVectorTrack(entry.path, 'position', entry.keyframes));
     for (const entry of parseUnityVectorCurveEntries(doc, 'm_ScaleCurves')) tracks.push(cocosVectorTrack(entry.path, 'scale', entry.keyframes));
     for (const entry of parseUnityVectorCurveEntries(doc, 'm_EulerCurves')) tracks.push(cocosVectorTrack(entry.path, 'eulerAngles', entry.keyframes));
+
+    for (const lines of splitUnityListEntries(getIndentedBlock(doc, 'm_PPtrCurves'))) {
+      const attribute = String(readUnityFieldFromLines(lines, 'attribute', ''));
+      const unityPath = String(readUnityFieldFromLines(lines, 'path', ''));
+      const classId = Number(readUnityFieldFromLines(lines, 'classID', 0));
+      const scriptGuid = unityRefGuid(readUnityFieldFromLines(lines, 'script', null));
+      // UI Image and SpriteRenderer use different Cocos components. Do not guess other scripts.
+      const component = classId === 114 && scriptGuid === 'fe87c0e1cc204ed48ad3b37840f39efc'
+        ? 'cc.Sprite' : classId === 212 ? 'cc.SpriteRenderer' : '';
+      if (attribute !== 'm_Sprite' || !component) {
+        reporter.high('ANIMATION_OBJECT_CURVE_UNSUPPORTED', file, unityPath, `Object curve ${attribute} (class ${classId}) needs an explicit binding`);
+        continue;
+      }
+      const keyframes = parseUnityCurveKeyframes(lines);
+      const values = keyframes.map(({ value }) => {
+        if (String(unityRefFileId(value)) === '0') return null;
+        const uuid = animationContext?.resolveSpriteReference?.(value);
+        return uuid ? { __uuid__: uuid, __expectedType__: 'cc.SpriteFrame' } : undefined;
+      });
+      if (!keyframes.length || values.includes(undefined)) {
+        reporter.high('ANIMATION_SPRITE_FRAME_UNRESOLVED', file, unityPath, 'Sprite animation has unresolved frames; import the referenced sprites and re-run. No partial clip is emitted for this track.');
+        continue;
+      }
+      let index = 0;
+      tracks.push(cocosObjectTrack(unityPath, 'spriteFrame', keyframes, () => values[index++], component));
+    }
 
     const colorCurveGroups = new Map();
     const vectorCurveGroups = new Map();
@@ -1137,6 +1164,21 @@ module.exports = function createAnimationPorter(deps) {
 
     ensureDir(outDir);
     ensureDirectoryMetas(outDir, path.join(options.cocosRoot, 'assets'));
+
+    animationContext = animationContext || {};
+    const spriteCache = new Map();
+    animationContext.resolveSpriteReference = (reference) => {
+      const guid = unityRefGuid(reference), fileId = String(unityRefFileId(reference));
+      const key = `${guid}:${fileId}`;
+      if (spriteCache.has(key)) return spriteCache.get(key);
+      const asset = unityDb.get(guid);
+      // The current image importer resolves whole-image sprites only, not arbitrary sliced fileIDs.
+      const result = asset && fileId === '21300000' && resolveUnitySpriteFrame
+        ? resolveUnitySpriteFrame(asset, options, unityDb, cocosDb, reporter) : null;
+      const uuid = result?.spriteUuid || '';
+      spriteCache.set(key, uuid);
+      return uuid;
+    };
 
     const controller = parseUnityAnimatorController(controllerAsset.path, unityDb, reporter, options);
     const clipInfoByState = new Map();

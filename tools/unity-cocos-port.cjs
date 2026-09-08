@@ -205,6 +205,7 @@ const {
   unityRefFileId,
   ensureDirectoryMetas,
   getNestedList,
+  resolveUnitySpriteFrame: resolveUnitySpriteFrameImpl,
 });
 const fontPorter = createFontPorter({
   getField,
@@ -2298,8 +2299,8 @@ function resolveUnityMaterialUuid(materialAsset, options, unityDb, cocosDb, repo
   return resolveUnityMaterialUuidImpl(materialAsset, options, unityDb, cocosDb, reporter, gameObjectName);
 }
 
-function resolveUnityParticleMaterial(materialAsset, options, unityDb, reporter, gameObjectName) {
-  return resolveUnityParticleMaterialImpl(materialAsset, options, unityDb, reporter, gameObjectName);
+function resolveUnityParticleMaterial(materialAsset, options, unityDb, reporter, gameObjectName, spriteTextureAsset = null) {
+  return resolveUnityParticleMaterialImpl(materialAsset, options, unityDb, reporter, gameObjectName, spriteTextureAsset);
 }
 
 function resolveBuiltinPrimitiveMeshUuid(...hints) {
@@ -3583,7 +3584,7 @@ function materializeStrippedTransforms(context) {
       sourceTransformId,
     );
     const rootGameObjectProps = prefabOverridePropsByFileId(instanceInfo, sourceGuid, rootGameObjectId);
-    const gameObjectProps = Object.keys(rootGameObjectProps).length
+    const gameObjectProps = rootGameObjectId
       ? rootGameObjectProps
       : firstGameObjectOverrideProps(instanceInfo, sourceGuid);
     const syntheticGameObjectId = `${instanceId}:go`;
@@ -4341,6 +4342,14 @@ function buildNestedPrefabPropertyOverrides(gameObject, transform, sourceModel) 
   for (const [key, props] of overrideInfo.overridesByTarget.entries()) {
     if (!key.startsWith(`${sourceGuid}:`)) continue;
     const sourceFileId = key.slice(sourceGuid.length + 1);
+    const sourceGameObject = sourceModel.gameObjects?.get(sourceFileId);
+    if (sourceGameObject && hasPrefabOverrideKey(props, 'm_IsActive')) {
+      overrides.push({
+        localId: `node-${sanitizeFileId(sourceGameObject.name)}-${sourceGameObject.transformId}`,
+        propertyPath: '_active',
+        value: Number(props.m_IsActive) !== 0,
+      });
+    }
     const sourceDoc = sourceModel.componentDocs.get(sourceFileId);
     if (!sourceDoc || Number(sourceDoc.classId) !== 114) continue;
     if (!hasField(sourceDoc, 'm_Text') && !hasField(sourceDoc, 'm_text')) continue;

@@ -8,6 +8,16 @@ argument-hint: "Unity prefab/material/shader source plus Unity project root and 
 
 Convert rendering behavior, not an isolated text file. A syntactically valid `.effect` can still use the wrong material, keyword, color space, renderer slot, light rig, camera exposure, or runtime variant. The requested 90–95% visual target is an **acceptance target**. Never infer it from Grade A, a static score, a clean TypeScript build, or a contact sheet.
 
+Visual accuracy is a target, not a compiler guarantee. When an invisible/hidden
+object becomes too obvious after porting, compare the source lighting formula
+and project ColorSpace before changing opacity: TCP2 wrapped NdotL, ramp
+threshold/smoothing, and shading in linear light can all affect visibility.
+Apply sRGB conversion once at the correct boundary. Inspect blend factors and
+texture alpha when an otherwise correct background develops solid rectangles
+or floor strips. Unity texture `alphaUsage: 2` derives alpha from grayscale;
+preserve that import behavior or use a scoped shader equivalent. Do not change
+mesh geometry to compensate for these material differences.
+
 ## Mandatory workflow
 
 1. Run Unity port preflight before reading raw Unity source or writing output:

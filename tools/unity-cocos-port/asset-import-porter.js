@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { copyAssetIfChanged, ensureDir, randomUuid, toPosix } = require('./core-utils');
 const { exportUnityMeshAssetToFbx } = require('./unity-mesh-fbx-exporter');
+const { textureImportLimit, copyTextureWithLimit } = require('./texture-import-limit');
 
 module.exports = function createAssetImportPorter(deps) {
   const {
@@ -88,7 +89,17 @@ module.exports = function createAssetImportPorter(deps) {
     }
     ensureDir(path.dirname(dest));
     ensureDirectoryMetas(path.dirname(dest), path.join(options.cocosRoot, 'assets'));
-    const copyResult = copyAssetIfChanged(unityAsset.path, dest);
+    const maxSize = kind === 'image' ? textureImportLimit(unityAsset.relativePath, options) : 0;
+    let copyResult;
+    try {
+      copyResult = maxSize ? copyTextureWithLimit(unityAsset.path, dest, maxSize, options.cocosRoot)
+        : copyAssetIfChanged(unityAsset.path, dest);
+    } catch (error) {
+      reporter.add('high', 'TEXTURE_IMPORT_RESIZE_FAILED', unityAsset.relativePath, dest, String(error));
+      return '';
+    }
+    if (maxSize && copyResult !== 'unchanged') reporter.low('TEXTURE_IMPORT_SIZE_LIMIT', unityAsset.relativePath,
+      toPosix(path.relative(options.cocosRoot, dest)), `Applied configured texture max size ${maxSize}; alpha/aspect ratio preserved`);
     if (copyResult === 'refreshed') {
       // The .meta and its uuid are left alone so existing references keep resolving;
       // the editor re-imports on the changed file.
@@ -96,7 +107,7 @@ module.exports = function createAssetImportPorter(deps) {
         'ASSET_REFRESHED',
         unityAsset.relativePath,
         toPosix(path.relative(options.cocosRoot, dest)),
-        'Existing Cocos copy differed from the Unity source and was replaced; refresh/import is required',
+        'Existing Cocos copy differed from the prepared Unity source and was replaced; refresh/import is required',
       );
     }
     if (kind === 'model') recoverModelMetaFromLibrary(dest, options);

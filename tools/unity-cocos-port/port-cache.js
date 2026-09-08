@@ -25,8 +25,10 @@
 
 const fs = require('fs');
 const path = require('path');
+const { readTextureImportLimits } = require('./texture-import-limit');
 
-const CACHE_VERSION = 1;
+// v2 invalidates clips/particles/linked overrides emitted before the parity fixes.
+const CACHE_VERSION = 2;
 
 /** Dấu vân tay của một file: kích thước + mtime. Đủ nhạy, không cần đọc nội dung. */
 function fileStamp(file) {
@@ -87,6 +89,7 @@ function optionsFingerprint(options) {
     unityRoot: options.unityRoot || '',
     cocosRoot: options.cocosRoot || '',
     modelImportWaitMs: Number(options.modelImportWaitMs ?? -1),
+    textureImportLimits: readTextureImportLimits(options.cocosRoot),
   });
 }
 

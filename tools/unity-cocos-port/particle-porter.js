@@ -5,6 +5,7 @@ const {
   applyParticleRendererMaterial,
   applyUnityParticleSystemToCocos,
   parseUnityRendererDoc,
+  parseUnityParticleDoc,
 } = require('./particle-system-converter');
 
 const UNITY_BUILTIN_RESOURCE_GUID = '0000000000000000f000000000000000';
@@ -132,8 +133,22 @@ module.exports = function createParticlePorter(deps = {}) {
       const materialAsset = !usedBuiltInDefaultParticleMaterial && materialRef?.guid && unityDb?.get
         ? unityDb.get(String(materialRef.guid))
         : null;
+      const uv = parseUnityParticleDoc(doc).UVModule;
+      let spriteTextureAsset = null;
+      if (Number(uv?.enabled) !== 0 && Number(uv?.mode) === 1) {
+        const sprites = (uv.sprites || []).map(entry => entry.sprite);
+        const ref = sprites[0];
+        const asset = sprites.length === 1 && String(ref?.fileID) === '21300000'
+          ? unityDb?.get(String(ref.guid)) : null;
+        if (asset && /\.(png|jpe?g|tga)$/i.test(asset.path) && materialAsset) {
+          spriteTextureAsset = asset;
+        } else {
+          reporter.high('PARTICLE_SPRITE_SHEET_UNRESOLVED', options.src || '', gameObject?.name || '',
+            'Sprite-mode UV animation requires one whole-image sprite and a converted material. Multiple/sliced sprites need atlas baking; grid tiles were not substituted.');
+        }
+      }
       const particleMaterial = resolveUnityParticleMaterial && materialAsset
-        ? resolveUnityParticleMaterial(materialAsset, options, unityDb, reporter, gameObject?.name || '')
+        ? resolveUnityParticleMaterial(materialAsset, options, unityDb, reporter, gameObject?.name || '', spriteTextureAsset)
         : null;
       if (particleMaterial?.materialUuid) {
         applyParticleRendererMaterial(builder, particleId, particleMaterial.materialUuid, particleMaterial.textureUuid);
