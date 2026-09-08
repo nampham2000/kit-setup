@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "generatedAt": "2026-09-08T11:16:01.676Z",
+    "generatedAt": "2026-09-08T19:29:04.687Z",
     "description": "Compact project manifest for AI Agents. Use this instead of scanning file trees.",
     "project": {
       "projectName": "cc_playable_framework",
@@ -28,137 +28,137 @@
   "prefabs": [
     {
       "name": "artstudio",
-      "path": "assets/resources/hidden-suspect/levels/artstudio.prefab",
+      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/levels/artstudio.prefab",
       "sizeKb": 35.7
     },
     {
       "name": "guestroom",
-      "path": "assets/resources/hidden-suspect/levels/guestroom.prefab",
+      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/levels/guestroom.prefab",
       "sizeKb": 41
     },
     {
       "name": "TutorialVFX",
-      "path": "assets/resources/hidden-suspect/levels/TutorialVFX.prefab",
+      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/levels/TutorialVFX.prefab",
       "sizeKb": 37.3
     },
     {
       "name": "AdBreakController",
-      "path": "assets/resources/hidden-suspect/ui/AdBreakController.prefab",
+      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/ui/AdBreakController.prefab",
       "sizeKb": 9.5
     },
     {
       "name": "ButtonClose",
-      "path": "assets/resources/hidden-suspect/ui/ButtonClose.prefab",
+      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/ui/ButtonClose.prefab",
       "sizeKb": 3.7
     },
     {
       "name": "Char_GamePlay",
-      "path": "assets/resources/hidden-suspect/ui/Char_GamePlay.prefab",
+      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/ui/Char_GamePlay.prefab",
       "sizeKb": 87.9
     },
     {
       "name": "Fade",
-      "path": "assets/resources/hidden-suspect/ui/Fade.prefab",
+      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/ui/Fade.prefab",
       "sizeKb": 3.3
     },
     {
       "name": "GameplayUIAnimationRewardHandler",
-      "path": "assets/resources/hidden-suspect/ui/GameplayUIAnimationRewardHandler.prefab",
+      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/ui/GameplayUIAnimationRewardHandler.prefab",
       "sizeKb": 22.5
     },
     {
       "name": "hud",
-      "path": "assets/resources/hidden-suspect/ui/hud.prefab",
-      "sizeKb": 351.5
+      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/ui/hud.prefab",
+      "sizeKb": 351.8
     },
     {
       "name": "Logo02",
-      "path": "assets/resources/hidden-suspect/ui/Logo02.prefab",
+      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/ui/Logo02.prefab",
       "sizeKb": 10.3
     },
     {
       "name": "lose",
-      "path": "assets/resources/hidden-suspect/ui/lose.prefab",
+      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/ui/lose.prefab",
       "sizeKb": 30.5
     },
     {
       "name": "PanelCoin",
-      "path": "assets/resources/hidden-suspect/ui/PanelCoin.prefab",
+      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/ui/PanelCoin.prefab",
       "sizeKb": 30.8
     },
     {
       "name": "PanelLive",
-      "path": "assets/resources/hidden-suspect/ui/PanelLive.prefab",
+      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/ui/PanelLive.prefab",
       "sizeKb": 84.8
     },
     {
       "name": "Sparkle_Coin",
-      "path": "assets/resources/hidden-suspect/ui/Sparkle_Coin.prefab",
+      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/ui/Sparkle_Coin.prefab",
       "sizeKb": 30.9
     },
     {
       "name": "Star_trail_gameplay",
-      "path": "assets/resources/hidden-suspect/ui/Star_trail_gameplay.prefab",
+      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/ui/Star_trail_gameplay.prefab",
       "sizeKb": 42.4
     },
     {
       "name": "UIparticleHit",
-      "path": "assets/resources/hidden-suspect/ui/UIparticleHit.prefab",
+      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/ui/UIparticleHit.prefab",
       "sizeKb": 124.3
     },
     {
       "name": "VFXTargetTrail",
-      "path": "assets/resources/hidden-suspect/ui/VFXTargetTrail.prefab",
+      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/ui/VFXTargetTrail.prefab",
       "sizeKb": 34
     },
     {
       "name": "win",
-      "path": "assets/resources/hidden-suspect/ui/win.prefab",
+      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/ui/win.prefab",
       "sizeKb": 224.9
     },
     {
       "name": "celebration",
-      "path": "assets/resources/hidden-suspect/vfx/celebration.prefab",
+      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/vfx/celebration.prefab",
       "sizeKb": 888
     },
     {
       "name": "flash",
-      "path": "assets/resources/hidden-suspect/vfx/flash.prefab",
+      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/vfx/flash.prefab",
       "sizeKb": 168.2
     },
     {
       "name": "hint",
-      "path": "assets/resources/hidden-suspect/vfx/hint.prefab",
+      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/vfx/hint.prefab",
       "sizeKb": 108.2
     },
     {
       "name": "hit",
-      "path": "assets/resources/hidden-suspect/vfx/hit.prefab",
+      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/vfx/hit.prefab",
       "sizeKb": 64.2
     },
     {
       "name": "miss",
-      "path": "assets/resources/hidden-suspect/vfx/miss.prefab",
+      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/vfx/miss.prefab",
       "sizeKb": 3.5
     },
     {
       "name": "perfect",
-      "path": "assets/resources/hidden-suspect/vfx/perfect.prefab",
+      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/vfx/perfect.prefab",
       "sizeKb": 3.6
     },
     {
       "name": "Star_trail_gameplay",
-      "path": "assets/resources/hidden-suspect/vfx/Star_trail_gameplay.prefab",
+      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/vfx/Star_trail_gameplay.prefab",
       "sizeKb": 59.5
     },
     {
       "name": "trail",
-      "path": "assets/resources/hidden-suspect/vfx/trail.prefab",
+      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/vfx/trail.prefab",
       "sizeKb": 34
     },
     {
       "name": "tutorial",
-      "path": "assets/resources/hidden-suspect/vfx/tutorial.prefab",
+      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/vfx/tutorial.prefab",
       "sizeKb": 66.4
     }
   ],
@@ -255,14 +255,14 @@
     "audioCount": 12,
     "audio": {
       "count": 12,
-      "totalKb": 3867.9,
+      "totalKb": 1139.1,
       "sample": [
-        "assets/resources/hidden-suspect/audio/celebrationStart.mp3",
-        "assets/resources/hidden-suspect/audio/celebrationTarget.mp3",
-        "assets/resources/hidden-suspect/audio/finderFocusComplete.mp3",
-        "assets/resources/hidden-suspect/audio/foundAccepted.mp3",
-        "assets/resources/hidden-suspect/audio/gameplayBgm.mp3",
-        "assets/resources/hidden-suspect/audio/levelIntro.mp3"
+        "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/audio/celebrationStart.mp3",
+        "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/audio/celebrationTarget.mp3",
+        "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/audio/finderFocusComplete.mp3",
+        "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/audio/foundAccepted.mp3",
+        "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/audio/gameplayBgm.mp3",
+        "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/audio/levelIntro.mp3"
       ],
       "truncated": 6
     },
@@ -278,9 +278,9 @@
     "shaderCount": 4,
     "shaders": {
       "count": 4,
-      "totalKb": 8.5,
+      "totalKb": 8.6,
       "sample": [
-        "assets/effects/HiddenSuspectParticleAlpha.effect",
+        "assets/effects/hidden-suspect-particle-alpha.effect",
         "assets/effects/HiddenSuspectTCP2.effect",
         "assets/effects/UnitySpriteRendererColor.effect",
         "assets/unity_imported/ui_sprite_alpha_sep/ui-sprite-alpha-sep.effect"
@@ -302,10 +302,10 @@
     },
     "textures": {
       "count": 82,
-      "totalKb": 8112.4,
+      "totalKb": 7350.8,
       "sample": [
-        "assets/resources/hidden-suspect/backgrounds/end.jpg",
-        "assets/resources/hidden-suspect/backgrounds/game.jpg",
+        "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/backgrounds/end.jpg",
+        "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/backgrounds/game.jpg",
         "assets/unity_imported/JMO Assets/Cartoon FX Remaster/CFXR Assets/Graphics/cfxr star blurred.png",
         "assets/unity_imported/JMO Assets/Cartoon FX Remaster/CFXR Assets/Graphics/cfxr stretch trait blur.png",
         "assets/unity_imported/Module/ModuleAdBreak/UI/AdBreakGamePlay/ads_break_1.png",
@@ -328,14 +328,14 @@
     },
     "prefabsInAssets": {
       "count": 27,
-      "totalKb": 2600.9,
+      "totalKb": 2601.2,
       "sample": [
-        "assets/resources/hidden-suspect/levels/artstudio.prefab",
-        "assets/resources/hidden-suspect/levels/guestroom.prefab",
-        "assets/resources/hidden-suspect/levels/TutorialVFX.prefab",
-        "assets/resources/hidden-suspect/ui/AdBreakController.prefab",
-        "assets/resources/hidden-suspect/ui/ButtonClose.prefab",
-        "assets/resources/hidden-suspect/ui/Char_GamePlay.prefab"
+        "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/levels/artstudio.prefab",
+        "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/levels/guestroom.prefab",
+        "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/levels/TutorialVFX.prefab",
+        "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/ui/AdBreakController.prefab",
+        "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/ui/ButtonClose.prefab",
+        "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/ui/Char_GamePlay.prefab"
       ],
       "truncated": 21
     },
@@ -343,7 +343,7 @@
       "exists": true,
       "root": "assets/unity_imported",
       "count": 113,
-      "totalKb": 12293.3,
+      "totalKb": 11531.7,
       "sample": [
         "assets/unity_imported/JMO Assets/Cartoon FX Remaster/CFXR Assets/Graphics/cfxr star blurred add.mtl",
         "assets/unity_imported/JMO Assets/Cartoon FX Remaster/CFXR Assets/Graphics/cfxr star blurred.png",
@@ -376,7 +376,9 @@
     "gameplayKeys": [
       "targetTaps",
       "autoWinTimer",
-      "difficulty"
+      "difficulty",
+      "activeBundle",
+      "briefs"
     ],
     "cameraKeys": [
       "defaultMode",
@@ -391,8 +393,8 @@
     ],
     "rawPreview": {
       "cta": {
-        "googlePlayUrl": "https://play.google.com/store/apps/details?id=com.playable.ad",
-        "appStoreUrl": "https://apps.apple.com/app/id123456789",
+        "googlePlayUrl": "https://play.google.com/store/apps/details?id=com.ntt.hidden.suspect.find.seek",
+        "appStoreUrl": "",
         "enableButtonPulse": true,
         "autoRedirectDelay": 0,
         "pulseScaleMultiplier": 1.08,
@@ -410,7 +412,14 @@
       "gameplay": {
         "targetTaps": 3,
         "autoWinTimer": 0,
-        "difficulty": "normal"
+        "difficulty": "normal",
+        "activeBundle": "hidden-suspect-brief3",
+        "briefs": {
+          "hidden-suspect-brief3": {
+            "customConfig": "hiddenSuspect",
+            "description": "Unity source levels 1 and 3"
+          }
+        }
       },
       "camera": {
         "defaultMode": 0,
@@ -520,6 +529,7 @@
     "fbx.strip": "npm run fbx:strip -- <file.fbx>",
     "engine.features": "npm run engine:features -- ensure --project <CocosProjectRoot>",
     "port.core.acceptance": "npm run ai:port:core:verify -- --unity-project <UnityProjectRoot> --cocos-project <CocosProjectRoot>",
+    "gameplay.briefs.verify": "npm run briefs:check",
     "verify.all": "npm run ai:verify",
     "verify.prefab": "npm run ai:verify:prefab",
     "verify.assets": "npm run ai:verify:assets",

@@ -4,7 +4,7 @@
     "source": "playable-shared-kit/ai/capabilities.def.cjs",
     "generatedBy": "npm run ai:sync",
     "contractCheck": "npm run ai:contract:verify",
-    "count": 53
+    "count": 54
   },
   "coreRules": [
     {
@@ -998,6 +998,25 @@
           "Score là rubric parity có evidence, không phải pixel-perfect hoặc semantic proof tự động; target 90 và minimum accept 80.",
           "Compiler confidence, status boolean hoặc file tồn tại đơn lẻ không được tính điểm. Evidence schema v1 phải bind current brief/state/checkpoint và SHA-256 của từng Cocos target; target đổi làm evidence stale. Mandatory input/rules/win-lose chỉ nhận runtime, không nhận visual-only.",
           "Mặc định chạy tuần tự `ai:verify`, `ai:lint`, `ai:verify:assets`, `ai:verify:regressions`, `build`, `ai:verify:runtime`; dừng ở gate đầu thất bại, timeout/output bounded và redacted. Regression gate buộc registry/matrix/oracle/watchFiles đã nằm trong Git và receipt khớp hash hiện tại. `--no-run-gates` không thể trả accepted/runnable."
+        ],
+        "verify": null,
+        "status": "partial"
+      },
+      {
+        "id": "gameplay.briefs.verify",
+        "title": "Kiểm tra selector, asset bundle và build config của mọi playable brief",
+        "run": "npm run briefs:check",
+        "command": "node playable-shared-kit/tools/gameplay-brief-validator.cjs",
+        "optional": [
+          "--project <dir>",
+          "--json"
+        ],
+        "when": "Sau khi thêm, đổi tên hoặc chuyển asset của playable brief. Bảo đảm đổi gameplay.activeBundle là đủ để preview và mỗi brief có build config riêng.",
+        "outputs": [
+          "stdout; JSON khi có --json"
+        ],
+        "limits": [
+          "Chỉ kiểm tra contract tĩnh và Cocos bundle metadata; không thay thế preview/runtime smoke test."
         ],
         "verify": null,
         "status": "partial"

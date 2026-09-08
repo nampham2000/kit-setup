@@ -121,9 +121,29 @@ export class MyGameplayController extends Component {
 }
 ```
 
+## 4. Playable Brief Bundles
+
+When one Cocos project contains several playable briefs, keep the shared launch
+scene and `playable-config.json` in `assets/resources`, and put each brief's
+runtime assets in exactly one Cocos bundle:
+
+```text
+assets/gameplay-bundles/<brief-name>/
+configs/<brief-name>.json
+```
+
+Declare every brief under `gameplay.briefs` and select Editor preview with the
+single `gameplay.activeBundle` value. Runtime code must load that bundle through
+`assetManager.loadBundle`; changing the selector then reloading Preview must be
+enough to run another brief. Each build config must include `resources`, include
+only its matching gameplay bundle, and stamp
+`packages.gameplay-briefs.activeBundle` so command-line builds cannot silently
+follow the current preview selector. Run `npm run briefs:check` after adding or
+renaming a brief.
+
 ---
 
-## 4. Visual Inspector Editing Workflow
+## 5. Visual Inspector Editing Workflow
 
 For a playable with level-to-level transition popups and a separate final-win
 screen, keep one imported sliced button/font treatment and assign behavior from
