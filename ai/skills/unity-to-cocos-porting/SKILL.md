@@ -282,6 +282,13 @@ mismatched join to the same effective opacity through game config. Check every
 edge at the narrowest supported viewport; do not blindly change panels whose
 source opacity already differs intentionally, and do not hide the symptom by
 moving the camera, level mesh, focus target, or tutorial hand.
+Fixed extension widths that cover a portrait reference can leave bright side
+bands after rotation when a height-fitted Canvas becomes much wider. On every
+Canvas size change, preserve the center hole dimensions, stretch top and bottom
+panels to the Canvas width, and set each side panel width to half the remaining
+Canvas width. Stretch solid modal dim sprites too. Validate portrait and landscape
+with runtime bounds; a full-screen root RectTransform alone does not resize its
+fixed-size composite children.
 
 For Unity ParticleSystem trails, renderer material slot 0 is the particle and
 slot 1 is the trail. Convert slot 1 with Cocos `builtin-particle-trail`, keep its
