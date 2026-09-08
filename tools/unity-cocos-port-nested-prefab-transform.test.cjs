@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 
 const {
+  resolveTransformLayout,
   resolveNestedPrefabEffectiveTransform,
 } = require('./unity-cocos-port.cjs');
 
@@ -49,4 +50,26 @@ test('nested prefab explicit transform modifications still override source defau
   });
 
   assert.deepEqual(result.localScale, { x: 0.5, y: 0.6, z: 0.7 });
+});
+
+test('RectTransform anchored position is applied once relative to the effective parent pivot', () => {
+  const parent = transform({
+    isRect: true,
+    sizeDelta: { x: 843, y: 224 },
+    anchor: { x: 0.5, y: 1 },
+    resolvedLayout: { size: { x: 843, y: 224 }, anchor: { x: 0.5, y: 1 } },
+  });
+  const child = transform({
+    isRect: true,
+    anchoredPosition: { x: 67.7, y: -16 },
+    localPosition: { x: 0, y: -16, z: 0 },
+    anchorMin: { x: 0, y: 0.5 },
+    anchorMax: { x: 0, y: 0.5 },
+    anchor: { x: 0, y: 0.5 },
+    sizeDelta: { x: 234, y: 268 },
+  });
+
+  const result = resolveTransformLayout(child, parent);
+
+  assert.deepEqual(result.localPosition, { x: -353.8, y: -128, z: 0 });
 });
