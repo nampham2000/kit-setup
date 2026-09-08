@@ -24,6 +24,12 @@ Before building, always run the automated asset optimization tools:
    The policy persists
    `useCompressTexture=true` plus its `presetId` through the Cocos Profile and
    Asset DB APIs. Never patch image `.meta` files directly.
+   After `npm run sync`, an Editor instance that was already open can still
+   expose the previous MCP schema. If either policy command reports `Tool not
+   found`, reload the `cocos-mcp-server` extension or restart the clean Cocos
+   project, then rerun the apply command and its `--verify` gate. A successful
+   file sync alone does not prove the live extension loaded the new importer
+   listeners.
 2. **Enforce the portable FBX importer policy** (Cocos Creator must be open):
    ```bash
    npm run ai:model:optimize
@@ -51,6 +57,12 @@ Before building, always run the automated asset optimization tools:
    Defaults are MP3 quality 30 (32kbps/22.05kHz) with source mono/stereo
    preserved. Extension changes go through Asset DB move/reimport and must keep
    the UUID. Never patch audio `.meta` files directly.
+   The quality percentage is a preset name, not an output-size ratio. When a
+   task requires the final audio set to remain around 25-30% of its source
+   bytes, dry-run candidate presets against the original files and choose from
+   measured aggregate size. Do not raise quality by re-encoding an already
+   compressed result. Hidden Suspect measured quality 60 at 29.5% of its source
+   set, so that project uses `--quality 60` for both `--write` and `--verify`.
 4. **Strip FBX Textures**:
    ```bash
    node playable-shared-kit/tools/strip-fbx-textures.cjs <file.fbx>

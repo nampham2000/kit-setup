@@ -218,10 +218,25 @@ function reconcileDestinationWithSource(src, dest) {
   return { removed };
 }
 
+function resolveNodeModuleSearchPath(existingNodePath = process.env.NODE_PATH) {
+  const nodeModuleCandidates = [
+    path.join(SHARED_EXTENSIONS_DIR, 'cocos-mcp', 'node_modules'),
+    path.join(TARGET_EXTENSIONS_DIR, 'cocos-mcp', 'node_modules'),
+    path.join(PROJECT_ROOT, 'node_modules'),
+    ...(existingNodePath ? existingNodePath.split(path.delimiter) : []),
+  ].filter(candidate => candidate && fs.existsSync(candidate));
+  return [...new Set(nodeModuleCandidates)].join(path.delimiter);
+}
+
 function runNodeGate(script, args, label) {
+  const nodeModuleSearchPath = resolveNodeModuleSearchPath();
   const result = spawnSync(process.execPath, [script, ...args], {
     cwd: SHARED_KIT_ROOT,
     encoding: 'utf8',
+    env: {
+      ...process.env,
+      ...(nodeModuleSearchPath ? { NODE_PATH: nodeModuleSearchPath } : {}),
+    },
   });
   if (result.stdout) process.stdout.write(result.stdout);
   if (result.stderr) process.stderr.write(result.stderr);
@@ -385,6 +400,7 @@ module.exports = {
   syncExtensions,
   reconcileDestinationWithSource,
   prepareCocosMcpForSync,
+  resolveNodeModuleSearchPath,
   TARGET_SHARED_DIR,
   TARGET_EXTENSIONS_DIR,
   SHARED_EXTENSIONS_DIR,

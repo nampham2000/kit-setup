@@ -29,3 +29,16 @@ test('extension reconciliation removes stale artifacts and preserves node_module
     fs.rmSync(destination, { recursive: true, force: true });
   }
 });
+
+test('node gates can resolve dependencies installed in the synced extension', () => {
+  const existing = fs.mkdtempSync(path.join(sync.SHARED_KIT_ROOT, '.external-node-modules-'));
+  try {
+    const entries = sync.resolveNodeModuleSearchPath(existing).split(path.delimiter);
+
+    assert.ok(entries.includes(path.join(sync.TARGET_EXTENSIONS_DIR, 'cocos-mcp', 'node_modules')));
+    assert.ok(entries.includes(existing));
+    assert.equal(entries.length, new Set(entries).size);
+  } finally {
+    fs.rmSync(existing, { recursive: true, force: true });
+  }
+});
