@@ -101,8 +101,11 @@ Before building, always run the automated asset optimization tools:
 ## 4. Startup latency in editor preview
 
 Measure from the config-loaded callback to the first gameplay draw, not just the
-`ready` log. Record each `resources.load` start/end and network transfer sizes;
-increase the browser Resource Timing buffer before navigation (its default can
+`ready` log. Record each `resources.load` start/end, network transfer sizes, and
+the runtime implementation marker. Fail the measurement when the Editor preview
+serves an older compiled chunk than the source under test; a browser reload alone
+does not prove Cocos recompiled TypeScript. Increase the browser Resource Timing
+buffer before navigation (its default can
 hide late, large requests). Compare repeated runs with the same cache policy.
 Do not change concurrency limits before identifying the actual bottleneck.
 
@@ -127,3 +130,10 @@ readiness barrier when immediate taps, popups and transitions need all assets;
 deferred loading requires explicit readiness/error handling, not missing sounds
 or effects. Validate visuals, the first interaction and a complete level flow
 after optimizing. Browser timing is not a build-size or low-end-device benchmark.
+
+When end-screen assets dominate first paint, use a config-driven critical set:
+load the first level, HUD, first FTUE, and immediate feedback before the first
+gameplay frame; begin level 2+, win/lose, celebration, and non-immediate audio
+after that frame. Cache every in-flight load so an early tap cannot duplicate it.
+Gate level transition, win, and lose entry points on deferred readiness, and let
+lazy audio reuse the same promise so a very early gesture still receives sound.
