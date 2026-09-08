@@ -54,7 +54,7 @@ module.exports = function createScriptPorter(deps) {
     const sourceBase = isTmp ? finiteNumber(getField(doc, 'm_fontSizeBase', requested), requested) : requested;
     const max = isTmp
       ? finiteNumber(getField(doc, 'm_fontSizeMax', NaN), NaN)
-      : finiteNumber(fontData.m_BestFitMaxSize, NaN);
+      : finiteNumber(fontData.m_MaxSize, NaN);
     const fontSize = autoSizing && Number.isFinite(max) ? max : requested;
     const lineHeight = isTmp
       ? fontSize + finiteNumber(getField(doc, 'm_lineSpacing', 0), 0)
@@ -296,6 +296,7 @@ module.exports = function createScriptPorter(deps) {
   }
 
   return {
+    resolveUnityLabelSizing,
     translateUnitySerializedValue,
     emitMonoBehaviour,
   };

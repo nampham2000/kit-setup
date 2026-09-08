@@ -164,6 +164,11 @@ sự paused/stopped, còn source đang `playing` phải được giữ nguyên. 
 lifecycle thật trong cùng một browser session và assert `currentTime` tăng nghiêm ngặt qua từng tap; một tap
 mỗi lần reload không thể phát hiện lỗi restart này. Kiểm tra pause/resume thật bằng một case riêng.
 
+Với Unity UI `Text` cũ, các thông số chữ nằm trong `m_FontData`. Khi `m_BestFit=1`, map cỡ nguồn tối đa từ
+`m_MaxSize` sang `cc.Label.fontSize`, giữ `Overflow.SHRINK`, và map `m_FontData.m_Font` sang đúng `cc.TTFFont`.
+Không dùng field không tồn tại `m_BestFitMaxSize`, system font hoặc mặc định 22; regression phải có fixture
+legacy Text với `m_FontSize`, `m_MinSize`, `m_MaxSize` và custom TTF.
+
 Auto-driver dùng để nghiệm thu nhiều lượt phải serialize qua các lifecycle phase này và ghi receipt win bất biến
 theo `pass:level`; đừng suy level đã thắng từ một snapshot trong loading transition. Chọn deadline từ một lượt đo
 thực tế rồi cộng headroom, và chỉ coi pass khi đủ receipt mong đợi, modal cuối đúng, cùng console/runtime sạch.
