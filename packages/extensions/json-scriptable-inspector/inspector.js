@@ -433,7 +433,7 @@ exports.template = `
         <div class="asset-info">
           <span class="asset-icon">📜</span>
           <span class="asset-name" id="assetTitle">Scriptable JSON</span>
-          <span class="badge-so">Scriptable Config</span>
+          <span class="badge-so" id="configModeBadge">Single file</span>
         </div>
         <span class="status-badge" id="statusBadge">Saved</span>
       </div>
@@ -443,6 +443,7 @@ exports.template = `
         <button class="btn btn-secondary" id="btnToggleMode">👁️ Raw Code</button>
         <button class="btn" id="btnFormat">✨ Format</button>
         <button class="btn" id="btnAddField">➕ Add Field</button>
+        <button class="btn" id="btnSplitConfig" title="Move top-level sections into editable resource fragments">🧩 Split Sections</button>
         <button class="btn" id="btnTemplate" title="Apply Default Playable Ad Preset">⚡ Playable Preset</button>
       </div>
       <div class="search-row">
@@ -468,12 +469,14 @@ exports.template = `
 exports.$ = {
   container: '.json-scriptable-container',
   assetTitle: '#assetTitle',
+  configModeBadge: '#configModeBadge',
   statusBadge: '#statusBadge',
   btnSave: '#btnSave',
   btnRevert: '#btnRevert',
   btnToggleMode: '#btnToggleMode',
   btnFormat: '#btnFormat',
   btnAddField: '#btnAddField',
+  btnSplitConfig: '#btnSplitConfig',
   btnTemplate: '#btnTemplate',
   searchInput: '#searchInput',
   searchCount: '#searchCount',
@@ -520,6 +523,24 @@ function searchTextFor(key, value, path = []) {
     parts.push(String(value));
   }
   return parts.join(' ').toLocaleLowerCase();
+}
+
+function buildTopLevelFragmentMap(data, basePath = 'playable-config') {
+  const current = data?.$fragments && typeof data.$fragments === 'object' && !Array.isArray(data.$fragments)
+    ? { ...data.$fragments }
+    : {};
+  const targets = Object.keys(current);
+  for (const key of Object.keys(data || {})) {
+    if (key === '$schema' || key === '$fragments' || key === 'title' || key === 'version') continue;
+    const value = data[key];
+    if (!value || typeof value !== 'object') continue;
+    const overlaps = targets.some(target => target === key || target.startsWith(`${key}.`) || key.startsWith(`${target}.`));
+    if (overlaps) continue;
+    const slug = key.replace(/([a-z0-9])([A-Z])/g, '$1-$2').replace(/[^A-Za-z0-9_-]+/g, '-').toLowerCase();
+    current[key] = `${basePath}/${slug}`;
+    targets.push(key);
+  }
+  return current;
 }
 
 function isDefaultJsonPreview(element, host) {
@@ -614,6 +635,7 @@ exports.ready = function () {
   self.viewMode = 'form';
   self.currentData = null;
   self.originalData = null;
+  self.fragmentSources = [];
   self.searchQuery = '';
   self.collapsedPaths = new Set();
   self.loadGeneration = 0;
@@ -636,6 +658,23 @@ exports.ready = function () {
         self.$.searchInput.focus();
       }
       self.applySearch();
+    });
+  }
+  if (self.$.btnSplitConfig) {
+    self.$.btnSplitConfig.addEventListener('click', () => {
+      if (!self.currentData) return;
+      const before = Object.keys(self.currentData.$fragments || {}).length;
+      const fragmentMap = buildTopLevelFragmentMap(self.currentData);
+      self.currentData.$fragments = fragmentMap;
+      const after = Object.keys(fragmentMap).length;
+      self.markDirty(true);
+      self.render();
+      if (self.$.configModeBadge) {
+        self.$.configModeBadge.textContent = `${after} fragments pending`;
+        self.$.configModeBadge.title = after === before
+          ? 'All eligible top-level sections already have fragment owners.'
+          : 'Save to create/update fragment files under assets/resources/playable-config/.';
+      }
     });
   }
 
@@ -899,6 +938,7 @@ exports.methods = {
     const self = this;
     let data = fallbackJson;
     let resolvedName = '';
+    let fragmentSources = [];
 
     if (!self.uuid && typeof Editor !== 'undefined' && Editor.Selection) {
       try {
@@ -913,6 +953,7 @@ exports.methods = {
         if (res && res.success && res.content) {
           data = JSON.parse(res.content);
           resolvedName = res.name || '';
+          fragmentSources = Array.isArray(res.fragmentSources) ? res.fragmentSources : [];
         }
       } catch (e) {
         // fallback
@@ -921,6 +962,14 @@ exports.methods = {
 
     if (generation !== self.loadGeneration) return;
     if (resolvedName && self.$.assetTitle) self.$.assetTitle.textContent = resolvedName;
+    self.fragmentSources = fragmentSources;
+    if (self.$.configModeBadge) {
+      const count = fragmentSources.length;
+      self.$.configModeBadge.textContent = count ? `${count} fragments merged` : 'Single file';
+      self.$.configModeBadge.title = count
+        ? fragmentSources.map(source => `${source.target} ← ${source.resourcePath}.json`).join('\n')
+        : '';
+    }
 
     if (!data) {
       data = JSON.parse(JSON.stringify(DEFAULT_PLAYABLE_TEMPLATE));
@@ -992,6 +1041,11 @@ exports.methods = {
         if (res && res.success) {
           saved = true;
           if (res.uuid) self.uuid = res.uuid;
+          if (self.$.configModeBadge && Number.isInteger(res.fragmentCount)) {
+            self.$.configModeBadge.textContent = res.fragmentCount
+              ? `${res.fragmentCount} fragments merged`
+              : 'Single file';
+          }
         }
       }
 
@@ -1042,7 +1096,7 @@ exports.methods = {
     const keys = Object.keys(self.currentData);
 
     for (const key of keys) {
-      if (key === '$schema' || key === 'title' || key === 'version') {
+      if (key === '$schema' || key === '$fragments' || key === 'title' || key === 'version') {
         continue;
       }
 
@@ -1372,4 +1426,5 @@ exports.__test = {
   isDefaultJsonPreview,
   removeLegacyGlobalHideStyle,
   restoreDefaultPreview,
+  buildTopLevelFragmentMap,
 };

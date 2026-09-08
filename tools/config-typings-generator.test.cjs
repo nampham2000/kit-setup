@@ -31,3 +31,12 @@ test('keeps the backwards-compatible custom fallback when config omits it', () =
   const output = buildTypings({ gameplay: { duration: 30 } });
   assert.match(output, /custom\?: Record<string, any>/);
 });
+
+test('does not expose fragment manifest metadata as a gameplay config section', () => {
+  const output = buildTypings({
+    $fragments: { cta: 'playable-config/cta' },
+    cta: { googlePlayUrl: 'https://example.test' },
+  });
+  assert.doesNotMatch(output, /fragments/i);
+  assert.match(output, /googlePlayUrl\?: string/);
+});

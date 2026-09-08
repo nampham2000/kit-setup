@@ -4,7 +4,7 @@
 > Mọi AI agent (Claude, Codex, Gemini, Copilot, Cursor) đều nạp cùng file này
 > để ra quyết định giống nhau khi tool không nói rõ.
 
-1. **config-driven** — Mọi tham số gameplay/CTA nằm trong `assets/resources/playable-config.json`, đọc qua `PlayableConfigManager.instance`. Không hardcode trong TS hay trên node của scene.
+1. **config-driven** — Mọi tham số gameplay/CTA phải truy cập qua manifest `assets/resources/playable-config.json` và `PlayableConfigManager.instance`. Subtree lớn có thể tách bằng `$fragments` sang JSON dưới assets/resources; Inspector vẫn merge thành một UI. Không hardcode trong TS hay trên node của scene.
 2. **zero-gc** — Không cấp phát trong `update(dt)`. Khai báo sẵn `Vec3` / `Quat` / `Color` ở module scope và tái sử dụng. Dùng `ObjectPool` cho spawner.
 3. **verify-gate** — Sau mọi lần sửa code hoặc port: chạy `npm run ai:verify` và `npm run ai:lint`. Với port core Unity, còn phải chạy `npm run ai:port:core:verify` và chỉ kết luận runnable/fidelity khi acceptance pass.
 4. **canonical-paths** — Script vào `assets/script/`, effect vào `assets/effects/`, config vào `assets/resources/`. Không tự tạo biến thể như `assets/scripts/`.

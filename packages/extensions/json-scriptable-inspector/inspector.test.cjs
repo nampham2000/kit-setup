@@ -14,6 +14,21 @@ test('search index contains nested keys, paths, and primitive values', () => {
   }
 });
 
+test('split action assigns eligible top-level sections without overlapping nested owners', () => {
+  const result = inspector.__test.buildTopLevelFragmentMap({
+    $fragments: { 'custom.levels': 'playable-config/levels' },
+    title: 'Example',
+    cta: { googlePlayUrl: '' },
+    gameplay: { targetTaps: 3 },
+    custom: { levels: [], inline: true },
+  });
+  assert.deepEqual(result, {
+    'custom.levels': 'playable-config/levels',
+    cta: 'playable-config/cta',
+    gameplay: 'playable-config/gameplay',
+  });
+});
+
 test('default preview detection never matches unrelated inspector panels', () => {
   const host = { contains: () => false };
   const element = (tagName, src = '', className = '') => ({

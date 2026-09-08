@@ -1177,7 +1177,7 @@ const CAPABILITIES = [
 const CORE_RULES = [
   {
     id: 'config-driven',
-    rule: 'Mọi tham số gameplay/CTA nằm trong `assets/resources/playable-config.json`, đọc qua `PlayableConfigManager.instance`. Không hardcode trong TS hay trên node của scene.',
+    rule: 'Mọi tham số gameplay/CTA phải truy cập qua manifest `assets/resources/playable-config.json` và `PlayableConfigManager.instance`. Subtree lớn có thể tách bằng `$fragments` sang JSON dưới assets/resources; Inspector vẫn merge thành một UI. Không hardcode trong TS hay trên node của scene.',
   },
   {
     id: 'zero-gc',

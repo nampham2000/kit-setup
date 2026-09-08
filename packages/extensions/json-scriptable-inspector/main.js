@@ -1,6 +1,46 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
+const {
+  FRAGMENTS_KEY,
+  loadMergedConfigFromFile,
+  saveMergedConfigToFile,
+  writeJsonAtomic,
+} = require('./config-fragments.cjs');
+
+function readCompositeFile(file) {
+  const manifest = JSON.parse(fs.readFileSync(file, 'utf8'));
+  if (!manifest?.[FRAGMENTS_KEY]) {
+    return { manifest, merged: manifest, entries: [], resourcesRoot: null };
+  }
+  return loadMergedConfigFromFile(file);
+}
+
+function writeCompositeFile(file, mergedConfig) {
+  return saveMergedConfigToFile(file, mergedConfig);
+}
+
+async function resolveAssetInfo(uuid) {
+  let assetInfo = null;
+  if (uuid) {
+    try {
+      assetInfo = await Editor.Message.request('asset-db', 'query-asset-info', uuid);
+    } catch (e) {
+      // fallback to current selection
+    }
+  }
+  if (!assetInfo && typeof Editor !== 'undefined' && Editor.Selection) {
+    try {
+      const lastSelected = Editor.Selection.getLastSelected?.('asset');
+      if (lastSelected) {
+        assetInfo = await Editor.Message.request('asset-db', 'query-asset-info', lastSelected);
+      }
+    } catch (e) {
+      // handled by caller
+    }
+  }
+  return assetInfo;
+}
 
 module.exports = {
   load() {
@@ -17,38 +57,23 @@ module.exports = {
      */
     async readJsonAsset(uuid) {
       try {
-        let assetInfo = null;
-
-        // 1. Try querying by provided UUID
-        if (uuid) {
-          try {
-            assetInfo = await Editor.Message.request('asset-db', 'query-asset-info', uuid);
-          } catch (e) {
-            // ignore
-          }
-        }
-
-        // 2. Try querying by Editor.Selection
-        if (!assetInfo && typeof Editor !== 'undefined' && Editor.Selection) {
-          try {
-            const lastSel = Editor.Selection.getLastSelected ? Editor.Selection.getLastSelected('asset') : null;
-            if (lastSel) {
-              assetInfo = await Editor.Message.request('asset-db', 'query-asset-info', lastSel);
-            }
-          } catch (e) {
-            // ignore
-          }
-        }
+        const assetInfo = await resolveAssetInfo(uuid);
 
         if (assetInfo && assetInfo.file && fs.existsSync(assetInfo.file)) {
-          const content = fs.readFileSync(assetInfo.file, 'utf8');
+          const composite = readCompositeFile(assetInfo.file);
           return {
             success: true,
-            content,
+            content: JSON.stringify(composite.merged, null, 2),
             file: assetInfo.file,
             url: assetInfo.url,
             name: assetInfo.name,
             uuid: assetInfo.uuid || uuid,
+            fragmented: composite.entries.length > 0,
+            fragmentCount: composite.entries.length,
+            fragmentSources: composite.entries.map(entry => ({
+              target: entry.target,
+              resourcePath: entry.resourcePath,
+            })),
           };
         }
 
@@ -64,41 +89,36 @@ module.exports = {
      */
     async saveJsonAsset(uuid, jsonString) {
       try {
-        let assetInfo = null;
         let targetUuid = uuid;
+        const assetInfo = await resolveAssetInfo(uuid);
+        if (assetInfo?.uuid) targetUuid = assetInfo.uuid;
 
-        // 1. Try querying by provided UUID
-        if (uuid) {
-          try {
-            assetInfo = await Editor.Message.request('asset-db', 'query-asset-info', uuid);
-          } catch (e) {
-            // ignore
-          }
-        }
-
-        // 2. Try querying by Selection
-        if (!assetInfo && typeof Editor !== 'undefined' && Editor.Selection) {
-          try {
-            const lastSel = Editor.Selection.getLastSelected ? Editor.Selection.getLastSelected('asset') : null;
-            if (lastSel) {
-              targetUuid = lastSel;
-              assetInfo = await Editor.Message.request('asset-db', 'query-asset-info', lastSel);
-            }
-          } catch (e) {
-            // ignore
-          }
-        }
-
-        // Direct file write + reimport
         if (assetInfo && assetInfo.file) {
-          fs.writeFileSync(assetInfo.file, jsonString, 'utf8');
+          const mergedConfig = JSON.parse(jsonString);
+          const writeResult = writeCompositeFile(assetInfo.file, mergedConfig);
           try {
             await Editor.Message.request('asset-db', 'reimport-asset', assetInfo.uuid || targetUuid);
           } catch (e) {
-            // fallback
+            // The AssetDB watcher still observes the atomic file replacements.
           }
-          console.log(`[json-scriptable-inspector] Saved JSON asset to file: ${assetInfo.file}`);
-          return { success: true, file: assetInfo.file, uuid: assetInfo.uuid || targetUuid };
+          if (writeResult.resourcesRoot) {
+            for (const file of writeResult.files.slice(1)) {
+              const relative = path.relative(writeResult.resourcesRoot, file).replace(/\\/g, '/');
+              try {
+                await Editor.Message.request('asset-db', 'refresh-asset', `db://assets/resources/${relative}`);
+              } catch (e) {
+                // The AssetDB watcher is the fallback on older editor versions.
+              }
+            }
+          }
+          console.log(`[json-scriptable-inspector] Saved merged JSON config to ${writeResult.files.length} file(s).`);
+          return {
+            success: true,
+            file: assetInfo.file,
+            files: writeResult.files,
+            fragmentCount: writeResult.fragmentCount,
+            uuid: assetInfo.uuid || targetUuid,
+          };
         }
 
         // Fallback: save-asset via AssetDB message if UUID exists
@@ -118,4 +138,10 @@ module.exports = {
       }
     },
   },
+};
+
+module.exports.__test = {
+  readCompositeFile,
+  writeCompositeFile,
+  writeJsonAtomic,
 };

@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
+const { loadMergedConfigFromFile } = require('../../packages/extensions/json-scriptable-inspector/config-fragments.cjs');
 
 const digest = data => crypto.createHash('sha256').update(data).digest('hex');
 
@@ -12,7 +13,7 @@ const digest = data => crypto.createHash('sha256').update(data).digest('hex');
 function readTextureImportLimits(cocosRoot) {
   if (!cocosRoot) return {};
   const file = path.join(cocosRoot, 'assets/resources/playable-config.json');
-  const config = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
+  const config = fs.existsSync(file) ? loadMergedConfigFromFile(file).merged : {};
   return config.custom?.assetImport?.textureMaxSizes || {};
 }
 

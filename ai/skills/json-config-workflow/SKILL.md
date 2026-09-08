@@ -14,7 +14,7 @@ This skill defines the architectural pattern and development guidelines for crea
 
 > [!IMPORTANT]
 > **NEVER hardcode gameplay variables or require developers to tweak values directly on Scene node inspectors.**
-> All balancing parameters, CTA store links, delays, audio volumes, camera presets, and custom mechanics **MUST reside in a centralized JSON file** (`assets/resources/playable-config.json`).
+> All balancing parameters, CTA store links, delays, audio volumes, camera presets, and custom mechanics **MUST be reachable through the centralized `assets/resources/playable-config.json` manifest**. Large subtrees may live in fragment JSON files under `assets/resources`.
 
 ### Why?
 1. **Prevents Scene Merge Conflicts**: Editing scene files (`.scene`) creates large, binary/serialized diffs that break multi-developer collaboration and AI modifications.
@@ -87,6 +87,38 @@ All playable configs follow the standard structure below:
 ---
 
 ## 3. Code Access Pattern via `PlayableConfigManager`
+
+When `playable-config.json` becomes difficult to review, add a `$fragments`
+map whose keys are mount paths in the merged config and whose values are
+resource paths without `.json`:
+
+```json
+{
+  "$schema": "playable-config-v1",
+  "$fragments": {
+    "cta": "playable-config/cta",
+    "audio": "playable-config/audio",
+    "custom.hiddenSuspect": "playable-config/hidden-suspect"
+  },
+  "gameplay": {
+    "activeBundle": "hidden-suspect"
+  }
+}
+```
+
+Store the mounted value itself in each fragment. For example,
+`assets/resources/playable-config/cta.json` starts with
+`{ "googlePlayUrl": "..." }`, without another `cta` wrapper. Target paths
+must not overlap, and resource paths must remain under `assets/resources`.
+`PlayableConfigManager` loads fragments in parallel and mounts them before
+notifying listeners. The visual Inspector presents the result as one form and
+saves each subtree back to its owning fragment.
+
+For a large existing config, select `playable-config.json`, click
+**🧩 Split Sections**, review the merged form, then Save. This creates one
+fragment per eligible top-level object through the extension and refreshes each
+new AssetDB entry. Use Raw Code only when a large nested subtree needs its own
+more specific target such as `custom.hiddenSuspect.levels`.
 
 Always query parameters through `PlayableConfigManager.instance`:
 

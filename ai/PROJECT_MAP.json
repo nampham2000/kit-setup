@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "generatedAt": "2026-09-08T19:29:04.687Z",
+    "generatedAt": "2026-09-08T20:57:17.984Z",
     "description": "Compact project manifest for AI Agents. Use this instead of scanning file trees.",
     "project": {
       "projectName": "cc_playable_framework",
@@ -15,7 +15,7 @@
       "playable-core (GameManager, SoundManager, ObjectPool, PlayableConfigManager)",
       "playable-sdk (Analytics, SuperHtmlPlayable store redirection)"
     ],
-    "configMechanism": "Single Scriptable JSON (assets/resources/playable-config.json) via PlayableConfigManager.instance",
+    "configMechanism": "Merged Scriptable JSON manifest (assets/resources/playable-config.json) via PlayableConfigManager.instance",
     "performanceRule": "Zero GC in update(dt) loops - Reuse temp Vec3/Quat/Color static objects"
   },
   "scenes": [
@@ -356,6 +356,7 @@
     }
   },
   "configSummary": {
+    "fragmentCount": 0,
     "ctaKeys": [
       "googlePlayUrl",
       "appStoreUrl",

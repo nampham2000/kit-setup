@@ -23,6 +23,7 @@ const { spawnSync } = require('child_process');
 const { runLinter } = require('./zero-gc-linter.cjs');
 const { run: runAssetImportCheck } = require('./verify-assets.cjs');
 const { auditCocosEngineFeatures } = require('./cocos-engine-feature-audit.cjs');
+const { loadMergedConfigFromFile } = require('../packages/extensions/json-scriptable-inspector/config-fragments.cjs');
 
 function findProjectRoot(startDir) {
   let current = path.resolve(startDir);
@@ -93,7 +94,8 @@ function checkConfigIntegrity() {
   }
 
   try {
-    const raw = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
+    const loaded = loadMergedConfigFromFile(CONFIG_FILE);
+    const raw = loaded.merged;
     const requiredSections = ['cta', 'audio', 'gameplay', 'camera'];
     for (const sec of requiredSections) {
       if (!raw[sec] || typeof raw[sec] !== 'object') {
@@ -103,7 +105,8 @@ function checkConfigIntegrity() {
     }
 
     if (result.status === 'PASS') {
-      result.details = `Config valid with sections: ${Object.keys(raw).join(', ')}`;
+      const fragmentDetail = loaded.entries.length ? ` (${loaded.entries.length} fragment(s))` : '';
+      result.details = `Config valid with sections: ${Object.keys(raw).filter(key => key !== '$fragments').join(', ')}${fragmentDetail}`;
     }
   } catch (err) {
     result.status = 'FAIL';
@@ -117,7 +120,7 @@ function checkAssetBindings() {
   if (!fs.existsSync(CONFIG_FILE)) return result;
 
   try {
-    const raw = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
+    const raw = loadMergedConfigFromFile(CONFIG_FILE).merged;
     if (raw.audio) {
       const audioKeys = ['bgmSoundPath', 'clickSoundPath', 'successSoundPath', 'winSoundPath'];
       for (const key of audioKeys) {

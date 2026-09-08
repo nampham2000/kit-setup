@@ -58,6 +58,7 @@ export interface IPlayableTrackingConfig {
 
 export interface IPlayableConfig {
   $schema?: string;
+  $fragments?: Record<string, string>;
   title?: string;
   version?: string;
   cta: IPlayableCTAConfig;

@@ -2,6 +2,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { loadMergedConfigFromFile } = require('../packages/extensions/json-scriptable-inspector/config-fragments.cjs');
 
 const RESERVED_BUNDLES = new Set(['main', 'internal', 'resources', 'start-scene']);
 const NAME = /^[a-z0-9][a-z0-9_-]*$/;
@@ -13,7 +14,7 @@ function readJson(file) {
 function validateGameplayBriefs(projectRoot = process.cwd()) {
   const root = fs.realpathSync(projectRoot);
   const configPath = path.join(root, 'assets', 'resources', 'playable-config.json');
-  const config = readJson(configPath);
+  const config = loadMergedConfigFromFile(configPath).merged;
   const gameplay = config.gameplay;
   const issues = [];
   const briefs = gameplay?.briefs;

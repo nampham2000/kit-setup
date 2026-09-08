@@ -11,6 +11,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { loadMergedConfigFromFile } = require('../packages/extensions/json-scriptable-inspector/config-fragments.cjs');
 
 function findProjectRoot(startDir) {
   let current = path.resolve(startDir);
@@ -65,10 +66,10 @@ function inferTsType(value) {
 }
 
 function buildTypings(raw) {
-  let dts = `/**\n * Auto-generated Playable Configuration Typings\n * DO NOT EDIT MANUALLY - Generated from assets/resources/playable-config.json\n */\n\n`;
+  let dts = `/**\n * Auto-generated Playable Configuration Typings\n * DO NOT EDIT MANUALLY - Generated from the merged assets/resources/playable-config.json manifest\n */\n\n`;
 
   const sections = Object.keys(raw)
-    .filter((section) => section !== '$schema' && section !== 'title' && section !== 'version');
+    .filter((section) => section !== '$schema' && section !== '$fragments' && section !== 'title' && section !== 'version');
 
   for (const section of sections) {
     const value = raw[section];
@@ -106,7 +107,7 @@ function generateTypings(options = {}) {
     return;
   }
 
-  const raw = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  const raw = loadMergedConfigFromFile(configPath).merged;
   const dts = buildTypings(raw);
 
   const outDir = path.dirname(outputPath);

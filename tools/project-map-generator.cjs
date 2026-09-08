@@ -13,6 +13,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { loadMergedConfigFromFile } = require('../packages/extensions/json-scriptable-inspector/config-fragments.cjs');
 
 /**
  * Cheat-sheet lệnh lấy từ capability manifest (single source of truth).
@@ -234,8 +235,10 @@ function scanConfigSummary() {
   }
 
   try {
-    const raw = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
+    const loaded = loadMergedConfigFromFile(CONFIG_FILE);
+    const raw = loaded.merged;
     return {
+      fragmentCount: loaded.entries.length,
       ctaKeys: raw.cta ? Object.keys(raw.cta) : [],
       audioKeys: raw.audio ? Object.keys(raw.audio) : [],
       gameplayKeys: raw.gameplay ? Object.keys(raw.gameplay) : [],
@@ -272,7 +275,7 @@ function generateProjectMap() {
         'playable-core (GameManager, SoundManager, ObjectPool, PlayableConfigManager)',
         'playable-sdk (Analytics, SuperHtmlPlayable store redirection)'
       ],
-      configMechanism: 'Single Scriptable JSON (assets/resources/playable-config.json) via PlayableConfigManager.instance',
+      configMechanism: 'Merged Scriptable JSON manifest (assets/resources/playable-config.json) via PlayableConfigManager.instance',
       performanceRule: 'Zero GC in update(dt) loops - Reuse temp Vec3/Quat/Color static objects'
     },
     scenes,
