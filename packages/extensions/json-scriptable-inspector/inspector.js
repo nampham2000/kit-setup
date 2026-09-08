@@ -147,6 +147,31 @@ exports.template = `
       flex-wrap: wrap;
       gap: 6px;
     }
+    .search-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .search-input {
+      flex: 1;
+      min-width: 0;
+      background: #181818;
+      border: 1px solid #3a3a3a;
+      border-radius: 4px;
+      color: #f0f6fc;
+      padding: 5px 8px;
+      font: inherit;
+    }
+    .search-input:focus {
+      border-color: #58a6ff;
+      outline: none;
+    }
+    .search-count {
+      color: #8b949e;
+      font-size: 10px;
+      min-width: 48px;
+      text-align: right;
+    }
     .btn {
       background: #333333;
       color: #e0e0e0;
@@ -222,6 +247,32 @@ exports.template = `
     }
     .section-card.collapsed .section-content {
       display: none;
+    }
+    .nested-group {
+      margin-left: 12px;
+      border-left: 2px solid #3d3d3d;
+      padding-left: 8px;
+    }
+    .nested-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      color: #8b949e;
+      font-weight: 600;
+      margin: 4px 0;
+      cursor: pointer;
+      user-select: none;
+    }
+    .nested-group.collapsed > .nested-content {
+      display: none;
+    }
+    .search-hidden {
+      display: none !important;
+    }
+    .search-open > .section-content,
+    .search-open > .nested-content {
+      display: flex !important;
     }
     .field-row {
       display: grid;
@@ -394,6 +445,11 @@ exports.template = `
         <button class="btn" id="btnAddField">➕ Add Field</button>
         <button class="btn" id="btnTemplate" title="Apply Default Playable Ad Preset">⚡ Playable Preset</button>
       </div>
+      <div class="search-row">
+        <input type="search" class="search-input" id="searchInput" placeholder="Search keys or values..." />
+        <span class="search-count" id="searchCount"></span>
+        <button class="btn-icon" id="btnClearSearch" title="Clear search">✕</button>
+      </div>
     </div>
   </div>
 
@@ -419,6 +475,9 @@ exports.$ = {
   btnFormat: '#btnFormat',
   btnAddField: '#btnAddField',
   btnTemplate: '#btnTemplate',
+  searchInput: '#searchInput',
+  searchCount: '#searchCount',
+  btnClearSearch: '#btnClearSearch',
   visualFormView: '#visualFormView',
   rawCodeView: '#rawCodeView',
   rawJsonText: '#rawJsonText',
@@ -451,52 +510,101 @@ function extractUuid(dump) {
   return null;
 }
 
+function searchTextFor(key, value, path = []) {
+  const parts = [...path, key].filter(part => part !== undefined && part !== null).map(String);
+  if (value && typeof value === 'object') {
+    for (const [childKey, childValue] of Object.entries(value)) {
+      parts.push(searchTextFor(childKey, childValue, [...path, key]));
+    }
+  } else if (value !== undefined && value !== null) {
+    parts.push(String(value));
+  }
+  return parts.join(' ').toLocaleLowerCase();
+}
+
+function isDefaultJsonPreview(element, host) {
+  if (!element || element === host || (host && host.contains && host.contains(element))) return false;
+  const tag = String(element.tagName || '').toLowerCase();
+  const src = String(element.getAttribute?.('src') || '').replaceAll('\\', '/').toLowerCase();
+  const className = typeof element.className === 'string' ? element.className.toLowerCase() : '';
+  return className.split(/\s+/).includes('asset-json')
+    || (tag === 'ui-panel' && (src.includes('/assets/json') || src.endsWith('/json.js')));
+}
+
 /**
- * Automatically hides Cocos Creator default read-only code preview and header elements
+ * Get the host <ui-panel> custom element for this inspector
  */
+function getHostPanel(self) {
+  if (self && self.tagName === 'UI-PANEL') return self;
+  if (self && self.$this && self.$this.tagName) return self.$this;
+  if (self && self.$ && self.$.container) {
+    const root = self.$.container.getRootNode ? self.$.container.getRootNode() : null;
+    if (root && root.host) return root.host;
+    if (self.$.container.closest) {
+      const p = self.$.container.closest('ui-panel');
+      if (p) return p;
+    }
+  }
+  return null;
+}
+
+function removeLegacyGlobalHideStyle(self) {
+  const host = getHostPanel(self);
+  const doc = host?.ownerDocument || (typeof document !== 'undefined' ? document : null);
+  const roots = [doc, host?.getRootNode?.(), host?.parentElement?.getRootNode?.()].filter(Boolean);
+  for (const root of new Set(roots)) {
+    root.querySelector?.('#cc-hide-default-json-preview')?.remove();
+  }
+}
+
+function restoreDefaultPreview(self) {
+  removeLegacyGlobalHideStyle(self);
+  if (self.__jsonInspectorTimers) {
+    self.__jsonInspectorTimers.forEach(clearTimeout);
+    self.__jsonInspectorTimers = [];
+  }
+  self.__jsonInspectorObserver?.disconnect();
+  self.__jsonInspectorObserver = null;
+  if (self.__jsonInspectorHidden) {
+    for (const [element, cssText] of self.__jsonInspectorHidden) {
+      if (element?.style) element.style.cssText = cssText;
+    }
+    self.__jsonInspectorHidden.clear();
+  }
+}
+
+/** Hide only the stock JSON preview beside this inspector and restore it on update/close. */
 function hideDefaultPreview(self) {
   try {
-    const container = self.$.container;
-    if (!container) return;
-
-    // Traverse ancestors up to 5 levels
-    let current = container.parentElement;
-    let depth = 0;
-    while (current && depth < 5 && current !== document.body) {
-      const children = Array.from(current.children);
-      for (const child of children) {
-        if (child !== container && !container.contains(child)) {
-          const tag = (child.tagName || '').toLowerCase();
-          const cls = child.className || '';
-          if (
-            tag.includes('preview') ||
-            tag.includes('code') ||
-            cls.includes('preview') ||
-            cls.includes('code') ||
-            cls.includes('readonly') ||
-            cls.includes('header') ||
-            child.querySelector('pre, code, ui-code, .preview, .monaco-editor, textarea[readonly]')
-          ) {
-            child.style.display = 'none';
-          }
-        }
+    const host = getHostPanel(self);
+    const parent = host?.parentElement;
+    if (!host || !parent || !host.isConnected) return;
+    self.__jsonInspectorHidden ??= new Map();
+    const hideStockPanels = () => {
+      if (!host.isConnected) {
+        restoreDefaultPreview(self);
+        return;
       }
-      current = current.parentElement;
-      depth++;
-    }
-
-    // Shadow DOM / Root query
-    const root = container.getRootNode ? container.getRootNode() : document;
-    if (root && root.querySelectorAll) {
-      const defaultElements = root.querySelectorAll('ui-asset-preview, .preview, .code-preview, .text-preview, ui-section[name="preview"], .monaco-editor, pre');
-      defaultElements.forEach(el => {
-        if (!container.contains(el) && el !== container) {
-          el.style.display = 'none';
-        }
-      });
+      for (const child of Array.from(parent.children || [])) {
+        if (!isDefaultJsonPreview(child, host) || self.__jsonInspectorHidden.has(child)) continue;
+        self.__jsonInspectorHidden.set(child, child.style.cssText);
+        child.style.setProperty('display', 'none', 'important');
+      }
+    };
+    hideStockPanels();
+    if (!self.__jsonInspectorObserver && typeof MutationObserver !== 'undefined') {
+      self.__jsonInspectorObserver = new MutationObserver(hideStockPanels);
+      self.__jsonInspectorObserver.observe(parent, { childList: true });
     }
   } catch (e) {
-    // ignore
+    restoreDefaultPreview(self);
+  }
+}
+
+function schedulePreviewHide(self) {
+  self.__jsonInspectorTimers ??= [];
+  for (const delay of [30, 100, 300]) {
+    self.__jsonInspectorTimers.push(setTimeout(() => hideDefaultPreview(self), delay));
   }
 }
 
@@ -506,10 +614,30 @@ exports.ready = function () {
   self.viewMode = 'form';
   self.currentData = null;
   self.originalData = null;
+  self.searchQuery = '';
+  self.collapsedPaths = new Set();
+  self.loadGeneration = 0;
 
+  restoreDefaultPreview(self);
   hideDefaultPreview(self);
-  setTimeout(() => hideDefaultPreview(self), 50);
-  setTimeout(() => hideDefaultPreview(self), 200);
+  schedulePreviewHide(self);
+
+  if (self.$.searchInput) {
+    self.$.searchInput.addEventListener('input', () => {
+      self.searchQuery = self.$.searchInput.value.trim().toLocaleLowerCase();
+      self.applySearch();
+    });
+  }
+  if (self.$.btnClearSearch) {
+    self.$.btnClearSearch.addEventListener('click', () => {
+      self.searchQuery = '';
+      if (self.$.searchInput) {
+        self.$.searchInput.value = '';
+        self.$.searchInput.focus();
+      }
+      self.applySearch();
+    });
+  }
 
   // Save Button
   if (self.$.btnSave) {
@@ -631,11 +759,13 @@ exports.ready = function () {
 
 exports.update = function (dump) {
   const self = this;
+  restoreDefaultPreview(self);
   self.dump = dump;
 
   let assetName = 'JSON Asset';
   let rawJson = null;
 
+  const previousUuid = self.uuid;
   self.uuid = extractUuid(dump);
 
   // If uuid not in dump, check Selection
@@ -645,6 +775,7 @@ exports.update = function (dump) {
       if (last) self.uuid = last;
     } catch (e) {}
   }
+  if (self.uuid !== previousUuid) self.collapsedPaths?.clear();
 
   if (dump) {
     assetName = dump.name ? (dump.name.value || dump.name) : 'playable-config.json';
@@ -673,13 +804,15 @@ exports.update = function (dump) {
   }
 
   hideDefaultPreview(self);
-  setTimeout(() => hideDefaultPreview(self), 50);
+  schedulePreviewHide(self);
 
-  self.loadAssetData(rawJson);
+  const generation = ++self.loadGeneration;
+  self.loadAssetData(rawJson, generation);
 };
 
 exports.close = function () {
-  // cleanup
+  this.loadGeneration += 1;
+  restoreDefaultPreview(this);
 };
 
 // Extension Methods attached to panel context
@@ -762,9 +895,10 @@ exports.methods = {
     });
   },
 
-  async loadAssetData(fallbackJson) {
+  async loadAssetData(fallbackJson, generation = this.loadGeneration) {
     const self = this;
     let data = fallbackJson;
+    let resolvedName = '';
 
     if (!self.uuid && typeof Editor !== 'undefined' && Editor.Selection) {
       try {
@@ -778,12 +912,15 @@ exports.methods = {
         const res = await Editor.Message.request('json-scriptable-inspector', 'read-json-asset', self.uuid);
         if (res && res.success && res.content) {
           data = JSON.parse(res.content);
-          if (res.name && self.$.assetTitle) self.$.assetTitle.textContent = res.name;
+          resolvedName = res.name || '';
         }
       } catch (e) {
         // fallback
       }
     }
+
+    if (generation !== self.loadGeneration) return;
+    if (resolvedName && self.$.assetTitle) self.$.assetTitle.textContent = resolvedName;
 
     if (!data) {
       data = JSON.parse(JSON.stringify(DEFAULT_PLAYABLE_TEMPLATE));
@@ -914,7 +1051,10 @@ exports.methods = {
       const title = key.toUpperCase();
 
       const card = document.createElement('div');
-      card.className = 'section-card';
+      card.className = 'section-card search-node';
+      card.dataset.searchText = searchTextFor(key, val);
+      const pathId = JSON.stringify([key]);
+      if (self.collapsedPaths.has(pathId)) card.classList.add('collapsed');
 
       // Section Header
       const header = document.createElement('div');
@@ -924,10 +1064,12 @@ exports.methods = {
           <span>${icon}</span>
           <span>${title}</span>
         </div>
-        <span class="btn-icon">▼</span>
+        <span class="btn-icon">${card.classList.contains('collapsed') ? '▶' : '▼'}</span>
       `;
       header.addEventListener('click', () => {
         card.classList.toggle('collapsed');
+        if (card.classList.contains('collapsed')) self.collapsedPaths.add(pathId);
+        else self.collapsedPaths.delete(pathId);
         const arrow = header.querySelector('.btn-icon');
         if (arrow) arrow.textContent = card.classList.contains('collapsed') ? '▶' : '▼';
       });
@@ -951,6 +1093,7 @@ exports.methods = {
 
     // Custom / Extra Properties Section
     self.renderAddSectionBtn(self.$.visualFormView);
+    self.applySearch();
   },
 
   renderObjectFields(container, obj, path) {
@@ -961,11 +1104,25 @@ exports.methods = {
       const fieldPath = [...path, k];
       if (typeof v === 'object' && v !== null && !Array.isArray(v)) {
         const subGroup = document.createElement('div');
-        subGroup.style.marginLeft = '12px';
-        subGroup.style.borderLeft = '2px solid #3d3d3d';
-        subGroup.style.paddingLeft = '8px';
-        subGroup.innerHTML = `<div style="font-weight:600; color:#8b949e; margin:4px 0;">📁 ${k}</div>`;
-        self.renderObjectFields(subGroup, v, fieldPath);
+        subGroup.className = 'nested-group search-node';
+        subGroup.dataset.searchText = searchTextFor(k, v, path);
+        const pathId = JSON.stringify(fieldPath);
+        if (self.collapsedPaths.has(pathId)) subGroup.classList.add('collapsed');
+        const header = document.createElement('div');
+        header.className = 'nested-header';
+        header.innerHTML = `<span>📁 ${k}</span><span class="btn-icon">${subGroup.classList.contains('collapsed') ? '▶' : '▼'}</span>`;
+        header.addEventListener('click', () => {
+          subGroup.classList.toggle('collapsed');
+          if (subGroup.classList.contains('collapsed')) self.collapsedPaths.add(pathId);
+          else self.collapsedPaths.delete(pathId);
+          header.querySelector('.btn-icon').textContent = subGroup.classList.contains('collapsed') ? '▶' : '▼';
+        });
+        const content = document.createElement('div');
+        content.className = 'nested-content';
+        content.style.flexDirection = 'column';
+        self.renderObjectFields(content, v, fieldPath);
+        subGroup.appendChild(header);
+        subGroup.appendChild(content);
         container.appendChild(subGroup);
       } else if (Array.isArray(v)) {
         self.renderArrayField(container, v, fieldPath, k);
@@ -978,7 +1135,9 @@ exports.methods = {
   renderPrimitiveField(container, key, val, path) {
     const self = this;
     const row = document.createElement('div');
-    row.className = 'field-row';
+    row.className = 'field-row search-node';
+    row.dataset.searchText = searchTextFor(key, val, path.slice(0, -1));
+    row.dataset.searchLeaf = 'true';
 
     const label = document.createElement('div');
     label.className = 'field-label';
@@ -1048,19 +1207,27 @@ exports.methods = {
   renderArrayField(container, arr, path, labelName) {
     const self = this;
     const arrayBox = document.createElement('div');
-    arrayBox.className = 'array-list';
+    arrayBox.className = 'array-list nested-group search-node';
+    arrayBox.dataset.searchText = searchTextFor(labelName, arr, path.slice(0, -1));
+    const pathId = JSON.stringify(path);
+    if (self.collapsedPaths.has(pathId)) arrayBox.classList.add('collapsed');
 
     const header = document.createElement('div');
-    header.style.display = 'flex';
-    header.style.justifyContent = 'space-between';
-    header.style.alignItems = 'center';
+    header.className = 'nested-header';
     header.innerHTML = `
       <span style="font-weight:600; color:#8b949e;">📑 ${labelName} [${arr.length}]</span>
-      <button class="btn-icon btn-add-item">➕ Add</button>
+      <span><button class="btn-icon btn-add-item">➕ Add</button> <span class="btn-icon collapse-arrow">${arrayBox.classList.contains('collapsed') ? '▶' : '▼'}</span></span>
     `;
+    header.addEventListener('click', () => {
+      arrayBox.classList.toggle('collapsed');
+      if (arrayBox.classList.contains('collapsed')) self.collapsedPaths.add(pathId);
+      else self.collapsedPaths.delete(pathId);
+      header.querySelector('.collapse-arrow').textContent = arrayBox.classList.contains('collapsed') ? '▶' : '▼';
+    });
     const btnAdd = header.querySelector('.btn-add-item');
     if (btnAdd) {
-      btnAdd.addEventListener('click', () => {
+      btnAdd.addEventListener('click', (event) => {
+        event.stopPropagation();
         const templateItem = arr.length > 0 ? JSON.parse(JSON.stringify(arr[0])) : '';
         arr.push(templateItem);
         self.setPathValue(path, arr);
@@ -1069,23 +1236,48 @@ exports.methods = {
       });
     }
     arrayBox.appendChild(header);
+    const itemsContent = document.createElement('div');
+    itemsContent.className = 'nested-content';
+    itemsContent.style.flexDirection = 'column';
+    itemsContent.style.gap = '4px';
 
     arr.forEach((item, idx) => {
       const itemRow = document.createElement('div');
-      itemRow.className = 'array-item-row';
-
-      const idxLabel = document.createElement('span');
-      idxLabel.style.color = '#6e7681';
-      idxLabel.style.fontSize = '10px';
-      idxLabel.textContent = `[${idx}]`;
-      itemRow.appendChild(idxLabel);
+      itemRow.className = 'array-item-row search-node';
+      itemRow.dataset.searchText = searchTextFor(String(idx), item, path);
 
       if (typeof item === 'object' && item !== null) {
         const nestedBox = document.createElement('div');
+        nestedBox.className = 'nested-group search-node';
         nestedBox.style.flex = '1';
-        self.renderObjectFields(nestedBox, item, [...path, idx]);
+        const itemPath = [...path, idx];
+        nestedBox.dataset.searchText = searchTextFor(String(idx), item, path);
+        const itemPathId = JSON.stringify(itemPath);
+        if (self.collapsedPaths.has(itemPathId)) nestedBox.classList.add('collapsed');
+        const itemHeader = document.createElement('div');
+        itemHeader.className = 'nested-header';
+        itemHeader.innerHTML = `<span>[${idx}]</span><span class="btn-icon">${nestedBox.classList.contains('collapsed') ? '▶' : '▼'}</span>`;
+        itemHeader.addEventListener('click', () => {
+          nestedBox.classList.toggle('collapsed');
+          if (nestedBox.classList.contains('collapsed')) self.collapsedPaths.add(itemPathId);
+          else self.collapsedPaths.delete(itemPathId);
+          itemHeader.querySelector('.btn-icon').textContent = nestedBox.classList.contains('collapsed') ? '▶' : '▼';
+        });
+        const nestedContent = document.createElement('div');
+        nestedContent.className = 'nested-content';
+        nestedContent.style.flexDirection = 'column';
+        if (Array.isArray(item)) self.renderArrayField(nestedContent, item, itemPath, `[${idx}]`);
+        else self.renderObjectFields(nestedContent, item, itemPath);
+        nestedBox.appendChild(itemHeader);
+        nestedBox.appendChild(nestedContent);
         itemRow.appendChild(nestedBox);
       } else {
+        itemRow.dataset.searchLeaf = 'true';
+        const idxLabel = document.createElement('span');
+        idxLabel.style.color = '#6e7681';
+        idxLabel.style.fontSize = '10px';
+        idxLabel.textContent = `[${idx}]`;
+        itemRow.appendChild(idxLabel);
         const inp = document.createElement('input');
         inp.className = 'input-text';
         inp.value = item;
@@ -1109,10 +1301,25 @@ exports.methods = {
       });
       itemRow.appendChild(btnDel);
 
-      arrayBox.appendChild(itemRow);
+      itemsContent.appendChild(itemRow);
     });
 
+    arrayBox.appendChild(itemsContent);
     container.appendChild(arrayBox);
+  },
+
+  applySearch() {
+    const self = this;
+    const query = self.searchQuery || '';
+    const nodes = Array.from(self.$.visualFormView?.querySelectorAll('.search-node') || []);
+    let matches = 0;
+    for (const node of nodes) {
+      const matched = !query || String(node.dataset.searchText || '').includes(query);
+      node.classList.toggle('search-hidden', !matched);
+      node.classList.toggle('search-open', !!query && matched);
+      if (query && matched && node.dataset.searchLeaf === 'true') matches += 1;
+    }
+    if (self.$.searchCount) self.$.searchCount.textContent = query ? `${matches} match${matches === 1 ? '' : 'es'}` : '';
   },
 
   renderAddSectionBtn(container) {
@@ -1157,4 +1364,12 @@ exports.methods = {
     }
     curr[path[path.length - 1]] = value;
   },
+};
+
+exports.__test = {
+  extractUuid,
+  searchTextFor,
+  isDefaultJsonPreview,
+  removeLegacyGlobalHideStyle,
+  restoreDefaultPreview,
 };

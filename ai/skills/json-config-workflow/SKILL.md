@@ -158,4 +158,12 @@ package IDs or fabricated App Store IDs.
 2. The **Inspector** panel will render the custom `json-scriptable-inspector` UI:
    - Visual groups for **CTA**, **AUDIO**, **GAMEPLAY**, **CAMERA**, **HERO**, **TRACKING**, and **CUSTOM**.
    - Input fields with auto-type detection (numbers, text, checkboxes, color pickers, array reordering).
+   - Collapse or expand any object, array, or nested array item independently.
+   - Search by a full/partial key path or primitive value; matching branches expand temporarily without changing saved collapse state.
    - Click **💾 Save (Ctrl+S)** to immediately save to disk and reimport the asset.
+
+When maintaining the inspector, scope stock JSON-preview suppression to the
+current custom panel. Record every element style before hiding it, then restore
+styles and disconnect observers/timers on both `update` and `close`. Guard
+asynchronous asset reads with a selection generation token so an older request
+cannot overwrite the inspector after the user selects another asset.
