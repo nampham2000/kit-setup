@@ -133,6 +133,7 @@ Commands:
 
 Common options:
   --id <memory-id>       Replace one exact existing memory row during remember.
+                        remember-auto also accepts an id field in each JSON payload and fails closed when missing.
   --repo-root <path>     Repo root. Default: current working directory.
   --repo-db <path>       Repo database path. Default: <repo-root>/playable-shared-kit/tools/work-memory/data/repo/<repo-id>.db
   --global-db <path>     Shared database path. Default: <repo-root>/playable-shared-kit/tools/work-memory/data/${DEFAULT_SHARED_DB_FILE_NAME}
@@ -406,7 +407,8 @@ function normalizeAgentMemoryPayload(payload, paths, options = {}) {
   const scope = inferAgentMemoryScope(payload, { defaultScope: options.defaultScope, sourcePath, sourceSymbol });
   const category = inferAgentMemoryCategory(payload, { title, content, sourcePath, sourceSymbol, tags: [] });
   const tags = inferAgentMemoryTags(payload, { title, content, sourcePath, sourceSymbol, category });
-  const id = stableId([
+  const requestedId = String(payload.id || '').trim();
+  const id = requestedId || stableId([
     'agent-memory',
     scope,
     scope === 'repo' ? paths.repoId : 'global',
@@ -417,6 +419,7 @@ function normalizeAgentMemoryPayload(payload, paths, options = {}) {
   ].join('|'));
   return {
     id,
+    requestedId: requestedId || null,
     scope,
     repoId: scope === 'repo' ? paths.repoId : null,
     repoRoot: scope === 'repo' ? paths.repoRoot : null,
@@ -853,6 +856,14 @@ async function commandRememberAuto(options) {
         }))
         .filter(Boolean)
     );
+    for (const item of normalized) {
+      if (!item.requestedId) continue;
+      const store = pickStoreByScope(item.scope, stores);
+      if (!store.getMemoryById(item.requestedId)) {
+        throw new Error(`Memory id not found in ${item.scope} scope: ${item.requestedId}`);
+      }
+    }
+    for (const item of normalized) delete item.requestedId;
     const imported = await saveNormalizedMemories(normalized, stores);
     printResult(options, {
       ok: true,

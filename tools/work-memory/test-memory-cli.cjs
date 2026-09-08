@@ -165,6 +165,34 @@ const rememberAutoResult = run([
 ]);
 assert.strictEqual(rememberAutoResult.importedCount, 1, 'expected remember-auto to save one memory');
 
+const rememberAutoCorrection = run([
+  'remember-auto',
+  '--repo-root', tempRepoRoot,
+  '--repo-db', repoDb,
+  '--global-db', globalDb,
+  '--cache-file', cacheFile,
+  '--memory', JSON.stringify({
+    id: rememberAutoResult.items[0].id,
+    scope: 'global',
+    category: 'tip',
+    title: 'Save root causes',
+    content: 'Replace the existing lesson without creating a duplicate memory row.',
+    tags: ['process', 'debugging'],
+  }),
+  '--json',
+]);
+assert.strictEqual(rememberAutoCorrection.items[0].id, rememberAutoResult.items[0].id, 'expected remember-auto to preserve an explicit correction id');
+assert.strictEqual(rememberAutoCorrection.items[0].content, 'Replace the existing lesson without creating a duplicate memory row.', 'expected remember-auto to replace the existing content');
+assert.throws(() => run([
+  'remember-auto',
+  '--repo-root', tempRepoRoot,
+  '--repo-db', repoDb,
+  '--global-db', globalDb,
+  '--cache-file', cacheFile,
+  '--memory', '{"id":"missing-auto-memory-id","scope":"global","title":"Must not insert","content":"Explicit ids are corrections."}',
+  '--json',
+]), /Memory id not found/, 'remember-auto must fail closed for an unknown explicit id');
+
 const rememberAutoInferredResult = run([
   'remember-auto',
   '--repo-root', tempRepoRoot,

@@ -290,6 +290,15 @@ Canvas width. Stretch solid modal dim sprites too. Validate portrait and landsca
 with runtime bounds; a full-screen root RectTransform alone does not resize its
 fixed-size composite children.
 
+For a HUD tutorial spotlight, matching the serialized Unity transform can still
+produce an opening that is visibly too loose around the current HUD control. Measure
+the rendered control and the transparent inner bounds of the focus texture. Keep the
+source feathered texture, size it from config into the required oval/rectangle, reset
+any authored scale already baked into that size, and move Top/Bot/Left/Right panels to
+the new half extents. Resizing only the center node leaves seams or uncovered bands;
+changing the whole HUD scale moves the focus and control together without fixing their
+relative gap. Validate the opening around the control at portrait and landscape sizes.
+
 For Unity ParticleSystem trails, renderer material slot 0 is the particle and
 slot 1 is the trail. Convert slot 1 with Cocos `builtin-particle-trail`, keep its
 own texture, and preserve loop per emitter; an EOL prefab may mix looping color
