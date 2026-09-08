@@ -308,6 +308,14 @@ an unused alpha of zero will erase the Cocos particle or trail. Before emitting
 a shared runtime helper, search the complete `assets/script` subtree for the
 same ccclass and reuse it to avoid duplicate class and UUID registration.
 
+Cocos Creator 3.8.8 validates a CPU ParticleSystem material with a case-sensitive
+substring check on the effect asset name: it must contain lowercase `particle`.
+An effect named `HiddenSuspectParticleAlpha` can include the correct
+`builtin/internal/particle-vs-legacy` ABI and render in isolation, yet ParticleSystem
+still logs warning 6035 and refuses it. Name or rename the `.effect` asset with
+lowercase `particle`, move its `.meta` alongside it to preserve UUID references, and
+run `shader.validate`; the validator reports `PARTICLE_EFFECT_NAME_CASE` for this trap.
+
 Unity UI Particle uses `CanvasRenderer`, so its Canvas sorting can place it over
 HUD graphics. Parenting a Cocos `ParticleSystem` under a Canvas does not provide
 the same order: the 3D particle pass still runs before the UI batch. When the

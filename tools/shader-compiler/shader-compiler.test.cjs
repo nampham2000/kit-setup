@@ -1739,6 +1739,21 @@ Shader "Custom/WithUsePass" {
     });
   });
 
+  describe('28. Cocos particle material naming contract', () => {
+    const particleEffect = `CCEffect %{ techniques: [{ passes: [{ vert: particle-vs:vert, frag: particle-fs:frag }] }] }%
+CCProgram particle-vs %{ #include <builtin/internal/particle-vs-legacy> vec4 vert () { return lpvs_main(); } }%
+CCProgram particle-fs %{ vec4 frag () { return vec4(1.0); } }%`;
+
+    test('requires lowercase particle in a custom particle effect asset name', () => {
+      const invalid = validateCceffectStructure(particleEffect, { effectPath: 'HiddenSuspectParticleAlpha.effect' });
+      assert.equal(invalid.valid, false);
+      assert.ok(invalid.errors.some(error => error.includes('PARTICLE_EFFECT_NAME_CASE')));
+
+      const valid = validateCceffectStructure(particleEffect, { effectPath: 'hidden-suspect-particle-alpha.effect' });
+      assert.ok(!valid.errors.some(error => error.includes('PARTICLE_EFFECT_NAME_CASE')));
+    });
+  });
+
 });
 
 

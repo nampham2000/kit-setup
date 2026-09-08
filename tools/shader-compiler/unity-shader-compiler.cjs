@@ -120,7 +120,7 @@ function transpileShaderFile(srcPath, outPath, options = {}) {
   const effectCode = emitCocosEffect(docIR, emitOptions);
 
   // 5. Validate generated effect
-  const validationResult = validateCceffectStructure(effectCode);
+  const validationResult = validateCceffectStructure(effectCode, { effectPath: outPath });
   const lintResult = lintPlayableShader(docIR, effectCode);
   for (const issue of (lintResult.issues || [])) {
     validationResult.warnings.push(`[${issue.severity.toUpperCase()}] ${issue.message}`);
@@ -338,7 +338,7 @@ function cmdValidate(effectPath) {
     process.exit(1);
   }
   const text = fs.readFileSync(effectPath, 'utf8');
-  const res = validateCceffectStructure(text);
+  const res = validateCceffectStructure(text, { effectPath });
   console.log(`Static validation for '${effectPath}': ${res.valid ? '✅ PASS' : '❌ FAIL'}`);
   console.log('Scope: text/ABI heuristics only. Cocos importer, runtime shader variants, and Unity visual parity were NOT checked.');
   if (res.errors.length > 0) {

@@ -110,12 +110,24 @@ function checkDefineShadowing(programs, errors) {
   }
 }
 
-function validateCceffectStructure(effectText) {
+function validateCceffectStructure(effectText, options = {}) {
   const errors = [];
   const warnings = [];
 
   if (!effectText || typeof effectText !== 'string') {
     return { valid: false, errors: ['Empty or non-string effect content'], warnings };
+  }
+
+  // Cocos 3.8.8 decides whether a CPU material is valid for ParticleSystem
+  // with a case-sensitive `effectName.indexOf('particle')` check. A custom
+  // effect can use the correct particle vertex ABI and still be rejected when
+  // its asset filename contains only `Particle` with an uppercase P.
+  if (/builtin\/internal\/particle-vs(?:-legacy)?/.test(effectText) && options.effectPath) {
+    const fileName = String(options.effectPath).split(/[\\/]/).pop() || '';
+    const effectName = fileName.replace(/\.effect$/i, '');
+    if (!effectName.includes('particle')) {
+      errors.push(`[PARTICLE_EFFECT_NAME_CASE] '${effectName}' uses the Cocos particle vertex ABI, but its asset name does not contain lowercase 'particle'. Cocos 3.8.8 will reject it as a ParticleSystem CPU material. Rename the .effect asset while preserving its .meta UUID.`);
+    }
   }
 
   // A surface-shader effect has a different, equally valid shape: the entry
