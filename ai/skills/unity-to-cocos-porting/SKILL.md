@@ -316,6 +316,16 @@ still logs warning 6035 and refuses it. Name or rename the `.effect` asset with
 lowercase `particle`, move its `.meta` alongside it to preserve UUID references, and
 run `shader.validate`; the validator reports `PARTICLE_EFFECT_NAME_CASE` for this trap.
 
+When Unity creates a looping hint with `Instantiate(prefab, worldPosition,
+Quaternion.identity, owner)` and then calls `SetWorldScale(Vector3.one)`, preserve
+all three semantics in Cocos: attach the effect to the target owner, keep the
+authored world position/rotation while reparenting, and restore world scale to one.
+Every source emitter with `moveWithTransform: 0` is Unity Local simulation and must
+be Cocos Local (`_simulationSpace: 1`). A world-root effect or stale Cocos World
+simulation may initially overlap the target but will drift when its owner transforms.
+If the converter was fixed after an asset was generated, re-port or migrate that
+prefab and audit every emitter; a newer porter does not repair committed old output.
+
 Unity UI Particle uses `CanvasRenderer`, so its Canvas sorting can place it over
 HUD graphics. Parenting a Cocos `ParticleSystem` under a Canvas does not provide
 the same order: the 3D particle pass still runs before the UI batch. When the
