@@ -268,6 +268,16 @@ and add a focused regression alongside the project repair. Do not count a local
 workaround as a repaired porter. After tool changes, sync generated AI guidance
 and run contract verification; never edit generated command blocks by hand.
 
+Unity FTUE spotlights are often composite UI: a center texture with a transparent
+hole plus opaque extension panels on its four sides. Even when every RectTransform
+ports correctly, different effective alpha at the center texture's outer pixels
+and an adjoining extension creates a hard rectangular seam after Canvas scaling.
+Inspect the source texture edge alpha and each panel color, then normalize the
+mismatched join to the same effective opacity through game config. Check every
+edge at the narrowest supported viewport; do not blindly change panels whose
+source opacity already differs intentionally, and do not hide the symptom by
+moving the camera, level mesh, focus target, or tutorial hand.
+
 For Unity ParticleSystem trails, renderer material slot 0 is the particle and
 slot 1 is the trail. Convert slot 1 with Cocos `builtin-particle-trail`, keep its
 own texture, and preserve loop per emitter; an EOL prefab may mix looping color
