@@ -75,6 +75,9 @@ không nghiệm thu project mới. Sau import/move, chờ Asset DB hoàn tất r
 Với nhiều worktree Cocos mở cùng lúc, giữ port trong settings/mcp-server.json của từng project khi restart;
 không reset về 3000. Trên Windows, launcher dùng literal environment path qua PowerShell call operator,
 không lồng quote cmd.exe vào spawnSync. Feature profile persisted vẫn cần import-map receipt sau restart.
+Physics backend đúng chưa đủ: bind TagManager layers và DynamicsManager collision matrix vào config của target
+trước khi tạo collider/body. Khi reuse prefab với group khác Default, thiếu matrix có thể làm cả stack xuyên bàn
+và tự win dù console sạch. Khóa regression idle-before-input: đúng level, đủ object, zero shot và không transition.
 Với port mới, golden entry là:
 
 ```bash
