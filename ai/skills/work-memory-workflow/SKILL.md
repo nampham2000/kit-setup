@@ -8,6 +8,11 @@ argument-hint: "Query topic or lesson to remember"
 
 Work Memory is a local SQLite database that stores architectural rules, debugging solutions, and porting lessons across projects for AI agents.
 
+Per-checkout databases in `tools/work-memory/data/repo/` are local recall state
+and are Git-ignored by the shared kit. Do not commit or delete them to satisfy
+portable doctor. The global `tools/work-memory/data/shared-memory.db` remains
+tracked; changes to that portable source still require review and a scoped commit.
+
 ## 1. How to Query Work Memory
 
 When starting a new task or encountering a tricky bug in Cocos 3.8:

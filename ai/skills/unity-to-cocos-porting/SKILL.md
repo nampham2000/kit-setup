@@ -32,6 +32,11 @@ lets the offline schema gate resolve its runtime imports; the second prepares th
 synced extension for Editor loading. A failed sync gate must leave target files
 intact, including with `--clean`; install missing dependencies and retry sync.
 
+Work Memory may create a per-checkout database during initial recall. Shared-kit
+Git ignores `tools/work-memory/data/repo/`; keep this local state out of commits.
+The pinned global `shared-memory.db` stays tracked and must remain clean unless
+the task explicitly updates portable knowledge.
+
 On a fresh Unity project, MCP restores NuGet dependencies during Editor updates
 and recompiles before the scanner assembly exists. Batch setup must enter the
 independent `BootstrapEntry` assembly and allow updates/domain reloads; do not add
