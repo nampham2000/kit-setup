@@ -7,7 +7,7 @@ const path = require('node:path');
 
 const { assertUnityLiveSnapshotPatch } = require('./live-schema.cjs');
 
-const BATCH_METHOD = 'CcPlayable.UnityIntelligence.BatchEntry.Scan';
+const BATCH_METHOD = 'CcPlayable.UnityIntelligence.BootstrapEntry.Scan';
 const DEFAULT_TIMEOUT_MS = 180_000;
 const MAX_BATCH_RESULT_BYTES = 2 * 1024 * 1024;
 const MAX_BATCH_UNRESOLVED_GUIDS = 512;
@@ -65,7 +65,9 @@ function buildUnityBatchInvocation(input) {
       '-nographics',
       '-projectPath', projectRoot,
       '-executeMethod', BATCH_METHOD,
-      '-quit',
+      // BootstrapEntry must allow Editor updates and domain reloads while the
+      // MCP resolver restores NuGet dependencies. BatchEntry exits on completion;
+      // waitForChild retains the bounded deadline and owned-process termination.
       '-logFile', path.resolve(input.logFile),
       '-upmLogFile', path.resolve(input.upmLogFile),
       '-timestamps',

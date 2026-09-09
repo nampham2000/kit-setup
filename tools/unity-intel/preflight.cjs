@@ -52,6 +52,8 @@ const WORKFLOW_FILES = [
   path.join('..', 'lib', 'path-boundary.cjs'),
   path.join('..', '..', 'packages', 'unity-intelligence', 'package.json'),
   path.join('..', '..', 'packages', 'unity-intelligence', 'Editor', 'BatchEntry.cs'),
+  path.join('..', '..', 'packages', 'unity-intelligence', 'Bootstrap', 'Editor', 'BootstrapEntry.cs'),
+  path.join('..', '..', 'packages', 'unity-intelligence', 'Bootstrap', 'Editor', 'CcPlayable.UnityIntelligence.Bootstrap.asmdef'),
   path.join('..', '..', 'packages', 'unity-intelligence', 'Editor', 'PlayablePortScanTool.cs'),
   path.join('..', '..', 'packages', 'unity-intelligence', 'Editor', 'UnityIntelligenceModels.cs'),
   path.join('..', '..', 'packages', 'unity-intelligence', 'Editor', 'UnityIntelligenceScanner.cs'),

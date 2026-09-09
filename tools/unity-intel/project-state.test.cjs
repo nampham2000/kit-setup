@@ -41,7 +41,7 @@ test('manifest, build settings and meta mutations invalidate project state', t =
   assert.notEqual(third, second);
 });
 
-test('non-hashed prefab content replacement stays detectable when size and mtime are restored', t => {
+test('prefab content replacement stays detectable when size and mtime are restored', t => {
   const fixture = createUnityFixture(t);
   const prefab = path.join(fixture.root, 'Assets', 'Game', 'Prefabs', 'Child.prefab');
   const original = fs.readFileSync(prefab, 'utf8');
@@ -53,4 +53,19 @@ test('non-hashed prefab content replacement stays detectable when size and mtime
   fs.utimesSync(prefab, stat.atime, stat.mtime);
   const second = computeUnityProjectState(fixture.root).fingerprint;
   assert.notEqual(second, first);
+});
+
+test('identical ProjectSettings rewrites survive batch confirmation but real changes invalidate it', t => {
+  const fixture = createUnityFixture(t);
+  const file = path.join(fixture.root, 'ProjectSettings', 'ProjectSettings.asset');
+  const original = 'PlayerSettings:\n  companyName: Old\n';
+  fs.writeFileSync(file, original);
+  const initialStat = fs.statSync(file);
+  const first = computeUnityProjectState(fixture.root).fingerprint;
+  fs.writeFileSync(file, original);
+  fs.utimesSync(file, initialStat.atime, new Date(initialStat.mtimeMs + 5000));
+  assert.equal(computeUnityProjectState(fixture.root).fingerprint, first);
+  fs.writeFileSync(file, original.replace('Old', 'New'));
+  fs.utimesSync(file, initialStat.atime, initialStat.mtime);
+  assert.notEqual(computeUnityProjectState(fixture.root).fingerprint, first);
 });

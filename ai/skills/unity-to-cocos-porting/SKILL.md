@@ -32,6 +32,18 @@ lets the offline schema gate resolve its runtime imports; the second prepares th
 synced extension for Editor loading. A failed sync gate must leave target files
 intact, including with `--clean`; install missing dependencies and retry sync.
 
+On a fresh Unity project, MCP restores NuGet dependencies during Editor updates
+and recompiles before the scanner assembly exists. Batch setup must enter the
+independent `BootstrapEntry` assembly and allow updates/domain reloads; do not add
+`-quit` or force `UNITY_MCP_READY`/dependency defines to bypass this phase. The
+validated scan marker and a confirming scan remain mandatory after restore.
+
+Unity may rewrite `ProjectSettings.asset` with identical bytes on each batch
+launch. Bounded serialized source files use content hashes for scan identity,
+so timestamp-only rewrites do not invalidate confirmation. Real byte changes
+still invalidate it, including equal-size changes with restored timestamps;
+large and binary files retain conservative size/mtime/ctime checks.
+
 `ai:portable:doctor` là read-only và fail-closed khi submodule lệch commit, skill/contract generated bị stale,
 Work Memory corrupt, dependency chưa cài, regression registry chưa track hoặc registry chứa absolute path theo máy.
 Sau `ai:sync`, chạy doctor lại nếu lượt đầu báo provider skill/contract stale.
