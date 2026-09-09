@@ -29,6 +29,21 @@ test('split action assigns eligible top-level sections without overlapping neste
   });
 });
 
+test('Split Sections is enabled only for a root playable config', () => {
+  assert.equal(inspector.__test.canSplitConfig({
+    $schema: 'playable-config-v1',
+    audio: { sfxVolume: 1 },
+  }), true);
+  assert.equal(inspector.__test.canSplitConfig({
+    audio: { sfxVolume: 1 },
+    $fragments: { audio: 'playable-config/audio' },
+  }), true);
+  assert.equal(inspector.__test.canSplitConfig({
+    autoPlayBgm: false,
+    bgmVolume: 0.6,
+  }), false);
+});
+
 test('default preview detection never matches unrelated inspector panels', () => {
   const host = { contains: () => false };
   const element = (tagName, src = '', className = '') => ({

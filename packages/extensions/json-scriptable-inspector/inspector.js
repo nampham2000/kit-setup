@@ -543,6 +543,11 @@ function buildTopLevelFragmentMap(data, basePath = 'playable-config') {
   return current;
 }
 
+function canSplitConfig(data) {
+  return data?.$schema === 'playable-config-v1'
+    || !!(data?.$fragments && typeof data.$fragments === 'object' && Object.keys(data.$fragments).length > 0);
+}
+
 function isDefaultJsonPreview(element, host) {
   if (!element || element === host || (host && host.contains && host.contains(element))) return false;
   const tag = String(element.tagName || '').toLowerCase();
@@ -636,6 +641,8 @@ exports.ready = function () {
   self.currentData = null;
   self.originalData = null;
   self.fragmentSources = [];
+  self.loadedUuid = null;
+  self.isLoadingAsset = false;
   self.searchQuery = '';
   self.collapsedPaths = new Set();
   self.loadGeneration = 0;
@@ -662,7 +669,7 @@ exports.ready = function () {
   }
   if (self.$.btnSplitConfig) {
     self.$.btnSplitConfig.addEventListener('click', () => {
-      if (!self.currentData) return;
+      if (!self.currentData || !canSplitConfig(self.currentData)) return;
       const before = Object.keys(self.currentData.$fragments || {}).length;
       const fragmentMap = buildTopLevelFragmentMap(self.currentData);
       self.currentData.$fragments = fragmentMap;
@@ -846,7 +853,10 @@ exports.update = function (dump) {
   schedulePreviewHide(self);
 
   const generation = ++self.loadGeneration;
-  self.loadAssetData(rawJson, generation);
+  const requestedUuid = self.uuid;
+  self.isLoadingAsset = true;
+  self.loadedUuid = null;
+  self.loadAssetData(rawJson, generation, requestedUuid);
 };
 
 exports.close = function () {
@@ -934,7 +944,7 @@ exports.methods = {
     });
   },
 
-  async loadAssetData(fallbackJson, generation = this.loadGeneration) {
+  async loadAssetData(fallbackJson, generation = this.loadGeneration, requestedUuid = this.uuid) {
     const self = this;
     let data = fallbackJson;
     let resolvedName = '';
@@ -947,9 +957,9 @@ exports.methods = {
       } catch (e) {}
     }
 
-    if (self.uuid && typeof Editor !== 'undefined' && Editor.Message) {
+    if (requestedUuid && typeof Editor !== 'undefined' && Editor.Message) {
       try {
-        const res = await Editor.Message.request('json-scriptable-inspector', 'read-json-asset', self.uuid);
+        const res = await Editor.Message.request('json-scriptable-inspector', 'read-json-asset', requestedUuid);
         if (res && res.success && res.content) {
           data = JSON.parse(res.content);
           resolvedName = res.name || '';
@@ -961,6 +971,8 @@ exports.methods = {
     }
 
     if (generation !== self.loadGeneration) return;
+    self.isLoadingAsset = false;
+    self.loadedUuid = requestedUuid || null;
     if (resolvedName && self.$.assetTitle) self.$.assetTitle.textContent = resolvedName;
     self.fragmentSources = fragmentSources;
     if (self.$.configModeBadge) {
@@ -973,6 +985,14 @@ exports.methods = {
 
     if (!data) {
       data = JSON.parse(JSON.stringify(DEFAULT_PLAYABLE_TEMPLATE));
+    }
+
+    if (self.$.btnSplitConfig) {
+      const eligible = canSplitConfig(data);
+      self.$.btnSplitConfig.disabled = !eligible;
+      self.$.btnSplitConfig.title = eligible
+        ? 'Move top-level sections into editable resource fragments'
+        : 'Split Sections is available only on the root playable-config manifest.';
     }
 
     self.currentData = data;
@@ -1006,7 +1026,13 @@ exports.methods = {
 
   async saveAsset() {
     const self = this;
-    if (!self.currentData) return;
+    if (!self.currentData || self.isLoadingAsset || !self.loadedUuid || self.loadedUuid !== self.uuid) {
+      if (self.$.statusBadge) {
+        self.$.statusBadge.textContent = 'Wait for asset load';
+        self.$.statusBadge.className = 'status-badge error';
+      }
+      return;
+    }
 
     if (self.viewMode === 'code' && self.$.rawJsonText) {
       try {
@@ -1427,4 +1453,5 @@ exports.__test = {
   removeLegacyGlobalHideStyle,
   restoreDefaultPreview,
   buildTopLevelFragmentMap,
+  canSplitConfig,
 };

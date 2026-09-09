@@ -95,3 +95,32 @@ test('editor save refreshes every fragment asset after writing', async () => {
     fs.rmSync(fixture.project, { recursive: true, force: true });
   }
 });
+
+test('a missing requested UUID never falls back to the current selection', async () => {
+  const fixture = createFixture();
+  const queried = [];
+  global.Editor = {
+    Selection: { getLastSelected: () => 'current-selection-uuid' },
+    Message: {
+      request: async (_channel, method, value) => {
+        if (method === 'query-asset-info') {
+          queried.push(value);
+          if (value === 'current-selection-uuid') {
+            return { uuid: value, file: fixture.manifestFile, name: 'playable-config.json' };
+          }
+          return null;
+        }
+        return null;
+      },
+    },
+  };
+  try {
+    const result = await extension.methods.saveJsonAsset('stale-fragment-uuid', '{"audio":true}');
+    assert.equal(result.success, true);
+    assert.deepEqual(queried, ['stale-fragment-uuid']);
+    assert.equal(JSON.parse(fs.readFileSync(fixture.manifestFile, 'utf8')).title, 'Fragmented');
+  } finally {
+    delete global.Editor;
+    fs.rmSync(fixture.project, { recursive: true, force: true });
+  }
+});

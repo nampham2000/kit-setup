@@ -26,10 +26,12 @@ async function resolveAssetInfo(uuid) {
     try {
       assetInfo = await Editor.Message.request('asset-db', 'query-asset-info', uuid);
     } catch (e) {
-      // fallback to current selection
+      // A supplied UUID is authoritative. Falling back to the current selection
+      // can write one asset's buffered JSON into another during AssetDB reimport.
     }
+    return assetInfo;
   }
-  if (!assetInfo && typeof Editor !== 'undefined' && Editor.Selection) {
+  if (typeof Editor !== 'undefined' && Editor.Selection) {
     try {
       const lastSelected = Editor.Selection.getLastSelected?.('asset');
       if (lastSelected) {
