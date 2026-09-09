@@ -2,9 +2,10 @@ const DEFAULT_DIRECTORY = 'db://assets';
 const FBX_EXTENSION = /\.fbx$/i;
 const MAX_MODELS_PER_SCAN = 10_000;
 
+// Keep source topology by default: reducing a two-triangle backdrop to 80% can remove half the image.
 export const PLAYABLE_FBX_IMPORT_SETTINGS = Object.freeze({
     meshOptimize: Object.freeze({ enable: true, vertexCache: true, vertexFetch: true, overdraw: true }),
-    meshSimplify: Object.freeze({ enable: true, targetRatio: 0.8, autoErrorRate: false, errorRate: 1, lockBoundary: false }),
+    meshSimplify: Object.freeze({ enable: true, targetRatio: 1, autoErrorRate: false, errorRate: 1, lockBoundary: false }),
     meshCluster: Object.freeze({ enable: false, generateBounding: false }),
     meshCompress: Object.freeze({ enable: true, encode: false, compress: true, quantize: false }),
 });

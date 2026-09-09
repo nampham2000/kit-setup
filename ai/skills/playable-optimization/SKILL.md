@@ -36,7 +36,7 @@ Before building, always run the automated asset optimization tools:
    npm run ai:model:optimize -- --verify
    ```
    This uses Asset DB metadata only. It enables Mesh Optimize with Vertex
-   Cache/Fetch/Overdraw, Mesh Simplify at ratio 0.8, and Mesh Compress with
+   Cache/Fetch/Overdraw, Mesh Simplify at ratio 1, and Mesh Compress with
    Compress enabled while Encode/Quantize remain disabled. Mesh Cluster stays
    disabled. The Cocos MCP listener reapplies the same contract to new imports.
    Keep the source/output format as FBX. If Cocos explicitly rejects the Unity
@@ -91,7 +91,7 @@ Before building, always run the automated asset optimization tools:
 | :--- | :--- | :--- |
 | **Engine Core / WASM** | ~600 KB - 900 KB | Inlined by Super-HTML; enable `engine-mangle-config.json` |
 | **Textures / UI** | ~500 KB - 1 MB | Max 512x512, combine into atlases, enforce WebP quality 50 |
-| **3D Models / Meshes** | ~200 KB - 500 KB | Keep/export FBX directly; importer Optimize + Simplify 0.8 + Compress; strip embedded textures |
+| **3D Models / Meshes** | ~200 KB - 500 KB | Keep/export FBX directly; importer Optimize + Simplify 1 + Compress; strip embedded textures |
 | **Audio (BGM / SFX)** | ~100 KB - 250 KB | MP3 quality 30; preserve original mono/stereo; short looped BGM (<15s) |
 | **Shaders / Code** | ~100 KB | Minified and inlined |
 
@@ -149,3 +149,13 @@ gameplay frame; begin level 2+, win/lose, celebration, and non-immediate audio
 after that frame. Cache every in-flight load so an early tap cannot duplicate it.
 Gate level transition, win, and lose entry points on deferred readiness, and let
 lazy audio reuse the same promise so a very early gesture still receives sound.
+
+### Preserve planar backdrop topology during import
+
+Mesh Simplify must default to targetRatio=1, matching the importer reference.
+A global ratio below 1 with unlocked boundaries can reduce a textured quad from
+two triangles to one, cutting half the map while bounds and camera remain valid.
+Keep Optimize and Compress enabled. Before approving reduction, compare source
+and imported index counts for every submesh, especially planar backdrops; inspect
+both levels in Preview. Repair through Asset DB, preserving UUIDs, and reload
+the extension before reimport so an old listener cannot reapply the bad policy.

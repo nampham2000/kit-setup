@@ -938,7 +938,7 @@ const CAPABILITIES = [
     outputs: ['stdout JSON; FBX importer metadata được ghi và đọc lại qua Cocos Asset DB'],
     limits: [
       'Cocos Creator phải đang mở đúng project và Cocos MCP phải reachable; tool không sửa `.fbx.meta` trực tiếp.',
-      'Policy: Mesh Optimize enable + Vertex Cache/Fetch/Overdraw; Mesh Simplify enable ratio 0.8, auto error off, error 1, lock boundary off; Mesh Cluster off; Mesh Compress enable, Encode off, Compress on, Quantize off.',
+      'Policy: Mesh Optimize enable + Vertex Cache/Fetch/Overdraw; Mesh Simplify enable ratio 1, auto error off, error 1, lock boundary off; Mesh Cluster off; Mesh Compress enable, Encode off, Compress on, Quantize off.',
       '`--verify` chạy dry-run và fail nếu còn bất kỳ FBX nào lệch policy.',
       'Automation trong Cocos MCP áp dụng lại khi Asset DB ready và khi FBX được add/change, nên checkout trên PC/project khác thừa hưởng sau `npm run sync`.',
     ],
@@ -1193,7 +1193,7 @@ const CORE_RULES = [
   },
   {
     id: 'portable-asset-optimization',
-    rule: 'Policy tối ưu asset phải portable và idempotent qua shared kit, không phụ thuộc thao tác Inspector trên một máy. PNG/JPG/JPEG phải dùng đúng preset WebP quality 50; audio mặc định MP3 quality 30 và giữ nguyên mono/stereo của từng nguồn; model phải giữ/export/import FBX trực tiếp, không dùng glTF/GLB để che lỗi importer. Nếu Cocos converter từ chối FBX gốc thì dùng `model.fbx-normalize` theo thứ tự preserve trước, static chỉ khi oracle chứng minh không dùng skeleton; static vẫn phải giữ mọi bone mà runtime scale/rotate qua `--preserve-anchor`, không được làm mất deformation anchor. Mọi FBX bật Mesh Optimize (cache/fetch/overdraw), Mesh Simplify ratio 0.8 và Mesh Compress compress-only theo `model.import-policy`. Mọi đổi importer/path/UUID phải qua Cocos Asset DB/MCP, đọc lại verify và tuyệt đối không sửa `.meta` trực tiếp. `stats.resources` phải báo font asset đang dùng có coverage đa ngôn ngữ để cân nhắc subset cho playable một ngôn ngữ.',
+    rule: 'Policy tối ưu asset phải portable và idempotent qua shared kit, không phụ thuộc thao tác Inspector trên một máy. PNG/JPG/JPEG phải dùng đúng preset WebP quality 50; audio mặc định MP3 quality 30 và giữ nguyên mono/stereo của từng nguồn; model phải giữ/export/import FBX trực tiếp, không dùng glTF/GLB để che lỗi importer. Nếu Cocos converter từ chối FBX gốc thì dùng `model.fbx-normalize` theo thứ tự preserve trước, static chỉ khi oracle chứng minh không dùng skeleton; static vẫn phải giữ mọi bone mà runtime scale/rotate qua `--preserve-anchor`, không được làm mất deformation anchor. Mọi FBX bật Mesh Optimize (cache/fetch/overdraw), Mesh Simplify ratio 1 và Mesh Compress compress-only theo `model.import-policy`. Mọi đổi importer/path/UUID phải qua Cocos Asset DB/MCP, đọc lại verify và tuyệt đối không sửa `.meta` trực tiếp. `stats.resources` phải báo font asset đang dùng có coverage đa ngôn ngữ để cân nhắc subset cho playable một ngôn ngữ.',
   },
   {
     id: 'severity',

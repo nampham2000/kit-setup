@@ -49,7 +49,7 @@ Model pipeline phải FBX-only. Nếu nguồn đã là `.fbx`, copy/import đún
 YAML đọc được, porter xuất thẳng FBX 7.4. Với mesh compressed/binary mà static exporter không đọc được, dùng Unity
 FBX Exporter trong đúng Editor/version nguồn và ghi provenance; không chuyển qua glTF/GLB để làm importer có vẻ pass.
 Flag legacy `--convert-fbx-fallback` bị từ chối. Sau khi Cocos import, chạy `npm run ai:model:optimize` rồi
-`npm run ai:model:optimize -- --verify`; tool dùng Asset DB để áp Mesh Optimize, Simplify ratio 0.8, Cluster off và
+`npm run ai:model:optimize -- --verify`; tool dùng Asset DB để áp Mesh Optimize, Simplify ratio 1, Cluster off và
 Compress-only. Nếu Cocos converter từ chối FBX gốc, chạy
 `npm run ai:fbx:normalize -- --src <Unity.fbx> --out <Cocos.fbx> --mode preserve`, reimport bằng Asset DB và bắt buộc
 `imported:true`. Chỉ dùng `--mode static` khi oracle nguồn/runtime chứng minh không có skeleton animation. Nếu C#/prefab
@@ -343,3 +343,13 @@ effect must cross over HUD sprites, render only that effect through a dedicated
 custom layer and an orthographic depth-only camera with priority above the UI
 camera. Keep the background on a different layer and match the UI camera's
 position, ortho height, near plane, and far plane.
+
+### Preserve planar backdrop topology during import
+
+Mesh Simplify must default to targetRatio=1, matching the importer reference.
+A global ratio below 1 with unlocked boundaries can reduce a textured quad from
+two triangles to one, cutting half the map while bounds and camera remain valid.
+Keep Optimize and Compress enabled. Before approving reduction, compare source
+and imported index counts for every submesh, especially planar backdrops; inspect
+both levels in Preview. Repair through Asset DB, preserving UUIDs, and reload
+the extension before reimport so an old listener cannot reapply the bad policy.

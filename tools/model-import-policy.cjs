@@ -24,7 +24,7 @@ Options:
 
 The tool writes importer metadata only through Cocos Asset DB. It enforces:
   Mesh Optimize: enable, Vertex Cache, Vertex Fetch, Overdraw
-  Mesh Simplify: enable, ratio 0.8, manual error 1, unlocked boundary
+  Mesh Simplify: enable, ratio 1, manual error 1, unlocked boundary
   Mesh Cluster: disabled
   Mesh Compress: enable, Compress on, Encode/Quantize off`;
 }
@@ -67,6 +67,9 @@ function parseArgs(argv) {
 function evaluateResult(payload, options) {
   if (!payload?.success || !payload?.data?.complete) {
     return { ok: false, code: 'FBX_POLICY_APPLY_FAILED', payload };
+  }
+  if (payload.data.settings?.meshSimplify?.targetRatio !== 1) {
+    return { ok: false, code: 'FBX_POLICY_STALE_EXTENSION', instruction: 'Restart the project Editor: the live FBX policy must preserve topology with targetRatio=1.', payload };
   }
   if (options.verify && payload.data.updated !== 0) {
     return { ok: false, code: 'FBX_POLICY_DRIFT', payload };

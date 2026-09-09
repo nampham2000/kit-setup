@@ -84,3 +84,18 @@ test('FBX helpers are case-insensitive and do not mutate source metadata', () =>
   assert.equal(next.userData.custom, 1);
   assert.equal(hasPlayableFbxImportSettings(next), true);
 });
+
+
+test('default policy preserves a two-triangle backdrop and repairs destructive legacy simplification', () => {
+  const legacy = { importer: 'fbx', uuid: 'map', subMetas: { plane: { uuid: 'map@plane', userData: { triangleCount: 2 } } },
+    userData: { meshSimplify: { enable: true, targetRatio: 0.8, errorRate: 1, lockBoundary: false } } };
+  const next = applyPlayableFbxImportSettings(legacy);
+  assert.equal(next.userData.meshSimplify.targetRatio, 1);
+  assert.equal(next.userData.meshOptimize.enable, true);
+  assert.equal(next.userData.meshCompress.compress, true);
+  assert.deepEqual(next.subMetas, legacy.subMetas);
+  assert.equal(next.uuid, legacy.uuid);
+  assert.equal(legacy.userData.meshSimplify.targetRatio, 0.8);
+  assert.equal(hasPlayableFbxImportSettings(legacy), false);
+  assert.equal(hasPlayableFbxImportSettings(next), true);
+});

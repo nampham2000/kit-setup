@@ -12,13 +12,19 @@ test('FBX policy CLI has portable defaults', () => {
 });
 
 test('FBX policy verify fails closed on importer drift', () => {
-  const result = evaluateResult({ success: true, data: { complete: true, updated: 1 } }, { verify: true });
+  const result = evaluateResult({ success: true, data: { complete: true, settings: { meshSimplify: { targetRatio: 1 } }, updated: 1 } }, { verify: true });
   assert.equal(result.ok, false);
   assert.equal(result.code, 'FBX_POLICY_DRIFT');
 });
 
 test('FBX policy accepts complete idempotent report', () => {
-  const result = evaluateResult({ success: true, data: { complete: true, updated: 0 } }, { verify: true });
+  const result = evaluateResult({ success: true, data: { complete: true, settings: { meshSimplify: { targetRatio: 1 } }, updated: 0 } }, { verify: true });
   assert.equal(result.ok, true);
   assert.equal(result.code, 'FBX_POLICY_OK');
+});
+
+test('CLI rejects stale Editor policy even when all assets match the destructive old default', () => {
+  const result = evaluateResult({ success: true, data: { complete: true, updated: 0, settings: { meshSimplify: { targetRatio: 0.8 } } } }, { verify: true });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'FBX_POLICY_STALE_EXTENSION');
 });
