@@ -1297,7 +1297,7 @@ const CORE_RULES = [
   },
   {
     id: 'portable-cross-pc-bootstrap',
-    rule: 'Trạng thái dùng chung phải sống trong Git: exact `playable-shared-kit` submodule commit, `capabilities.def.cjs`, skill source, global pinned Work Memory và registry/matrix/oracle/reference/watchFiles. Sau clone trên PC khác phải chạy `git submodule update --init --recursive`, `npm ci`, `ai:portable:doctor`, `ai:sync`, `ai:contract:verify` và `memory:doctor` trước port/resume. Không dùng absolute path, temp screenshot, user-local cache, mutation receipt hoặc resume packet từ máy cũ làm handoff truth; các state local phải regenerate và bind lại source hiện tại.',
+    rule: 'Trạng thái dùng chung phải sống trong Git: exact `playable-shared-kit` submodule commit, `capabilities.def.cjs`, skill source, global pinned Work Memory và registry/matrix/oracle/reference/watchFiles. Sau clone trên PC khác phải chạy `git submodule update --init --recursive`, `npm ci`, cài runtime dependencies của extension bằng `npm ci --omit=dev --ignore-scripts --prefix playable-shared-kit/packages/extensions/cocos-mcp`, `sync:shared`, cài dependencies của `extensions/cocos-mcp`, `ai:portable:doctor`, `ai:sync`, `ai:contract:verify` và `memory:doctor` trước port/resume. Không dùng absolute path, temp screenshot, user-local cache, mutation receipt hoặc resume packet từ máy cũ làm handoff truth; các state local phải regenerate và bind lại source hiện tại.',
   },
   {
     id: 'meta-files',

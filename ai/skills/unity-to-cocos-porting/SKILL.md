@@ -18,11 +18,19 @@ hoặc project clone mới, chạy chuỗi này trước khi đọc Unity source
 ```bash
 git submodule update --init --recursive
 npm ci
+npm ci --omit=dev --ignore-scripts --prefix playable-shared-kit/packages/extensions/cocos-mcp
+npm run sync:shared
+npm ci --omit=dev --ignore-scripts --prefix extensions/cocos-mcp
 npm run ai:portable:doctor
 npm run ai:sync
 npm run ai:contract:verify
 npm run memory:doctor -- --json
 ```
+
+Root `npm ci` does not install extension dependencies. The first extension install
+lets the offline schema gate resolve its runtime imports; the second prepares the
+synced extension for Editor loading. A failed sync gate must leave target files
+intact, including with `--clean`; install missing dependencies and retry sync.
 
 `ai:portable:doctor` là read-only và fail-closed khi submodule lệch commit, skill/contract generated bị stale,
 Work Memory corrupt, dependency chưa cài, regression registry chưa track hoặc registry chứa absolute path theo máy.
