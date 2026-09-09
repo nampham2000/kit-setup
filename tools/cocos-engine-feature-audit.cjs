@@ -725,11 +725,10 @@ async function restartCocosProject(projectRoot, options = {}) {
     : path.resolve(__dirname, '..', 'scripts', '1_open-project.bat');
   if (!fs.existsSync(script)) return { attempted: false, complete: false, error: '1_open-project.bat was not found.' };
   const beforePid = portOwner(port);
-  const run = spawnSync('cmd.exe', ['/d', '/s', '/c', 'call "%PLAYABLE_OPEN_PROJECT_BAT%"'], {
+  const run = runWindowsProjectLauncher(script, {
     cwd: projectRoot,
     env: {
       ...process.env,
-      PLAYABLE_OPEN_PROJECT_BAT: script,
       PLAYABLE_SKIP_MCP_BACKENDS: '1',
       PLAYABLE_SKIP_MCP_VERIFY: '1',
     },
@@ -751,6 +750,17 @@ async function restartCocosProject(projectRoot, options = {}) {
     outputTail: `${run.stdout || ''}\n${run.stderr || ''}`.trim().split(/\r?\n/).slice(-20),
     error: run.error?.message || null,
   };
+}
+
+function runWindowsProjectLauncher(script, options = {}) {
+  // PowerShell's call operator expands the environment value as one literal path.
+  // Node's cmd.exe quoting escaped the nested quotes into \" and never ran the bat.
+  return spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
+    '& $env:PLAYABLE_OPEN_PROJECT_BAT; exit $LASTEXITCODE'], {
+    ...options,
+    env: { ...process.env, ...options.env, PLAYABLE_OPEN_PROJECT_BAT: script },
+    windowsHide: true,
+  });
 }
 
 async function waitForEngineApplication(projectRoot, options = {}) {
@@ -925,6 +935,7 @@ module.exports = {
   createMcpClient,
   unwrapToolResult,
   restartCocosProject,
+  runWindowsProjectLauncher,
   waitForEngineApplication,
   writeAuditReport,
   sha256,

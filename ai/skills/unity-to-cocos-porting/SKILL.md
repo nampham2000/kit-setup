@@ -72,6 +72,9 @@ không chép đè toàn bộ manifest bằng schema cũ. Kiểm tra API library 
 với tsconfig của target, và di chuyển thư mục script legacy qua Asset DB về assets/script/.
 Source levels, tutorial, branding và animation phải bind lại Unity project đang port; receipt/playtest của donor
 không nghiệm thu project mới. Sau import/move, chờ Asset DB hoàn tất rồi chạy verify/lint trước Preview.
+Với nhiều worktree Cocos mở cùng lúc, giữ port trong settings/mcp-server.json của từng project khi restart;
+không reset về 3000. Trên Windows, launcher dùng literal environment path qua PowerShell call operator,
+không lồng quote cmd.exe vào spawnSync. Feature profile persisted vẫn cần import-map receipt sau restart.
 Với port mới, golden entry là:
 
 ```bash

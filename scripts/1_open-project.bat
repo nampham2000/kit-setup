@@ -22,6 +22,18 @@ if (-not (Test-Path (Join-Path $ProjectDir 'package.json'))) {
 }
 
 $CocosMcpPort = 3000
+$ExistingMcpSettings = Join-Path $ProjectDir 'settings\mcp-server.json'
+if (Test-Path -LiteralPath $ExistingMcpSettings) {
+    $ExistingMcpConfig = Get-Content -LiteralPath $ExistingMcpSettings -Raw | ConvertFrom-Json
+    if ($ExistingMcpConfig.PSObject.Properties['port']) {
+        $ConfiguredMcpPort = 0
+        if (-not [int]::TryParse([string]$ExistingMcpConfig.port, [ref]$ConfiguredMcpPort) -or
+            $ConfiguredMcpPort -lt 1 -or $ConfiguredMcpPort -gt 65535) {
+            throw 'Invalid project Cocos MCP port; refusing to overwrite it with a default.'
+        }
+        $CocosMcpPort = $ConfiguredMcpPort
+    }
+}
 $CocosMcpExtensionName = 'cocos-mcp'
 $CocosMcpUrl = "http://127.0.0.1:$CocosMcpPort/mcp"
 
