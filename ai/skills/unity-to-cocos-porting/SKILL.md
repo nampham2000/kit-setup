@@ -43,6 +43,12 @@ independent `BootstrapEntry` assembly and allow updates/domain reloads; do not a
 `-quit` or force `UNITY_MCP_READY`/dependency defines to bypass this phase. The
 validated scan marker and a confirming scan remain mandatory after restore.
 
+On Windows, Unity helpers can keep inherited stdout/stderr handles open after
+the owned Editor exits. Batch waiting uses the Editor's `exit` event and closes
+its read pipes; it must still validate the JSON marker and matching fingerprint.
+Never kill unrelated Unity helpers to release a pipe, or interpret exit code 0
+alone as scanner success. A timeout remains failure even if termination emits exit.
+
 Unity may rewrite `ProjectSettings.asset` with identical bytes on each batch
 launch. Bounded serialized source files use content hashes for scan identity,
 so timestamp-only rewrites do not invalidate confirmation. Real byte changes

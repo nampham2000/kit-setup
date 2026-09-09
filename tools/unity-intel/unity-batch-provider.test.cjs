@@ -92,6 +92,36 @@ test('batch result requires a valid live patch for the same static project finge
   assert.throws(() => parseBatchResult(resultPath, 'c'.repeat(64)), /projectFingerprint/);
 });
 
+test('owned Unity exit completes even when a descendant retains stdout pipes', async () => {
+  const child = new EventEmitter();
+  child.stdout = new PassThrough();
+  child.stderr = new PassThrough();
+  let killCount = 0;
+  child.kill = () => { killCount++; return false; };
+  const waiting = waitForChild(child, 100, { terminationGraceMs: 5 });
+  child.stdout.write('bounded output');
+  child.emit('exit', 0, null);
+  const result = await waiting;
+  assert.equal(result.code, 0);
+  assert.equal(result.stdout, 'bounded output');
+  assert.equal(killCount, 0);
+  assert.equal(child.stdout.destroyed, true);
+  assert.equal(child.stderr.destroyed, true);
+});
+
+test('timeout remains failure when Unity exits but pipes stay open', async () => {
+  const child = new EventEmitter();
+  child.stdout = new PassThrough();
+  child.stderr = new PassThrough();
+  child.kill = () => { process.nextTick(() => child.emit('exit', null, 'SIGTERM')); return true; };
+  await assert.rejects(waitForChild(child, 5, { terminationGraceMs: 5 }), error => {
+    assert.equal(error.code, 'UNITY_BATCH_TIMEOUT');
+    assert.notEqual(error.processStillRunning, true);
+    return true;
+  });
+  assert.equal(child.stdout.destroyed, true);
+});
+
 test('missing marker is failure even when Unity itself might return exit code zero', t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'unity-batch-missing-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
