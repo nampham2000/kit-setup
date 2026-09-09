@@ -69,3 +69,18 @@ test('identical ProjectSettings rewrites survive batch confirmation but real cha
   fs.utimesSync(file, initialStat.atime, initialStat.mtime);
   assert.notEqual(computeUnityProjectState(fixture.root).fingerprint, first);
 });
+
+test('AudioMixer postprocessor saves ignore timestamp-only changes but detect parameter changes', t => {
+  const fixture = createUnityFixture(t);
+  const file = path.join(fixture.root, 'Assets', 'Game', 'Audio.mixer');
+  const original = '%YAML 1.1\nAudioMixerController:\n  m_Volume: 1\n';
+  fs.writeFileSync(file, original);
+  const initialStat = fs.statSync(file);
+  const first = computeUnityProjectState(fixture.root).fingerprint;
+  fs.writeFileSync(file, original);
+  fs.utimesSync(file, initialStat.atime, new Date(initialStat.mtimeMs + 5000));
+  assert.equal(computeUnityProjectState(fixture.root).fingerprint, first);
+  fs.writeFileSync(file, original.replace('m_Volume: 1', 'm_Volume: 2'));
+  fs.utimesSync(file, initialStat.atime, initialStat.mtime);
+  assert.notEqual(computeUnityProjectState(fixture.root).fingerprint, first);
+});

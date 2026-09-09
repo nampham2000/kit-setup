@@ -49,8 +49,8 @@ its read pipes; it must still validate the JSON marker and matching fingerprint.
 Never kill unrelated Unity helpers to release a pipe, or interpret exit code 0
 alone as scanner success. A timeout remains failure even if termination emits exit.
 
-Unity may rewrite `ProjectSettings.asset` with identical bytes on each batch
-launch. Bounded serialized source files use content hashes for scan identity,
+Unity may rewrite `ProjectSettings.asset` or postprocessed Audio Mixer `.mixer`
+assets with identical bytes during import. Bounded serialized source files use content hashes for scan identity,
 so timestamp-only rewrites do not invalidate confirmation. Real byte changes
 still invalidate it, including equal-size changes with restored timestamps;
 large and binary files retain conservative size/mtime/ctime checks.
