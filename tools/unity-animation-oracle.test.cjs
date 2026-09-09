@@ -159,6 +159,28 @@ test('writes a partial oracle but exits non-zero when source curves are unsuppor
     item.severity === 'high' && item.code === 'ANIMATION_ROTATION_CURVE_SKIPPED'), true);
 });
 
+test('reports unsupported object curves without crashing the oracle', () => {
+  const data = fixture();
+  const source = fs.readFileSync(data.file, 'utf8').replace(
+    '  m_PPtrCurves: []',
+    `  m_PPtrCurves:
+  - curve: []
+    attribute: m_Unknown
+    path: Hand
+    classID: 114
+    script: {fileID: 0}`,
+  );
+  fs.writeFileSync(data.file, source, 'utf8');
+  const result = spawnSync(process.execPath, [TOOL, '--src', data.file, '--unity-root', data.root], {
+    encoding: 'utf8',
+  });
+  assert.equal(result.status, 2, result.stderr);
+  const oracle = JSON.parse(result.stdout);
+  assert.equal(oracle.completeness, 'partial');
+  assert.equal(oracle.diagnostics.some(item =>
+    item.severity === 'high' && item.code === 'ANIMATION_OBJECT_CURVE_UNSUPPORTED'), true);
+});
+
 test('fails closed when Unity animation events would otherwise disappear from the oracle', () => {
   const data = fixture();
   const source = fs.readFileSync(data.file, 'utf8').replace(

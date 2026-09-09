@@ -194,6 +194,12 @@ function buildOracle(files, unityRoot) {
       diagnostics.push({ severity, code, source, target, message, detail });
     };
     const reporter = {
+      high(code, _file, target, message, detail) {
+        report('high', code, target, message, detail || '');
+      },
+      medium(code, _file, target, message, detail) {
+        report('medium', code, target, message, detail || '');
+      },
       low(code, _file, target, message, detail) {
         const severity = /(?:_SKIPPED|_UNSUPPORTED)$/.test(String(code)) ? 'high' : 'low';
         report(severity, code, target, message, detail || '');
