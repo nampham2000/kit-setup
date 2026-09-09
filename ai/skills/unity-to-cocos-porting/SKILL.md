@@ -66,6 +66,12 @@ Trên máy mới, chạy `ai:port:core:resume` hoặc scaffold để revalidate 
 ổ đĩa tuyệt đối vào registry/oracle/handoff; dùng project-relative path để một checkout khác chạy lại được.
 
 Trước khi viết tay bất kỳ prefab / shader / script nào, dùng tool sẵn có.
+Khi tái sử dụng một Cocos port có sẵn, pin commit của donor và bỏ qua dirty working tree.
+Giữ config sections/package/TypeScript contract của shared kit hiện tại; merge gameplay đã đối chiếu nguồn,
+không chép đè toàn bộ manifest bằng schema cũ. Kiểm tra API library (ví dụ Promise.finally/Array.flatMap)
+với tsconfig của target, và di chuyển thư mục script legacy qua Asset DB về assets/script/.
+Source levels, tutorial, branding và animation phải bind lại Unity project đang port; receipt/playtest của donor
+không nghiệm thu project mới. Sau import/move, chờ Asset DB hoàn tất rồi chạy verify/lint trước Preview.
 Với port mới, golden entry là:
 
 ```bash
