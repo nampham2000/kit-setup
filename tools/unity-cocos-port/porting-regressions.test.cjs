@@ -9,6 +9,7 @@ const createAnimationPorter = require('./animation-porter');
 const createColliderPorter = require('./collider-porter');
 const createRuntimePorter = require('./runtime-component-porter');
 const createParticlePorter = require('./particle-porter');
+const createMaterialPorter = require('./material-porter');
 const { applyParticleRendererMaterial, applyUnityParticleDataToCocos } = require('./particle-system-converter');
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'hidden-suspect-port-regressions-'));
 test.after(() => {
@@ -20,6 +21,30 @@ const reports = () => {
   const entries = [];
   return { entries, ...Object.fromEntries(['high','medium','low'].map(level => [level, (...args) => entries.push({level,args})])) };
 };
+test('particle UV tiling emits a typed Vec4 for a single FLOAT4 uniform',()=>{
+  const source=path.join(temp,'uv-mask.mat');
+  fs.writeFileSync(source,`%YAML 1.1
+--- !u!21 &2100000
+Material:
+  m_Name: Mask
+  m_TexEnvs:
+  - _MainTex:
+      m_Scale: {x: 1, y: 0.99}
+      m_Offset: {x: 0.2, y: -0.3}
+`);
+  const porter=createMaterialPorter({
+    parseUnityScalar:yaml.parseScalar,
+    parseUnityYaml:file=>[{classId:21,lines:fs.readFileSync(file,'utf8').split(/\r?\n/)}],
+    getField:(doc,key,fallback)=>{const line=doc.lines.find(l=>l.trim().startsWith(key+':'));return line?yaml.parseScalar(line.slice(line.indexOf(':')+1)):fallback;},
+    getIndentedBlock:(doc,key)=>key==='m_TexEnvs'?doc.lines.slice(doc.lines.findIndex(l=>l.trim()==='m_TexEnvs:')+1).filter(Boolean):[],
+    unityRefGuid:r=>r?.guid||'',
+    importedUnityAssetPath:()=>path.join(temp,'assets','uv-mask.mat'),
+    ensureDirectoryMetas:()=>{},ensureMaterialAssetMeta:()=>null,
+  });
+  const result=porter.convertUnityParticleMaterialToCocos({path:source,relativePath:'uv-mask.mat',stem:'Mask'},{cocosRoot:temp},new Map(),reports());
+  const output=JSON.parse(fs.readFileSync(result.file,'utf8'));
+  assert.deepEqual(output._props[0].mainTiling_Offset,{__type__:'cc.Vec4',x:1,y:.99,z:.2,w:-.3});
+});
 const animation = createAnimationPorter({
   parseUnityYaml: file => [{classId:74,lines:fs.readFileSync(file,'utf8').split(/\r?\n/)}],
   getField: (doc,key,fallback) => {const line=doc.lines.find(l=>new RegExp(`^\\s*${key}:`).test(l));return line ? yaml.parseScalar(line.slice(line.indexOf(':')+1)) : fallback;},
@@ -89,6 +114,22 @@ test('cache from before the parity repairs cannot hide newly corrected output',(
 function particleBuilder() {
   return {objects:[{}, {_textureAnimationModule:{__id__:2},renderer:{__id__:3}}, {_enable:false,_numTilesX:1,_numTilesY:1},{}],addParticleSystemFromTemplate:()=>1};
 }
+test('renderer View and emitter Local alignment use the correct Cocos CPU frames',()=>{
+  for(const [source,expected] of [[0,2],[2,0]]){
+    const b=particleBuilder();applyUnityParticleDataToCocos(b,1,{}, {m_RenderAlignment:source,m_RenderMode:4});
+    assert.equal(b.objects[3]._alignSpace,expected);
+  }
+  const b=particleBuilder();applyUnityParticleDataToCocos(b,1,{}, {m_RenderMode:5,m_Enabled:1});
+  assert.equal(b.objects[1]._enabled,false);
+});
+test('Unity gradient alpha before first authored key remains constant',()=>{
+  const b=particleBuilder();b.add=o=>b.objects.push(o)-1;b.objects[1].startColor={__id__:b.objects.push({})-1};
+  applyUnityParticleDataToCocos(b,1,{InitialModule:{startColor:{minMaxState:1,maxGradient:{
+    m_NumColorKeys:2,m_NumAlphaKeys:2,key0:{r:1,g:1,b:1,a:1},key1:{r:1,g:1,b:1,a:0},ctime0:0,ctime1:65535,atime0:52428,atime1:65535,
+  }}}});
+  const range=b.objects[b.objects[1].startColor.__id__],g=b.objects[range.gradient.__id__];
+  assert.deepEqual(g.alphaKeys.map(r=>b.objects[r.__id__]).map(k=>[k.time,k.alpha]),[[0,255],[.8,255],[1,0]]);
+});
 test('particle trail material is preserved in Cocos material slot 1',()=>{
   const b=particleBuilder();
   applyParticleRendererMaterial(b,1,'particle-mat','particle-texture');

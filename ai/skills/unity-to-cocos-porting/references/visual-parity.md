@@ -1,5 +1,25 @@
 # Evidence to check before adjusting a Unity port
 
+- **Particle alignment and gradient boundaries:** Unity `RenderAlignment=2`
+  means emitter Local, while Cocos `2` means View. Cocos CPU alignment World
+  (`0`) reads the full emitter world rotation; Local (`1`) reads only its local
+  rotation. A Unity local mesh must include its ancestors; local billboards
+  additionally need a vertex adapter because builtin Cocos billboard axes stay
+  camera-facing. Check a source 90-degree parent with opposite particle rotation.
+  Unity gradients clamp outside authored key times; Cocos fades toward black/zero
+  outside them. Add constant 0/1 endpoints, separately for RGB and alpha. A first
+  alpha key at 0.8 must not make a looping hint fade in for 80% of its lifetime.
+  Renderer None must not become a visible billboard. Standard Particles uses
+  `_Color`, including values above one, whereas legacy particle shaders use
+  `_TintColor`; never apply the legacy rule to every builtin shader file ID.
+
+- **Particle UV uniforms:** serialize material `mainTiling_Offset` as
+  `{"__type__":"cc.Vec4","x":1,"y":0.99,"z":0,"w":0}`, using source values.
+  A plain number array is treated as a uniform array by Cocos and can upload
+  NaN to a single FLOAT4, turning a feathered mask into a solid rectangle.
+  Check the loaded material and GPU uniform block after a fresh Preview load;
+  preserve particle size and mesh geometry when the fault is UV serialization.
+
 - **Texture import size:** compare Unity TextureImporter default and active
   platform overrides with the actual Cocos native image, not only source file
   sizes. An original 6000 px PNG may render at 2048 px in Unity. Scope verified

@@ -302,9 +302,11 @@ relative gap. Validate the opening around the control at portrait and landscape 
 For Unity ParticleSystem trails, renderer material slot 0 is the particle and
 slot 1 is the trail. Convert slot 1 with Cocos `builtin-particle-trail`, keep its
 own texture, and preserve loop per emitter; an EOL prefab may mix looping color
-bursts with one-shot launch rays. For Unity built-in particle shaders, only
-`_TintColor` is shader input. Do not reuse stale vendor `_Color` values, because
-an unused alpha of zero will erase the Cocos particle or trail. Before emitting
+bursts with one-shot launch rays. Unity legacy particle shaders use `_TintColor`;
+Standard Particles uses `_Color`, including authored values above one. Resolve
+the actual builtin shader file ID before choosing the color key or blend formula.
+An unused vendor `_Color` alpha of zero must not erase a legacy particle or trail.
+Before emitting
 a shared runtime helper, search the complete `assets/script` subtree for the
 same ccclass and reuse it to avoid duplicate class and UUID registration.
 

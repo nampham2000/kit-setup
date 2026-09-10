@@ -99,6 +99,12 @@ module.exports = function createParticlePorter(deps = {}) {
     const particleId = builder.addParticleSystemFromTemplate(nodeId, componentId, doc, `cmp-particle-system-${componentId}`);
     if (particleId) {
       const result = applyUnityParticleSystemToCocos(builder, particleId, doc, rendererDoc);
+      const alignmentData = parseUnityRendererDoc(rendererDoc);
+      const alignment = Number(alignmentData.m_RenderAlignment || 0);
+      if ((alignment === 2 && Number(alignmentData.m_RenderMode || 0) !== 4) || (alignment !== 0 && alignment !== 2)) {
+        reporter.high('PARTICLE_RENDER_ALIGNMENT_ADAPTER_REQUIRED', options.src || '', gameObject?.name || '',
+          `Unity render alignment ${alignment} requires a source-frame shader adapter; Cocos built-in billboards use camera axes. Validate the generated effect in Preview.`);
+      }
       const meshRef = firstRendererMeshRef(rendererDoc);
       const mesh = resolveParticleRendererMesh(meshRef, gameObject, componentId, reporter, options, unityDb, cocosDb);
       if (mesh.meshUuid && applyParticleRendererMesh(builder, particleId, mesh.meshUuid)) {

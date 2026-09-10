@@ -1135,6 +1135,15 @@ function addGradient(builder, unityGradient) {
   if (!colorKeys.length) colorKeys.push(addColorKey(builder, { r: 1, g: 1, b: 1, a: 1 }, 0));
   if (!alphaKeys.length) alphaKeys.push(addAlphaKey(builder, 1, 0));
 
+  // Unity clamps outside authored key times. Cocos interpolates from/to
+  // transparent black at 0/1, so materialize the two constant endpoints.
+  for (const keys of [colorKeys, alphaKeys]) {
+    const first = builder.objects[keys[0].__id__];
+    const last = builder.objects[keys[keys.length - 1].__id__];
+    if (first.time > 0) keys.unshift(cocosRef(addObject(builder, { ...first, time: 0 })));
+    if (last.time < 1) keys.push(cocosRef(addObject(builder, { ...last, time: 1 })));
+  }
+
   const id = addObject(builder, {
     __type__: 'cc.Gradient',
     colorKeys,
@@ -1545,8 +1554,15 @@ function applyRenderer(builder, particle, data) {
   if (data.m_Enabled != null) {
     particle._enabled = bool(data.m_Enabled, true);
   }
+  if (Number(data.m_RenderMode) === 5) particle._enabled = false; // Unity None: never fabricate a billboard.
   renderer._renderMode = UNITY_RENDER_MODE_TO_COCOS[num(data.m_RenderMode, 0)] ?? 0;
-  renderer._alignSpace = num(data.m_RenderAlignment, renderer._alignSpace ?? 0);
+  // Unity View=0, World=1, Local=2. Cocos CPU World=0 reads the
+  // emitter WORLD rotation (including its ancestors), while View=2 uses
+  // the camera. Local=1 only reads the immediate node's local rotation.
+  // World/Facing/Velocity and local billboards require a shader adapter;
+  // particle-porter reports those paths instead of silently claiming parity.
+  const alignment = num(data.m_RenderAlignment, 0);
+  renderer._alignSpace = alignment === 0 ? 2 : alignment === 2 ? 0 : 1;
   renderer._velocityScale = num(data.m_VelocityScale, renderer._velocityScale ?? 1);
   renderer._lengthScale = num(data.m_LengthScale, renderer._lengthScale ?? 1);
   // Unity GPU instancing is a renderer batching option. Cocos _useGPU switches to

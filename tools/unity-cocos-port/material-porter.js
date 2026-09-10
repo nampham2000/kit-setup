@@ -819,7 +819,8 @@ module.exports = function createMaterialPorter(deps) {
     // retain unrelated serialized _Color values (including alpha 0) from a
     // previous custom shader; feeding that stale value into Cocos multiplies
     // the complete particle/trail output to zero.
-    const particleTintColorKeys = particleShaderGuid === UNITY_BUILTIN_SHADER_GUID
+    const standardParticle = particleShaderGuid === UNITY_BUILTIN_SHADER_GUID && Number(particleShaderRef?.fileID) === 211;
+    const particleTintColorKeys = standardParticle ? ['_Color'] : particleShaderGuid === UNITY_BUILTIN_SHADER_GUID
       ? ['_TintColor']
       : ['_TintColor', '_Color', '_BaseColor'];
     const mainColor = firstDefinedMaterialValue(colors, particleTintColorKeys, {
@@ -860,12 +861,15 @@ module.exports = function createMaterialPorter(deps) {
         : { r: 0, g: 0, b: 0, a: 1 }),
     } : {};
     if (!isDefaultParticleTilingOffset(scale, offset)) {
-      props.mainTiling_Offset = [
-        Number(scale.x ?? 1),
-        Number(scale.y ?? 1),
-        Number(offset.x ?? 0),
-        Number(offset.y ?? 0),
-      ];
+      // Material deserialization must restore a Vec4. A number[] is treated
+      // as a uniform array, uploading NaN to a single FLOAT4 UV transform.
+      props.mainTiling_Offset = {
+        __type__: 'cc.Vec4',
+        x: Number(scale.x ?? 1),
+        y: Number(scale.y ?? 1),
+        z: Number(offset.x ?? 0),
+        w: Number(offset.y ?? 0),
+      };
     }
     if (mainTextureUuid) props.mainTexture = cocosUuid(mainTextureUuid, 'cc.Texture2D');
     if (!tcp2ParticleMaterial && particleTechniqueUsesTintColor(techniqueIndex)) {
@@ -875,7 +879,13 @@ module.exports = function createMaterialPorter(deps) {
       // to flatten every additive material to 0.5 - a material authored at 1.0
       // came out half as bright as Unity.
       if (hasUnityMaterialColor(colors, particleTintColorKeys)) {
-        props.tintColor = materialColor(mainColor);
+        if (standardParticle) {
+          // Standard is color * texture * vertex, whereas builtin-particle
+          // multiplies by two. FLOAT4 keeps authored values above one.
+          props.tintColor = {__type__:'cc.Vec4',x:Number(mainColor.r)/2,y:Number(mainColor.g)/2,z:Number(mainColor.b)/2,w:Number(mainColor.a)/2};
+          reporter.high('STANDARD_PARTICLE_COLOR_SPACE_ADAPTER_REQUIRED', materialAsset.relativePath, '',
+            'Standard Particles uses _Color (HDR Inspector), not legacy _TintColor. Values are preserved; bind source Linear/sRGB and alpha-import semantics through a shader adapter before visual acceptance.');
+        } else props.tintColor = materialColor(mainColor);
       }
       // No authored tint: Unity's own shader default is 0.5, which is already the
       // Cocos default, so leaving the property off keeps the two in agreement.
