@@ -1296,7 +1296,7 @@ class CocosAssetDatabase {
   }
 
   resolveModelMaterialUuidsByStem(stem, materialNameHints = []) {
-    const records = this.findByStem(stem);
+    const records = this.byStem.get(normalizeKey(stem)) || [];
     const candidates = records.filter((record) => ['.fbx', '.gltf', '.glb'].includes(record.ext));
     const hints = materialNameHints.map((hint) => String(hint || ''));
     for (const record of candidates) {
@@ -1336,7 +1336,7 @@ class CocosAssetDatabase {
   }
 
   resolveModelMeshByStem(stem, meshNameHint = '') {
-    const records = this.findByStem(stem);
+    const records = this.byStem.get(normalizeKey(stem)) || [];
     const candidates = records.filter((record) => ['.fbx', '.gltf', '.glb'].includes(record.ext));
     for (const record of candidates) {
       const meshRecord = firstImportedSubMetaRecord(record.uuid, record.subMetas, 'gltf-mesh', meshNameHint);
@@ -1356,7 +1356,9 @@ class CocosAssetDatabase {
   }
 
   resolveModelPrefabByStem(stem, preferredUnityRelativePath = '') {
-    const records = this.findByStem(stem);
+    // A prefix match can refresh table.fbx with table_move.fbx bytes, corrupting
+    // every existing prefab that references the original model's stable UUID.
+    const records = this.byStem.get(normalizeKey(stem)) || [];
     const preferredSuffix = toPosix(preferredUnityRelativePath).toLowerCase();
     const candidates = records
       .filter((record) => ['.fbx', '.gltf', '.glb'].includes(record.ext))
