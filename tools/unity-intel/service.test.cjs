@@ -94,6 +94,24 @@ test('doctor reports live Unity MCP only after scanner tool probe completes', as
   assert.equal(result.canUseLiveMcp, true);
   assert.equal(result.liveMcp.toolReady, true);
   assert.equal(result.liveMcp.scannerPackageVersion, '0.3.0');
+  assert.equal(result.liveMcp.activeBuildTarget, null);
+  assert.deepEqual(result.liveMcp.editorState, { isPlaying: null, isCompiling: null, isUpdating: null });
+});
+
+test('doctor reports actual target and busy state from the live Editor, not the project folder name', async t => {
+  const { fixture } = staticFixture(t);
+  for (const activeBuildTarget of ['Android', 'StandaloneWindows64']) {
+    const result = await inspectUnityProject({ project: fixture.root }, {
+      doctor: () => doctorState(fixture.root, false),
+      readConnection: () => ({ url: 'http://127.0.0.1:25000', token: 'secret' }),
+      liveProvider: { probe: async () => ({ packageVersion: '0.3.0', protocolVersion: 1,
+        project: { activeBuildTarget, isPlaying: true, isCompiling: false, isUpdating: true } }) },
+    });
+    assert.equal(result.liveMcp.activeBuildTarget, activeBuildTarget);
+    assert.deepEqual(result.liveMcp.editorState, { isPlaying: true, isCompiling: false, isUpdating: true });
+    assert.equal(result.canUseLiveMcp, true);
+    assert.equal(JSON.stringify(result).includes('secret'), false);
+  }
 });
 
 test('bootstrap on a locked Editor waits the full requested readiness window and never batch-launches', async t => {

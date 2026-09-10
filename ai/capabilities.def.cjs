@@ -106,6 +106,7 @@ const CAPABILITIES = [
     outputs: ['stdout JSON compact: declared Unity version, exact Editor readiness, lock state, loopback config và authenticated playable-port-scan tool probe'],
     limits: [
       '`canAttach` chỉ nói có thể attach Unity Editor đang mở; chỉ `canUseLiveMcp=true` chứng minh tool `playable-port-scan` đã trả payload đúng deadline.',
+      '`liveMcp.activeBuildTarget` và `editorState` là trạng thái Editor từ live probe; null nghĩa là scanner cũ hoặc chưa có evidence, không phải Android/idle. Build target đúng và compile/import đã xong chưa chứng minh gameplay chạy được; phải vào Play Mode và kiểm Game View/Console.',
       'Ping/config có thể thành công trong khi Unity main-thread tool treo; trường hợp này trả `UNITY_MCP_TOOL_UNRESPONSIVE`, không được tuyên bố live MCP ready.',
     ],
     status: 'ok',

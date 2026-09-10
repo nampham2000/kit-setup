@@ -51,7 +51,7 @@ Chạy `npm run ai:contract:verify` để chứng minh manifest khớp với CLI
 | Cần biết cấu trúc scene trước khi sửa node/component. | `npm run ai:scene -- <sceneName>` | Component script hiện UUID thô, chưa giải ra tên class. |
 | Trước khi giải một vấn đề nghe quen; sau khi giải xong thì ghi lại. | `npm run memory:query -- <keyword>` | Semantic recall cần `sqlite-vec` + `@xenova/transformers` (nặng ~283MB); thiếu thì tự động lùi về keyword. |
 | Sau clone/npm ci hoặc trước khi một agent trên PC/project khác bắt đầu port hay resume. | `npm run ai:portable:doctor` | Read-only: không init submodule, không npm install, không sync/generate, không repair database và không tạo receipt. Source/contract/skill/memory/regression input phải được Git-track; mutation receipt, cache và resume packet là state local phải regenerate/revalidate trên từng PC. |
-| Khi cần biết project có thể attach Editor đang mở hay chạy batch bằng đúng Unity version trước khi setup live scanner. | `npm run unity:intel:doctor -- -- --project <UnityProjectRoot>` | `canAttach` chỉ nói có thể attach Unity Editor đang mở; chỉ `canUseLiveMcp=true` chứng minh tool `playable-port-scan` đã trả payload đúng deadline. Ping/config có thể thành công trong khi Unity main-thread tool treo; trường hợp này trả `UNITY_MCP_TOOL_UNRESPONSIVE`, không được tuyên bố live MCP ready. |
+| Khi cần biết project có thể attach Editor đang mở hay chạy batch bằng đúng Unity version trước khi setup live scanner. | `npm run unity:intel:doctor -- -- --project <UnityProjectRoot>` | `canAttach` chỉ nói có thể attach Unity Editor đang mở; chỉ `canUseLiveMcp=true` chứng minh tool `playable-port-scan` đã trả payload đúng deadline. `liveMcp.activeBuildTarget` và `editorState` là trạng thái Editor từ live probe; null nghĩa là scanner cũ hoặc chưa có evidence, không phải Android/idle. Build target đúng và compile/import đã xong chưa chứng minh gameplay chạy được; phải vào Play Mode và kiểm Game View/Console. Ping/config có thể thành công trong khi Unity main-thread tool treo; trường hợp này trả `UNITY_MCP_TOOL_UNRESPONSIVE`, không được tuyên bố live MCP ready. |
 
 ### Port Unity → Cocos
 
@@ -140,6 +140,7 @@ Những tool sau **không làm được việc mà tên gọi gợi ý**. Đọc
   - Source/contract/skill/memory/regression input phải được Git-track; mutation receipt, cache và resume packet là state local phải regenerate/revalidate trên từng PC.
 - **`unity.intel.doctor`** (npm run unity:intel:doctor -- -- --project <UnityProjectRoot>)
   - `canAttach` chỉ nói có thể attach Unity Editor đang mở; chỉ `canUseLiveMcp=true` chứng minh tool `playable-port-scan` đã trả payload đúng deadline.
+  - `liveMcp.activeBuildTarget` và `editorState` là trạng thái Editor từ live probe; null nghĩa là scanner cũ hoặc chưa có evidence, không phải Android/idle. Build target đúng và compile/import đã xong chưa chứng minh gameplay chạy được; phải vào Play Mode và kiểm Game View/Console.
   - Ping/config có thể thành công trong khi Unity main-thread tool treo; trường hợp này trả `UNITY_MCP_TOOL_UNRESPONSIVE`, không được tuyên bố live MCP ready.
 - **`unity.intel.setup`** (npm run unity:intel:setup -- -- --project <UnityProjectRoot>)
   - Có sửa `Packages/manifest.json` và `UserSettings/AI-Game-Developer-Config.json`; manifest có exact-byte backup + CAS transaction.

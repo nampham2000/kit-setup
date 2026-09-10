@@ -43,6 +43,24 @@ independent `BootstrapEntry` assembly and allow updates/domain reloads; do not a
 `-quit` or force `UNITY_MCP_READY`/dependency defines to bypass this phase. The
 validated scan marker and a confirming scan remain mandatory after restore.
 
+When the source has Android/iOS variants, use the requested variant and exact
+Editor version. For unresolved GUIDs on a fresh checkout, finish Unity package
+resolution/import on the intended build target before declaring assets missing.
+Read `unity:intel:doctor` live `activeBuildTarget` and `editorState`; a directory
+name or launch argument is not proof of the active target. Older scanners return
+null for these fields, not an idle/Android confirmation. If import changes source
+during preflight, let it settle and rerun the scan; do not reuse the stale receipt.
+Enter Play Mode through the source boot flow and inspect Game View and Console.
+Successful import or a clean compile does not prove gameplay or repair genuinely
+missing references. Keep unresolved core dependencies blocked until disposition
+is backed by live/source evidence; do not regenerate GUIDs or guess replacements.
+
+If Unity warns that `DontDestroyOnLoad` was called on a child, inspect ownership
+before repairing it. Unity already leaves that child scene-owned; a root-only
+guard preserves that behavior. Detaching the child or persisting its entire root
+changes lifecycle and can leak gameplay into later levels. Verify repeated scene
+entry and disposal, not only warning disappearance.
+
 On Windows, Unity helpers can keep inherited stdout/stderr handles open after
 the owned Editor exits. Batch waiting uses the Editor's `exit` event and closes
 its read pipes; it must still validate the JSON marker and matching fingerprint.

@@ -533,6 +533,7 @@ function createImplementationBrief(scanResult, input = {}) {
     project: {
       name: snapshot.project && snapshot.project.name || path.basename(projectRoot),
       unityVersion: snapshot.project && snapshot.project.unityVersion || null,
+      activeBuildTarget: snapshot.project && snapshot.project.activeBuildTarget || null,
       projectFingerprint,
       stateFingerprint,
       provider: snapshot.provider,

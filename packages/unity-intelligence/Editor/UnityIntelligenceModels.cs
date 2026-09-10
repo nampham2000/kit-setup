@@ -36,6 +36,10 @@ namespace CcPlayable.UnityIntelligence
     {
         public string name { get; set; } = string.Empty;
         public string unityVersion { get; set; } = string.Empty;
+        public string activeBuildTarget { get; set; } = string.Empty;
+        public bool isPlaying { get; set; }
+        public bool isCompiling { get; set; }
+        public bool isUpdating { get; set; }
     }
 
     public sealed class UnityBuildSceneFact

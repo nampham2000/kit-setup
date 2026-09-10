@@ -253,6 +253,12 @@ async function inspectUnityProject(input = {}, injected = {}) {
         toolReady: true,
         scannerPackageVersion: probe && probe.packageVersion || null,
         protocolVersion: probe && probe.protocolVersion || null,
+        activeBuildTarget: probe && probe.project && probe.project.activeBuildTarget || null,
+        editorState: {
+          isPlaying: typeof probe?.project?.isPlaying === 'boolean' ? probe.project.isPlaying : null,
+          isCompiling: typeof probe?.project?.isCompiling === 'boolean' ? probe.project.isCompiling : null,
+          isUpdating: typeof probe?.project?.isUpdating === 'boolean' ? probe.project.isUpdating : null,
+        },
       };
     } catch (error) {
       const causeCode = error && error.code || 'UNITY_MCP_UNAVAILABLE';

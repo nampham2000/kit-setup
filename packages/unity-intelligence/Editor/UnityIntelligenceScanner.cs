@@ -100,6 +100,10 @@ namespace CcPlayable.UnityIntelligence
                 {
                     name = projectName,
                     unityVersion = Application.unityVersion,
+                    activeBuildTarget = EditorUserBuildSettings.activeBuildTarget.ToString(),
+                    isPlaying = EditorApplication.isPlaying,
+                    isCompiling = EditorApplication.isCompiling,
+                    isUpdating = EditorApplication.isUpdating,
                 },
                 buildScenes = buildScenes,
             };
