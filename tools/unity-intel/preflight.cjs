@@ -52,6 +52,8 @@ const WORKFLOW_FILES = [
   path.join('..', 'lib', 'path-boundary.cjs'),
   path.join('..', '..', 'packages', 'unity-intelligence', 'package.json'),
   path.join('..', '..', 'packages', 'unity-intelligence', 'Editor', 'BatchEntry.cs'),
+  path.join('..', '..', 'packages', 'unity-intelligence', 'Bootstrap', 'Editor', 'BootstrapEntry.cs'),
+  path.join('..', '..', 'packages', 'unity-intelligence', 'Bootstrap', 'Editor', 'CcPlayable.UnityIntelligence.Bootstrap.asmdef'),
   path.join('..', '..', 'packages', 'unity-intelligence', 'Editor', 'PlayablePortScanTool.cs'),
   path.join('..', '..', 'packages', 'unity-intelligence', 'Editor', 'UnityIntelligenceModels.cs'),
   path.join('..', '..', 'packages', 'unity-intelligence', 'Editor', 'UnityIntelligenceScanner.cs'),
@@ -531,6 +533,7 @@ function createImplementationBrief(scanResult, input = {}) {
     project: {
       name: snapshot.project && snapshot.project.name || path.basename(projectRoot),
       unityVersion: snapshot.project && snapshot.project.unityVersion || null,
+      activeBuildTarget: snapshot.project && snapshot.project.activeBuildTarget || null,
       projectFingerprint,
       stateFingerprint,
       provider: snapshot.provider,

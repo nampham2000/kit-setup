@@ -18,11 +18,67 @@ hoặc project clone mới, chạy chuỗi này trước khi đọc Unity source
 ```bash
 git submodule update --init --recursive
 npm ci
+npm ci --omit=dev --ignore-scripts --prefix playable-shared-kit/packages/extensions/cocos-mcp
+npm run sync:shared
+npm ci --omit=dev --ignore-scripts --prefix extensions/cocos-mcp
 npm run ai:portable:doctor
 npm run ai:sync
 npm run ai:contract:verify
 npm run memory:doctor -- --json
 ```
+
+Root `npm ci` does not install extension dependencies. The first extension install
+lets the offline schema gate resolve its runtime imports; the second prepares the
+synced extension for Editor loading. A failed sync gate must leave target files
+intact, including with `--clean`; install missing dependencies and retry sync.
+
+Work Memory may create a per-checkout database during initial recall. Shared-kit
+Git ignores `tools/work-memory/data/repo/`; keep this local state out of commits.
+The pinned global `shared-memory.db` stays tracked and must remain clean unless
+the task explicitly updates portable knowledge.
+
+On a fresh Unity project, MCP restores NuGet dependencies during Editor updates
+and recompiles before the scanner assembly exists. Batch setup must enter the
+independent `BootstrapEntry` assembly and allow updates/domain reloads; do not add
+`-quit` or force `UNITY_MCP_READY`/dependency defines to bypass this phase. The
+validated scan marker and a confirming scan remain mandatory after restore.
+
+When the source has Android/iOS variants, use the requested variant and exact
+Editor version. For unresolved GUIDs on a fresh checkout, finish Unity package
+resolution/import on the intended build target before declaring assets missing.
+Read `unity:intel:doctor` live `activeBuildTarget` and `editorState`; a directory
+name or launch argument is not proof of the active target. Older scanners return
+null for these fields, not an idle/Android confirmation. If import changes source
+during preflight, let it settle and rerun the scan; do not reuse the stale receipt.
+Enter Play Mode through the source boot flow and inspect Game View and Console.
+Successful import or a clean compile does not prove gameplay or repair genuinely
+missing references. Keep unresolved core dependencies blocked until disposition
+is backed by live/source evidence; do not regenerate GUIDs or guess replacements.
+
+For paginated live evidence, retain the exact section/search/filter and cursor.
+Invocation timestamps must not invalidate otherwise identical evidence. If a
+cursor is stale repeatedly on an idle, unchanged project, inspect the paging
+identity and add a regression before retrying; never drop source-state or live
+evidence binding to force pagination through. Read all pages before treating a
+bounded first page as the complete missing-reference inventory.
+
+If Unity warns that `DontDestroyOnLoad` was called on a child, inspect ownership
+before repairing it. Unity already leaves that child scene-owned; a root-only
+guard preserves that behavior. Detaching the child or persisting its entire root
+changes lifecycle and can leak gameplay into later levels. Verify repeated scene
+entry and disposal, not only warning disappearance.
+
+On Windows, Unity helpers can keep inherited stdout/stderr handles open after
+the owned Editor exits. Batch waiting uses the Editor's `exit` event and closes
+its read pipes; it must still validate the JSON marker and matching fingerprint.
+Never kill unrelated Unity helpers to release a pipe, or interpret exit code 0
+alone as scanner success. A timeout remains failure even if termination emits exit.
+
+Unity may rewrite `ProjectSettings.asset` or postprocessed Audio Mixer `.mixer`
+assets with identical bytes during import. Bounded serialized source files use content hashes for scan identity,
+so timestamp-only rewrites do not invalidate confirmation. Real byte changes
+still invalidate it, including equal-size changes with restored timestamps;
+large and binary files retain conservative size/mtime/ctime checks.
 
 `ai:portable:doctor` là read-only và fail-closed khi submodule lệch commit, skill/contract generated bị stale,
 Work Memory corrupt, dependency chưa cài, regression registry chưa track hoặc registry chứa absolute path theo máy.
@@ -35,6 +91,18 @@ Trên máy mới, chạy `ai:port:core:resume` hoặc scaffold để revalidate 
 ổ đĩa tuyệt đối vào registry/oracle/handoff; dùng project-relative path để một checkout khác chạy lại được.
 
 Trước khi viết tay bất kỳ prefab / shader / script nào, dùng tool sẵn có.
+Khi tái sử dụng một Cocos port có sẵn, pin commit của donor và bỏ qua dirty working tree.
+Giữ config sections/package/TypeScript contract của shared kit hiện tại; merge gameplay đã đối chiếu nguồn,
+không chép đè toàn bộ manifest bằng schema cũ. Kiểm tra API library (ví dụ Promise.finally/Array.flatMap)
+với tsconfig của target, và di chuyển thư mục script legacy qua Asset DB về assets/script/.
+Source levels, tutorial, branding và animation phải bind lại Unity project đang port; receipt/playtest của donor
+không nghiệm thu project mới. Sau import/move, chờ Asset DB hoàn tất rồi chạy verify/lint trước Preview.
+Với nhiều worktree Cocos mở cùng lúc, giữ port trong settings/mcp-server.json của từng project khi restart;
+không reset về 3000. Trên Windows, launcher dùng literal environment path qua PowerShell call operator,
+không lồng quote cmd.exe vào spawnSync. Feature profile persisted vẫn cần import-map receipt sau restart.
+Physics backend đúng chưa đủ: bind TagManager layers và DynamicsManager collision matrix vào config của target
+trước khi tạo collider/body. Khi reuse prefab với group khác Default, thiếu matrix có thể làm cả stack xuyên bàn
+và tự win dù console sạch. Khóa regression idle-before-input: đúng level, đủ object, zero shot và không transition.
 Với port mới, golden entry là:
 
 ```bash

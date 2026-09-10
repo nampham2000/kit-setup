@@ -34,7 +34,7 @@ test('batch invocation is non-interactive, externalizes logs, and passes scan id
   });
   assert.ok(invocation.args.includes('-batchmode'));
   assert.ok(invocation.args.includes('-nographics'));
-  assert.ok(invocation.args.includes('-quit'));
+  assert.ok(!invocation.args.includes('-quit'), 'bootstrap needs Editor updates before scanner dependencies are ready');
   assert.equal(invocation.args[invocation.args.indexOf('-executeMethod') + 1], BATCH_METHOD);
   assert.equal(invocation.env.CC_PLAYABLE_UNITY_PROJECT_FINGERPRINT, 'a'.repeat(64));
   assert.equal(invocation.env.CC_PLAYABLE_UNITY_UNRESOLVED_GUIDS, undefined);
@@ -44,6 +44,19 @@ test('batch invocation is non-interactive, externalizes logs, and passes scan id
     .filter(([key]) => key.startsWith('CC_PLAYABLE_UNITY_'))
     .reduce((total, [key, value]) => total + key.length + String(value).length + 2, 0);
   assert.ok(addedEnvironmentBytes < 1024);
+});
+
+test('batch bootstrap remains compilable before MCP dependency defines and DLLs exist', () => {
+  const packageRoot = path.resolve(__dirname, '../../packages/unity-intelligence');
+  const bootstrap = JSON.parse(fs.readFileSync(path.join(packageRoot, 'Bootstrap/Editor/CcPlayable.UnityIntelligence.Bootstrap.asmdef'), 'utf8'));
+  const scanner = JSON.parse(fs.readFileSync(path.join(packageRoot, 'Editor/CcPlayable.UnityIntelligence.Editor.asmdef'), 'utf8'));
+  assert.deepEqual(bootstrap.references, []);
+  assert.deepEqual(bootstrap.precompiledReferences, []);
+  assert.deepEqual(bootstrap.defineConstraints, []);
+  assert.deepEqual(bootstrap.includePlatforms, ['Editor']);
+  assert.ok(scanner.defineConstraints.includes('UNITY_MCP_READY'));
+  assert.ok(scanner.defineConstraints.includes('UNITY_MCP_DEPS_2'));
+  assert.equal(BATCH_METHOD, 'CcPlayable.UnityIntelligence.BootstrapEntry.Scan');
 });
 
 test('maximum UTF-8 candidate lists round-trip through a bounded file instead of the Windows environment block', t => {
@@ -77,6 +90,36 @@ test('batch result requires a valid live patch for the same static project finge
   fs.writeFileSync(resultPath, JSON.stringify(patch));
   assert.equal(parseBatchResult(resultPath, fingerprint).scanId, 'test-scan');
   assert.throws(() => parseBatchResult(resultPath, 'c'.repeat(64)), /projectFingerprint/);
+});
+
+test('owned Unity exit completes even when a descendant retains stdout pipes', async () => {
+  const child = new EventEmitter();
+  child.stdout = new PassThrough();
+  child.stderr = new PassThrough();
+  let killCount = 0;
+  child.kill = () => { killCount++; return false; };
+  const waiting = waitForChild(child, 100, { terminationGraceMs: 5 });
+  child.stdout.write('bounded output');
+  child.emit('exit', 0, null);
+  const result = await waiting;
+  assert.equal(result.code, 0);
+  assert.equal(result.stdout, 'bounded output');
+  assert.equal(killCount, 0);
+  assert.equal(child.stdout.destroyed, true);
+  assert.equal(child.stderr.destroyed, true);
+});
+
+test('timeout remains failure when Unity exits but pipes stay open', async () => {
+  const child = new EventEmitter();
+  child.stdout = new PassThrough();
+  child.stderr = new PassThrough();
+  child.kill = () => { process.nextTick(() => child.emit('exit', null, 'SIGTERM')); return true; };
+  await assert.rejects(waitForChild(child, 5, { terminationGraceMs: 5 }), error => {
+    assert.equal(error.code, 'UNITY_BATCH_TIMEOUT');
+    assert.notEqual(error.processStillRunning, true);
+    return true;
+  });
+  assert.equal(child.stdout.destroyed, true);
 });
 
 test('missing marker is failure even when Unity itself might return exit code zero', t => {

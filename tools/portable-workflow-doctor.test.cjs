@@ -64,3 +64,13 @@ test('help is read-only and documents every public option', () => {
   assert.match(result.stdout, /--json/);
   assert.match(result.stdout, /Read-only/);
 });
+
+test('Git ignores per-checkout memory while retaining the global portable database', () => {
+  const local = 'tools/work-memory/data/repo/fresh-checkout-0123456789ab.db';
+  const global = 'tools/work-memory/data/shared-memory.db';
+  const result = spawnSync('git', ['check-ignore', '--no-index', '--stdin'], {
+    cwd: path.resolve(__dirname, '..'), encoding: 'utf8', input: `${local}\n${global}\n`,
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(result.stdout.trim().split(/\r?\n/), [local]);
+});

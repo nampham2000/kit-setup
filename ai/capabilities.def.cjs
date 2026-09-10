@@ -106,6 +106,7 @@ const CAPABILITIES = [
     outputs: ['stdout JSON compact: declared Unity version, exact Editor readiness, lock state, loopback config và authenticated playable-port-scan tool probe'],
     limits: [
       '`canAttach` chỉ nói có thể attach Unity Editor đang mở; chỉ `canUseLiveMcp=true` chứng minh tool `playable-port-scan` đã trả payload đúng deadline.',
+      '`liveMcp.activeBuildTarget` và `editorState` là trạng thái Editor từ live probe; null nghĩa là scanner cũ hoặc chưa có evidence, không phải Android/idle. Build target đúng và compile/import đã xong chưa chứng minh gameplay chạy được; phải vào Play Mode và kiểm Game View/Console.',
       'Ping/config có thể thành công trong khi Unity main-thread tool treo; trường hợp này trả `UNITY_MCP_TOOL_UNRESPONSIVE`, không được tuyên bố live MCP ready.',
     ],
     status: 'ok',
@@ -134,7 +135,7 @@ const CAPABILITIES = [
       'Project đóng chỉ được batch-launch khi có đúng Unity version khai báo; không âm thầm dùng version gần nhất.',
       'Compile error có sẵn trong Unity project có thể chặn package import/executeMethod; setup đọc bounded Editor.log tail theo đúng WorkingDir và trả UNITY_PROJECT_COMPILE_ERRORS với evidence gọn, không nạp toàn bộ log. Tool chỉ coi marker JSON hợp lệ là thành công, không tin exit code 0.',
       'Nếu Unity Package Manager không tải được upstream MCP vì TLS certificate (`Curl error 35`/UnityTls 7), setup trả `UNITY_PACKAGE_TLS_CERTIFICATE_ERROR` từ bounded project-owned Editor.log thay vì báo timeout chung hoặc giả vờ live scanner đã sẵn sàng.',
-      'Bootstrap scan đầu chỉ xác nhận import/domain reload. Tool rebuild static baseline rồi bắt buộc scan xác nhận lần hai; marker đầu không bao giờ authorize implement.',
+      'Batch dùng BootstrapEntry không phụ thuộc MCP/NuGet và không truyền -quit, để dependency resolver có Editor update và domain reload trước khi gọi scanner; không force readiness define. Source fingerprint dùng hash cho serialized file nhỏ để bỏ qua timestamp-only rewrite của Unity; đổi byte thật vẫn invalidate. Bootstrap scan đầu chỉ xác nhận import/domain reload. Tool rebuild static baseline rồi bắt buộc scan xác nhận lần hai; marker đầu không bao giờ authorize implement.',
       'Khi manifest/config đổi và Editor Windows đang mở, setup đọc EditorInstance.json rồi kiểm tra lại PID + exact -projectPath trước khi tự gửi Assets > Refresh; không gửi phím nếu metadata stale/mismatch. Platform không hỗ trợ vẫn dùng file watcher/readiness fail-closed.',
       'Editor đang mở có thể vẫn trả scanner cũ hoặc HTTP 502/503/504 trong lúc domain reload; readiness call không gửi field candidate mới, retry transient/version/capability mismatch đến deadline và chỉ chấp nhận đúng package 0.3.0, protocol 1, cùng candidateDisposition khi request có candidate.',
       'Trước reload, manifest/config rollback theo CAS và chỉ mutate sau khi tất cả target cùng qua validation. Sau khi reload bắt đầu, ownership có thể đã đổi nên tool fail-preserve toàn bộ setup generation; sửa compile/import error rồi chạy lại setup.',
@@ -289,7 +290,7 @@ const CAPABILITIES = [
     when: 'Sau port.preflight, chỉ gọi khi implementation brief yêu cầu evidence cụ thể. Thay cho việc đọc hàng loạt Unity YAML/C# hoặc dump toàn bộ MCP response.',
     outputs: ['stdout JSON page <=48 KiB, tối đa 200 item, opaque nextCursor'],
     limits: [
-      'Cursor gắn với scanId + section + query; scan hoặc query khác làm cursor cũ bị từ chối.',
+      'Cursor gắn với content-sensitive scanId + section + query; timestamp/ID của lần gọi live không làm stale cursor, nhưng source state, live evidence, build target hoặc query đổi vẫn bị từ chối.',
       'Full snapshot chỉ giữ nội bộ; output bỏ secret/raw source/absolute path và giới hạn evidence.',
     ],
     status: 'ok',
@@ -1297,7 +1298,7 @@ const CORE_RULES = [
   },
   {
     id: 'portable-cross-pc-bootstrap',
-    rule: 'Trạng thái dùng chung phải sống trong Git: exact `playable-shared-kit` submodule commit, `capabilities.def.cjs`, skill source, global pinned Work Memory và registry/matrix/oracle/reference/watchFiles. Sau clone trên PC khác phải chạy `git submodule update --init --recursive`, `npm ci`, `ai:portable:doctor`, `ai:sync`, `ai:contract:verify` và `memory:doctor` trước port/resume. Không dùng absolute path, temp screenshot, user-local cache, mutation receipt hoặc resume packet từ máy cũ làm handoff truth; các state local phải regenerate và bind lại source hiện tại.',
+    rule: 'Trạng thái dùng chung phải sống trong Git: exact `playable-shared-kit` submodule commit, `capabilities.def.cjs`, skill source, global pinned Work Memory và registry/matrix/oracle/reference/watchFiles. Sau clone trên PC khác phải chạy `git submodule update --init --recursive`, `npm ci`, cài runtime dependencies của extension bằng `npm ci --omit=dev --ignore-scripts --prefix playable-shared-kit/packages/extensions/cocos-mcp`, `sync:shared`, cài dependencies của `extensions/cocos-mcp`, `ai:portable:doctor`, `ai:sync`, `ai:contract:verify` và `memory:doctor` trước port/resume. Không dùng absolute path, temp screenshot, user-local cache, mutation receipt hoặc resume packet từ máy cũ làm handoff truth; các state local phải regenerate và bind lại source hiện tại.',
   },
   {
     id: 'meta-files',

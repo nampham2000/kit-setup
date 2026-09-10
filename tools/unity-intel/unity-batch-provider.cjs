@@ -7,7 +7,7 @@ const path = require('node:path');
 
 const { assertUnityLiveSnapshotPatch } = require('./live-schema.cjs');
 
-const BATCH_METHOD = 'CcPlayable.UnityIntelligence.BatchEntry.Scan';
+const BATCH_METHOD = 'CcPlayable.UnityIntelligence.BootstrapEntry.Scan';
 const DEFAULT_TIMEOUT_MS = 180_000;
 const MAX_BATCH_RESULT_BYTES = 2 * 1024 * 1024;
 const MAX_BATCH_UNRESOLVED_GUIDS = 512;
@@ -65,7 +65,9 @@ function buildUnityBatchInvocation(input) {
       '-nographics',
       '-projectPath', projectRoot,
       '-executeMethod', BATCH_METHOD,
-      '-quit',
+      // BootstrapEntry must allow Editor updates and domain reloads while the
+      // MCP resolver restores NuGet dependencies. BatchEntry exits on completion;
+      // waitForChild retains the bounded deadline and owned-process termination.
       '-logFile', path.resolve(input.logFile),
       '-upmLogFile', path.resolve(input.upmLogFile),
       '-timestamps',
@@ -142,12 +144,18 @@ function waitForChild(child, timeoutMs, options = {}) {
       if (unconfirmedTimer) clearTimeout(unconfirmedTimer);
       reject(error);
     });
-    child.once('close', (code, signal) => {
+    const finish = (code, signal) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
       if (forceTimer) clearTimeout(forceTimer);
       if (unconfirmedTimer) clearTimeout(unconfirmedTimer);
+      // Unity helpers can inherit its pipes and outlive the owned Editor. The
+      // exit event confirms that Editor has stopped; waiting for pipe closure
+      // would misreport a completed scan as a timeout. The result marker and
+      // external log remain authoritative, independently of this bounded tail.
+      child.stdout?.destroy?.();
+      child.stderr?.destroy?.();
       if (timedOut) {
         const error = new Error(`Unity batch scan timeout sau ${timeoutMs} ms; process đã đóng.`);
         error.code = 'UNITY_BATCH_TIMEOUT';
@@ -158,7 +166,9 @@ function waitForChild(child, timeoutMs, options = {}) {
         return;
       }
       resolve({ code, signal, stdout: tail(stdout), stderr: tail(stderr) });
-    });
+    };
+    child.once('exit', finish);
+    child.once('close', finish);
   });
 }
 

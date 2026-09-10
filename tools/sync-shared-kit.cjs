@@ -248,17 +248,22 @@ function runNodeGate(script, args, label) {
 function prepareCocosMcpForSync() {
   const extensionRoot = path.join(SHARED_EXTENSIONS_DIR, 'cocos-mcp');
   runNodeGate(path.join(extensionRoot, 'scripts', 'source-dist-manifest.cjs'), ['verify'], 'Cocos MCP source/dist verification');
-  runNodeGate(path.join(SHARED_KIT_ROOT, 'tools', 'cocos-mcp-schema-refresh.cjs'), [], 'Cocos MCP offline schema refresh');
+  try {
+    runNodeGate(path.join(SHARED_KIT_ROOT, 'tools', 'cocos-mcp-schema-refresh.cjs'), [], 'Cocos MCP offline schema refresh');
+  } catch (error) {
+    error.message += '\nFor a fresh checkout, install extension runtime dependencies first: npm ci --omit=dev --ignore-scripts --prefix playable-shared-kit/packages/extensions/cocos-mcp';
+    throw error;
+  }
 }
 
-function syncExtensions() {
+function syncExtensions(prepared = false) {
   if (!fs.existsSync(SHARED_EXTENSIONS_DIR)) return;
+  if (!prepared) prepareCocosMcpForSync();
   if (!fs.existsSync(TARGET_EXTENSIONS_DIR)) {
     fs.mkdirSync(TARGET_EXTENSIONS_DIR, { recursive: true });
   }
 
   console.log('[sync-shared-kit] Syncing editor extensions from shared kit -> extensions/ ...');
-  prepareCocosMcpForSync();
   const entries = fs.readdirSync(SHARED_EXTENSIONS_DIR, { withFileTypes: true });
   for (const entry of entries) {
     if (entry.isDirectory()) {
@@ -359,6 +364,8 @@ function syncPackageJson() {
 }
 
 function syncSharedKit(options = {}) {
+  // Validate the extension before any target writes, including --clean.
+  if (fs.existsSync(SHARED_EXTENSIONS_DIR)) prepareCocosMcpForSync();
   console.log('[sync-shared-kit] Syncing packages from playable-shared-kit -> assets/script/shared ...');
 
   if (options.clean && fs.existsSync(TARGET_SHARED_DIR)) {
@@ -384,7 +391,7 @@ function syncSharedKit(options = {}) {
   }
 
   generateSharedIndex(TARGET_SHARED_DIR);
-  syncExtensions();
+  syncExtensions(true);
   syncPackageJson();
   console.log('[sync-shared-kit] Successfully synchronized shared modules & extensions.\n');
 }

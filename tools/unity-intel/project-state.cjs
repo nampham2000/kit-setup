@@ -10,6 +10,7 @@ const { discoverPackageRoots } = require('./package-roots.cjs');
 const PROJECT_STATE_SCHEMA_VERSION = 1;
 const CONTENT_HASH_EXTENSIONS = new Set([
   '.asmdef', '.asmref', '.cginc', '.compute', '.cs', '.hlsl', '.json', '.shader', '.tcp2shader', '.shadergraph',
+  '.asset', '.meta', '.prefab', '.unity', '.mat', '.mixer', '.controller', '.anim', '.txt',
 ]);
 const MAX_CONTENT_HASH_BYTES = 2 * 1024 * 1024;
 
@@ -37,8 +38,11 @@ function fileState(file, logicalPath) {
   return {
     path: logicalPath.replace(/\\/g, '/'),
     size: stat.size,
-    mtimeMs: Math.trunc(stat.mtimeMs),
-    ctimeMs: Math.trunc(stat.ctimeMs),
+    // Unity can rewrite ProjectSettings with identical bytes on every launch.
+    // Hashed source identity is content-based; large/binary files retain the
+    // conservative stat checks, including ctime for same-size replacements.
+    mtimeMs: shouldHash ? 0 : Math.trunc(stat.mtimeMs),
+    ctimeMs: shouldHash ? 0 : Math.trunc(stat.ctimeMs),
     content: shouldHash ? hashFile(file) : null,
   };
 }

@@ -18,6 +18,7 @@ const {
   defaultLiveProvider,
   scanUnityProject,
   queryUnitySnapshot,
+  finalizeSnapshotState,
 } = require('./service.cjs');
 
 function staticFixture(t) {
@@ -94,6 +95,24 @@ test('doctor reports live Unity MCP only after scanner tool probe completes', as
   assert.equal(result.canUseLiveMcp, true);
   assert.equal(result.liveMcp.toolReady, true);
   assert.equal(result.liveMcp.scannerPackageVersion, '0.3.0');
+  assert.equal(result.liveMcp.activeBuildTarget, null);
+  assert.deepEqual(result.liveMcp.editorState, { isPlaying: null, isCompiling: null, isUpdating: null });
+});
+
+test('doctor reports actual target and busy state from the live Editor, not the project folder name', async t => {
+  const { fixture } = staticFixture(t);
+  for (const activeBuildTarget of ['Android', 'StandaloneWindows64']) {
+    const result = await inspectUnityProject({ project: fixture.root }, {
+      doctor: () => doctorState(fixture.root, false),
+      readConnection: () => ({ url: 'http://127.0.0.1:25000', token: 'secret' }),
+      liveProvider: { probe: async () => ({ packageVersion: '0.3.0', protocolVersion: 1,
+        project: { activeBuildTarget, isPlaying: true, isCompiling: false, isUpdating: true } }) },
+    });
+    assert.equal(result.liveMcp.activeBuildTarget, activeBuildTarget);
+    assert.deepEqual(result.liveMcp.editorState, { isPlaying: true, isCompiling: false, isUpdating: true });
+    assert.equal(result.canUseLiveMcp, true);
+    assert.equal(JSON.stringify(result).includes('secret'), false);
+  }
 });
 
 test('bootstrap on a locked Editor waits the full requested readiness window and never batch-launches', async t => {
@@ -412,6 +431,38 @@ test('final scan envelope remains inside 24 KiB after environment metadata is co
     setup: { reload: { message: 'r'.repeat(5000) } },
   };
   assert.ok(jsonBytes(createCompactScanEnvelope(result)) <= SUMMARY_MAX_BYTES);
+});
+
+test('live pagination survives invocation timestamps but rejects changed evidence or query', t => {
+  const { snapshot, fingerprint } = staticFixture(t);
+  const { mergeUnityProjectSnapshots } = require('./snapshot-merge.cjs');
+  const state = { fingerprint: 'same-source-state', schemaVersion: 1, fileCount: 10 };
+  function scan(id, mutate = () => {}) {
+    const patch = livePatch(fingerprint);
+    patch.scanId = id;
+    patch.facts.metrics = { durationMs: id === 'first' ? 412 : 415, assetsScanned: 20 };
+    patch.generatedAt = id === 'first' ? '2026-09-10T00:00:00.000Z' : '2026-09-10T00:01:00.000Z';
+    const merged = mergeUnityProjectSnapshots(snapshot, patch);
+    mutate(merged);
+    return finalizeSnapshotState('fixture', merged, fingerprint, { computeProjectState: () => state });
+  }
+  const first = scan('first');
+  const page = queryUnitySnapshot(first, { section: 'assets', limit: 1 });
+  assert.ok(page.nextCursor);
+  const second = scan('second');
+  assert.equal(first.scanId, second.scanId);
+  assert.equal(queryUnitySnapshot(second, { section: 'assets', limit: 1, cursor: page.nextCursor }).count, 1);
+  for (const mutate of [
+    s => { s.live.facts.componentCensus[0].count += 1; },
+    s => { s.project.activeBuildTarget = 'Android'; },
+    s => { s.dependencies.unresolved.push({ guid: 'e'.repeat(32), category: 'reachable-missing' }); },
+    s => { s.live.capabilities.playModeCapture = true; },
+    s => { s.live.facts.metrics.assetsScanned += 1; },
+  ]) {
+    assert.throws(() => queryUnitySnapshot(scan('third', mutate), { section: 'assets', limit: 1, cursor: page.nextCursor }),
+      error => error.code === 'UNITY_CURSOR_STALE');
+  }
+  assert.throws(() => queryUnitySnapshot(second, { section: 'assets', search: 'other', cursor: page.nextCursor }));
 });
 
 test('content-sensitive scanId rejects a cursor after Unity source changes', async t => {

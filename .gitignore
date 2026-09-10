@@ -1,5 +1,7 @@
 # Work memory cache & SQLite temporary files
 tools/work-memory/data/cache/*.json
+# Per-checkout recall state; shared-memory.db remains tracked.
+tools/work-memory/data/repo/
 *.db-shm
 *.db-wal
 *.db-journal
