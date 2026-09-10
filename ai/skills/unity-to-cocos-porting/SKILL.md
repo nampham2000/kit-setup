@@ -55,6 +55,13 @@ Successful import or a clean compile does not prove gameplay or repair genuinely
 missing references. Keep unresolved core dependencies blocked until disposition
 is backed by live/source evidence; do not regenerate GUIDs or guess replacements.
 
+For paginated live evidence, retain the exact section/search/filter and cursor.
+Invocation timestamps must not invalidate otherwise identical evidence. If a
+cursor is stale repeatedly on an idle, unchanged project, inspect the paging
+identity and add a regression before retrying; never drop source-state or live
+evidence binding to force pagination through. Read all pages before treating a
+bounded first page as the complete missing-reference inventory.
+
 If Unity warns that `DontDestroyOnLoad` was called on a child, inspect ownership
 before repairing it. Unity already leaves that child scene-owned; a root-only
 guard preserves that behavior. Detaching the child or persisting its entire root

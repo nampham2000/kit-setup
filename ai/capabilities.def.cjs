@@ -290,7 +290,7 @@ const CAPABILITIES = [
     when: 'Sau port.preflight, chỉ gọi khi implementation brief yêu cầu evidence cụ thể. Thay cho việc đọc hàng loạt Unity YAML/C# hoặc dump toàn bộ MCP response.',
     outputs: ['stdout JSON page <=48 KiB, tối đa 200 item, opaque nextCursor'],
     limits: [
-      'Cursor gắn với scanId + section + query; scan hoặc query khác làm cursor cũ bị từ chối.',
+      'Cursor gắn với content-sensitive scanId + section + query; timestamp/ID của lần gọi live không làm stale cursor, nhưng source state, live evidence, build target hoặc query đổi vẫn bị từ chối.',
       'Full snapshot chỉ giữ nội bộ; output bỏ secret/raw source/absolute path và giới hạn evidence.',
     ],
     status: 'ok',

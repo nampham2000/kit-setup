@@ -25,7 +25,7 @@ const { ensureUnityMcpConfig, publicConnection, readUnityMcpConnection } = requi
 const { runUnityBatchScan } = require('./unity-batch-provider.cjs');
 const { computeStaticProjectFingerprint, diagnosticKey, sha256Hex, stableStringify } = require('./live-schema.cjs');
 const { computeUnityProjectState } = require('./project-state.cjs');
-const { mergeUnityProjectSnapshots } = require('./snapshot-merge.cjs');
+const { mergeUnityProjectSnapshots, fingerprintHybridSnapshot } = require('./snapshot-merge.cjs');
 const { buildFeatureSketch } = require('./feature-sketch.cjs');
 const {
   SUMMARY_MAX_BYTES,
@@ -126,14 +126,16 @@ function finalizeSnapshotState(projectRoot, snapshot, projectFingerprint, option
   const computeProjectState = options.computeProjectState || computeUnityProjectState;
   const state = computeProjectState(projectRoot);
   assertStableProjectState(options.expectedState, state);
-  const providerScanId = snapshot.live && snapshot.live.scanId || snapshot.scanId || projectFingerprint;
+  // Provider invocation IDs include timestamps. Bind paging to evidence instead,
+  // while retaining source-state validation and all live facts/dispositions.
+  const evidenceFingerprint = fingerprintHybridSnapshot(snapshot);
   snapshot.projectFingerprint = projectFingerprint;
   snapshot.stateFingerprint = state.fingerprint;
   snapshot.scanId = sha256Hex(stableStringify({
     projectFingerprint,
     stateFingerprint: state.fingerprint,
     provider: snapshot.provider,
-    providerScanId,
+    evidenceFingerprint,
   })).slice(0, 32);
   snapshot.state = {
     schemaVersion: state.schemaVersion,

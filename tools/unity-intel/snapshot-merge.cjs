@@ -223,6 +223,10 @@ function fingerprintHybridSnapshot(snapshot) {
   delete copy.cache;
   delete copy.metrics;
   delete copy.fingerprint;
+  delete copy.scanId;
+  delete copy.state;
+  delete copy.stateFingerprint;
+  delete copy.projectFingerprint;
   if (copy.project) {
     delete copy.project.root;
     delete copy.project.layout;
@@ -231,11 +235,16 @@ function fingerprintHybridSnapshot(snapshot) {
     delete copy.source.root;
     delete copy.source.assetsRoot;
   }
-  if (copy.live) delete copy.live.generatedAt;
+  if (copy.live) {
+    delete copy.live.generatedAt;
+    delete copy.live.scanId;
+    if (copy.live.facts && copy.live.facts.metrics) delete copy.live.facts.metrics.durationMs;
+  }
   if (Array.isArray(copy.providers)) {
     copy.providers = copy.providers.map(provider => {
       const stable = { ...provider };
       delete stable.generatedAt;
+      delete stable.scanId;
       return stable;
     });
   }

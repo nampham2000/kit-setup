@@ -18,6 +18,7 @@ const {
   defaultLiveProvider,
   scanUnityProject,
   queryUnitySnapshot,
+  finalizeSnapshotState,
 } = require('./service.cjs');
 
 function staticFixture(t) {
@@ -430,6 +431,38 @@ test('final scan envelope remains inside 24 KiB after environment metadata is co
     setup: { reload: { message: 'r'.repeat(5000) } },
   };
   assert.ok(jsonBytes(createCompactScanEnvelope(result)) <= SUMMARY_MAX_BYTES);
+});
+
+test('live pagination survives invocation timestamps but rejects changed evidence or query', t => {
+  const { snapshot, fingerprint } = staticFixture(t);
+  const { mergeUnityProjectSnapshots } = require('./snapshot-merge.cjs');
+  const state = { fingerprint: 'same-source-state', schemaVersion: 1, fileCount: 10 };
+  function scan(id, mutate = () => {}) {
+    const patch = livePatch(fingerprint);
+    patch.scanId = id;
+    patch.facts.metrics = { durationMs: id === 'first' ? 412 : 415, assetsScanned: 20 };
+    patch.generatedAt = id === 'first' ? '2026-09-10T00:00:00.000Z' : '2026-09-10T00:01:00.000Z';
+    const merged = mergeUnityProjectSnapshots(snapshot, patch);
+    mutate(merged);
+    return finalizeSnapshotState('fixture', merged, fingerprint, { computeProjectState: () => state });
+  }
+  const first = scan('first');
+  const page = queryUnitySnapshot(first, { section: 'assets', limit: 1 });
+  assert.ok(page.nextCursor);
+  const second = scan('second');
+  assert.equal(first.scanId, second.scanId);
+  assert.equal(queryUnitySnapshot(second, { section: 'assets', limit: 1, cursor: page.nextCursor }).count, 1);
+  for (const mutate of [
+    s => { s.live.facts.componentCensus[0].count += 1; },
+    s => { s.project.activeBuildTarget = 'Android'; },
+    s => { s.dependencies.unresolved.push({ guid: 'e'.repeat(32), category: 'reachable-missing' }); },
+    s => { s.live.capabilities.playModeCapture = true; },
+    s => { s.live.facts.metrics.assetsScanned += 1; },
+  ]) {
+    assert.throws(() => queryUnitySnapshot(scan('third', mutate), { section: 'assets', limit: 1, cursor: page.nextCursor }),
+      error => error.code === 'UNITY_CURSOR_STALE');
+  }
+  assert.throws(() => queryUnitySnapshot(second, { section: 'assets', search: 'other', cursor: page.nextCursor }));
 });
 
 test('content-sensitive scanId rejects a cursor after Unity source changes', async t => {
