@@ -1409,9 +1409,15 @@ class PlayableResourceStats {
       const rawArea = rawW * rawH;
       const wasteRatio = rawArea / displayArea;
 
-      if (wasteRatio >= this.options.minWasteRatio && rawW > 64 && rawH > 64) {
-        const targetW = Math.min(rawW, Math.max(16, Math.ceil((displayW * 1.5) / 16) * 16));
-        const targetH = Math.min(rawH, Math.max(16, Math.ceil((displayH * 1.5) / 16) * 16));
+      const targetW = Math.min(rawW, Math.max(16, Math.ceil((displayW * 1.5) / 16) * 16));
+      const targetH = Math.min(rawH, Math.max(16, Math.ceil((displayH * 1.5) / 16) * 16));
+      const canDownscale = targetW < rawW || targetH < rawH;
+
+      // The area heuristic may still exceed the threshold after an image has
+      // already reached its rounded target dimensions. Do not report an
+      // optimization opportunity unless at least one source dimension can
+      // actually be reduced.
+      if (wasteRatio >= this.options.minWasteRatio && rawW > 64 && rawH > 64 && canDownscale) {
         const texFile = this.stats.categories.textures.files.find((f) => f.relPath === sfInfo.relPath);
         const hasBuild = this.buildInfo?.hasBuild;
         const isPackaged = hasBuild && texFile ? texFile.isPackaged : true;
