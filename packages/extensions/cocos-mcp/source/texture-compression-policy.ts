@@ -236,18 +236,20 @@ export class TextureCompressionPolicy {
             if (!meta || meta.importer !== 'image') {
                 return { status: 'failed', url, uuid: info.uuid, error: 'Asset is a PNG/JPG/JPEG but Cocos did not return image importer metadata.' };
             }
-            if (meta.userData?.useCompressTexture === true && meta.userData?.presetId === presetId) {
+            if (meta.userData?.compressSettings?.useCompressTexture === true && meta.userData?.compressSettings?.presetId === presetId) {
                 return { status: 'unchanged', url, uuid: info.uuid };
             }
             if (dryRun) return { status: 'updated', url, uuid: info.uuid };
 
             const next = deepClone(meta);
             next.userData ||= {};
-            next.userData.useCompressTexture = true;
-            next.userData.presetId = presetId;
+            // Cocos 3.8 reads only this nested importer field during builds.
+            next.userData.compressSettings ||= {};
+            next.userData.compressSettings.useCompressTexture = true;
+            next.userData.compressSettings.presetId = presetId;
             await Editor.Message.request('asset-db', 'save-asset-meta', info.uuid || identity, JSON.stringify(next, null, 2));
             const verified: any = await Editor.Message.request('asset-db', 'query-asset-meta', info.uuid || identity);
-            if (verified?.userData?.useCompressTexture !== true || verified?.userData?.presetId !== presetId) {
+            if (verified?.userData?.compressSettings?.useCompressTexture !== true || verified?.userData?.compressSettings?.presetId !== presetId) {
                 throw new Error('Asset DB accepted save-asset-meta but the compression settings did not persist.');
             }
             return { status: 'updated', url, uuid: info.uuid };

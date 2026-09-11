@@ -22,7 +22,11 @@ function makeEditor({ preset = null } = {}) {
   const byId = new Map(assets.flatMap((asset) => [[asset.uuid, asset], [asset.url, asset]]));
   const metas = new Map(assets.filter((asset) => /\.(?:png|jpe?g)$/i.test(asset.url)).map((asset) => [asset.uuid, {
     ver: '1.0.27', importer: 'image', imported: true, uuid: asset.uuid,
-    files: ['.json'], subMetas: {}, userData: { type: 'texture', keepMe: true },
+    files: ['.json'], subMetas: {}, userData: {
+      type: 'texture', keepMe: true,
+      useCompressTexture: true, presetId: PLAYABLE_TRANSPARENT_PRESET_ID,
+      compressSettings: { useCompressTexture: false, presetId: 'old-preset', keepNested: true },
+    },
   }]));
   const calls = [];
   return {
@@ -82,8 +86,9 @@ test('extension policy creates WebP 50 fallback and applies it to PNG/JPG/JPEG o
     assert.equal(fixture.profileWrites, 1);
     assert.equal(fixture.profile.userPreset[PLAYABLE_TRANSPARENT_PRESET_ID].options.web.webp.quality, 50);
     for (const id of ['png', 'jpg', 'jpeg']) {
-      assert.equal(fixture.metas.get(id).userData.useCompressTexture, true);
-      assert.equal(fixture.metas.get(id).userData.presetId, PLAYABLE_TRANSPARENT_PRESET_ID);
+      assert.equal(fixture.metas.get(id).userData.compressSettings.useCompressTexture, true);
+      assert.equal(fixture.metas.get(id).userData.compressSettings.presetId, PLAYABLE_TRANSPARENT_PRESET_ID);
+      assert.equal(fixture.metas.get(id).userData.compressSettings.keepNested, true);
       assert.equal(fixture.metas.get(id).userData.keepMe, true);
     }
     assert.equal(fixture.metas.has('webp'), false);
@@ -115,7 +120,7 @@ test('extension policy normalizes a spaced Playable Transparent alias to WebP 50
     assert.equal(report.preset.changed, true);
     assert.equal(fixture.profileWrites, 1);
     assert.deepEqual(fixture.profile.userPreset['existing-preset-id'].options.web, { webp: { quality: 50 } });
-    assert.equal(fixture.metas.get('png').userData.presetId, 'existing-preset-id');
+    assert.equal(fixture.metas.get('png').userData.compressSettings.presetId, 'existing-preset-id');
   } finally {
     delete global.Editor;
   }
