@@ -1674,6 +1674,7 @@ class PlayableResourceStats {
   }
 
   finalizeBuildStats() {
+    this.stats.buildInfo = this.buildInfo;
     if (!this.buildInfo.hasBuild) {
       this.stats.hasBuildData = false;
       this.stats.totalBuildSize = 0;
@@ -1689,7 +1690,6 @@ class PlayableResourceStats {
     this.stats.totalBuildAssetSize = totalBuildAssets;
     this.stats.totalBuildWithEngine = totalBuildAssets + (this.stats.categories.engine.buildSize || 0);
     this.stats.totalBuildSize = totalBuildAssets;
-    this.stats.buildInfo = this.buildInfo;
   }
 
   computeQuickWinsAndHealth() {
