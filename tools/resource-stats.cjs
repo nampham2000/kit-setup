@@ -2017,7 +2017,7 @@ function renderCliReport(stats, options) {
       console.log(`     ${saveLabel} | Impact: ${win.impact}`);
       console.log(`     ${d}${win.explanation}${colors.reset}`);
       if (win.action.startsWith('npm ') || win.action.startsWith('node ')) {
-        console.log(`     ${c}Run: ${win.action}${colors.reset}`);
+        console.log(`     ${colors.cyan}Run: ${win.action}${colors.reset}`);
       }
     });
   }
