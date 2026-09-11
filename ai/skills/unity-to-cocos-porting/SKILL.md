@@ -10,6 +10,27 @@ This skill provides step-by-step guidance and architectural rules for converting
 
 ## 1. Automated Tooling First
 
+### UGUI layout and sliced images
+
+- Treat RectTransform/layout bounds separately from Image draw bounds. Unity Sliced/Tiled ignores
+  `m_PreserveAspect`; preserve the authored rect, CUSTOM sizeMode, Image type and spriteBorder
+  left/bottom/right/top. A valid existing UUID does not prove importer borders were refreshed.
+  Refresh through AssetDB, read back metadata and keep the UUID. Do not resize sprite pixels
+  without remapping borders and logical sizes.
+- Horizontal/VerticalLayoutGroup runs after authored RectTransform serialization. Preserve enabled,
+  padding, negative spacing, alignment, pivots, scale flags, reverse order, inactive children and
+  LayoutElement.ignoreLayout. Disabled groups keep authored positions. `UnityFixedLayoutGroup`
+  handles groups with childControl/forceExpand disabled, including runtime resize/activation.
+  Controlled/flexible sizes, Grid and fitters currently report `UI_LAYOUT_UNSUPPORTED` high;
+  resolve their source semantics before claiming the HUD is complete.
+- Regression: `node --test playable-shared-kit/tools/unity-cocos-port/ui-layout-porter.test.cjs
+  playable-shared-kit/tools/unity-cocos-port/sprite-border-import.test.cjs`. Then inspect fresh
+  Preview at portrait and landscape; measure slot/icon centers, frame containment, and repeat after
+  a child becomes inactive. Fixture adapter tests do not establish rendered Unity/Cocos parity.
+- For recurring faults, fix the shared converter and its tests before adding a game-specific offset.
+  Keep project layout overrides config-driven; existing approved overrides need a separate runtime
+  comparison before removal. Re-port only after the normal Unity source gate passes.
+
 ### Portable checkout / cross-PC bootstrap
 
 Shared kit chỉ portable khi source of truth đã được commit và checkout đúng exact submodule pointer. Trên một PC

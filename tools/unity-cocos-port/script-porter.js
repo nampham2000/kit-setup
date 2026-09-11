@@ -4,6 +4,7 @@ const path = require('path');
 const { cocosRef } = require('./core-utils');
 const { SCRIPT_SHAPE_MATCH_THRESHOLD } = require('./constants');
 const { mapUnityImageFill } = require('./ui-image-fill-mapper');
+const { emitUnityLayout } = require('./ui-layout-porter');
 
 module.exports = function createScriptPorter(deps) {
   const {
@@ -142,6 +143,8 @@ module.exports = function createScriptPorter(deps) {
   }
 
   function emitMonoBehaviour(nodeId, componentId, doc, model, builder, reporter, options, unityDb, cocosDb, gameObject) {
+    if (emitUnityLayout({ nodeId, componentId, doc, model, builder, reporter, options, unityDb, cocosDb,
+      getField, hasField, unityRefGuid, ensureLayoutScript: deps.ensureLayoutScript })) return;
     if (isUnityTextEffect(doc, unityDb)) {
       reporter.low('UNITY_TEXT_EFFECT_MERGED', model.file, gameObject?.name || '',
         'Unity UI Shadow/Outline was merged into the sibling Cocos Label');
@@ -167,7 +170,10 @@ module.exports = function createScriptPorter(deps) {
     if (hasField(doc, 'm_Sprite') && (hasField(doc, 'm_Type') || hasField(doc, 'm_FillCenter'))) {
       const spriteRef = getField(doc, 'm_Sprite');
       const spriteAsset = unityDb.get(unityRefGuid(spriteRef));
-      const preserveAspect = Number(getField(doc, 'm_PreserveAspect', 0) || 0) !== 0;
+      // Unity Image.GenerateSlicedSprite/GenerateTiledSprite ignore preserveAspect.
+      const imageType = Number(getField(doc, 'm_Type', 0));
+      const preserveAspect = (imageType === 0 || imageType === 3)
+        && Number(getField(doc, 'm_PreserveAspect', 0) || 0) !== 0;
       let spriteUuid = '';
       if (spriteAsset) {
         spriteUuid = reportResolvedUnitySprite(resolveUnitySpriteFrame(spriteAsset, options, unityDb, cocosDb, reporter), spriteAsset, reporter, options);

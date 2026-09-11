@@ -234,6 +234,7 @@ const {
   resolveUnitySpineSkeletonDataUuid,
   resolveUnityLabelConfig: fontPorter.resolveLabelConfig,
   isUnityTextEffect: fontPorter.isTextEffect,
+  ensureLayoutScript: (options, reporter, cocosDb) => runtimeComponentPorter.ensureUiLayoutScript(options, reporter, cocosDb),
 });
 
 const {
@@ -5400,7 +5401,7 @@ class CocosPrefabBuilder {
   }
 
   addSprite(nodeId, unityComponentId, spriteUuid, unityColor, fileId, config = {}) {
-    if (config.preserveAspect) this.applyPreserveAspectSize(nodeId, spriteUuid);
+    if (config.preserveAspect && [0, 3].includes(Number(config.spriteType ?? 0))) this.applyPreserveAspectSize(nodeId, spriteUuid);
     const spriteAlpha = unitySpriteAlpha(unityColor, 1);
     const hasChildren = (this.objects[nodeId]?._children || []).length > 0;
     const customMaterialUuid = spriteAlpha < 1 && hasChildren
@@ -5649,6 +5650,7 @@ function buildCocosPrefabBuilder(model, outputFile, options, reporter, unityDb, 
 
   for (const root of model.roots) emitNodeRecursive(root, null, model, builder, layerResolver, reporter, options, unityDb, cocosDb);
   emitComponents(model, builder, reporter, options, unityDb, cocosDb);
+  require('./unity-cocos-port/ui-layout-porter').finalizeUnityLayouts(builder);
   runtimeComponentPorter.attachParticleSubEmitterFollowers(model, builder, reporter);
   runtimeComponentPorter.attachParticleRateOverDistanceEmitters(model, builder, reporter);
   runtimeComponentPorter.attachParticleHierarchyTransformSync(builder, reporter);
@@ -7717,6 +7719,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  CocosPrefabBuilder,
   CocosAssetDatabase,
   portPrefab,
   portPrefabBatch,

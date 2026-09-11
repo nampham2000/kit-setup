@@ -26,6 +26,11 @@ const SUB_EMITTER_TYPE = {
 };
 
 const RUNTIME_SCRIPTS = {
+  uiLayout: {
+    className: 'UnityFixedLayoutGroup',
+    missingCode: 'UI_LAYOUT_TEMPLATE_MISSING',
+    missingMessage: 'Unity fixed-size layout requires its runtime adapter',
+  },
   particleSubEmitterFollower: {
     className: 'UnityParticleSubEmitterFollower',
     entryClassName: 'UnityParticleSubEmitterEntry',
@@ -716,6 +721,12 @@ function createRuntimeComponentPorter(deps) {
 
   return {
     ensureParticleSubEmitterFollowerScript: (options, reporter) => ensureRuntimeScript(RUNTIME_SCRIPTS.particleSubEmitterFollower, options, reporter),
+    ensureUiLayoutScript: (options, reporter, cocosDb) => {
+      const script = RUNTIME_SCRIPTS.uiLayout;
+      ensureRuntimeScript(script, options, reporter);
+      return readRuntimeScriptClassId(script, cocosDb)
+        || (options.dryRun ? compressUuid(stableUuid(scriptRuntimeSeed(script))) : '');
+    },
     ensureParticleHierarchyTransformSyncScript: (options, reporter) => ensureRuntimeScript(RUNTIME_SCRIPTS.particleHierarchyTransformSync, options, reporter),
     ensureParticleRateOverDistanceEmitterScript: (options, reporter) => ensureRuntimeScript(RUNTIME_SCRIPTS.particleRateOverDistanceEmitter, options, reporter),
     ensureSpriteRendererColorAdapterScript: (options, reporter) => ensureRuntimeScript(RUNTIME_SCRIPTS.spriteRendererColorAdapter, options, reporter),

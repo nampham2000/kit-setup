@@ -27,8 +27,8 @@ const fs = require('fs');
 const path = require('path');
 const { readTextureImportLimits } = require('./texture-import-limit');
 
-// v2 invalidates clips/particles/linked overrides emitted before the parity fixes.
-const CACHE_VERSION = 2;
+// v3 invalidates missing UI layouts and aspect-fitted sliced/tiled images.
+const CACHE_VERSION = 3;
 
 /** Dấu vân tay của một file: kích thước + mtime. Đủ nhạy, không cần đọc nội dung. */
 function fileStamp(file) {
