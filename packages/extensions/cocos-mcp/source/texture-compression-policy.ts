@@ -263,6 +263,7 @@ let sharedPolicy: TextureCompressionPolicy | null = null;
 let automationStarted = false;
 let bootstrapTimer: ReturnType<typeof setTimeout> | null = null;
 const broadcastListeners: Array<[string, (payload: any) => void]> = [];
+const MAX_BOOTSTRAP_RETRY_DELAY_MS = 30_000;
 
 export function getTextureCompressionPolicy(): TextureCompressionPolicy {
     sharedPolicy ||= new TextureCompressionPolicy();
@@ -276,7 +277,11 @@ function logAutomationError(scope: string, error: unknown): void {
 
 function scheduleBootstrapScan(attempt = 0): void {
     const policy = getTextureCompressionPolicy();
-    const delayMs = attempt === 0 ? 500 : 1000;
+    // The extension can load before Asset DB and can also miss asset-db:ready if
+    // that broadcast happened before listeners were registered. Keep a cheap,
+    // capped readiness poll alive instead of turning normal startup ordering into
+    // a red console error after an arbitrary retry count.
+    const delayMs = attempt === 0 ? 500 : Math.min(1000 * (2 ** Math.min(attempt - 1, 5)), MAX_BOOTSTRAP_RETRY_DELAY_MS);
     bootstrapTimer = setTimeout(() => {
         bootstrapTimer = null;
         if (!automationStarted) return;
@@ -284,7 +289,7 @@ function scheduleBootstrapScan(attempt = 0): void {
             console.log(`[TextureCompressionPolicy] preset=${report.preset.name} eligible=${report.eligible} updated=${report.updated} unchanged=${report.unchanged} failed=${report.failed}`);
         }).catch((error) => {
             const message = error instanceof Error ? error.message : String(error);
-            if (/asset db is not ready/i.test(message) && attempt < 30 && automationStarted) {
+            if (/asset db is not ready/i.test(message) && automationStarted) {
                 scheduleBootstrapScan(attempt + 1);
                 return;
             }

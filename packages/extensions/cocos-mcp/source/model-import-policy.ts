@@ -159,6 +159,7 @@ let sharedPolicy: ModelImportPolicy | null = null;
 let automationStarted = false;
 let bootstrapTimer: ReturnType<typeof setTimeout> | null = null;
 const broadcastListeners: Array<[string, (payload: any) => void]> = [];
+const MAX_BOOTSTRAP_RETRY_DELAY_MS = 30_000;
 
 export function getModelImportPolicy(): ModelImportPolicy {
     sharedPolicy ||= new ModelImportPolicy();
@@ -172,7 +173,10 @@ function logAutomationError(scope: string, error: unknown): void {
 
 function scheduleBootstrapScan(attempt = 0): void {
     const policy = getModelImportPolicy();
-    const delayMs = attempt === 0 ? 700 : 1000;
+    // Asset DB readiness is independent from extension load order, and its ready
+    // broadcast may already have fired. Poll with capped backoff so that a normal
+    // delayed startup remains pending rather than becoming a false console error.
+    const delayMs = attempt === 0 ? 700 : Math.min(1000 * (2 ** Math.min(attempt - 1, 5)), MAX_BOOTSTRAP_RETRY_DELAY_MS);
     bootstrapTimer = setTimeout(() => {
         bootstrapTimer = null;
         if (!automationStarted) return;
@@ -180,7 +184,7 @@ function scheduleBootstrapScan(attempt = 0): void {
             console.log(`[ModelImportPolicy] eligible=${report.eligible} updated=${report.updated} unchanged=${report.unchanged} failed=${report.failed}`);
         }).catch((error) => {
             const message = error instanceof Error ? error.message : String(error);
-            if (/asset db is not ready/i.test(message) && attempt < 30 && automationStarted) {
+            if (/asset db is not ready/i.test(message) && automationStarted) {
                 scheduleBootstrapScan(attempt + 1);
                 return;
             }
