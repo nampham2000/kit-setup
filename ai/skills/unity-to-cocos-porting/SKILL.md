@@ -10,6 +10,41 @@ This skill provides step-by-step guidance and architectural rules for converting
 
 ## 1. Automated Tooling First
 
+### Diagnose port blockers before stopping
+
+- Start with `unity:intel:doctor`. Check installation, connection and an actual
+  `playable-port-scan` response separately. A visible Unity MCP window or a ping
+  is not scan evidence. If the package is missing, use the documented setup within
+  the authorized port scope; do not ask the user to restart or install blindly.
+- For scan failures, report the exact diagnostic and bounded evidence. Distinguish
+  package/TLS/compile/import failures from a main-thread timeout. Wait for import
+  or domain reload and retry readiness within its deadline. Do not kill the user's
+  Editor, launch a second instance, expose tokens, or claim a provider fix merely
+  because setup/retry restored this particular project.
+- A scan timeout is not proof that Unity gameplay cannot run. Continue independent
+  static work only when preflight authorizes it. Keep unresolved source-integrity
+  blockers and missing live visual acceptance evidence explicit.
+- For sample scene selection ties, use an evidenced `--entry-scene` from the indexed
+  runtime inventory. Do not rename source scenes to satisfy a naming heuristic.
+- For Cocos `marionette` or other missing engine exports, inspect the failing module,
+  source dependencies, configured features and applied preview evidence separately.
+  Use the engine feature audit/apply workflow and reload preview; a checked Settings
+  box alone does not prove the preview engine was regenerated. Do not remove a used
+  module or run a game build as a speculative repair.
+- Effect validation must read AssetDB asset type and importer metadata separately,
+  then inspect compile logs and preview. Read back serialized asset references:
+  EffectAsset properties must retain the effect UUID/type, not a URL or SpriteFrame.
+- Honor explicit scope exclusions. If the user requests preview only, mark build
+  acceptance as outside delivery scope; do not build, fabricate a build receipt or
+  claim packaged readiness. Excluded scenes must leave no runtime load dependency;
+  document any replacement restart route.
+- Choose evidence suited to the source: measured multi-round restarts for a demo
+  without win state; GUID/fileID frame and state samples for sprite animation.
+  Keep semantic assertions and source references; never relax bounds just to pass.
+- After a recurring fix, update shared tool/tests, this source skill and capability
+  definitions, regenerate instructions and sync extensions. Commit generated project
+  copies and the exact submodule pointer; push shared kit before its consumer.
+
 ### UGUI layout and sliced images
 
 - Treat RectTransform/layout bounds separately from Image draw bounds. Unity Sliced/Tiled ignores

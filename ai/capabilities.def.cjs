@@ -1326,6 +1326,10 @@ const CORE_RULES = [
     id: 'correct-stale-memory',
     rule: 'Khi evidence mới bác bỏ một Work Memory, phải dùng `memory.correct` cập nhật đúng memory id; không thêm note mới mâu thuẫn và để hướng dẫn sai tiếp tục được recall trên project khác.',
   },
+  {
+    id: 'port-blocker-triage',
+    rule: 'Trước khi dừng port vì MCP, chạy doctor để phân biệt package chưa cài, connection, compile/import và tool scan timeout; MCP window/ping không chứng minh scan thành công. Dùng setup khi thiếu package trong phạm vi port đã được giao. Không suy Unity không chạy từ MCP timeout; tiếp tục phần static được preflight cho phép, giữ source-integrity blocker và live visual acceptance riêng. Scene hòa điểm dùng --entry-scene đã index. Cocos feature đã bật phải kiểm applied preview; không build để chữa thử Marionette. User yêu cầu preview-only thì build acceptance nằm ngoài phạm vi, không tạo receipt giả hoặc claim packaged readiness. Sau fix phải sync và commit cả source tool/skill/instructions lẫn bản sinh ở consumer, push shared kit trước submodule pointer.',
+  },
 ];
 
 module.exports = { CAPABILITIES, CORE_RULES, TOOLS };
