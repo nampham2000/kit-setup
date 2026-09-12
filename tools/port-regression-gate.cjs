@@ -296,6 +296,17 @@ function validateAnimationCurveOracle(file, label) {
 }
 
 function caseHasAnimationCurveOracle(entry, validatedCases) {
+  const oracle = validatedCases.get(entry);
+  const spriteOracle = oracle && oracle.clips.every(clip => clip.tracks.every(track =>
+    track.kind === 'object-reference' && track.property === 'm_Sprite'
+    && Array.isArray(track.keys) && track.keys.length > 0
+    && track.keys.every(key => Number.isFinite(key.time) && /^[a-f0-9]{32}:-?\d+$/.test(key.sprite))));
+  if (spriteOracle && caseHasEval(entry) && entry.referenceImage
+      && Array.isArray(entry.requiredTrace) && entry.requiredTrace.length >= 2
+      && metricBoundAtMost(entry.requiredEvalMetrics, 'frameMismatchCount', 0)
+      && metricBoundAtMost(entry.requiredEvalMetrics, 'stateMismatchCount', 0)
+      && metricBoundAtLeast(entry.requiredEvalMetrics, 'animationSampleCount', 80)
+      && metricBoundAtLeast(entry.requiredEvalMetrics, 'oracleClipCount', oracle.clips.length)) return true;
   return validatedCases.has(entry) && caseHasEval(entry) && !!entry.referenceImage
     && Array.isArray(entry.requiredTrace) && entry.requiredTrace.length >= 2
     && metricBoundAtMost(entry.requiredEvalMetrics, 'crossAxisMaxError', 0.02)
@@ -314,7 +325,7 @@ function validateMatrixPolicy(projectRoot, suite, matrix, matrixFile) {
   }
   const names = new Set();
   const tags = new Set();
-  const animationOracleCases = new Set();
+  const animationOracleCases = new Map();
   const dependencyMap = new Map();
   const addDependency = (value, label) => {
     const file = resolveContained(projectRoot, value, label, { mustExist: true });
@@ -340,9 +351,9 @@ function validateMatrixPolicy(projectRoot, suite, matrix, matrixFile) {
     if (entry.animationOracle) {
       const oracleFile = resolveContained(projectRoot, entry.animationOracle,
         `${suite.id}.animationOracle`, { mustExist: true });
-      validateAnimationCurveOracle(oracleFile, `${suite.id}/${name}`);
+      const validatedOracle = validateAnimationCurveOracle(oracleFile, `${suite.id}/${name}`);
       addDependency(entry.animationOracle, `${suite.id}.animationOracle`);
-      animationOracleCases.add(entry);
+      animationOracleCases.set(entry, validatedOracle);
     }
     if (entry.regressionTags !== undefined && (!Array.isArray(entry.regressionTags) ||
         entry.regressionTags.some(tag => typeof tag !== 'string' || !tag.trim()))) {

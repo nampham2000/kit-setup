@@ -101,6 +101,23 @@ test('a win-less demo can verify lifecycle through two measured gesture restarts
   assert.throws(()=>validateRegistry(root,source,{configFile:file}),error=>error.code==='REGRESSION_WIN_RECEIPT_MISSING');
 });
 
+test('sprite animation oracle uses discrete frame and state evidence instead of transform extrema', t => {
+  const root=fixture(t);const matrix='tools/qa/sprite.json';
+  const oracleFile=path.join(root,'docs/references/animation-oracle.json');
+  const oracle=JSON.parse(fs.readFileSync(oracleFile));
+  oracle.clips[0].tracks=[{kind:'object-reference',property:'m_Sprite',path:'',keys:[{time:0,sprite:'a'.repeat(32)+':1'}]}];
+  fs.writeFileSync(oracleFile,JSON.stringify(oracle));
+  const entry={name:'sprite',animationOracle:'docs/references/animation-oracle.json',referenceImage:'docs/references/unity.png',
+    eval:'({ok:true})',requireEvalOk:true,requiredTrace:['Idle','Jump'],
+    requiredEvalMetrics:{frameMismatchCount:{max:0},stateMismatchCount:{max:0},animationSampleCount:{min:80},oracleClipCount:{min:1}}};
+  writeMatrix(root,matrix,[entry]);
+  const source=registry([{id:'sprite',risks:['animation-curve-fidelity'],mandatory:true,runs:1,matrix,watchFiles:['assets/script/Game.ts']}],['animation-curve-fidelity']);
+  const file=writeRegistry(root,source);
+  assert.equal(validateRegistry(root,source,{configFile:file}).suites.length,1);
+  entry.requiredEvalMetrics.frameMismatchCount.max=1;writeMatrix(root,matrix,[entry]);
+  assert.throws(()=>validateRegistry(root,source,{configFile:file}),error=>error.code==='REGRESSION_ANIMATION_CURVE_ORACLE_MISSING');
+});
+
 test('hold-drag and lifecycle policies require semantic hold gesture and two rounds', t => {
   const root = fixture(t);
   const matrix = 'tools/qa/hold-drag.json';
