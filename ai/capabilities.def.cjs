@@ -152,11 +152,12 @@ const CAPABILITIES = [
     id: 'port.preflight',
     group: 'port',
     title: 'Unity port preflight: playable-core brief + full high audit + fresh mutation receipt',
-    npm: 'npm run ai:port:preflight -- -- --project <UnityProjectRoot>',
+    npm: 'npm run ai:port:preflight -- --project <UnityProjectRoot>',
     cmd: `node ${TOOLS}/unity-intel-cli.cjs preflight --json`,
     args: ['--project <UnityProjectRoot>'],
     optional: [
       '--provider <auto|static|unity-mcp>', '--bootstrap', '--intent <kind>', '--target <logical-path-or-symbol>', '--profile <playable-core|full-project>',
+      '--entry-scene <Assets/...unity>',
       '--unity <file>', '--mcp-url <url>', '--timeout-ms <n>', '--include-vendor', '--cache-dir <dir>', '--no-cache', '--refresh-cache',
     ],
     when: 'BƯỚC DUY NHẤT đầu tiên trước khi agent đọc Unity source hoặc chạy tool có ghi output. Mặc định chọn gameplay scene/closure, loại menu-shop-online khỏi implementation route, giữ full high audit và cấp receipt theo source state.',
@@ -187,7 +188,7 @@ const CAPABILITIES = [
     npm: 'npm run ai:port:core:init -- --unity-project <UnityProjectRoot> --cocos-project <CocosProjectRoot>',
     cmd: `node ${TOOLS}/core-gameplay-port.cjs init --json`,
     args: ['--unity-project <UnityProjectRoot>', '--cocos-project <CocosProjectRoot>'],
-    optional: ['--provider <auto|static|unity-mcp>', '--bootstrap', '--manifest <file>', '--force', '--dry-run', '--json'],
+    optional: ['--provider <auto|static|unity-mcp>', '--entry-scene <Assets/...unity>', '--bootstrap', '--manifest <file>', '--force', '--dry-run', '--json'],
     when: 'Bước đầu implementation core playable. Lệnh tự chạy preflight playable-core, khóa gameplay entry/closure và tạo manifest evidence nhỏ để agent không phải đọc lại toàn project.',
     outputs: ['<CocosProjectRoot>/.ai/port/core-gameplay.json', 'stdout JSON compact core scope + next action'],
     limits: [
@@ -208,7 +209,7 @@ const CAPABILITIES = [
     npm: 'npm run ai:port:core:scaffold -- --unity-project <UnityProjectRoot> --cocos-project <CocosProjectRoot>',
     cmd: `node ${TOOLS}/core-gameplay-port.cjs scaffold --json`,
     args: ['--unity-project <UnityProjectRoot>', '--cocos-project <CocosProjectRoot>'],
-    optional: ['--provider <static|auto|unity-mcp>', '--bootstrap', '--manifest <file>', '--wiring <file>', '--packet <file>', '--force', '--dry-run', '--json'],
+    optional: ['--provider <static|auto|unity-mcp>', '--entry-scene <Assets/...unity>', '--bootstrap', '--manifest <file>', '--wiring <file>', '--packet <file>', '--force', '--dry-run', '--json'],
     when: 'Lệnh mặc định khi bắt đầu implementation port mới. Dùng static provider trước, sinh scene khung + wiring report, rồi lưu resume packet bounded để agent khác tiếp tục mà không đọc lại toàn source.',
     outputs: [
       '<CocosProjectRoot>/.ai/port/core-gameplay.json',
@@ -217,7 +218,7 @@ const CAPABILITIES = [
       '<CocosProjectRoot>/.ai/port/resume-packet.json',
     ],
     limits: [
-      'Mặc định provider=static. Chỉ nâng lên auto/unity-mcp khi preflight có uncertainty cụ thể mà static evidence không giải quyết được.',
+      'Mặc định provider=static. Chỉ nâng lên auto/unity-mcp khi preflight có uncertainty cụ thể mà static evidence không giải quyết được. Khi scene bị hòa điểm hoặc tên không đạt heuristic, dùng --entry-scene Assets/...unity theo quyết định có evidence; tool kiểm scene runtime đã index và bind closure/receipt theo scene đó. MCP timeout không chặn công việc static được preflight cho phép; live evidence vẫn bắt buộc khi nghiệm thu visual fidelity.',
       'Không overwrite target scene/wiring đang tồn tại; trạng thái một-nửa được report để agent đối chiếu trước khi regenerate.',
       'Scene và wiring chỉ được reuse khi receipt bind cùng Unity brief/state fingerprint và SHA-256 hiện tại của cả hai output.',
       'Static scene chỉ là geometry/component skeleton. Script, material, shader, prefab instance và runtime-only object vẫn phải xử lý theo wiring/obligation report.',

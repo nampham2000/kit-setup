@@ -89,6 +89,18 @@ test('CLI is explicit about refresh and rejects unknown options', () => {
   assert.throws(() => parseArgs(['run', '--maybe']), error => error.code === 'REGRESSION_OPTION_INVALID');
 });
 
+test('a win-less demo can verify lifecycle through two measured gesture restarts', t => {
+  const root=fixture(t); const matrix='tools/qa/restart.json';
+  const entry={name:'two restarts',gesture:'0.5,0.5,0.2,0.5,2000,30',eval:'({ok:true})',requireEvalOk:true,
+    regressionTags:['restart'],requiredEvalMetrics:{resets:{min:2,max:2},rounds:{min:3,max:3}}};
+  writeMatrix(root,matrix,[entry]);
+  const source=registry([{id:'restart',risks:['level-lifecycle'],mandatory:true,runs:2,matrix,watchFiles:['assets/script/Game.ts']}],['level-lifecycle']);
+  const file=writeRegistry(root,source);
+  assert.equal(validateRegistry(root,source,{configFile:file}).suites.length,1);
+  entry.requiredEvalMetrics.resets.min=1; writeMatrix(root,matrix,[entry]);
+  assert.throws(()=>validateRegistry(root,source,{configFile:file}),error=>error.code==='REGRESSION_WIN_RECEIPT_MISSING');
+});
+
 test('hold-drag and lifecycle policies require semantic hold gesture and two rounds', t => {
   const root = fixture(t);
   const matrix = 'tools/qa/hold-drag.json';

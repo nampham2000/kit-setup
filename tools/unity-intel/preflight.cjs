@@ -193,7 +193,11 @@ function normalizeIntent(projectRoot, input = {}) {
   if (kind !== 'project' && !targets.length) {
     throw preflightError('UNITY_PREFLIGHT_TARGET_REQUIRED', `Intent ${kind} cần --target.`);
   }
-  return { kind, targets, profile, hash: sha256(stableStringify({ kind, targets, profile })).slice(0, 24) };
+  const selection = input.entryScene === undefined ? {} : { entryScene: String(input.entryScene).replace(/\\/g, '/') };
+  if (input.entryScene !== undefined && (kind !== 'project' || profile !== 'playable-core')) {
+    throw preflightError('UNITY_PORT_ENTRY_SCENE_INVALID', '--entry-scene requires project intent and playable-core profile.');
+  }
+  return { kind, targets, profile, ...selection, hash: sha256(stableStringify({ kind, targets, profile, ...selection })).slice(0, 24) };
 }
 
 function evidencePaths(value, output = []) {
@@ -506,7 +510,7 @@ function createImplementationBrief(scanResult, input = {}) {
   const projectRoot = scanResult.projectRoot || findUnityProjectRoot(input.project);
   const intent = normalizeIntent(projectRoot, input);
   const scope = resolveIntentScope(snapshot, intent);
-  const coreScope = buildCoreGameplayScope(snapshot, { profile: intent.profile });
+  const coreScope = buildCoreGameplayScope(snapshot, { profile: intent.profile, entryScene: intent.entryScene });
   const obligations = buildObligations(snapshot, intent, scope).map(obligation => ({
     ...obligation,
     coreDisposition: coreDisposition(obligation, coreScope),

@@ -66,6 +66,7 @@ Options:
   --unity-project <dir>  Complete Unity project root (required).
   --cocos-project <dir>  Cocos playable root. Default: current directory.
   --manifest <file>      Relative path inside Cocos project. Default: ${DEFAULT_MANIFEST}.
+  --entry-scene <path>   Explicit indexed Unity runtime scene, e.g. Assets/Scenes/Complete.unity.
   --wiring <file>        Static scene wiring path. Default: ${DEFAULT_WIRING}.
   --packet <file>        Resume packet path. Default: ${DEFAULT_RESUME_PACKET}.
   --provider <mode>      auto | static | unity-mcp. Default: auto.
@@ -111,7 +112,7 @@ function parseArgs(argv) {
     if (argument === '--no-run-gates') { options.runGates = false; continue; }
     const equal = /^--([a-z-]+)=(.*)$/.exec(argument);
     const name = equal ? equal[1] : argument.startsWith('--') ? argument.slice(2) : null;
-    if (!['unity-project', 'cocos-project', 'manifest', 'wiring', 'packet', 'provider'].includes(name)) {
+    if (!['unity-project', 'cocos-project', 'manifest', 'wiring', 'packet', 'provider', 'entry-scene'].includes(name)) {
       throw corePortError('CORE_PORT_OPTION_INVALID', `Option khong ho tro: ${argument}`);
     }
     const value = equal ? equal[2] : argv[++index];
@@ -401,6 +402,7 @@ async function initCorePort(options, dependencies = {}) {
     bootstrap: options.bootstrap === true,
     profile: 'playable-core',
     intent: 'project',
+    entryScene: options.entryScene,
   });
   progress({ stage: 'preflight', status: 'complete' });
   const brief = result.brief;

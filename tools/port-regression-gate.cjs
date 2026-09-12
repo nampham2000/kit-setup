@@ -409,8 +409,12 @@ function validateMatrixPolicy(projectRoot, suite, matrix, matrixFile) {
       throw regressionError('REGRESSION_ROUNDS_REQUIRED', `${suite.id}: level-lifecycle phải chạy ít nhất 2 rounds.`);
     }
     if (risk === 'level-lifecycle' && !matrix.cases.some(entry =>
-      (entry.regressionTags || []).includes('win') && caseHasEval(entry))) {
-      throw regressionError('REGRESSION_WIN_RECEIPT_MISSING', `${suite.id}: level-lifecycle cần case tag win với semantic receipt.`);
+      ((entry.regressionTags || []).includes('win')
+        || ((entry.regressionTags || []).includes('restart')
+          && caseHasInputGesture(entry)
+          && metricBoundAtLeast(entry.requiredEvalMetrics, 'resets', 2)
+          && metricBoundAtLeast(entry.requiredEvalMetrics, 'rounds', 3))) && caseHasEval(entry))) {
+      throw regressionError('REGRESSION_WIN_RECEIPT_MISSING', `${suite.id}: level-lifecycle cần win receipt hoặc real-gesture restart với >=2 resets / >=3 rounds.`);
     }
   }
   return {

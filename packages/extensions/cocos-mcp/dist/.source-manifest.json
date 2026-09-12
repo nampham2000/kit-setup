@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "aggregateSha256": "1ea339e46cd73c3bdbf5405417ead1735516a63d21a511b898368eba9992d62d",
+  "aggregateSha256": "3e4e6abc0f664c1fb530aab6516b9063bd14345488ae7dd12cf92e48c3c705ad",
   "files": {
     "base.tsconfig.json": "5ace3c7786f1a9d5074cc945028633a589aafef89ccaa830e6152cb71e1014c2",
     "package.json": "75c376f74fa703cb21c905890f0650eec1f4f35bc5061db7bd14a6983d8c5db1",
@@ -21,7 +21,7 @@
     "source/test/prefab-tools-test.ts": "9c90cc270c7f39edb8f50ca6ae41fb8de83003ab45540b03fcea3592859265df",
     "source/test/tool-tester.ts": "1de5d9820345accb3b89da3bd8d57c7ca4b195a50959ed36f20dca49a6fa5841",
     "source/texture-compression-policy.ts": "c3d9066acb35dfba731724d16b19ed6f3813c05efd5d15a146964b58b4054460",
-    "source/tools/asset-advanced-tools.ts": "4617054db41184693e16444e390f870d2b279e1796c2cbd734608815ee49bbf3",
+    "source/tools/asset-advanced-tools.ts": "a2a529bc0f3a9e45bfd33631958d366aa97a164f2665fd2f24a9e7c2db365c38",
     "source/tools/broadcast-tools.ts": "661ecb3561a78e45186344759a79826fdb944ef0cbbc215c8dec9dd898d944ae",
     "source/tools/component-tools.ts": "daab135f0692cfb876fd76e3e2c95b81999d3eba8d3377f266cc71c8e5aaebb0",
     "source/tools/debug-tools.ts": "31975c4815037ba18595b8fd1d9a5b5f64e1e7b2710d91ee88fb0769e7eb216f",
@@ -107,7 +107,7 @@
       "dist/test/prefab-tools-test.js": "f84aa43a37e07780564b70587fc96e9e89f21d07626b89a3b69e396cc42fe5f3",
       "dist/test/tool-tester.js": "7a2ada4dd082e4dc9065933b832d81bfab95f02f841a1b1086b6aa3b8318d51d",
       "dist/texture-compression-policy.js": "114ec62dd81fb42693d3b5037dab40fb1af8d94714d8547c9e236005a9cdf515",
-      "dist/tools/asset-advanced-tools.js": "1c7e226ecb9117ef712825fa0d61e952a631083bbe63d2accfbad5fc81894fc1",
+      "dist/tools/asset-advanced-tools.js": "5917885723feccb7f7dc5f26671450c0c44b857197c134674f02d97376a3203a",
       "dist/tools/broadcast-tools.js": "4cf8f84c2208a9cb9a88dc46f1630a6e9a59bb23fd21849094ddf7e2744765ca",
       "dist/tools/component-tools.js": "32385455a6c31e2422c34c84428282dd3056e8b5ed7ef9e908ad0e723a75ee7d",
       "dist/tools/debug-tools.js": "a66abd9225e3c751474ede5b9c9fc4b4d54d660531860c71124f1605bafddcc5",

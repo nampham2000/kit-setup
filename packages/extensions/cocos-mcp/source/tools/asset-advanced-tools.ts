@@ -641,8 +641,10 @@ export class AssetAdvancedTools implements ToolExecutor {
             try {
                 await Editor.Message.request('asset-db', 'reimport-asset', target.url);
                 const info: any = await Editor.Message.request('asset-db', 'query-asset-info', target.url);
+                const metaResult: any = await Editor.Message.request('asset-db', 'query-asset-meta', info?.uuid || target.url);
+                const meta: any = typeof metaResult === 'string' ? JSON.parse(metaResult) : metaResult;
                 const type = String(info?.type || '');
-                const importer = String(info?.meta?.importer || '');
+                const importer = String(meta?.importer || '');
                 const typeOk = type === target.expectedType;
                 const importerOk = importer === target.expectedImporter;
                 assets.push({

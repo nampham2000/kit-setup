@@ -317,7 +317,7 @@
       {
         "id": "port.preflight",
         "title": "Unity port preflight: playable-core brief + full high audit + fresh mutation receipt",
-        "run": "npm run ai:port:preflight -- -- --project <UnityProjectRoot>",
+        "run": "npm run ai:port:preflight -- --project <UnityProjectRoot>",
         "command": "node playable-shared-kit/tools/unity-intel-cli.cjs preflight --json --project <UnityProjectRoot>",
         "optional": [
           "--provider <auto|static|unity-mcp>",
@@ -325,6 +325,7 @@
           "--intent <kind>",
           "--target <logical-path-or-symbol>",
           "--profile <playable-core|full-project>",
+          "--entry-scene <Assets/...unity>",
           "--unity <file>",
           "--mcp-url <url>",
           "--timeout-ms <n>",
@@ -361,6 +362,7 @@
         "command": "node playable-shared-kit/tools/core-gameplay-port.cjs init --json --unity-project <UnityProjectRoot> --cocos-project <CocosProjectRoot>",
         "optional": [
           "--provider <auto|static|unity-mcp>",
+          "--entry-scene <Assets/...unity>",
           "--bootstrap",
           "--manifest <file>",
           "--force",
@@ -388,6 +390,7 @@
         "command": "node playable-shared-kit/tools/core-gameplay-port.cjs scaffold --json --unity-project <UnityProjectRoot> --cocos-project <CocosProjectRoot>",
         "optional": [
           "--provider <static|auto|unity-mcp>",
+          "--entry-scene <Assets/...unity>",
           "--bootstrap",
           "--manifest <file>",
           "--wiring <file>",
@@ -404,7 +407,7 @@
           "<CocosProjectRoot>/.ai/port/resume-packet.json"
         ],
         "limits": [
-          "Mặc định provider=static. Chỉ nâng lên auto/unity-mcp khi preflight có uncertainty cụ thể mà static evidence không giải quyết được.",
+          "Mặc định provider=static. Chỉ nâng lên auto/unity-mcp khi preflight có uncertainty cụ thể mà static evidence không giải quyết được. Khi scene bị hòa điểm hoặc tên không đạt heuristic, dùng --entry-scene Assets/...unity theo quyết định có evidence; tool kiểm scene runtime đã index và bind closure/receipt theo scene đó. MCP timeout không chặn công việc static được preflight cho phép; live evidence vẫn bắt buộc khi nghiệm thu visual fidelity.",
           "Không overwrite target scene/wiring đang tồn tại; trạng thái một-nửa được report để agent đối chiếu trước khi regenerate.",
           "Scene và wiring chỉ được reuse khi receipt bind cùng Unity brief/state fingerprint và SHA-256 hiện tại của cả hai output.",
           "Static scene chỉ là geometry/component skeleton. Script, material, shader, prefab instance và runtime-only object vẫn phải xử lý theo wiring/obligation report.",

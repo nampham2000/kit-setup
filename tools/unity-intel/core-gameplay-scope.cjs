@@ -131,10 +131,21 @@ function scoreGameplayScene(scene) {
   return { path: scenePath, score, enabled: !!scene.enabled, indexed: scene.indexed !== false };
 }
 
-function selectGameplayEntry(snapshot) {
+function selectGameplayEntry(snapshot, options = {}) {
   const buildScenes = Array.isArray(snapshot && snapshot.buildScenes) ? snapshot.buildScenes : [];
   const viewScenes = snapshot && snapshot.views && Array.isArray(snapshot.views.scenes) ? snapshot.views.scenes : [];
   const source = buildScenes.length ? buildScenes : viewScenes;
+  if (options.entryScene !== undefined) {
+    const requested = String(options.entryScene).replace(/\\/g, '/');
+    const validPath = /^Assets\/.+\.unity$/.test(requested) && !requested.split('/').some(part => !part || part === '.' || part === '..');
+    const selected = source.find(scene => (scene.path || scene.assetPath) === requested && scene.indexed !== false && (!scene.scope || scene.scope === 'runtime'));
+    if (!validPath || !selected) {
+      const error = new Error('Explicit entry scene must be an indexed runtime Unity scene in the project scene inventory.');
+      error.code = 'UNITY_PORT_ENTRY_SCENE_INVALID';
+      throw error;
+    }
+    return { primary: requested, confidence: 'high', needsDecision: false, selection: 'explicit', candidates: [[requested, scoreGameplayScene(selected).score]] };
+  }
   const candidates = source
     .map(scoreGameplayScene)
     .filter(Boolean)
@@ -311,7 +322,7 @@ function buildCoreGameplayScope(snapshot, options = {}) {
   const profile = normalizePortProfile(options.profile);
   if (profile === 'full-project') return fullProjectScope(snapshot);
 
-  const entry = selectGameplayEntry(snapshot);
+  const entry = selectGameplayEntry(snapshot, options);
   const records = snapshot && snapshot.assets && snapshot.assets.records || [];
   const recordByPath = new Map(records.map(record => [logicalPath(record.assetPath || record.path), record]).filter(item => item[0]));
   const closure = buildClosure(snapshot, entry.primary ? [entry.primary] : []);

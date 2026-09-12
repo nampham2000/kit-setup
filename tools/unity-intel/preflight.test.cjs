@@ -17,7 +17,17 @@ const {
   readReceipt,
   runUnityPortPreflight,
   writePortProvenance,
+  normalizeIntent,
 } = require('./preflight.cjs');
+
+test('explicit entry scene is bound into project intent identity', () => {
+  const root = process.cwd();
+  const basic = normalizeIntent(root, { entryScene: 'Assets/Scenes/Basic.unity' });
+  const complete = normalizeIntent(root, { entryScene: 'Assets/Scenes/Complete.unity' });
+  assert.notEqual(basic.hash, complete.hash);
+  assert.notEqual(complete.hash, normalizeIntent(root).hash);
+  assert.throws(() => normalizeIntent(root, { intent: 'scene', targets: ['Assets/Scenes/Complete.unity'], entryScene: complete.entryScene }), { code: 'UNITY_PORT_ENTRY_SCENE_INVALID' });
+});
 
 function cacheFixture(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'unity-preflight-cache-'));

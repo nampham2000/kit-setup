@@ -91,6 +91,22 @@ test('scene selection fails visibly when no unique gameplay candidate exists', (
   assert.notEqual(entry.confidence, 'high');
 });
 
+test('explicit sample scene selection seeds the correct closure without a name-score requirement', () => {
+  const snapshot = snapshotFixture();
+  snapshot.buildScenes.push({ path: 'Assets/Scenes/Complete.unity', enabled: true, indexed: true, scope: 'runtime' });
+  snapshot.assets.records.push({ assetPath: 'Assets/Scenes/Complete.unity', type: 'scene', scope: 'runtime' });
+  snapshot.dependencies.edges.push({ from: 'Assets/Scenes/Complete.unity', to: 'Assets/Game/Audio/tap.mp3', kind: 'asset' });
+  const scope = buildCoreGameplayScope(snapshot, { entryScene: 'Assets/Scenes/Complete.unity' });
+  assert.equal(scope.entry.primary, 'Assets/Scenes/Complete.unity');
+  assert.equal(scope.entry.needsDecision, false);
+  assert.equal(scope.entry.selection, 'explicit');
+  assert.equal(scope.pathSet.has('Assets/Game/Audio/tap.mp3'), true);
+  assert.equal(scope.pathSet.has('Assets/Game/Board.prefab'), false);
+  for (const entryScene of ['Assets/Scenes/Missing.unity', 'Assets/../Scenes/Complete.unity', 'D:/Complete.unity', '']) {
+    assert.throws(() => buildCoreGameplayScope(snapshot, { entryScene }), { code: 'UNITY_PORT_ENTRY_SCENE_INVALID' });
+  }
+});
+
 test('full-project remains an explicit escape hatch and invalid profiles fail closed', () => {
   const snapshot = snapshotFixture();
   const scope = buildCoreGameplayScope(snapshot, { profile: 'full-project' });
