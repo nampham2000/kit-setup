@@ -393,6 +393,7 @@ function syncSharedKit(options = {}) {
   generateSharedIndex(TARGET_SHARED_DIR);
   syncExtensions(true);
   syncPackageJson();
+  require('./portable-npm-policy.cjs').applyPolicy(PROJECT_ROOT);
   console.log('[sync-shared-kit] Successfully synchronized shared modules & extensions.\n');
 }
 

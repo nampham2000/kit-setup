@@ -27,6 +27,16 @@ const TOOLS = 'playable-shared-kit/tools';
 
 /** @type {Array<Object>} */
 const CAPABILITIES = [
+  {
+    id: 'portable.npm.policy', group: 'onboarding',
+    title: 'Chuẩn hóa npm copy install cho exFAT và NTFS trước npm ci',
+    cmd: `node ${TOOLS}/portable-npm-policy.cjs`, args: [],
+    optional: ['--project <dir>', '--write'],
+    when: 'Trước npm ci trên clone mới hoặc khi gặp EISDIR/symlink với package nội bộ.',
+    outputs: ['package.json + .npmrc khi --write; audit lockfile read-only'],
+    limits: ['Dùng file:playable-shared-kit/... và install-links=true cùng lockfile không link:true. npm 11.6.2 vẫn ép link cho file:./... nội bộ.', 'Sau migration chạy npm install --package-lock-only --ignore-scripts rồi npm ci; commit package.json, package-lock.json và .npmrc. Không sửa link:true bằng tay, không đổi ổ đĩa hoặc bật Developer Mode để né exFAT.'],
+    status: 'ok', probe: 'help', probeCmd: `node ${TOOLS}/portable-npm-policy.cjs`, expect: ['--project', '--write', 'Read-only'],
+  },
   // ─────────────────────────────────────────────────────────── onboarding ──
   {
     id: 'map.generate',
@@ -98,7 +108,7 @@ const CAPABILITIES = [
     id: 'unity.intel.doctor',
     group: 'onboarding',
     title: 'Kiểm tra Unity Editor, project lock và Unity-MCP endpoint',
-    npm: 'npm run unity:intel:doctor -- -- --project <UnityProjectRoot>',
+    npm: 'npm run unity:intel:doctor -- --project <UnityProjectRoot>',
     cmd: `node ${TOOLS}/unity-intel-cli.cjs doctor`,
     args: ['--project <UnityProjectRoot>'],
     optional: ['--unity <file>', '--mcp-url <url>', '--timeout-ms <n>', '--json'],
@@ -120,7 +130,7 @@ const CAPABILITIES = [
     id: 'unity.intel.setup',
     group: 'port',
     title: 'Cài Unity-side compact scanner + Unity-MCP và reload tự động',
-    npm: 'npm run unity:intel:setup -- -- --project <UnityProjectRoot>',
+    npm: 'npm run unity:intel:setup -- --project <UnityProjectRoot>',
     cmd: `node ${TOOLS}/unity-intel-cli.cjs setup`,
     args: ['--project <UnityProjectRoot>'],
     optional: [
@@ -209,7 +219,7 @@ const CAPABILITIES = [
     npm: 'npm run ai:port:core:scaffold -- --unity-project <UnityProjectRoot> --cocos-project <CocosProjectRoot>',
     cmd: `node ${TOOLS}/core-gameplay-port.cjs scaffold --json`,
     args: ['--unity-project <UnityProjectRoot>', '--cocos-project <CocosProjectRoot>'],
-    optional: ['--provider <static|auto|unity-mcp>', '--entry-scene <Assets/...unity>', '--bootstrap', '--manifest <file>', '--wiring <file>', '--packet <file>', '--force', '--dry-run', '--json'],
+    optional: ['--provider <static|auto|unity-mcp>', '--entry-scene <Assets/...unity>', '--bootstrap', '--manifest <file>', '--wiring <file>', '--scaffold-receipt <file>', '--packet <file>', '--force', '--dry-run', '--json'],
     when: 'Lệnh mặc định khi bắt đầu implementation port mới. Dùng static provider trước, sinh scene khung + wiring report, rồi lưu resume packet bounded để agent khác tiếp tục mà không đọc lại toàn source.',
     outputs: [
       '<CocosProjectRoot>/.ai/port/core-gameplay.json',
@@ -236,7 +246,7 @@ const CAPABILITIES = [
     npm: 'npm run ai:port:core:resume -- --unity-project <UnityProjectRoot> --cocos-project <CocosProjectRoot>',
     cmd: `node ${TOOLS}/core-gameplay-port.cjs resume --json`,
     args: ['--unity-project <UnityProjectRoot>', '--cocos-project <CocosProjectRoot>'],
-    optional: ['--manifest <file>', '--wiring <file>', '--packet <file>', '--write', '--dry-run', '--json'],
+    optional: ['--manifest <file>', '--wiring <file>', '--scaffold-receipt <file>', '--packet <file>', '--write', '--dry-run', '--json'],
     when: 'Bước đầu của mọi lượt tiếp tục một port đang dở. Đọc packet compact trước khi mở raw Unity source; dùng --write trước khi handoff/interruption để refresh packet trên disk.',
     outputs: ['stdout JSON bounded phase/sourceFresh/staticFirst/report/checkpoints/nextActions/tokenBudgetHints', '<packet> khi có --write'],
     limits: [
@@ -254,7 +264,7 @@ const CAPABILITIES = [
     id: 'unity.intel.scan',
     group: 'port',
     title: 'Scan compact Unity project qua static + Unity-MCP live provider',
-    npm: 'npm run ai:unity:scan -- -- --project <UnityProjectRoot>',
+    npm: 'npm run ai:unity:scan -- --project <UnityProjectRoot>',
     cmd: `node ${TOOLS}/unity-intel-cli.cjs scan --json`,
     args: ['--project <UnityProjectRoot>'],
     optional: [
@@ -281,7 +291,7 @@ const CAPABILITIES = [
     id: 'unity.intel.query',
     group: 'port',
     title: 'Đọc một slice Unity index có cursor và payload giới hạn',
-    npm: 'npm run ai:unity:query -- -- --project <UnityProjectRoot> --section <name>',
+    npm: 'npm run ai:unity:query -- --project <UnityProjectRoot> --section <name>',
     cmd: `node ${TOOLS}/unity-intel-cli.cjs query --json`,
     args: ['--project <UnityProjectRoot>', '--section <name>'],
     optional: [
@@ -303,7 +313,7 @@ const CAPABILITIES = [
     id: 'port.plan',
     group: 'port',
     title: 'Phân tích project Unity và lập kế hoạch port',
-    npm: 'npm run ai:port:plan -- -- --project <UnityProjectRoot>',
+    npm: 'npm run ai:port:plan -- --project <UnityProjectRoot>',
     cmd: `node ${TOOLS}/port-plan.cjs`,
     args: ['--project <UnityProjectRoot>'],
     optional: [
@@ -1299,7 +1309,7 @@ const CORE_RULES = [
   },
   {
     id: 'portable-cross-pc-bootstrap',
-    rule: 'Trạng thái dùng chung phải sống trong Git: exact `playable-shared-kit` submodule commit, `capabilities.def.cjs`, skill source, global pinned Work Memory và registry/matrix/oracle/reference/watchFiles. Sau clone trên PC khác phải chạy `git submodule update --init --recursive`, `npm ci`, cài runtime dependencies của extension bằng `npm ci --omit=dev --ignore-scripts --prefix playable-shared-kit/packages/extensions/cocos-mcp`, `sync:shared`, cài dependencies của `extensions/cocos-mcp`, `ai:portable:doctor`, `ai:sync`, `ai:contract:verify` và `memory:doctor` trước port/resume. Không dùng absolute path, temp screenshot, user-local cache, mutation receipt hoặc resume packet từ máy cũ làm handoff truth; các state local phải regenerate và bind lại source hiện tại.',
+    rule: 'Trạng thái dùng chung phải sống trong Git: exact `playable-shared-kit` submodule commit, `capabilities.def.cjs`, skill source, global pinned Work Memory và registry/matrix/oracle/reference/watchFiles. Sau clone phải chạy `git submodule update --init --recursive`, `node playable-shared-kit/tools/portable-npm-policy.cjs --write` trước `npm ci`. exFAT không hỗ trợ symlink: bắt buộc file:playable-shared-kit/... không có ./ + .npmrc install-links=true + lockfile không link:true; npm 11.6.2 vẫn ép link cho file:./... nội bộ. Legacy lock phải regenerate bằng `npm install --package-lock-only --ignore-scripts`, không sửa link flag tay; commit package.json/package-lock.json/.npmrc và không retry npm ci mù. Tiếp theo cài runtime dependencies của extension bằng `npm ci --omit=dev --ignore-scripts --prefix playable-shared-kit/packages/extensions/cocos-mcp`, `sync:shared`, cài dependencies của `extensions/cocos-mcp`, `ai:portable:doctor`, `ai:sync`, `ai:contract:verify` và `memory:doctor` trước port/resume. Không dùng absolute path, temp screenshot, user-local cache, mutation receipt hoặc resume packet từ máy cũ làm handoff truth; các state local phải regenerate và bind lại source hiện tại.',
   },
   {
     id: 'meta-files',
@@ -1311,7 +1321,7 @@ const CORE_RULES = [
   },
   {
     id: 'unity-preflight',
-    rule: 'Trước khi agent đọc raw Unity source hoặc chạy bất kỳ port tool có ghi output, BẮT BUỘC chạy `npm run ai:port:preflight -- -- --project <UnityProjectRoot>` (hoặc MCP `scanUnityProject`) và đọc `decision`, `coreGameplay`, `features`, `obligationIndex`, `coreObligationIndex`, `obligations`. Chỉ query evidence bounded khi brief yêu cầu. Hard blocker chặn implement; source high trong core/adapter phải được giải quyết, source high deferred phải có explicit out-of-scope disposition. Mutation receipt chỉ áp dụng cho Assets/package root đã khai báo; closure staging ngoài project phải có exact provenance và explicit --unity-project.',
+    rule: 'Trước khi agent đọc raw Unity source hoặc chạy bất kỳ port tool có ghi output, BẮT BUỘC chạy `npm run ai:port:preflight -- --project <UnityProjectRoot>` (hoặc MCP `scanUnityProject`) và đọc `decision`, `coreGameplay`, `features`, `obligationIndex`, `coreObligationIndex`, `obligations`. Chỉ query evidence bounded khi brief yêu cầu. Hard blocker chặn implement; source high trong core/adapter phải được giải quyết, source high deferred phải có explicit out-of-scope disposition. Mutation receipt chỉ áp dụng cho Assets/package root đã khai báo; closure staging ngoài project phải có exact provenance và explicit --unity-project.',
     agentContract: {
       entrypoints: ['port.preflight'],
       mcpEntrypoint: 'scanUnityProject',

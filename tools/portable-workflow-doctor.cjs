@@ -197,6 +197,13 @@ function runDoctor(options = {}, dependencies = {}) {
     addCheck(checks, 'package-json', false, 'high', 'package.json cannot be parsed.', { error: error.message }, 'Restore package.json from Git.');
   }
   if (packageJson) {
+    const rcPath = path.join(projectRoot, '.npmrc');
+    let lock = null;
+    try { lock = JSON.parse(fs.readFileSync(path.join(projectRoot, 'package-lock.json'), 'utf8')); } catch {}
+    const npmPolicy = require('./portable-npm-policy.cjs').inspectPolicy(packageJson, fs.existsSync(rcPath) ? fs.readFileSync(rcPath, 'utf8') : '', lock);
+    addCheck(checks, 'npm-copy-policy', npmPolicy.ok, 'high',
+      npmPolicy.ok ? 'Shared packages install without symlinks, including on exFAT.' : 'npm dependency policy can require unsupported symlinks.',
+      npmPolicy, npmPolicy.ok ? null : 'Run node playable-shared-kit/tools/portable-npm-policy.cjs --write; regenerate legacy lockfile with npm install --package-lock-only --ignore-scripts, then npm ci.');
     const scriptCheck = inspectPackageScripts(packageJson);
     addCheck(checks, 'portable-scripts', scriptCheck.ok, 'high',
       scriptCheck.ok ? 'Portable workflow scripts match the shared tool entrypoints.' : 'Portable workflow scripts are missing or drifted.',

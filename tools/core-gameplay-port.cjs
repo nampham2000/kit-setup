@@ -68,6 +68,7 @@ Options:
   --manifest <file>      Relative path inside Cocos project. Default: ${DEFAULT_MANIFEST}.
   --entry-scene <path>   Explicit indexed Unity runtime scene, e.g. Assets/Scenes/Complete.unity.
   --wiring <file>        Static scene wiring path. Default: ${DEFAULT_WIRING}.
+  --scaffold-receipt <file> Static provenance receipt path. Default: ${DEFAULT_STATIC_SCAFFOLD_RECEIPT}.
   --packet <file>        Resume packet path. Default: ${DEFAULT_RESUME_PACKET}.
   --provider <mode>      auto | static | unity-mcp. Default: auto.
   --bootstrap            Allow Unity-MCP package setup/reload during init.
@@ -112,7 +113,7 @@ function parseArgs(argv) {
     if (argument === '--no-run-gates') { options.runGates = false; continue; }
     const equal = /^--([a-z-]+)=(.*)$/.exec(argument);
     const name = equal ? equal[1] : argument.startsWith('--') ? argument.slice(2) : null;
-    if (!['unity-project', 'cocos-project', 'manifest', 'wiring', 'packet', 'provider', 'entry-scene'].includes(name)) {
+    if (!['unity-project', 'cocos-project', 'manifest', 'wiring', 'scaffold-receipt', 'packet', 'provider', 'entry-scene'].includes(name)) {
       throw corePortError('CORE_PORT_OPTION_INVALID', `Option khong ho tro: ${argument}`);
     }
     const value = equal ? equal[2] : argv[++index];
@@ -705,6 +706,10 @@ function runStaticScenePort(unityRoot, cocosRoot, manifest, options = {}, depend
       wiring: relativeSlash(cocosRoot, wiringFile),
       receipt,
     };
+  }
+  const receiptFile = resolveContained(cocosRoot, options.scaffoldReceipt || DEFAULT_STATIC_SCAFFOLD_RECEIPT);
+  if (fs.existsSync(receiptFile)) {
+    throw corePortError('CORE_PORT_STATIC_RECEIPT_EXISTS', 'Static receipt already exists; choose a separate --scaffold-receipt before generating outputs.');
   }
   const run = dependencies.runStaticScene || ((request) => {
     const child = spawnSync(process.execPath, [

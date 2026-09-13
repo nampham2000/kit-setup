@@ -132,6 +132,10 @@ function verifyCapability(cap, scripts, helpCache) {
   const errors = [];
   const warnings = [];
 
+  if (/\s--\s+--(?:\s|$)/.test(String(cap.npm || ''))) {
+    errors.push('npm command contains a duplicate -- separator; npm forwards the second separator to the CLI.');
+  }
+
   const embeddedDuplicates = findEmbeddedArgumentDuplicates(cap);
   if (embeddedDuplicates.length) {
     errors.push(`cmd lặp operand đã khai báo trong args: ${embeddedDuplicates.join(', ')}.`);

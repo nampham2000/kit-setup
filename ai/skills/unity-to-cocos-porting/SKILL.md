@@ -12,6 +12,10 @@ This skill provides step-by-step guidance and architectural rules for converting
 
 ### Diagnose port blockers before stopping
 
+- Use one npm forwarding separator: `npm run unity:intel:doctor -- --project <root>`.
+  An extra standalone `--` is passed to the parser and fails before probing Unity;
+  classify that as a command contract defect, not an Editor or MCP failure.
+
 - Start with `unity:intel:doctor`. Check installation, connection and an actual
   `playable-port-scan` response separately. A visible Unity MCP window or a ping
   is not scan evidence. If the package is missing, use the documented setup within
@@ -73,6 +77,7 @@ hoặc project clone mới, chạy chuỗi này trước khi đọc Unity source
 
 ```bash
 git submodule update --init --recursive
+node playable-shared-kit/tools/portable-npm-policy.cjs --write
 npm ci
 npm ci --omit=dev --ignore-scripts --prefix playable-shared-kit/packages/extensions/cocos-mcp
 npm run sync:shared
@@ -87,6 +92,29 @@ Root `npm ci` does not install extension dependencies. The first extension insta
 lets the offline schema gate resolve its runtime imports; the second prepares the
 synced extension for Editor loading. A failed sync gate must leave target files
 intact, including with `--clean`; install missing dependencies and retry sync.
+
+### exFAT: fix dependency policy before retrying installation
+
+On exFAT, npm local dependency symlinks fail with EISDIR. This is not a missing
+package or an administrator permission problem. Do not repeat the same `npm ci`,
+change disks, or recommend Developer Mode. The shared portable policy requires
+all three: `file:playable-shared-kit/packages/...` (without `./`), project
+`.npmrc` with `install-links=true`, and lockfile entries without `link: true`.
+The installed npm 11.6.2 explicitly forces links for internal `file:./...` paths
+even with install-links enabled, so that setting alone is insufficient.
+
+For a legacy clone, run the policy tool with `--write`, then
+`npm install --package-lock-only --ignore-scripts` to let npm migrate the lockfile,
+and `npm ci`. Commit `.npmrc`, package.json and package-lock.json together.
+Do not manually flip lockfile link flags. `sync:shared` preserves the policy and
+`ai:portable:doctor` rejects regressions. Verify actual package resolution and
+that both installed shared package directories are ordinary directories.
+These packages are copies: after editing shared package source, sync Cocos assets
+and reinstall npm copies when Node consumers require the changed package.
+
+When starting a different game in a clone containing a previous port, use distinct
+manifest, wiring, packet and `--scaffold-receipt` paths. Never reuse another game's
+receipt. A receipt collision must be rejected before scene/wiring output is written.
 
 Work Memory may create a per-checkout database during initial recall. Shared-kit
 Git ignores `tools/work-memory/data/repo/`; keep this local state out of commits.

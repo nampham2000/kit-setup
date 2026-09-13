@@ -121,7 +121,8 @@
     "test:regressions": "node --test playable-shared-kit/tools/port-regression-gate.test.cjs",
     "test:unity:intel:samples": "node playable-shared-kit/tools/unity-intel/sample-project-regression.cjs",
     "test:unity:all": "node playable-shared-kit/tools/shader-compiler/test-all-unity-projects.cjs",
-    "playbook": "node -e \"const {exec}=require('child_process'); exec(process.platform==='win32'?'start docs/playbook/index.html':(process.platform==='darwin'?'open docs/playbook/index.html':'xdg-open docs/playbook/index.html'))\""
+    "playbook": "node -e \"const {exec}=require('child_process'); exec(process.platform==='win32'?'start docs/playbook/index.html':(process.platform==='darwin'?'open docs/playbook/index.html':'xdg-open docs/playbook/index.html'))\"",
+    "test:portable": "node --test playable-shared-kit/tools/portable-npm-policy.test.cjs playable-shared-kit/tools/portable-workflow-doctor.test.cjs playable-shared-kit/tools/sync-shared-kit.test.cjs"
   },
   "dependencies": {
     "better-sqlite3": "^11.8.1"

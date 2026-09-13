@@ -67,6 +67,8 @@ Use `global` only for a lesson reusable by every project. The corrected content 
 
 ## 4. Database Integrity and Portable Runtime
 
+- Nếu `npm ci` lỗi EISDIR/symlink trên exFAT, chạy `node playable-shared-kit/tools/portable-npm-policy.cjs --write`, rồi `npm install --package-lock-only --ignore-scripts` và `npm ci`. Dùng `file:playable-shared-kit/...` không có `./`, `.npmrc` với `install-links=true`, và lockfile không có `link:true`. Chỉ bật install-links không đủ với npm 11.6.2. Không chẩn đoán DB corrupt khi dependency chưa cài được; commit cả ba file policy trước handoff.
+
 - Node 20 không có `node:sqlite`; project template phải khai báo `better-sqlite3` để keyword memory vẫn chạy.
 - Khi query/stats có count mâu thuẫn hoặc DB được copy từ máy khác, chạy read-only doctor:
   ```bash

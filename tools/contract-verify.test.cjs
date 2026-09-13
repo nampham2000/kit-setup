@@ -7,7 +7,15 @@ const test = require('node:test');
 
 const { CAPABILITIES, CORE_RULES } = require('../ai/capabilities.def.cjs');
 const { fullCommand } = require('./capability-manifest.cjs');
-const { findEmbeddedArgumentDuplicates } = require('./contract-verify.cjs');
+const { findEmbeddedArgumentDuplicates, verifyCapability } = require('./contract-verify.cjs');
+
+test('npm examples contain exactly one forwarding separator', () => {
+  for (const capability of CAPABILITIES) {
+    assert.doesNotMatch(capability.npm || '', /\s--\s+--(?:\s|$)/, capability.id);
+  }
+  const result = verifyCapability({ id: 'broken', npm: 'npm run doctor -- -- --project sample' }, {}, new Map());
+  assert.ok(result.errors.some(error => error.includes('duplicate -- separator')));
+});
 
 test('capability commands do not duplicate flags or positional placeholders', () => {
   for (const capability of CAPABILITIES) {

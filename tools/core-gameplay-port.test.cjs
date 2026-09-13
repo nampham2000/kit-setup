@@ -23,6 +23,7 @@ const {
   resumeCorePort,
   resolveContained,
   runRequiredGates,
+  runStaticScenePort,
   scaffoldCorePort,
   validateManifest,
   verifyCorePort,
@@ -251,9 +252,26 @@ test('atomic manifest publish supports Windows filesystems without hard links', 
 });
 
 test('scaffold defaults to static provider and resume supports explicit packet persistence', () => {
+  assert.equal(parseArgs(['scaffold', '--unity-project', '.', '--scaffold-receipt', '.ai/new.receipt.json']).scaffoldReceipt, '.ai/new.receipt.json');
   assert.equal(parseArgs(['scaffold', '--unity-project', '.']).provider, 'static');
   assert.equal(parseArgs(['scaffold', '--unity-project', '.', '--provider', 'unity-mcp']).provider, 'unity-mcp');
   assert.equal(parseArgs(['resume', '--unity-project', '.', '--write']).write, true);
+});
+
+test('receipt collision fails before invoking the scene writer', t => {
+  const fixture = projectFixture(t);
+  const relative = '.ai/port/old.receipt.json';
+  fs.mkdirSync(path.join(fixture.cocos, '.ai/port'), { recursive: true });
+  fs.writeFileSync(path.join(fixture.cocos, relative), 'old provenance');
+  const manifest = { source: { entryScene: 'Assets/Scenes/Gameplay.unity' }, delivery: { targetEntryScene: 'assets/New.scene' } };
+  fs.writeFileSync(path.join(fixture.unity, manifest.source.entryScene), 'source');
+  let called = false;
+  assert.throws(() => runStaticScenePort(fixture.unity, fixture.cocos, manifest, { scaffoldReceipt: relative }, {
+    runStaticScene() { called = true; },
+  }), error => error.code === 'CORE_PORT_STATIC_RECEIPT_EXISTS');
+  assert.equal(called, false);
+  assert.equal(fs.existsSync(path.join(fixture.cocos, 'assets/New.scene')), false);
+  assert.equal(fs.readFileSync(path.join(fixture.cocos, relative), 'utf8'), 'old provenance');
 });
 
 test('static scaffold creates scene wiring and a bounded resume packet for interrupted agents', async t => {
