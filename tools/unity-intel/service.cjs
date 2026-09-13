@@ -909,8 +909,8 @@ async function scanUnityProject(input = {}, injected = {}) {
         const causeCode = error.code;
         error.code = packageFailure.code;
         error.message = packageFailure.code === 'UNITY_PACKAGE_TLS_CERTIFICATE_ERROR'
-          ? 'Unity Package Manager không tải được Unity-MCP vì TLS certificate verification thất bại; live scanner chưa được cài/reload.'
-          : 'Unity Package Manager không resolve được package Unity-MCP; live scanner chưa được cài/reload.';
+          ? 'Unity Package Manager ghi nhận lỗi TLS certificate verification; chưa xác nhận live scanner đã cài/reload. Xem packageFailure để xác định package liên quan.'
+          : 'Unity Package Manager ghi nhận lỗi resolve package; chưa xác nhận live scanner đã cài/reload. Xem packageFailure để xác định package liên quan.';
         error.details = { ...(error.details || {}), causeCode, packageFailure };
       }
       const readCompileDiagnostics = injected.readCompileDiagnostics || readUnityCompileDiagnostics;

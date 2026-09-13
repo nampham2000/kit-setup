@@ -25,6 +25,11 @@ This skill provides step-by-step guidance and architectural rules for converting
   or domain reload and retry readiness within its deadline. Do not kill the user's
   Editor, launch a second instance, expose tokens, or claim a provider fix merely
   because setup/retry restored this particular project.
+- A generic `Curl error 35` / `UnityTls error code: 7` in Editor.log may come from
+  unrelated Unity services. Require nearby Package Manager attribution before
+  diagnosing package TLS failure; otherwise preserve the scanner timeout and
+  inspect the project-owned UPM log. Do not assert MCP could not download without
+  evidence identifying that package.
 - A scan timeout is not proof that Unity gameplay cannot run. Continue independent
   static work only when preflight authorizes it. Keep unresolved source-integrity
   blockers and missing live visual acceptance evidence explicit.

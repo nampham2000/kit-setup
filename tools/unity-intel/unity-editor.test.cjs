@@ -247,6 +247,7 @@ test('extracts project-owned Unity Package Manager TLS failure without reading a
     'WorkingDir: D:/Other/UnityProject',
     'Curl error 35: Cert verify failed. Certificate could not be verified',
     `WorkingDir: ${fixture.root.replace(/\\/g, '/')}`,
+    '[Package Manager] Downloading com.ivanmurzak.unity.mcp',
     'Curl error 35: Cert verify failed. Certificate could not be verified (either omitted or unsupported).',
     'UnityTls error code: 7',
     '',
@@ -255,4 +256,11 @@ test('extracts project-owned Unity Package Manager TLS failure without reading a
   assert.equal(result.code, 'UNITY_PACKAGE_TLS_CERTIFICATE_ERROR');
   assert.equal(result.count, 2);
   assert.equal(result.evidence.some(line => /Other/.test(line)), false);
+});
+
+test('unattributed Unity service TLS errors do not diagnose a package download failure', t => {
+  const fixture = createUnityFixture(t);
+  const editorLog = path.join(fixture.root, 'Editor.log');
+  fs.writeFileSync(editorLog, `WorkingDir: ${fixture.root.replace(/\\/g, '/')}\nCurl error 35: Cert verify failed. Certificate could not be verified\nUnityTls error code: 7\n`);
+  assert.equal(readUnityPackageDiagnostics(fixture.root, { editorLog }), null);
 });

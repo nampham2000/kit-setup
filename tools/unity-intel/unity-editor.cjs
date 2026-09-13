@@ -624,10 +624,16 @@ function readUnityPackageDiagnostics(projectOrPath, options = {}) {
   const evidence = [];
   const seen = new Set();
   let code = null;
-  for (const line of lines.slice(targetStart, targetEnd)) {
+  const projectLines = lines.slice(targetStart, targetEnd);
+  for (let index = 0; index < projectLines.length; index++) {
+    const line = projectLines[index];
     const trimmed = line.trim();
     if (/Curl error 35:.*Cert(?:ificate)? verify failed/i.test(trimmed)
       || /UnityTls error code:\s*7/i.test(trimmed)) {
+      // Unity services also log these messages. A project-owned TLS line alone
+      // does not identify Package Manager, much less an MCP download failure.
+      const context = projectLines.slice(Math.max(0, index - 4), index + 5).join('\n');
+      if (!/(?:\[Package Manager\]|\bUPM\b|Error adding package|package\.openupm\.com|com\.ivanmurzak\.unity\.mcp)/i.test(context)) continue;
       code = 'UNITY_PACKAGE_TLS_CERTIFICATE_ERROR';
     } else if (/(?:Package Manager|UPM).*(?:error|failed)|Error adding package/i.test(trimmed)) {
       code = code || 'UNITY_PACKAGE_RESOLUTION_ERROR';
