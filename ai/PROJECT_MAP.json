@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "generatedAt": "2026-09-12T14:16:11.119Z",
+    "generatedAt": "2026-09-13T09:28:43.852Z",
     "description": "Compact project manifest for AI Agents. Use this instead of scanning file trees.",
     "project": {
       "projectName": "cc_playable_framework",
@@ -20,14 +20,24 @@
   },
   "scenes": [
     {
+      "name": "Complete",
+      "path": "assets/Complete.scene",
+      "sizeKb": 25.8
+    },
+    {
       "name": "Gameplay",
       "path": "assets/Gameplay.scene",
       "sizeKb": 13.3
     },
     {
-      "name": "Complete",
-      "path": "assets/Complete.scene",
-      "sizeKb": 24.4
+      "name": "Game",
+      "path": "assets/Game.scene",
+      "sizeKb": 54.4
+    },
+    {
+      "name": "MainMenu",
+      "path": "assets/MainMenu.scene",
+      "sizeKb": 5.1
     }
   ],
   "prefabs": [
@@ -65,6 +75,11 @@
       "name": "Fade",
       "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/ui/Fade.prefab",
       "sizeKb": 3.5
+    },
+    {
+      "name": "GameplayUIAnimationRewardHandler",
+      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/ui/GameplayUIAnimationRewardHandler.prefab",
+      "sizeKb": 23.8
     },
     {
       "name": "Logo02",
@@ -107,11 +122,6 @@
       "sizeKb": 371.3
     },
     {
-      "name": "GameplayUIAnimationRewardHandler",
-      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/ui/GameplayUIAnimationRewardHandler.prefab",
-      "sizeKb": 23.8
-    },
-    {
       "name": "lose",
       "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/ui/lose.prefab",
       "sizeKb": 32.3
@@ -137,6 +147,11 @@
       "sizeKb": 176.3
     },
     {
+      "name": "hint",
+      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/vfx/hint.prefab",
+      "sizeKb": 114.7
+    },
+    {
       "name": "hit",
       "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/vfx/hit.prefab",
       "sizeKb": 67.7
@@ -160,11 +175,6 @@
       "name": "tutorial",
       "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/vfx/tutorial.prefab",
       "sizeKb": 69.5
-    },
-    {
-      "name": "hint",
-      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/vfx/hint.prefab",
-      "sizeKb": 114.7
     },
     {
       "name": "artstudio",
@@ -925,42 +935,29 @@
       "name": "tutorial",
       "path": "assets/gameplay-bundles/hidden-suspect-normal-sound-bg/hidden-suspect/vfx/tutorial.prefab",
       "sizeKb": 69.5
+    },
+    {
+      "name": "Unit_Knight_Jarek",
+      "path": "assets/dragon-crashers/units/Unit_Knight_Jarek.prefab",
+      "sizeKb": 139.4
     }
   ],
   "scripts": {
-    "count": 32,
+    "count": 34,
     "byDir": [
       {
-        "dir": "assets/script/shared/sdk/analytics",
+        "dir": "assets/script/hidden-suspect",
         "names": [
-          "GameTrackingService"
+          "HiddenSuspectGame",
+          "HiddenSuspectSession"
         ]
       },
       {
-        "dir": "assets/script/shared/sdk/platform",
+        "dir": "assets/script/pixel-light",
         "names": [
-          "PlayableAdDownloadEvent",
-          "SuperHtmlPlayable"
-        ]
-      },
-      {
-        "dir": "assets/script/shared/sdk",
-        "names": [
-          "index"
-        ]
-      },
-      {
-        "dir": "assets/script/shared/core/utils",
-        "names": [
-          "GameUtils"
-        ]
-      },
-      {
-        "dir": "assets/script/shared/core/utils/pool",
-        "names": [
-          "NodePoolAdapter",
-          "ObjectPool",
-          "Poolable"
+          "PixelLightAnimator",
+          "PixelLightGame",
+          "PixelLightPost"
         ]
       },
       {
@@ -993,16 +990,42 @@
         ]
       },
       {
+        "dir": "assets/script/shared/core/utils",
+        "names": [
+          "GameUtils"
+        ]
+      },
+      {
+        "dir": "assets/script/shared/core/utils/pool",
+        "names": [
+          "NodePoolAdapter",
+          "ObjectPool",
+          "Poolable"
+        ]
+      },
+      {
         "dir": "assets/script/shared",
         "names": [
           "index"
         ]
       },
       {
-        "dir": "assets/script/hidden-suspect",
+        "dir": "assets/script/shared/sdk/analytics",
         "names": [
-          "HiddenSuspectGame",
-          "HiddenSuspectSession"
+          "GameTrackingService"
+        ]
+      },
+      {
+        "dir": "assets/script/shared/sdk",
+        "names": [
+          "index"
+        ]
+      },
+      {
+        "dir": "assets/script/shared/sdk/platform",
+        "names": [
+          "PlayableAdDownloadEvent",
+          "SuperHtmlPlayable"
         ]
       },
       {
@@ -1015,20 +1038,19 @@
         ]
       },
       {
-        "dir": "assets/script/pixel-light",
+        "dir": "assets/script/dragon",
         "names": [
-          "PixelLightAnimator",
-          "PixelLightGame",
-          "PixelLightPost"
+          "DragonBattle",
+          "DragonGame"
         ]
       }
     ]
   },
   "assetsSummary": {
-    "audioCount": 84,
+    "audioCount": 103,
     "audio": {
-      "count": 84,
-      "totalKb": 825.3,
+      "count": 103,
+      "totalKb": 2807.7,
       "sample": [
         "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/audio/celebrationStart.mp3",
         "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/audio/celebrationTarget.mp3",
@@ -1037,7 +1059,7 @@
         "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/audio/gameplayBgm.mp3",
         "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/audio/levelIntro.mp3"
       ],
-      "truncated": 78
+      "truncated": 97
     },
     "modelCount": 1,
     "models": {
@@ -1051,42 +1073,42 @@
     "shaderCount": 7,
     "shaders": {
       "count": 7,
-      "totalKb": 27.5,
+      "totalKb": 27.6,
       "sample": [
-        "assets/effects/UnitySpriteRendererColor.effect",
         "assets/effects/HiddenSuspectTCP2.effect",
-        "assets/effects/TCP2HybridShader2.effect",
-        "assets/effects/hidden-suspect-particle-alpha.effect",
         "assets/effects/PixelLight.effect",
-        "assets/effects/PixelLightPost.effect"
+        "assets/effects/PixelLightPost.effect",
+        "assets/effects/TCP2HybridShader2.effect",
+        "assets/effects/UnitySpriteRendererColor.effect",
+        "assets/effects/hidden-suspect-particle-alpha.effect"
       ],
       "truncated": 1
     },
     "materials": {
-      "count": 23,
-      "totalKb": 19.6,
+      "count": 25,
+      "totalKb": 20.8,
       "sample": [
+        "assets/materials/HiddenSuspectTutorialGlow.mtl",
         "assets/materials/UnitySpriteRendererColor.mtl",
         "assets/materials/UnitySpriteRendererColorOpaque.mtl",
         "assets/materials/UnitySpriteRendererGlow.mtl",
-        "assets/materials/HiddenSuspectTutorialGlow.mtl",
-        "assets/unity_imported/_Game/_VFX/Materials/Circle03.mtl",
-        "assets/unity_imported/_Game/_VFX/Materials/Circles_Additive.mtl"
+        "assets/unity_imported/JMO Assets/Cartoon FX Remaster/CFXR Assets/Graphics/cfxr star blurred add.mtl",
+        "assets/unity_imported/JMO Assets/Cartoon FX Remaster/CFXR Assets/Graphics/cfxr stretch trait blur add.trail.mtl"
       ],
-      "truncated": 17
+      "truncated": 19
     },
     "textures": {
-      "count": 121,
-      "totalKb": 5804.6,
+      "count": 502,
+      "totalKb": 27795.7,
       "sample": [
-        "assets/resources/pixel-light/textures/Wall3.png",
-        "assets/resources/pixel-light/textures/Wall4.png",
-        "assets/resources/pixel-light/textures/Wall1.png",
-        "assets/resources/pixel-light/textures/Wall2.png",
-        "assets/resources/pixel-light/textures/Ground2.png",
-        "assets/resources/pixel-light/textures/Ground1.png"
+        "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/backgrounds/end.jpg",
+        "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/backgrounds/game.jpg",
+        "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/ui/frame_hint_header.png",
+        "assets/gameplay-bundles/hidden-suspect-easy-no-sound-bg/hidden-suspect/backgrounds/end.jpg",
+        "assets/gameplay-bundles/hidden-suspect-easy-no-sound-bg/hidden-suspect/backgrounds/game.jpg",
+        "assets/gameplay-bundles/hidden-suspect-easy-no-sound-bg/hidden-suspect/ui/frame_hint_header.png"
       ],
-      "truncated": 115
+      "truncated": 496
     },
     "animations": {
       "count": 12,
@@ -1102,8 +1124,8 @@
       "truncated": 6
     },
     "prefabsInAssets": {
-      "count": 179,
-      "totalKb": 18753,
+      "count": 180,
+      "totalKb": 18892.4,
       "sample": [
         "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/levels/TutorialVFX.prefab",
         "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/levels/artstudio.prefab",
@@ -1112,22 +1134,22 @@
         "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/ui/ButtonClose.prefab",
         "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/ui/Char_GamePlay.prefab"
       ],
-      "truncated": 173
+      "truncated": 174
     },
     "unityImported": {
       "exists": true,
       "root": "assets/unity_imported",
-      "count": 114,
-      "totalKb": 8823.5,
+      "count": 117,
+      "totalKb": 8865.1,
       "sample": [
-        "assets/unity_imported/_Game/_VFX/Materials/Circle03.mtl",
-        "assets/unity_imported/_Game/_VFX/Materials/Circles_Additive.mtl",
-        "assets/unity_imported/_Game/_VFX/Materials/Circles_Additive_sprite-52f0c9cb69ef58a43887e781deaea292.mtl",
-        "assets/unity_imported/_Game/_VFX/Materials/Radial Glow.mtl",
-        "assets/unity_imported/_Game/_VFX/Materials/bastar.mtl",
-        "assets/unity_imported/_Game/_VFX/Materials/circle.png"
+        "assets/unity_imported/JMO Assets/Cartoon FX Remaster/CFXR Assets/Graphics/cfxr star blurred add.mtl",
+        "assets/unity_imported/JMO Assets/Cartoon FX Remaster/CFXR Assets/Graphics/cfxr star blurred.png",
+        "assets/unity_imported/JMO Assets/Cartoon FX Remaster/CFXR Assets/Graphics/cfxr stretch trait blur add.trail.mtl",
+        "assets/unity_imported/JMO Assets/Cartoon FX Remaster/CFXR Assets/Graphics/cfxr stretch trait blur.png",
+        "assets/unity_imported/Module/ModuleAdBreak/UI/AdBreakGamePlay/ads_break_1.png",
+        "assets/unity_imported/Module/ModuleAdBreak/UI/AdBreakGamePlay/ads_break_2.png"
       ],
-      "truncated": 108
+      "truncated": 111
     }
   },
   "configSummary": {
@@ -1164,9 +1186,7 @@
       "presets"
     ],
     "customKeys": [
-      "hiddenSuspect",
-      "assetImport",
-      "pixelLight"
+      "dragon"
     ],
     "rawPreview": {
       "cta": {
@@ -1377,19 +1397,20 @@
     }
   ],
   "cliCheatSheet": {
+    "portable.npm.policy": "node playable-shared-kit/tools/portable-npm-policy.cjs",
     "map.generate": "npm run ai:map",
     "scene.inspect": "npm run ai:scene -- <sceneName>",
     "memory.query": "npm run memory:query -- <keyword>",
     "portable.workflow.doctor": "npm run ai:portable:doctor",
-    "unity.intel.doctor": "npm run unity:intel:doctor -- -- --project <UnityProjectRoot>",
-    "unity.intel.setup": "npm run unity:intel:setup -- -- --project <UnityProjectRoot>",
+    "unity.intel.doctor": "npm run unity:intel:doctor -- --project <UnityProjectRoot>",
+    "unity.intel.setup": "npm run unity:intel:setup -- --project <UnityProjectRoot>",
     "port.preflight": "npm run ai:port:preflight -- --project <UnityProjectRoot>",
     "port.core.init": "npm run ai:port:core:init -- --unity-project <UnityProjectRoot> --cocos-project <CocosProjectRoot>",
     "port.core.scaffold": "npm run ai:port:core:scaffold -- --unity-project <UnityProjectRoot> --cocos-project <CocosProjectRoot>",
     "port.core.resume": "npm run ai:port:core:resume -- --unity-project <UnityProjectRoot> --cocos-project <CocosProjectRoot>",
-    "unity.intel.scan": "npm run ai:unity:scan -- -- --project <UnityProjectRoot>",
-    "unity.intel.query": "npm run ai:unity:query -- -- --project <UnityProjectRoot> --section <name>",
-    "port.plan": "npm run ai:port:plan -- -- --project <UnityProjectRoot>",
+    "unity.intel.scan": "npm run ai:unity:scan -- --project <UnityProjectRoot>",
+    "unity.intel.query": "npm run ai:unity:query -- --project <UnityProjectRoot> --section <name>",
+    "port.plan": "npm run ai:port:plan -- --project <UnityProjectRoot>",
     "port.scene": "npm run port:scene -- --scene <file.unity> --unity-root <UnityAssetsFolder> --out assets/<Name>.scene",
     "port.animation.oracle": "npm run ai:port:animation:oracle -- --src <UnityAnimOrDirectory> --unity-root <UnityProjectRoot> --out <oracle.json>",
     "mesh.path.audit": "node playable-shared-kit/tools/runtime-mesh-path-audit.cjs --config <audit.json>",

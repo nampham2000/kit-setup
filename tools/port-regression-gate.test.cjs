@@ -445,3 +445,13 @@ test('portability proof rejects a local-only oracle that another checkout would 
   assert.throws(() => assertPortableRegistry(root, loaded),
     error => error.code === 'REGRESSION_FILES_UNTRACKED' && error.details.files.some(file => file.endsWith('local-only.js')));
 });
+
+test('native rendered animation requires complete sampled source and measured runtime parity',t=>{
+ const root=fixture(t),matrix='tools/qa/rendered.json';
+ const oracle={schemaVersion:1,kind:'unity-rendered-animation-oracle',completeness:'complete',captureFps:30,clipCount:1,clips:[{source:'Assets/Idle.anim',sha256:'a'.repeat(64),frameDigest:'b'.repeat(64),duration:1,loop:true,frameCount:31}]};
+ const fileOracle=path.join(root,'docs/references/animation-oracle.json');fs.writeFileSync(fileOracle,JSON.stringify(oracle));
+ const entry={name:'native',gesture:'0.5,0.5,0.5,0.5,30,1',eval:'({ok:true})',requireEvalOk:true,referenceImage:'docs/references/unity.png',animationOracle:'docs/references/animation-oracle.json',requiredTrace:['start','attack'],requiredReferenceMetrics:{foregroundRgbSimilarity:{min:.9}},requiredEvalMetrics:{frameMismatchCount:{max:0},stateMismatchCount:{max:0},positionMaxError:{max:.5},timingMaxErrorMs:{max:34},animationSampleCount:{min:80},oracleClipCount:{min:1}}};
+ writeMatrix(root,matrix,[entry]);const source=registry([{id:'native',risks:['animation-curve-fidelity'],mandatory:true,runs:1,matrix,watchFiles:['assets/script/Game.ts']}],['animation-curve-fidelity']);const file=writeRegistry(root,source);
+ assert.equal(validateRegistry(root,source,{configFile:file}).suites.length,1);
+ oracle.clips[0].frameCount=15;fs.writeFileSync(fileOracle,JSON.stringify(oracle));assert.throws(()=>validateRegistry(root,source,{configFile:file}),e=>e.code==='REGRESSION_ANIMATION_ORACLE_INVALID');
+});

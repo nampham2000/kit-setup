@@ -31,7 +31,7 @@ const DEFAULT_OUTPUT = '.unity/port-regressions';
 const MAX_REGISTRY_BYTES = 256 * 1024;
 const MAX_MATRIX_BYTES = 512 * 1024;
 const MAX_SUITES = 64;
-const MAX_WATCH_FILES = 64;
+const MAX_WATCH_FILES = 512;
 const RUN_TIMEOUT_MS = 10 * 60 * 1000;
 const RUN_MAX_BUFFER_BYTES = 2 * 1024 * 1024;
 
@@ -272,6 +272,16 @@ function caseHasInputConcurrencyOracle(entry) {
 
 function validateAnimationCurveOracle(file, label) {
   const oracle = readJsonBounded(file, MAX_MATRIX_BYTES, 'REGRESSION_ANIMATION_ORACLE_INVALID');
+  if (oracle?.kind === 'unity-rendered-animation-oracle') {
+    if (oracle.schemaVersion !== 1 || oracle.completeness !== 'complete' || oracle.captureFps < 30
+      || !Array.isArray(oracle.clips) || oracle.clips.length < 1 || oracle.clipCount !== oracle.clips.length
+      || oracle.clips.some(c => !/^(Assets|Packages)\//.test(c.source) || c.source.includes('..')
+        || !/^[a-f0-9]{64}$/.test(c.sha256) || !/^[a-f0-9]{64}$/.test(c.frameDigest)
+        || !(c.duration > 0) || typeof c.loop !== 'boolean' || c.frameCount < Math.ceil(c.duration * oracle.captureFps))) {
+      throw regressionError('REGRESSION_ANIMATION_ORACLE_INVALID', `${label}: native rendered oracle needs source hashes, frame digests and complete >=30 fps coverage.`);
+    }
+    return oracle;
+  }
   if (!oracle || oracle.schemaVersion !== 1 || oracle.kind !== 'unity-animation-curve-oracle'
       || oracle.completeness !== 'complete'
       || !Array.isArray(oracle.clips) || oracle.clips.length < 1
@@ -297,6 +307,15 @@ function validateAnimationCurveOracle(file, label) {
 
 function caseHasAnimationCurveOracle(entry, validatedCases) {
   const oracle = validatedCases.get(entry);
+  if (oracle?.kind === 'unity-rendered-animation-oracle') return caseHasInputGesture(entry) && caseHasEval(entry)
+    && !!entry.referenceImage && Array.isArray(entry.requiredTrace) && entry.requiredTrace.length >= 2
+    && metricBoundAtLeast(entry.requiredReferenceMetrics, 'foregroundRgbSimilarity', 0.9)
+    && metricBoundAtMost(entry.requiredEvalMetrics, 'frameMismatchCount', 0)
+    && metricBoundAtMost(entry.requiredEvalMetrics, 'stateMismatchCount', 0)
+    && metricBoundAtMost(entry.requiredEvalMetrics, 'positionMaxError', 0.5)
+    && metricBoundAtMost(entry.requiredEvalMetrics, 'timingMaxErrorMs', 34)
+    && metricBoundAtLeast(entry.requiredEvalMetrics, 'animationSampleCount', 80)
+    && metricBoundAtLeast(entry.requiredEvalMetrics, 'oracleClipCount', oracle.clips.length);
   const spriteOracle = oracle && oracle.clips.every(clip => clip.tracks.every(track =>
     track.kind === 'object-reference' && track.property === 'm_Sprite'
     && Array.isArray(track.keys) && track.keys.length > 0

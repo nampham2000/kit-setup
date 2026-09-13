@@ -10,6 +10,14 @@ This skill provides step-by-step guidance and architectural rules for converting
 
 ## 1. Automated Tooling First
 
+### Preview combat and filesystem pitfalls
+
+- Keep gameplay delivery first. For explicit preview-only acceptance use core verify with --preview-url; keep all runtime, regression and evidence gates, exclude only packaged build. Never invent a build receipt.
+- On exFAT, run portable-npm-policy before install. Internal dependencies must be copied, never symlinked. Audio conversion must stage on the destination volume; publishing a C: temp file with rename into D: fails EXDEV. A failed publish must preserve the source and any existing destination.
+- Long combat tests may use gestureDelaysMs (0–60000 ms each, <=180000 ms total) with separate real touch lifecycles. Verify heal-drop positive/negative, pause/resume, loss/retry and two wins without changing HP or invoking gameplay methods.
+- Native Unity render baking is an alternative for SpriteSkin/IK/Timeline closures: keep gameplay/state in TypeScript, record every relevant clip at >=30 fps with source hashes and frame digests, and preserve animation signal/sound times. Do not relabel incomplete curve extraction as complete. Use a unity-rendered-animation-oracle plus measured frame/state/position/timing checks, >=80 runtime samples, ordered trace and Unity ROI similarity >=0.90. Keep every atlas/config watched; registry supports up to 512 files per suite. Environment/feedback animation and PSD half-banner mirroring remain source obligations.
+- For Cocos canvas drag, do not pass design-space getUILocation coordinates to a world-space UITransform conversion. Bind the moving control's touch end/cancel as well as global movement and test that releasing really consumes or rejects the item and restores its position.
+
 ### Diagnose port blockers before stopping
 
 - Use one npm forwarding separator: `npm run unity:intel:doctor -- --project <root>`.

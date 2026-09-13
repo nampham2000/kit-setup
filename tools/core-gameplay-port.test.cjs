@@ -432,3 +432,11 @@ test('manifest and evidence paths reject an intermediate symlink or junction', t
   assert.throws(() => resolveContained(fixture.cocos, '.ai/port/evidence/input.json'),
     error => error.code === 'CORE_PORT_PATH_ESCAPE');
 });
+
+test('explicit preview delivery runs runtime against the URL without invoking a build',t=>{
+ const fixture=projectFixture(t),calls=[];
+ const result=runRequiredGates(fixture.cocos,{previewUrl:'http://localhost:7456/',spawnSync:(exe,args)=>{calls.push(args);return {status:0,stdout:'',stderr:''};}});
+ assert.equal(result.length,REQUIRED_SCRIPTS.length-1);assert.equal(result.some(g=>g.id==='build.playable'),false);
+ assert.ok(calls.at(-1).includes('--url'));assert.ok(calls.at(-1).includes('http://localhost:7456/'));
+ assert.throws(()=>parseArgs(['verify','--unity-project',fixture.unity,'--preview-url','http://localhost/;echo']),/Preview URL/);
+});

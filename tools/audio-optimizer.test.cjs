@@ -97,3 +97,8 @@ test('extension changes use an Asset DB move and preserve UUID without touching 
     fs.rmSync(project, { recursive: true, force: true });
   }
 });
+
+test('failed standalone publish preserves both source and existing target',async()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'audio-atomic-'));const input=path.join(root,'input.wav'),target=path.join(root,'output.mp3');fs.writeFileSync(input,'source');fs.writeFileSync(target,'old target');
+ try{await assert.rejects(commitOptimizedAsset(input,target,path.join(root,'missing-stage.mp3'),{outputDir:root,updateMeta:false,backup:false}));assert.equal(fs.readFileSync(input,'utf8'),'source');assert.equal(fs.readFileSync(target,'utf8'),'old target');}finally{fs.rmSync(root,{recursive:true,force:true});}
+});

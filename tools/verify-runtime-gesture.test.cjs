@@ -183,3 +183,12 @@ test('Cocos preview device selection fails closed when the device is absent', as
     /available=Default, WebpageFullScreen/,
   );
 });
+
+test('long battle gesture schedule preserves separate real touch lifecycles', async () => {
+ let clock=0;const events=[];const session={send(method,params){if(method==='Runtime.evaluate')return Promise.resolve({result:{value:JSON.stringify({left:0,top:0,width:100,height:200})}});if(method==='Input.dispatchTouchEvent')events.push({type:params.type,at:clock});return Promise.resolve({});}};
+ const taps=[parseGesture('0.2,0.4,0.2,0.4,30,1'),parseGesture('0.8,0.5,0.8,0.5,30,1')];
+ const result=await dispatchTouchGestureSequence(session,'session',taps,{delaysMs:[0,22000],now:()=>clock,wait:async ms=>{clock+=ms;}});
+ assert.equal(events[3].at-events[2].at,22000);assert.deepEqual(result.delaysMs,[0,22000]);assert.equal(events.filter(e=>e.type==='touchStart').length,2);
+ await assert.rejects(dispatchTouchGestureSequence(session,'s',taps,{delaysMs:[0]}),/must match/);
+ await assert.rejects(dispatchTouchGestureSequence(session,'s',taps,{delaysMs:[0,Infinity]}),/must match/);
+});

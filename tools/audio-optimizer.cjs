@@ -499,9 +499,10 @@ async function commitOptimizedAsset(inputPath, targetPath, tempPath, options) {
   if (options.backup) fs.copyFileSync(inputPath, `${inputPath}.bak`);
 
   if (options.outputDir || !options.updateMeta) {
-    if (!options.outputDir && extensionChanged) fs.unlinkSync(inputPath);
-    if (fs.existsSync(targetPath)) fs.unlinkSync(targetPath);
+    // Conversion stages on the destination volume so this atomic rename also
+    // works when the OS temp directory and the project use different drives.
     fs.renameSync(tempPath, targetPath);
+    if (!options.outputDir && extensionChanged) fs.unlinkSync(inputPath);
     return { assetDb: false, uuidPreserved: null };
   }
 
@@ -556,7 +557,7 @@ async function optimizeAudioFile(ffmpegPath, inputPath, options, qualityConfig) 
   }
 
   const targetPath = path.join(outDir, `${baseName}${targetExt}`);
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'playable-audio-'));
+  const tempDir = fs.mkdtempSync(path.join(options.write ? outDir : os.tmpdir(), '.playable-audio-'));
   const tempPath = path.join(tempDir, `${baseName}${targetExt}`);
 
   const origSize = fs.statSync(inputPath).size;

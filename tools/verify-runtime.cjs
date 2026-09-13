@@ -437,7 +437,12 @@ async function dispatchTouchGestureSequence(session, sessionId, gestures, timing
   const waitFor = timing.wait || wait;
   const gapMs = Math.max(0, Math.min(5000, Math.round(Number(timing.gapMs) || 0)));
   const results = [];
+  const delays = timing.delaysMs;
+  if (delays !== undefined && (!Array.isArray(delays) || delays.length !== gestures.length
+    || delays.some(x => !Number.isFinite(x) || x < 0 || x > 60000)
+    || delays.reduce((a,b) => a+b,0) > 180000)) throw new Error('gestureDelaysMs must match gestures, each 0-60000 ms and total <=180000 ms');
   for (let index = 0; index < gestures.length; index += 1) {
+    if (delays && delays[index] > 0) await waitFor(delays[index]);
     results.push(await dispatchTouchGesture(session, sessionId, gestures[index], {
       now: timing.now,
       wait: waitFor,
@@ -449,7 +454,7 @@ async function dispatchTouchGestureSequence(session, sessionId, gestures, timing
     }));
     if (index + 1 < gestures.length && gapMs > 0) await waitFor(gapMs);
   }
-  return { gapMs, gestures: results };
+  return { gapMs, delaysMs: delays || null, gestures: results };
 }
 
 /**
@@ -601,6 +606,7 @@ async function runOne(target, options) {
       try {
         const sequence = await dispatchTouchGestureSequence(session, sessionId, gestureSequence, {
           gapMs: options.gestureGapMs,
+          delaysMs: options.gestureDelaysMs,
           holdBeforeMoveMs: options.gestureHoldBeforeMoveMs,
           keepPressed: options.gestureKeepPressed === true,
         });

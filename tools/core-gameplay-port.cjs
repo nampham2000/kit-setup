@@ -76,6 +76,7 @@ Options:
   --dry-run              Init without creating a directory or file.
   --write                Persist the refreshed packet when running resume.
   --no-run-gates         Verify manifest only; result cannot be accepted as runnable.
+  --preview-url <url>    Verify browser-preview delivery; excludes packaging/build only, never claims packaged readiness.
   --json                 Compact JSON output.
   --help                 Show help.
 
@@ -113,7 +114,7 @@ function parseArgs(argv) {
     if (argument === '--no-run-gates') { options.runGates = false; continue; }
     const equal = /^--([a-z-]+)=(.*)$/.exec(argument);
     const name = equal ? equal[1] : argument.startsWith('--') ? argument.slice(2) : null;
-    if (!['unity-project', 'cocos-project', 'manifest', 'wiring', 'scaffold-receipt', 'packet', 'provider', 'entry-scene'].includes(name)) {
+    if (!['unity-project', 'cocos-project', 'manifest', 'wiring', 'scaffold-receipt', 'packet', 'provider', 'entry-scene', 'preview-url'].includes(name)) {
       throw corePortError('CORE_PORT_OPTION_INVALID', `Option khong ho tro: ${argument}`);
     }
     const value = equal ? equal[2] : argv[++index];
@@ -123,6 +124,12 @@ function parseArgs(argv) {
   if (!options.unityProject && !options.help) throw corePortError('CORE_PORT_UNITY_REQUIRED', 'Thieu --unity-project.');
   if (!['auto', 'static', 'unity-mcp'].includes(options.provider)) {
     throw corePortError('CORE_PORT_PROVIDER_INVALID', '--provider phai la auto, static hoac unity-mcp.');
+  }
+  if (options.previewUrl) {
+    let parsed; try { parsed = new URL(options.previewUrl); } catch (_) { /* rejected below */ }
+    if (!parsed || !['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password || /[\s"';&|<>^%`$]/.test(options.previewUrl)) {
+      throw corePortError('CORE_PORT_PREVIEW_URL_INVALID', 'Preview URL must be an http(s) URL without shell metacharacters.');
+    }
   }
   return options;
 }
@@ -711,6 +718,7 @@ function runStaticScenePort(unityRoot, cocosRoot, manifest, options = {}, depend
   if (fs.existsSync(receiptFile)) {
     throw corePortError('CORE_PORT_STATIC_RECEIPT_EXISTS', 'Static receipt already exists; choose a separate --scaffold-receipt before generating outputs.');
   }
+
   const run = dependencies.runStaticScene || ((request) => {
     const child = spawnSync(process.execPath, [
       path.join(__dirname, 'unity-scene-port.cjs'),
@@ -981,12 +989,19 @@ function runRequiredGates(cocosRoot, options = {}) {
     : 'npm';
   const prefixArgs = platform === 'win32' ? ['/d', '/s', '/c', 'npm.cmd'] : [];
   const results = [];
-  for (const gate of REQUIRED_SCRIPTS) {
+  for (const gate of REQUIRED_SCRIPTS.filter(gate => !options.previewUrl || gate.id !== 'build.playable')) {
+    if (gate.id === 'verify.regressions' && fs.existsSync(path.join(cocosRoot, '.ai', 'port', 'regression-receipt.json'))) {
+      try {
+        const checked = require('./port-regression-gate.cjs').checkRegressionReceipt({ project: cocosRoot });
+        if (checked.ok) { results.push({ id: gate.id, script: gate.script, ok: true, verification: 'current-hash-bound-receipt' }); continue; }
+      } catch (_) { /* A missing, stale or invalid receipt requires a fresh run. */ }
+    }
     if (typeof scripts[gate.script] !== 'string' || !scripts[gate.script].trim()) {
       results.push({ id: gate.id, ok: false, code: 'script-missing', script: gate.script });
       break;
     }
-    const child = (options.spawnSync || spawnSync)(executable, [...prefixArgs, 'run', gate.script], {
+    const runtimeArgs = options.previewUrl && gate.id === 'verify.runtime' ? ['--', '--url', options.previewUrl, '--seconds', '30', '--window-size', '1280x800', '--preview-device', 'WebpageFullScreen'] : [];
+    const child = (options.spawnSync || spawnSync)(executable, [...prefixArgs, 'run', gate.script, ...runtimeArgs], {
       cwd: cocosRoot,
       encoding: 'utf8',
       windowsHide: true,
@@ -1075,21 +1090,27 @@ function verifyCorePort(options, dependencies = {}) {
     ? []
     : (dependencies.runGates || runRequiredGates)(cocosRoot, {
       ...(dependencies.gateOptions || {}),
+      previewUrl: options.previewUrl,
       redactRoots: [unityRoot, ...((dependencies.gateOptions && dependencies.gateOptions.redactRoots) || [])],
     });
-  const gatesPassed = gateResults.length === REQUIRED_SCRIPTS.length && gateResults.every(item => item.ok);
+  const selectedGates = REQUIRED_SCRIPTS.filter(gate => !options.previewUrl || gate.id !== 'build.playable');
+  const gatesPassed = gateResults.length === selectedGates.length && gateResults.every((item,index) => item.ok && item.id === selectedGates[index].id);
   const artifacts = inspectRequiredArtifacts(cocosRoot, manifest);
+  if (options.previewUrl) delete artifacts.builtHtml;
   const artifactsPassed = Object.values(artifacts).every(Boolean);
   const accepted = gatesPassed && artifactsPassed && fidelity.mandatoryPassed && fidelity.score >= fidelity.minimum;
   return {
     ok: accepted,
     command: 'verify',
+    deliveryMode: options.previewUrl ? 'browser-preview' : 'packaged-playable',
+    excludedGates: options.previewUrl ? ['build.playable'] : [],
+    packagedReadiness: options.previewUrl ? 'not-assessed' : (accepted ? 'accepted' : 'not-accepted'),
     accepted,
     runnable: { passed: gatesPassed && artifactsPassed, gatesRun: options.runGates !== false, gates: gateResults, artifacts },
     fidelity,
     evidenceContract: manifest.delivery.evidenceContract,
     claim: accepted
-      ? `Core gameplay accepted at ${fidelity.score}/100 (target ${fidelity.target}).`
+      ? `Core gameplay ${options.previewUrl ? 'browser preview' : 'packaged playable'} accepted at ${fidelity.score}/100 (target ${fidelity.target}).`
       : 'Do not claim 80-90% fidelity or runnable delivery until every reported gate passes.',
     nextActions: [
       ...fidelity.items.filter(item => !item.grounded).slice(0, 5).map(item =>

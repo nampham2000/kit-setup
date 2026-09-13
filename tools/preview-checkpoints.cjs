@@ -688,6 +688,12 @@ function validateConfig(config, overrides = {}) {
     if (entry.gestureGapMs !== undefined && !entry.gestures) {
       throw new Error(`cases[${index}].gestureGapMs cần gestures`);
     }
+    if (entry.gestureDelaysMs !== undefined && (!Array.isArray(entry.gestureDelaysMs)
+      || !entry.gestures || entry.gestureDelaysMs.length !== entry.gestures.length
+      || entry.gestureDelaysMs.some(x => !Number.isFinite(x) || x < 0 || x > 60000)
+      || entry.gestureDelaysMs.reduce((a,b) => a+b,0) > 180000)) {
+      throw new Error(`cases[${index}].gestureDelaysMs must match gestures, each 0-60000 ms and total <=180000 ms`);
+    }
     if (entry.previewDevice !== undefined
       && (typeof entry.previewDevice !== 'string' || !entry.previewDevice.trim())) {
       throw new Error(`cases[${index}].previewDevice phải là string không rỗng`);
@@ -708,6 +714,7 @@ function validateConfig(config, overrides = {}) {
       parsedGesture: entry.gesture ? parseGesture(entry.gesture) : null,
       parsedGestures: entry.gestures ? entry.gestures.map(gesture => parseGesture(gesture)) : [],
       gestureGapMs: entry.gestureGapMs === undefined ? 0 : Number(entry.gestureGapMs),
+      gestureDelaysMs: entry.gestureDelaysMs,
       gestureHoldBeforeMoveMs: entry.gestureHoldBeforeMoveMs === undefined
         ? 0 : Number(entry.gestureHoldBeforeMoveMs),
       requiredTrace: entry.requiredTrace ? entry.requiredTrace.map(phase => phase.trim()) : [],
@@ -842,6 +849,7 @@ async function main() {
       gesture: caseEntry.parsedGesture,
       gestures: caseEntry.parsedGestures,
       gestureGapMs: caseEntry.gestureGapMs,
+      gestureDelaysMs: caseEntry.gestureDelaysMs,
       gestureHoldBeforeMoveMs: caseEntry.gestureHoldBeforeMoveMs,
       gestureKeepPressed: caseEntry.gestureKeepPressed === true,
     });
