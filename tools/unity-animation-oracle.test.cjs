@@ -181,11 +181,46 @@ test('reports unsupported object curves without crashing the oracle', () => {
     item.severity === 'high' && item.code === 'ANIMATION_OBJECT_CURVE_UNSUPPORTED'), true);
 });
 
-test('fails closed when Unity animation events would otherwise disappear from the oracle', () => {
+test('captures Unity animation events as portable callback obligations', () => {
   const data = fixture();
   const source = fs.readFileSync(data.file, 'utf8').replace(
     '  m_AnimationClipSettings:',
-    '  m_Events:\n  - time: 0.1\n    functionName: PlayCloudCircle\n  m_AnimationClipSettings:',
+    '  m_Events:\n  - time: 0.1\n    functionName: PlayCloudCircle\n    data: burst\n    objectReferenceParameter: {fileID: 0}\n    floatParameter: 1.5\n    intParameter: 2\n    messageOptions: 1\n  - time: 0.2\n    functionName: StopCloudCircle\n    data: \n    objectReferenceParameter: {fileID: 0, guid: abc, type: 3}\n    floatParameter: 0\n    intParameter: 0\n    messageOptions: 0\n  m_AnimationClipSettings:',
+  );
+  fs.writeFileSync(data.file, source, 'utf8');
+  const result = spawnSync(process.execPath, [TOOL, '--src', data.file, '--unity-root', data.root], {
+    encoding: 'utf8',
+  });
+  assert.equal(result.status, 0, result.stderr);
+  const oracle = JSON.parse(result.stdout);
+  assert.equal(oracle.completeness, 'complete');
+  assert.deepEqual(oracle.clips[0].events, [
+    {
+      time: 0.1,
+      functionName: 'PlayCloudCircle',
+      data: 'burst',
+      objectReferenceParameter: { fileID: 0 },
+      floatParameter: 1.5,
+      intParameter: 2,
+      messageOptions: 1,
+    },
+    {
+      time: 0.2,
+      functionName: 'StopCloudCircle',
+      data: '',
+      objectReferenceParameter: { fileID: 0, guid: 'abc', type: 3 },
+      floatParameter: 0,
+      intParameter: 0,
+      messageOptions: 0,
+    },
+  ]);
+});
+
+test('fails closed when a Unity animation event cannot be represented completely', () => {
+  const data = fixture();
+  const source = fs.readFileSync(data.file, 'utf8').replace(
+    '  m_AnimationClipSettings:',
+    '  m_Events:\n  - time: nope\n    functionName: \n  m_AnimationClipSettings:',
   );
   fs.writeFileSync(data.file, source, 'utf8');
   const result = spawnSync(process.execPath, [TOOL, '--src', data.file, '--unity-root', data.root], {
@@ -195,5 +230,5 @@ test('fails closed when Unity animation events would otherwise disappear from th
   const oracle = JSON.parse(result.stdout);
   assert.equal(oracle.completeness, 'partial');
   assert.equal(oracle.diagnostics.some(item =>
-    item.severity === 'high' && item.code === 'ANIMATION_EVENT_SKIPPED'), true);
+    item.severity === 'high' && item.code === 'ANIMATION_EVENT_PARSE_FAILED'), true);
 });

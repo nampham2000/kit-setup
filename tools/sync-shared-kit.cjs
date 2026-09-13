@@ -285,13 +285,14 @@ function generateSharedIndex(destDir) {
  * @module cc_playable_framework/shared
  * Auto-synced from playable-shared-kit. DO NOT EDIT DIRECTLY.
  * Modify sources in \`playable-shared-kit/packages/\` and run \`npm run sync:shared\`.
+ *
+ * Cocos Creator 3.8.x counts decorated Components re-exported by a barrel.
+ * This surface only forwards Component-free package exports. Import every
+ * decorated Component from its concrete shared module directly.
  */
-
-// SDK Platforms & Tracking
 export * from './sdk';
-
-// Core Game Lifecycle, Audio & Utilities
 export * from './core';
+export const PLAYABLE_SHARED_MODULE_LAYOUT = 1;
 `;
 
   let shouldWrite = true;
@@ -393,6 +394,18 @@ function syncSharedKit(options = {}) {
   generateSharedIndex(TARGET_SHARED_DIR);
   syncExtensions(true);
   syncPackageJson();
+  // Launchers are part of the kit contract too; updating only packages leaves
+  // fresh projects running an older setup/open workflow.
+  const launchers = path.join(SHARED_KIT_ROOT, 'scripts');
+  for (const name of fs.readdirSync(launchers)) {
+    if (!/\.(bat|sh)$/.test(name)) continue;
+    const source = path.join(launchers, name);
+    const target = path.join(PROJECT_ROOT, name);
+    const bytes = fs.readFileSync(source);
+    if (!fs.existsSync(target) || !bytes.equals(fs.readFileSync(target))) {
+      fs.writeFileSync(target, bytes);
+    }
+  }
   require('./portable-npm-policy.cjs').applyPolicy(PROJECT_ROOT);
   console.log('[sync-shared-kit] Successfully synchronized shared modules & extensions.\n');
 }

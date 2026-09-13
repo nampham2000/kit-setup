@@ -166,15 +166,42 @@ function materialColor(text, key, fallback) {
   return match ? color(inlineObject(match[1]), fallback) : fallback;
 }
 
+function activeMaterialKeywords(text) {
+  const keywords = new Set();
+  const lines = String(text || '').split(/\r?\n/);
+  const addTokens = (value) => {
+    for (const token of String(value || '').replace(/[\[\],'\"]/g, ' ').split(/\s+/)) {
+      if (/^[A-Z][A-Z0-9_]*$/.test(token)) keywords.add(token);
+    }
+  };
+  for (let index = 0; index < lines.length; index++) {
+    const shaderKeywords = /^\s*m_ShaderKeywords:\s*(.*)$/.exec(lines[index]);
+    if (shaderKeywords) {
+      addTokens(shaderKeywords[1]);
+      continue;
+    }
+    const validKeywords = /^\s*m_ValidKeywords:\s*(.*)$/.exec(lines[index]);
+    if (!validKeywords) continue;
+    addTokens(validKeywords[1]);
+    for (let child = index + 1; child < lines.length; child++) {
+      const item = /^\s*-\s*([^\s#]+)\s*$/.exec(lines[child]);
+      if (!item) break;
+      addTokens(item[1]);
+      index = child;
+    }
+  }
+  return keywords;
+}
+
 function tmpMaterialStyle(asset) {
   const text = readableAssetText(asset);
   if (!text) return {};
+  const keywords = activeMaterialKeywords(text);
   const outlineWidth = Math.max(0, materialScalar(text, '_OutlineWidth', 0));
-  const underlayEnabled = /(?:^|\s)UNDERLAY_ON(?:\s|$)/m.test(text)
-    || materialScalar(text, '_UnderlayDilate', 0) !== 0
-    || materialScalar(text, '_UnderlaySoftness', 0) !== 0;
+  const outlineEnabled = keywords.has('OUTLINE_ON') && outlineWidth > 0;
+  const underlayEnabled = keywords.has('UNDERLAY_ON') || keywords.has('UNDERLAY_INNER');
   return {
-    enableOutline: outlineWidth > 0,
+    enableOutline: outlineEnabled,
     outlineColor: materialColor(text, '_OutlineColor', { r: 0, g: 0, b: 0, a: 1 }),
     outlineWidth: Math.max(1, Math.round(outlineWidth * 10)),
     enableShadow: underlayEnabled,
@@ -395,4 +422,5 @@ module.exports.CONVERTIBLE_FONT_EXTENSIONS = CONVERTIBLE_FONT_EXTENSIONS;
 module.exports.guidRefs = guidRefs;
 module.exports.normalizeFontStem = normalizeFontStem;
 module.exports.resolveFontDependency = resolveFontDependency;
+module.exports.activeMaterialKeywords = activeMaterialKeywords;
 module.exports.tmpMaterialStyle = tmpMaterialStyle;

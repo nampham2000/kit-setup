@@ -28,9 +28,20 @@ test('validates isolated URL checkpoint cases and gestures', () => {
         gestureKeepPressed: true },
       { name: 'rapid taps', gestures: ['0.2,0.4,0.2,0.4,30,1', '0.8,0.5,0.8,0.5,30,1'],
         gestureGapMs: 50 },
+      { name: 'runtime target', evalBefore: '({ target: { x: 0.2, y: 0.4 } })',
+        gestureFromEvalBefore: {
+          x1: 'target.x', y1: 'target.y', x2: 'target.x', y2: 'target.y', durationMs: 80, steps: 1,
+        } },
+      { name: 'runtime rapid taps', evalBefore: '({ targets: [{x:0.2,y:0.4},{x:0.8,y:0.5}] })',
+        gesturesFromEvalBefore: [
+          { x1: 'targets.0.x', y1: 'targets.0.y', x2: 'targets.0.x', y2: 'targets.0.y',
+            durationMs: 30, steps: 1 },
+          { x1: 'targets.1.x', y1: 'targets.1.y', x2: 'targets.1.x', y2: 'targets.1.y',
+            durationMs: 30, steps: 1 },
+        ], gestureGapMs: 25 },
     ],
   });
-  assert.equal(value.cases.length, 4);
+  assert.equal(value.cases.length, 6);
   assert.equal(value.cases[1].parsedGesture.steps, 12);
   assert.equal(value.cases[1].previewDevice, 'WebpageFullScreen');
   assert.equal(value.cases[1].postActionSeconds, 3);
@@ -39,6 +50,12 @@ test('validates isolated URL checkpoint cases and gestures', () => {
   assert.equal(value.cases[2].gestureHoldBeforeMoveMs, 280);
   assert.equal(value.cases[3].parsedGestures.length, 2);
   assert.equal(value.cases[3].gestureGapMs, 50);
+  assert.deepEqual(value.cases[4].gestureFromEvalBefore, {
+    x1: 'target.x', y1: 'target.y', x2: 'target.x', y2: 'target.y', durationMs: 80, steps: 1,
+  });
+  assert.equal(value.cases[5].gesturesFromEvalBefore.length, 2);
+  assert.equal(value.cases[5].gesturesFromEvalBefore[1].x1, 'targets.1.x');
+  assert.equal(value.cases[5].gestureGapMs, 25);
   assert.equal(value.windowSize, '720,1280');
 });
 
@@ -61,6 +78,35 @@ test('fails closed on build/file targets, duplicate names and unknown options', 
   assert.throws(() => validateConfig({
     url: 'http://localhost:7456', cases: [{ name: 'a', gesture: '0.5,0.5,0.5,0.5,30,1',
       gestures: ['0.2,0.2,0.2,0.2,30,1', '0.8,0.8,0.8,0.8,30,1'] }],
+  }), /đồng thời/);
+  assert.throws(() => validateConfig({
+    url: 'http://localhost:7456', cases: [{ name: 'dynamic without eval', gestureFromEvalBefore: {
+      x1: 'target.x', y1: 'target.y', x2: 'target.x', y2: 'target.y', durationMs: 80, steps: 1,
+    } }],
+  }), /cần evalBefore/);
+  assert.throws(() => validateConfig({
+    url: 'http://localhost:7456', cases: [{ name: 'bad dynamic path', evalBefore: 'true',
+      gestureFromEvalBefore: { x1: '', y1: 'y', x2: 'x', y2: 'y', durationMs: 80, steps: 1 } }],
+  }), /x1\/y1\/x2\/y2/);
+  assert.throws(() => validateConfig({
+    url: 'http://localhost:7456', cases: [{ name: 'dynamic sequence without eval',
+      gesturesFromEvalBefore: [
+        { x1: 'a.x', y1: 'a.y', x2: 'a.x', y2: 'a.y', durationMs: 30, steps: 1 },
+        { x1: 'b.x', y1: 'b.y', x2: 'b.x', y2: 'b.y', durationMs: 30, steps: 1 },
+      ] }],
+  }), /cần evalBefore/);
+  assert.throws(() => validateConfig({
+    url: 'http://localhost:7456', cases: [{ name: 'short dynamic sequence', evalBefore: 'true',
+      gesturesFromEvalBefore: [
+        { x1: 'a.x', y1: 'a.y', x2: 'a.x', y2: 'a.y', durationMs: 30, steps: 1 },
+      ] }],
+  }), /2-8/);
+  assert.throws(() => validateConfig({
+    url: 'http://localhost:7456', cases: [{ name: 'conflicting dynamic sequence', evalBefore: 'true',
+      gesture: '0.5,0.5,0.5,0.5,30,1', gesturesFromEvalBefore: [
+        { x1: 'a.x', y1: 'a.y', x2: 'a.x', y2: 'a.y', durationMs: 30, steps: 1 },
+        { x1: 'b.x', y1: 'b.y', x2: 'b.x', y2: 'b.y', durationMs: 30, steps: 1 },
+      ] }],
   }), /đồng thời/);
   assert.throws(() => validateConfig({
     url: 'http://localhost:7456', cases: [{ name: 'a', gestures: ['0.2,0.2,0.2,0.2,30,1'],

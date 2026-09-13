@@ -7,7 +7,7 @@ const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 
-const { createUnityFixture } = require('../unity-intel/test-fixture.cjs');
+const { createUnityFixture, isLinkUnavailableError } = require('../unity-intel/test-fixture.cjs');
 const { buildGuidIndex, guidCacheContext, resolveChain, referencedGuids } = require('./prefab-shader-chain.cjs');
 
 const SHADER_CLI = path.resolve(__dirname, 'unity-shader-compiler.cjs');
@@ -78,6 +78,43 @@ test('shader chain discovers a ScriptableObject material set and all per-state t
   assert.equal(chain.materialSetDetected, true);
   assert.equal(chain.materials.length, 2);
   assert.equal(chain.textures.length, 2);
+});
+
+test('shader chain starts from a Unity scene and follows prefab material closure', t => {
+  const fixture = createUnityFixture(t);
+  const prefabGuid = '81'.repeat(16);
+  const materialGuid = '82'.repeat(16);
+  const shaderGuid = '83'.repeat(16);
+  const scene = fixture.write('Assets/Game/Scenes/Gameplay.unity', [
+    '%YAML 1.1',
+    'PrefabInstance:',
+    `  m_SourcePrefab: {fileID: 100100000, guid: ${prefabGuid}, type: 3}`,
+    '',
+  ].join('\n'));
+  fixture.write('Assets/Game/Prefabs/Board.prefab', [
+    '%YAML 1.1',
+    'SpriteRenderer:',
+    `  m_Materials: [{fileID: 2100000, guid: ${materialGuid}, type: 2}]`,
+    '',
+  ].join('\n'));
+  fixture.write('Assets/Game/Prefabs/Board.prefab.meta', `fileFormatVersion: 2\nguid: ${prefabGuid}\n`);
+  fixture.write('Assets/Game/Materials/Board.mat', [
+    'Material:',
+    `  m_Shader: {fileID: 4800000, guid: ${shaderGuid}, type: 3}`,
+    '',
+  ].join('\n'));
+  fixture.write('Assets/Game/Materials/Board.mat.meta', `fileFormatVersion: 2\nguid: ${materialGuid}\n`);
+  fixture.write('Assets/Game/Shaders/Board.shader', 'Shader "Test/Board" {}\n');
+  fixture.write('Assets/Game/Shaders/Board.shader.meta', `fileFormatVersion: 2\nguid: ${shaderGuid}\n`);
+
+  const chain = resolveChain(scene, fixture.assets, { noCache: true });
+  assert.equal(chain.sourceKind, 'scene');
+  assert.equal(chain.closure.complete, true);
+  assert.equal(chain.closure.nestedPrefabCount, 1);
+  assert.equal(chain.materials.length, 1);
+  assert.equal(chain.materials[0].name, 'Board');
+  assert.equal(chain.shaders.length, 1);
+  assert.equal(chain.shaders[0].name, 'Board');
 });
 
 test('shader chain follows nested prefabs, model importer material remaps, and selected package shaders', t => {
@@ -207,8 +244,8 @@ test('shader GUID cache rejects a junction redirecting its cache directory into 
   try {
     fs.symlinkSync(fixture.root, redirect, process.platform === 'win32' ? 'junction' : 'dir');
   } catch (error) {
-    if (error && (error.code === 'EPERM' || error.code === 'EACCES')) {
-      t.skip('Host does not allow directory symlinks/junctions.');
+    if (isLinkUnavailableError(error)) {
+      t.skip(`Host filesystem does not support directory symlinks/junctions: ${error.code}`);
       return;
     }
     throw error;

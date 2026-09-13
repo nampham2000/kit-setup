@@ -53,7 +53,7 @@ test('shipped Unity scanner keeps nested traversal and global candidate evidence
     'whole candidate payload must be bounded before returning the live patch');
 });
 const { validateUnityProject } = require('./unity-editor.cjs');
-const { createUnityFixture } = require('./test-fixture.cjs');
+const { createUnityFixture, isLinkUnavailableError } = require('./test-fixture.cjs');
 
 function createTempDir(t, prefix) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -184,8 +184,8 @@ test('rejects a Packages junction that escapes the Unity project', t => {
   try {
     fs.symlinkSync(outside, path.join(fixture.root, 'Packages'), process.platform === 'win32' ? 'junction' : 'dir');
   } catch (error) {
-    if (error.code === 'EPERM' || error.code === 'EACCES') {
-      t.skip(`Symlink creation unavailable: ${error.code}`);
+    if (isLinkUnavailableError(error)) {
+      t.skip(`Host filesystem does not support the required symlink/junction: ${error.code}`);
       return;
     }
     throw error;

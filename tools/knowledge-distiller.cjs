@@ -512,7 +512,7 @@ public class PlayerBallController : MonoBehaviour {
     }
 }`,
     cocosCode: `import { _decorator, Component, Node, RigidBody, Vec3, Collider, ICollisionEvent } from 'cc';
-import { PlayableConfigManager } from 'playable-core';
+import { PlayableConfigManager } from 'playable-core/config/PlayableConfigManager';
 const { ccclass, property } = _decorator;
 
 // Static pre-allocated vector to guarantee ZERO Garbage Collection

@@ -13,7 +13,7 @@ const {
   buildGuidIndex,
   guidCacheContext,
 } = require('../shader-compiler/prefab-shader-chain.cjs');
-const { createUnityFixture } = require('./test-fixture.cjs');
+const { createUnityFixture, isLinkUnavailableError } = require('./test-fixture.cjs');
 
 function tempDirectory(t, prefix) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -32,8 +32,8 @@ function createLinkOrSkip(t, target, link, type) {
     fs.symlinkSync(target, link, type);
     return true;
   } catch (error) {
-    if (error && (error.code === 'EPERM' || error.code === 'EACCES' || error.code === 'ENOTSUP')) {
-      t.skip('Host does not allow the symlink needed by this security regression.');
+    if (isLinkUnavailableError(error)) {
+      t.skip(`Host filesystem does not support the symlink needed by this security regression: ${error.code}`);
       return false;
     }
     throw error;
@@ -45,7 +45,7 @@ function tryCreateFileLink(target, link) {
     fs.symlinkSync(target, link, 'file');
     return true;
   } catch (error) {
-    if (error && (error.code === 'EPERM' || error.code === 'EACCES' || error.code === 'ENOTSUP')) {
+    if (isLinkUnavailableError(error)) {
       return false;
     }
     throw error;

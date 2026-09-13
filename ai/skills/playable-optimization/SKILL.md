@@ -1,6 +1,6 @@
 ---
 name: playable-optimization
-description: "Use when optimizing Cocos Creator 3.8.8+ Playable Ads for file size (<2MB / <5MB limit), draw calls, texture budgets, audio compression, and single-file HTML packaging."
+description: "Use when optimizing Cocos Creator 3.8.8+ Playable Ads for resources dynamic-root boundaries, static asset catalogs, file size (<2MB / <5MB limit), draw calls, texture/font/audio budgets, and single-file HTML packaging."
 argument-hint: "Playable project or asset to optimize"
 ---
 
@@ -67,18 +67,65 @@ Before building, always run the automated asset optimization tools:
    ```bash
    node playable-shared-kit/tools/strip-fbx-textures.cjs <file.fbx>
    ```
-5. **Inspect size and multilingual font coverage**:
+5. **Enforce the portable 80/100 KiB TTF budget**:
    ```bash
    npm run stats
+   npm run font:subset -- --config tools/font-subsets.json --unity-project <UnityProjectRoot>
+   npm run font:subset -- --config tools/font-subsets.json --unity-project <UnityProjectRoot> --write
+   npm run font:subset -- --config tools/font-subsets.json --verify
    ```
-   Review `fontDiagnostics`: it contains only font assets currently referenced
-   by authoring data or mapped into the build. Subset multilingual fonts only
-   after checking the actual character inventory and verifying every glyph.
-6. **Clean Unused Assets**:
+   Active playable TTF files target 80 KiB and must not exceed the hard 100 KiB
+   gate. Before writing a subset, trace the exact font owner through the Unity
+   prefab/TMP font asset/source TTF and collect every reachable label string,
+   including ScriptableObject, JSON/config, and dynamic text. For an
+   English-only playable, prefer subsetting the exact source font to printable
+   Basic Latin U+0020-U+007E plus any additional reachable characters. Keep the
+   manifest project-relative and source-hash-bound; never infer the inventory
+   from one screenshot or one sample string.
+
+   If the game carries two fonts, remove one only when it is dormant in the
+   playable closure. Consolidating a live label onto the smaller family requires
+   explicit user authorization plus glyph-metric and tight text-ROI acceptance;
+   file size alone is not evidence of parity. `--write` preserves the Cocos
+   `.meta`/UUID. After it runs, wait for AssetDB reimport, then require
+   `font:subset --verify`, `ai:verify:assets`, the relevant visual regression,
+   and a clean `npm run stats` font budget report.
+6. **Enforce `assets/resources` as a dynamic-load boundary**:
+   ```bash
+   npm run ai:resources:boundary
+   npm run ai:resources:boundary -- --write-catalog
+   npm run ai:resources:boundary -- --verify
+   ```
+   Before classifying or moving anything, trace every reachable
+   `resources.load` / `loadDir` call and the ScriptableObject/JSON/config fields
+   that supply its path. `assets/resources` is an API boundary for true dynamic
+   roots, not a generic asset folder. Keep only roots that runtime genuinely
+   selects by path, commonly config JSON, SFX/BGM, dynamically selected prefabs,
+   and the small subset of sprites that cannot be serialized from a known
+   owner. Asset type alone is never evidence: a prefab may be dormant conversion
+   evidence, while one sprite may genuinely be runtime-selected.
+
+   Put fixed fonts, SpriteFrames, AnimationClips, materials/effects, FBX/models,
+   Spine dependencies, and similar assets outside `resources`. Wire them through
+   a scene/prefab `StaticAssetCatalog` (or another explicit serialized owner), so
+   Cocos includes them as transitive dependencies. Keep logical config keys
+   stable while AssetDB moves preserve UUIDs and sprite-frame sub-UUIDs. The
+   Git-tracked `tools/resource-boundary.json` must declare every dynamic root,
+   static move, catalog rule, and reason.
+
+   `--write-catalog` only generates the deterministic catalog prefab; it never
+   moves assets or edits `.meta`. Reimport that prefab through Cocos AssetDB, move
+   every declared folder through AssetDB/MCP, then run `--verify` and
+   `ai:verify:assets`. Verification must fail on pending/conflicting moves,
+   unclassified resource files, missing/dormant catalog entries, importer drift,
+   UUID/sub-asset drift, or a stale manifest digest. Open the preview and exercise
+   deferred animation/VFX/end-screen paths after the move; file-level PASS alone
+   does not prove the catalog dependency graph is runnable.
+7. **Clean Unused Assets**:
    ```bash
    node playable-shared-kit/tools/unused-asset-cleanup.cjs scan --clean
    ```
-7. **Build & Package Super-HTML**:
+8. **Build & Package Super-HTML**:
    ```bash
    npm run build
    ```

@@ -45,10 +45,13 @@ const RISKS = Object.freeze([
   'transparent-hold-state',
   'animation-callback-flow',
   'animation-curve-fidelity',
+  'first-use-performance',
+  'particle-vfx',
   'runtime-mesh-animation',
   'attachment-layout',
   'font-ui-layout',
   'progress-ui-state',
+  'responsive-layout',
   'level-lifecycle',
 ]);
 const RISK_SET = new Set(RISKS);
@@ -70,8 +73,11 @@ const SEMANTIC_RISKS = new Set([
   'camera-transform',
   'attachment-layout',
   'transparent-hold-state',
+  'first-use-performance',
+  'particle-vfx',
   'runtime-mesh-animation',
   'progress-ui-state',
+  'responsive-layout',
   'level-lifecycle',
 ]);
 
@@ -88,6 +94,7 @@ Options:
   --receipt <file>      Machine receipt path. Default: ${DEFAULT_RECEIPT}.
   --output <dir>        Matrix evidence root. Default: ${DEFAULT_OUTPUT}.
   --risk <id>           Required risk for init; repeatable.
+  --suite <id>          Re-run one suite and merge it into a current hash-bound receipt; repeatable.
   --force               Replace an existing registry during init.
   --no-refresh          Intentionally skip Cocos AssetDB/preview refresh.
   --json                Emit compact JSON.
@@ -106,7 +113,7 @@ function regressionError(code, message, details = null) {
 }
 
 function parseArgs(argv) {
-  const options = { command: null, risks: [], refresh: true, json: false };
+  const options = { command: null, risks: [], suites: [], refresh: true, json: false };
   let index = 0;
   if (argv[0] && !argv[0].startsWith('-')) {
     options.command = argv[0];
@@ -124,7 +131,7 @@ function parseArgs(argv) {
     if (argument === '--no-refresh') { options.refresh = false; continue; }
     const equal = /^--([a-z-]+)=(.*)$/.exec(argument);
     const name = equal ? equal[1] : argument.startsWith('--') ? argument.slice(2) : null;
-    if (!['project', 'config', 'receipt', 'output', 'risk'].includes(name)) {
+    if (!['project', 'config', 'receipt', 'output', 'risk', 'suite'].includes(name)) {
       throw regressionError('REGRESSION_OPTION_INVALID', `Option không hỗ trợ: ${argument}`);
     }
     const value = equal ? equal[2] : argv[++index];
@@ -132,6 +139,7 @@ function parseArgs(argv) {
       throw regressionError('REGRESSION_OPTION_VALUE_REQUIRED', `--${name} cần giá trị.`);
     }
     if (name === 'risk') options.risks.push(value);
+    else if (name === 'suite') options.suites.push(value);
     else options[name] = value;
   }
   return options;
@@ -230,7 +238,10 @@ function caseHasEval(entry) {
 }
 
 function caseHasInputGesture(entry) {
-  return !!entry.gesture || (Array.isArray(entry.gestures) && entry.gestures.length > 0);
+  return !!entry.gesture
+    || (Array.isArray(entry.gestures) && entry.gestures.length > 0)
+    || !!entry.gestureFromEvalBefore
+    || (Array.isArray(entry.gesturesFromEvalBefore) && entry.gesturesFromEvalBefore.length > 0);
 }
 
 function metricBoundAtLeast(contract, metric, bound) {
@@ -244,7 +255,7 @@ function metricBoundAtMost(contract, metric, bound) {
 }
 
 function caseHasRuntimeMeshOracle(entry) {
-  return !!entry.gesture && caseHasEval(entry) && !!entry.referenceImage
+  return caseHasInputGesture(entry) && caseHasEval(entry) && !!entry.referenceImage
     && entry.requireEvalBeforeOk === true && !!(entry.evalBefore || entry.evalBeforeFile)
     && Array.isArray(entry.requiredTrace) && entry.requiredTrace.length >= 2
     && metricBoundAtLeast(entry.requiredEvalBeforeMetrics, 'actionStarted', 0)
@@ -259,7 +270,9 @@ function caseHasRuntimeMeshOracle(entry) {
 }
 
 function caseHasInputConcurrencyOracle(entry) {
-  return Array.isArray(entry.gestures) && entry.gestures.length >= 2 && caseHasEval(entry)
+  const gestureCount = Array.isArray(entry.gestures) ? entry.gestures.length
+    : (Array.isArray(entry.gesturesFromEvalBefore) ? entry.gesturesFromEvalBefore.length : 0);
+  return gestureCount >= 2 && caseHasEval(entry)
     && entry.requireEvalBeforeOk === true && !!(entry.evalBefore || entry.evalBeforeFile)
     && metricBoundAtLeast(entry.requiredEvalBeforeMetrics, 'actionStarted', 0)
     && metricBoundAtMost(entry.requiredEvalBeforeMetrics, 'actionStarted', 0)
@@ -268,6 +281,87 @@ function caseHasInputConcurrencyOracle(entry) {
     && metricBoundAtLeast(entry.requiredEvalMetrics, 'secondStartsBeforeFirstCompletes', 1)
     && metricBoundAtLeast(entry.requiredEvalMetrics, 'uniqueReservedDestinationCount', 2)
     && metricBoundAtMost(entry.requiredEvalMetrics, 'reservationCollisionCount', 0);
+}
+
+function caseHasFirstUsePerformanceOracle(entry) {
+  return caseHasInputGesture(entry) && caseHasEval(entry)
+    && entry.requireEvalBeforeOk === true && !!(entry.evalBefore || entry.evalBeforeFile)
+    && entry.requireEvalOk === true
+    && (entry.regressionTags || []).includes('cold-start')
+    && Array.isArray(entry.requiredTrace) && entry.requiredTrace.length >= 2
+    && metricBoundAtLeast(entry.requiredEvalBeforeMetrics, 'firstUseProbeArmed', 1)
+    && metricBoundAtMost(entry.requiredEvalBeforeMetrics, 'firstUseProbeArmed', 1)
+    && metricBoundAtMost(entry.requiredEvalMetrics, 'firstUseLongTaskCount', 0)
+    && metricBoundAtMost(entry.requiredEvalMetrics, 'firstUseMaxFrameGapMs', 50)
+    && metricBoundAtMost(entry.requiredEvalMetrics, 'firstFeedbackToNextSemanticMs', 200);
+}
+
+function caseHasResponsiveLayoutMetrics(entry) {
+  return caseHasEval(entry)
+    && metricBoundAtMost(entry.requiredEvalMetrics, 'layoutOverlapMax', 0.01)
+    && metricBoundAtMost(entry.requiredEvalMetrics, 'slicedBorderInsetError', 0.001);
+}
+
+function metricHasFiniteRange(contract, metric) {
+  const minimum = Number(contract?.[metric]?.min);
+  const maximum = Number(contract?.[metric]?.max);
+  return Number.isFinite(minimum) && Number.isFinite(maximum) && maximum >= minimum;
+}
+
+function caseHasBoundedParticlePixels(entry) {
+  const screenshotMetrics = entry?.requiredScreenshotMetrics;
+  return caseHasEval(entry)
+    && entry.screenshotRegion && typeof entry.screenshotRegion === 'object'
+    && screenshotMetrics && typeof screenshotMetrics === 'object'
+    && Object.keys(screenshotMetrics).some(metric => metricHasFiniteRange(screenshotMetrics, metric));
+}
+
+function validateParticleVfxOracle(suite, matrix) {
+  if (!matrix.cases.some(caseHasBoundedParticlePixels)) {
+    throw regressionError('REGRESSION_PARTICLE_VFX_ORACLE_MISSING',
+      `${suite.id}: particle-vfx cần semantic eval, screenshotRegion và ít nhất một `
+      + 'requiredScreenshotMetrics có cả min/max để chặn VFX vô hình lẫn quá dày.');
+  }
+  const spatialCases = matrix.cases.filter(entry =>
+    (entry.regressionTags || []).includes('spatial-distribution'));
+  if (!spatialCases.length) return;
+  const viewports = new Set(spatialCases.map(entry => String(entry.windowSize || matrix.windowSize || '').trim()));
+  if (viewports.size < 2 || viewports.has('')) {
+    throw regressionError('REGRESSION_PARTICLE_SPATIAL_ORACLE_MISSING',
+      `${suite.id}: spatial-distribution cần ít nhất hai viewport explicit khác nhau.`);
+  }
+  for (const entry of spatialCases) {
+    const metrics = entry.requiredSpatialMetrics;
+    if (!caseHasBoundedParticlePixels(entry)
+      || !Array.isArray(metrics) || metrics.length < 3
+      || new Set(metrics).size !== metrics.length
+      || metrics.some(metric => typeof metric !== 'string' || !metric.trim()
+        || !metricHasFiniteRange(entry.requiredEvalMetrics, metric))) {
+      throw regressionError('REGRESSION_PARTICLE_SPATIAL_ORACLE_MISSING',
+        `${suite.id}/${entry.name}: spatial-distribution cần >=3 requiredSpatialMetrics unique; `
+        + 'mỗi metric phải có min/max finite trong requiredEvalMetrics cùng bounded screenshot metrics.');
+    }
+  }
+}
+
+function validateResponsiveLayoutOracle(suite, matrix) {
+  const sourceCase = matrix.cases.find(entry =>
+    (entry.regressionTags || []).includes('source-viewport')
+    && !!entry.referenceImage
+    && entry.requiredReferenceMetrics
+    && Object.keys(entry.requiredReferenceMetrics).length > 0
+    && caseHasResponsiveLayoutMetrics(entry));
+  const shortCase = matrix.cases.find(entry =>
+    (entry.regressionTags || []).includes('short-wide-viewport')
+    && typeof entry.windowSize === 'string'
+    && entry.windowSize.trim()
+    && caseHasResponsiveLayoutMetrics(entry));
+  if (!sourceCase || !shortCase || String(sourceCase.windowSize || matrix.windowSize || '') === String(shortCase.windowSize || matrix.windowSize || '')) {
+    throw regressionError('REGRESSION_RESPONSIVE_LAYOUT_ORACLE_MISSING',
+      `${suite.id}: responsive-layout cần source-viewport có Unity reference + reference metrics và `
+      + 'short-wide-viewport khác windowSize; cả hai case phải có semantic eval cùng bounds '
+      + 'layoutOverlapMax<=0.01 và slicedBorderInsetError<=0.001.');
+  }
 }
 
 function validateAnimationCurveOracle(file, label) {
@@ -361,6 +455,11 @@ function validateMatrixPolicy(projectRoot, suite, matrix, matrixFile) {
     if (caseHasInputGesture(entry) && !caseHasEval(entry)) {
       throw regressionError('REGRESSION_ORACLE_REQUIRED', `${suite.id}/${name}: gesture cần eval/evalFile + requireEvalOk=true.`);
     }
+    if ((entry.gestureFromEvalBefore || entry.gesturesFromEvalBefore)
+      && !(entry.evalBefore || entry.evalBeforeFile)) {
+      throw regressionError('REGRESSION_ORACLE_REQUIRED',
+        `${suite.id}/${name}: gestureFromEvalBefore cần evalBefore/evalBeforeFile runtime evidence.`);
+    }
     if (entry.requiredTrace && (!Array.isArray(entry.requiredTrace) || entry.requiredTrace.length < 2 || !caseHasEval(entry))) {
       throw regressionError('REGRESSION_TRACE_REQUIRED', `${suite.id}/${name}: requiredTrace cần >=2 phase và semantic eval.`);
     }
@@ -396,15 +495,15 @@ function validateMatrixPolicy(projectRoot, suite, matrix, matrixFile) {
         + 'cho concurrent action, ordering và destination reservation uniqueness.');
     }
     if (risk === 'hold-drag-composition' && !matrix.cases.some(entry =>
-      entry.gesture && Number(entry.gestureHoldBeforeMoveMs) > 0 && caseHasEval(entry))) {
+      caseHasInputGesture(entry) && Number(entry.gestureHoldBeforeMoveMs) > 0 && caseHasEval(entry))) {
       throw regressionError('REGRESSION_HOLD_DRAG_ORACLE_MISSING', `${suite.id}: hold-drag cần gestureHoldBeforeMoveMs > 0 và semantic eval.`);
     }
     if (risk === 'raycast-occlusion' && !['positive', 'negative'].every(tag => matrix.cases.some(entry =>
-      (entry.regressionTags || []).includes(tag) && entry.gesture && caseHasEval(entry)))) {
+      (entry.regressionTags || []).includes(tag) && caseHasInputGesture(entry) && caseHasEval(entry)))) {
       throw regressionError('REGRESSION_RAYCAST_POLARITY_MISSING', `${suite.id}: raycast cần case tag positive và negative.`);
     }
     if (risk === 'transparent-hold-state' && !matrix.cases.some(entry =>
-      entry.gesture && entry.gestureKeepPressed === true && caseHasEval(entry))) {
+      caseHasInputGesture(entry) && entry.gestureKeepPressed === true && caseHasEval(entry))) {
       throw regressionError('REGRESSION_TRANSPARENT_HOLD_MISSING', `${suite.id}: transparent hold cần gestureKeepPressed=true và semantic eval.`);
     }
     if (risk === 'animation-callback-flow' && !matrix.cases.some(entry =>
@@ -416,6 +515,20 @@ function validateMatrixPolicy(projectRoot, suite, matrix, matrixFile) {
       throw regressionError('REGRESSION_ANIMATION_CURVE_ORACLE_MISSING',
         `${suite.id}: animation-curve-fidelity cần animationOracle + Unity reference + ordered trace và metric bounds `
         + 'cho cross-axis, curve extrema, one-shot phase count, timing và oracle clip count.');
+    }
+    if (risk === 'first-use-performance') {
+      if (suite.runs < 2) {
+        throw regressionError('REGRESSION_FIRST_USE_ROUNDS_REQUIRED',
+          `${suite.id}: first-use-performance cần ít nhất 2 cold runs để loại cache/timing false positive.`);
+      }
+      if (!matrix.cases.some(caseHasFirstUsePerformanceOracle)) {
+        throw regressionError('REGRESSION_FIRST_USE_ORACLE_MISSING',
+          `${suite.id}: first-use-performance cần cold-start real gesture, probe cài trước input, ordered trace `
+          + 'và bounds cho long task, frame gap, feedback-to-semantic delay.');
+      }
+    }
+    if (risk === 'particle-vfx') {
+      validateParticleVfxOracle(suite, matrix);
     }
     if (risk === 'runtime-mesh-animation') {
       const missingPathCases = ['linear-path', 'curved-path'].filter(tag => !matrix.cases.some(entry =>
@@ -434,6 +547,9 @@ function validateMatrixPolicy(projectRoot, suite, matrix, matrixFile) {
         throw regressionError('REGRESSION_RUNTIME_MESH_WATCH_MISSING',
           `${suite.id}: runtime-mesh-animation phải watch code và ít nhất một render asset/effect/prefab.`);
       }
+    }
+    if (risk === 'responsive-layout') {
+      validateResponsiveLayoutOracle(suite, matrix);
     }
     if (risk === 'level-lifecycle' && suite.runs < 2) {
       throw regressionError('REGRESSION_ROUNDS_REQUIRED', `${suite.id}: level-lifecycle phải chạy ít nhất 2 rounds.`);
@@ -745,11 +861,44 @@ async function runRegressionGate(options = {}, dependencies = {}) {
     ? await dependencies.assertPortable(projectRoot, registry)
     : assertPortableRegistry(projectRoot, registry);
   const before = registrySnapshot(projectRoot, registry);
+  const selectedSuiteIds = [...new Set((options.suites || []).map(value => String(value || '').trim()).filter(Boolean))];
+  const selectedSuiteSet = new Set(selectedSuiteIds);
+  const unknownSuites = selectedSuiteIds.filter(id => !registry.suites.some(suite => suite.id === id));
+  if (unknownSuites.length) {
+    throw regressionError('REGRESSION_SUITE_UNKNOWN', `Suite không có trong registry: ${unknownSuites.join(', ')}`);
+  }
+  let baseReceipt = null;
+  let baseResults = new Map();
+  if (selectedSuiteIds.length) {
+    try {
+      baseReceipt = readReceipt(projectRoot, options).value;
+    } catch (error) {
+      throw regressionError('REGRESSION_SELECTIVE_BASE_REQUIRED', 'Selective suite rerun cần receipt hiện hữu cùng snapshot; chạy full registry trước.', {
+        cause: error.code || error.message,
+      });
+    }
+    if (!baseReceipt.snapshot || baseReceipt.snapshot.digest !== before.digest) {
+      throw regressionError('REGRESSION_SELECTIVE_BASE_STALE', 'Selective suite rerun không được merge với receipt stale; chạy full registry trước.', {
+        expected: before.digest,
+        actual: baseReceipt.snapshot && baseReceipt.snapshot.digest,
+      });
+    }
+    baseResults = new Map((baseReceipt.suites || []).map(result => [result.id, result]));
+    const missingBaseSuites = registry.suites
+      .filter(suite => !selectedSuiteSet.has(suite.id) && !baseResults.has(suite.id))
+      .map(suite => suite.id);
+    if (missingBaseSuites.length) {
+      throw regressionError('REGRESSION_SELECTIVE_BASE_INCOMPLETE', `Receipt base thiếu suite chưa được chọn: ${missingBaseSuites.join(', ')}`);
+    }
+  }
   const refresh = options.refresh === false
     ? { ok: true, skipped: true, reason: 'explicit --no-refresh' }
     : await (dependencies.refreshPreview || refreshCocosPreview)(projectRoot, dependencies.refreshOptions || {});
   const results = [];
-  for (const suite of registry.suites) {
+  const executionSuites = selectedSuiteIds.length
+    ? registry.suites.filter(suite => selectedSuiteSet.has(suite.id))
+    : registry.suites;
+  for (const suite of executionSuites) {
     const runs = [];
     for (let runNumber = 1; runNumber <= suite.runs; runNumber += 1) {
       const result = (dependencies.runMatrix || executeMatrix)(projectRoot, suite, runNumber, {
@@ -766,7 +915,11 @@ async function runRegressionGate(options = {}, dependencies = {}) {
       before: before.digest, after: after.digest,
     });
   }
-  const ok = results.filter(item => item.mandatory).every(item => item.ok);
+  const executedById = new Map(results.map(result => [result.id, result]));
+  const mergedResults = selectedSuiteIds.length
+    ? registry.suites.map(suite => executedById.get(suite.id) || baseResults.get(suite.id))
+    : results;
+  const ok = mergedResults.filter(item => item.mandatory).every(item => item.ok);
   const receiptFile = resolveContained(projectRoot, options.receipt || DEFAULT_RECEIPT, 'receipt');
   const receipt = {
     schemaVersion: RECEIPT_SCHEMA_VERSION,
@@ -777,7 +930,13 @@ async function runRegressionGate(options = {}, dependencies = {}) {
     portable,
     snapshot: after,
     requiredRisks: registry.requiredRisks,
-    suites: results,
+    suites: mergedResults,
+    ...(selectedSuiteIds.length ? {
+      selectiveRerun: {
+        suites: selectedSuiteIds,
+        baseGeneratedAt: baseReceipt.generatedAt || null,
+      },
+    } : {}),
   };
   atomicWriteJson(receiptFile, receipt);
   return {
@@ -789,8 +948,9 @@ async function runRegressionGate(options = {}, dependencies = {}) {
     portable,
     refresh,
     requiredRisks: registry.requiredRisks,
-    suites: results,
-    nextActions: results.filter(item => item.mandatory && !item.ok).map(item => `Fix/re-run ${item.id}`),
+    suites: mergedResults,
+    ...(selectedSuiteIds.length ? { selectiveRerun: selectedSuiteIds } : {}),
+    nextActions: mergedResults.filter(item => item.mandatory && !item.ok).map(item => `Fix/re-run ${item.id}`),
   };
 }
 

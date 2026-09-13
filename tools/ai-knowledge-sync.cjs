@@ -109,6 +109,10 @@ function copyDirRecursive(src, dest) {
   }
 }
 
+function shouldDeployUserHome(env = process.env) {
+  return env.CC_PLAYABLE_AI_SYNC_PROJECT_ONLY !== '1';
+}
+
 function copyFileSafe(src, dest) {
   if (!fs.existsSync(src)) return false;
   const parentDir = path.dirname(dest);
@@ -165,9 +169,12 @@ function main() {
   const agentsDest = path.join(PROJECT_ROOT, 'AGENTS.md');
   copyFileSafe(agentsSrc, agentsDest);
 
+  const deployUserHome = shouldDeployUserHome();
   const codexSkillsDest = path.join(HOME_DIR, '.codex', 'skills');
-  copyDirRecursive(skillsDir, codexSkillsDest);
-  console.log('  [ok] Codex / ChatGPT -> AGENTS.md, ~/.codex/skills/');
+  if (deployUserHome) copyDirRecursive(skillsDir, codexSkillsDest);
+  console.log(deployUserHome
+    ? '  [ok] Codex / ChatGPT -> AGENTS.md, ~/.codex/skills/'
+    : '  [ok] Codex / ChatGPT -> AGENTS.md (user-home skills skipped by CC_PLAYABLE_AI_SYNC_PROJECT_ONLY=1)');
 
   // 3. Gemini / Antigravity (GEMINI.md, .gemini/GEMINI.md, ~/.gemini/antigravity/skills/)
   const geminiSrc = path.join(templatesDir, 'GEMINI.md');
@@ -175,11 +182,13 @@ function main() {
   copyFileSafe(geminiSrc, path.join(PROJECT_ROOT, '.gemini', 'GEMINI.md'));
 
   const antigravitySkillsDest = path.join(HOME_DIR, '.gemini', 'antigravity', 'skills');
-  copyDirRecursive(skillsDir, antigravitySkillsDest);
+  if (deployUserHome) copyDirRecursive(skillsDir, antigravitySkillsDest);
 
   const workspaceAgentsSkills = path.join(PROJECT_ROOT, '.agents', 'skills');
   copyDirRecursive(skillsDir, workspaceAgentsSkills);
-  console.log('  [ok] Gemini / Antigravity -> GEMINI.md, ~/.gemini/antigravity/skills/, .agents/skills/');
+  console.log(deployUserHome
+    ? '  [ok] Gemini / Antigravity -> GEMINI.md, ~/.gemini/antigravity/skills/, .agents/skills/'
+    : '  [ok] Gemini / Antigravity -> GEMINI.md, .agents/skills/ (user-home skills skipped)');
 
   // 4. GitHub Copilot / Cursor (.github/copilot-instructions.md, .cursorrules, .github/skills/)
   const copilotSrcCandidates = [
@@ -211,7 +220,9 @@ function main() {
     path.join(PROJECT_ROOT, '.cursorrules'),
     path.join(PROJECT_ROOT, '.github', 'copilot-instructions.md'),
   ];
-  for (const skillRoot of [projectSkillsDest, workspaceAgentsSkills, codexSkillsDest, antigravitySkillsDest]) {
+  const renderedSkillRoots = [projectSkillsDest, workspaceAgentsSkills];
+  if (deployUserHome) renderedSkillRoots.push(codexSkillsDest, antigravitySkillsDest);
+  for (const skillRoot of renderedSkillRoots) {
     const skillFile = path.join(skillRoot, 'unity-to-cocos-porting', 'SKILL.md');
     if (fs.existsSync(skillFile)) renderTargets.push(skillFile);
   }
@@ -234,4 +245,4 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { generatedBlocks, injectGenerated, insertGeneratedStamp, main };
+module.exports = { generatedBlocks, injectGenerated, insertGeneratedStamp, shouldDeployUserHome, main };

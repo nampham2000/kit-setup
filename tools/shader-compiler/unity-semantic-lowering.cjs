@@ -288,13 +288,15 @@ function lowerHlslToGlsl(code, options = {}) {
   out = out.replace(/\b([-+]?(?:\d+\.\d*|\.\d+))\.(x{2,4})\b/g,
     (m, lit, sw) => `vec${sw.length}(${lit})`);
 
-  // Unity injects `<Tex>_TexelSize` = (1/w, 1/h, w, h) for every sampler. Cocos
-  // does not, so leaving the declaration standing produced a material uniform
-  // that nothing ever writes -- it stayed at zero and every outline/blur shader
-  // that scaled by it sampled a single texel. textureSize() gives the same value.
+  // Unity injects `<Tex>_TexelSize` = (1/w, 1/h, w, h) for every sampler. Keep
+  // that semantic as an explicit Cocos material uniform. `textureSize()` looks
+  // equivalent on WebGL2, but Cocos also compiles a WebGL1/GLES100 variant where
+  // it becomes unsupported `texture2DSize` and rejects the entire effect.
+  // cocos-effect-generator synthesizes the matching authorable vec4 property;
+  // runtime code binds it from the actual texture dimensions.
   out = out.replace(/\b_?([A-Za-z_]\w*?)_TexelSize\b/g, (m, tex) => {
     const name = toCocosSamplerName(tex);
-    return `vec4(1.0 / vec2(textureSize(${name}, 0)), vec2(textureSize(${name}, 0)))`;
+    return `${name}TexelSize`;
   });
   // SpriteRenderer's per-instance tint. In Cocos the sprite's colour arrives as
   // the vertex colour varying.

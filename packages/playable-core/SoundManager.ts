@@ -1,4 +1,4 @@
-import { _decorator, Component, AudioClip, AudioSource, Node, director } from 'cc';
+import { _decorator, Component, AudioClip, AudioSource, Node, director, tween, Tween } from 'cc';
 import { GameUtils } from './utils/GameUtils';
 const { ccclass } = _decorator;
 
@@ -93,12 +93,31 @@ export class SoundManager extends Component {
     return Promise.all(paths.map((p) => this.preload(p))).then(() => undefined);
   }
 
-  public playBGM(pathOrClip: string | AudioClip, loop: boolean = true): void {
+  /**
+   * Plays BGM without restarting an already-playing identical clip.
+   *
+   * `fadeInSeconds` mirrors Unity AudioSource fade-in flows while keeping the
+   * browser unlock path idempotent. The fade is owned by the AudioSource, so
+   * later stop/volume/mute calls can cancel it deterministically.
+   */
+  public playBGM(
+    pathOrClip: string | AudioClip,
+    loop: boolean = true,
+    fadeInSeconds: number = 0,
+  ): void {
     if (!pathOrClip || !this._bgmAudioSource) return;
 
     if (typeof pathOrClip === 'string') {
+      // A preloaded clip must start synchronously inside the user gesture that
+      // unlocks Web Audio. Deferring even a cache hit through Promise.then can
+      // lose autoplay authorization on stricter browser/webview runtimes.
+      const cached = this._audioCache.get(pathOrClip);
+      if (cached) {
+        this.playBGM(cached, loop, fadeInSeconds);
+        return;
+      }
       this.preload(pathOrClip)
-        .then((clip) => this.playBGM(clip, loop))
+        .then((clip) => this.playBGM(clip, loop, fadeInSeconds))
         .catch(() => undefined);
       return;
     }
@@ -106,15 +125,24 @@ export class SoundManager extends Component {
     const clip = pathOrClip;
     if (this._bgmAudioSource.clip === clip && this._bgmAudioSource.playing) return;
 
+    Tween.stopAllByTarget(this._bgmAudioSource);
     this._bgmAudioSource.stop();
     this._bgmAudioSource.clip = clip;
     this._bgmAudioSource.loop = loop;
-    this._bgmAudioSource.volume = this._bgmMuted ? 0 : this._bgmVolume;
+    const targetVolume = this._bgmMuted ? 0 : this._bgmVolume;
+    const duration = Math.max(0, fadeInSeconds);
+    this._bgmAudioSource.volume = duration > 0 ? 0 : targetVolume;
     this._bgmAudioSource.play();
+    if (duration > 0 && targetVolume > 0) {
+      tween(this._bgmAudioSource)
+        .to(duration, { volume: targetVolume })
+        .start();
+    }
   }
 
   public stopBGM(): void {
     if (this._bgmAudioSource) {
+      Tween.stopAllByTarget(this._bgmAudioSource);
       this._bgmAudioSource.stop();
     }
   }
@@ -142,14 +170,23 @@ export class SoundManager extends Component {
     return this._bgmAudioSource?.currentTime ?? 0;
   }
 
-  public playSFX(pathOrClip: string | AudioClip, volume: number = 1.0, loop: boolean = false): void {
-    if (!pathOrClip || !this._sfxAudioSource || this._sfxMuted) return;
+  /**
+   * Plays an SFX and reports whether the engine playback call happened now.
+   *
+   * Preloaded string paths intentionally resolve from the cache synchronously.
+   * Besides preserving source callback order, this lets gameplay QA distinguish
+   * an actual AudioSource call from a request that was only queued for loading.
+   */
+  public playSFX(pathOrClip: string | AudioClip, volume: number = 1.0, loop: boolean = false): boolean {
+    if (!pathOrClip || !this._sfxAudioSource || this._sfxMuted) return false;
 
     if (typeof pathOrClip === 'string') {
+      const cached = this._audioCache.get(pathOrClip);
+      if (cached) return this.playSFX(cached, volume, loop);
       this.preload(pathOrClip)
         .then((clip) => this.playSFX(clip, volume, loop))
         .catch(() => undefined);
-      return;
+      return false;
     }
 
     const clip = pathOrClip;
@@ -161,10 +198,11 @@ export class SoundManager extends Component {
         this._sfxAudioSource.volume = this._sfxVolume * volume;
         this._sfxAudioSource.play();
       }
-      return;
+      return true;
     }
 
     this._sfxAudioSource.playOneShot(clip, this._sfxVolume * volume);
+    return true;
   }
 
   /**
@@ -249,6 +287,7 @@ export class SoundManager extends Component {
   public setBGMVolume(volume: number): void {
     this._bgmVolume = Math.max(0, Math.min(1, volume));
     if (this._bgmAudioSource && !this._bgmMuted) {
+      Tween.stopAllByTarget(this._bgmAudioSource);
       this._bgmAudioSource.volume = this._bgmVolume;
     }
   }
@@ -274,6 +313,7 @@ export class SoundManager extends Component {
   public muteBGM(mute: boolean): void {
     this._bgmMuted = mute;
     if (this._bgmAudioSource) {
+      Tween.stopAllByTarget(this._bgmAudioSource);
       this._bgmAudioSource.volume = mute ? 0 : this._bgmVolume;
     }
   }

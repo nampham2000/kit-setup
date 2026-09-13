@@ -52,7 +52,7 @@ flowchart LR
 
 ## 7. TypeScript & Performance Guidelines
 - Cocos Creator 3.8.8+ uses decorators: `@ccclass('ClassName')`, `@property(CCFloat)`.
-- Use `ObjectPool` from `playable-core` for hypercasual spawner loops.
+- Use `ObjectPool` from `playable-core/utils/pool/ObjectPool` for hypercasual spawner loops.
 - Use `tween(this.node).to(...)` for UI & node animations.
 - Wire `GameManager.instance` for lifecycle (`onGameReady`, `onGameStart`, `onGameWin`, `onGameLose`) and `SuperHtmlPlayable.download()` for CTA clicks.
 

@@ -194,7 +194,7 @@ test('reads TMP outline and underlay settings from the referenced material', () 
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'font-porter-test-'));
   try {
     const material = asset(root, '33333333333333333333333333333333', 'Fonts/Styled.mat', [
-      'm_ShaderKeywords: UNDERLAY_ON',
+      'm_ShaderKeywords: OUTLINE_ON UNDERLAY_ON',
       '    - _OutlineWidth: 0.2',
       '    - _OutlineColor: {r: 1, g: 0.5, b: 0.25, a: 1}',
       '    - _UnderlayOffsetX: 3',
@@ -218,7 +218,7 @@ test('follows a TMP font asset m_Material dependency when the label has no share
   try {
     const ttf = asset(root, '22222222222222222222222222222222', 'Fonts/Styled.ttf', Buffer.from([0, 1, 0, 0]));
     const material = asset(root, '33333333333333333333333333333333', 'Fonts/Styled.mat', [
-      'm_ShaderKeywords: UNDERLAY_ON',
+      'm_ShaderKeywords: OUTLINE_ON UNDERLAY_ON',
       '    - _OutlineWidth: 0.3',
       '    - _UnderlayOffsetX: 4',
     ].join('\n'));
@@ -236,6 +236,47 @@ test('follows a TMP font asset m_Material dependency when the label has no share
     assert.equal(config.outlineWidth, 3);
     assert.equal(config.enableShadow, true);
     assert.equal(config.shadowOffset.x, 4);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('does not enable dormant TMP outline or underlay properties without active material keywords', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'font-porter-test-'));
+  try {
+    const material = asset(root, '66666666666666666666666666666666', 'Fonts/Dormant.mat', [
+      'm_ValidKeywords: []',
+      'm_InvalidKeywords:',
+      '  - OUTLINE_ON',
+      '  - UNDERLAY_ON',
+      '    - _OutlineWidth: 0.4',
+      '    - _UnderlayDilate: 0.218',
+      '    - _UnderlaySoftness: 0.4',
+    ].join('\n'));
+    const style = tmpMaterialStyle(material);
+    assert.equal(style.enableOutline, false);
+    assert.equal(style.enableShadow, false);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('enables only the TMP effects listed in m_ValidKeywords', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'font-porter-test-'));
+  try {
+    const material = asset(root, '77777777777777777777777777777777', 'Fonts/OutlineOnly.mat', [
+      'm_ValidKeywords:',
+      '  - OUTLINE_ON',
+      'm_InvalidKeywords:',
+      '  - UNDERLAY_ON',
+      '    - _OutlineWidth: 0.25',
+      '    - _UnderlayDilate: 0.218',
+      '    - _UnderlayOffsetY: -0.843',
+    ].join('\n'));
+    const style = tmpMaterialStyle(material);
+    assert.equal(style.enableOutline, true);
+    assert.equal(style.outlineWidth, 3);
+    assert.equal(style.enableShadow, false);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

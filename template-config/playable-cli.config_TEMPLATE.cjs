@@ -33,7 +33,7 @@ const COCOS_DEFAULTS = {
 
 const INSTALL_DIRS = [
   '.',
-  'extensions/particles-converter',
+  'extensions/cocos-mcp',
   'extensions/super-html',
 ];
 

@@ -1,5 +1,60 @@
 import { ToolDefinition, ToolResponse, ToolExecutor, ComponentInfo } from '../types';
 
+function extractUuid(value: any): string | null {
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        return trimmed || null;
+    }
+    if (!value || typeof value !== 'object') {
+        return null;
+    }
+
+    const direct = extractUuid(value.uuid);
+    if (direct) {
+        return direct;
+    }
+
+    const nestedValue = extractUuid(value.value);
+    if (nestedValue) {
+        return nestedValue;
+    }
+
+    return extractUuid(value.asset);
+}
+
+/**
+ * Cocos serializes custom component types as a class id (CID), not the script
+ * class/file name. The referenced script asset UUID is the stable identity.
+ */
+export function getComponentScriptAssetUuid(component: any): string | null {
+    if (!component || typeof component !== 'object') {
+        return null;
+    }
+
+    const candidates = [
+        component.scriptAssetUuid,
+        component.__scriptAsset,
+        component.value?.__scriptAsset,
+        component.properties?.__scriptAsset,
+        component.properties?.value?.__scriptAsset,
+    ];
+
+    for (const candidate of candidates) {
+        const uuid = extractUuid(candidate);
+        if (uuid) {
+            return uuid;
+        }
+    }
+    return null;
+}
+
+export function findScriptComponentByAssetUuid(components: any[], scriptAssetUuid: string): any | undefined {
+    if (!Array.isArray(components) || !scriptAssetUuid) {
+        return undefined;
+    }
+    return components.find((component: any) => getComponentScriptAssetUuid(component) === scriptAssetUuid);
+}
+
 export class ComponentTools implements ToolExecutor {
     getTools(): ToolDefinition[] {
         return [
@@ -323,12 +378,16 @@ export class ComponentTools implements ToolExecutor {
             // Prefer querying node information directly through the Editor API
             Editor.Message.request('scene', 'query-node', nodeUuid).then((nodeData: any) => {
                 if (nodeData && nodeData.__comps__) {
-                    const components = nodeData.__comps__.map((comp: any) => ({
-                        type: comp.__type__ || comp.cid || comp.type || 'Unknown',
-                        uuid: comp.uuid?.value || comp.uuid || null,
-                        enabled: comp.enabled !== undefined ? comp.enabled : true,
-                        properties: this.extractComponentProperties(comp)
-                    }));
+                    const components = nodeData.__comps__.map((comp: any) => {
+                        const properties = this.extractComponentProperties(comp);
+                        return {
+                            type: comp.__type__ || comp.cid || comp.type || 'Unknown',
+                            uuid: comp.uuid?.value || comp.uuid || null,
+                            enabled: comp.enabled !== undefined ? comp.enabled : true,
+                            scriptAssetUuid: getComponentScriptAssetUuid({ ...comp, properties }),
+                            properties,
+                        };
+                    });
                     
                     resolve({
                         success: true,
@@ -1098,82 +1157,151 @@ export class ComponentTools implements ToolExecutor {
     }
 
 
+    private async resolveScriptAssetUuid(scriptPath: string): Promise<string | null> {
+        try {
+            const uuid = extractUuid(await Editor.Message.request('asset-db', 'query-uuid', scriptPath));
+            if (uuid) {
+                return uuid;
+            }
+        } catch {
+            // Older/custom AssetDB bridges may not expose query-uuid. The asset
+            // info lookup below is still UUID-backed and therefore safe.
+        }
+
+        try {
+            return extractUuid(await Editor.Message.request('asset-db', 'query-asset-info', scriptPath));
+        } catch {
+            return null;
+        }
+    }
+
     private async attachScript(nodeUuid: string, scriptPath: string): Promise<ToolResponse> {
-        return new Promise(async (resolve) => {
-            // Extract the component class name from the script path
-            const scriptName = scriptPath.split('/').pop()?.replace('.ts', '').replace('.js', '');
-            if (!scriptName) {
-                resolve({ success: false, error: 'Invalid script path' });
-                return;
-            }
-            // First check whether the script component already exists on the node
-            const allComponentsInfo = await this.getComponents(nodeUuid);
-            if (allComponentsInfo.success && allComponentsInfo.data?.components) {
-                const existingScript = allComponentsInfo.data.components.find((comp: any) => comp.type === scriptName);
-                if (existingScript) {
-                    resolve({
-                        success: true,
-                        message: `Script '${scriptName}' already exists on node`,
-                        data: {
-                            nodeUuid: nodeUuid,
-                            componentName: scriptName,
-                            existing: true
-                        }
-                    });
-                    return;
-                }
-            }
-            // First try using the script name directly as the component type
-            Editor.Message.request('scene', 'create-component', {
-                uuid: nodeUuid,
-                component: scriptName  // Use the script name instead of the UUID
-            }).then(async (result: any) => {
-                // Wait a short time for the Editor to finish adding the component
-                await new Promise(resolve => setTimeout(resolve, 100));
-                // Query the node again to verify that the script was actually added successfully
-                const allComponentsInfo2 = await this.getComponents(nodeUuid);
-                if (allComponentsInfo2.success && allComponentsInfo2.data?.components) {
-                    const addedScript = allComponentsInfo2.data.components.find((comp: any) => comp.type === scriptName);
-                    if (addedScript) {
-                        resolve({
-                            success: true,
-                            message: `Script '${scriptName}' attached successfully`,
-                            data: {
-                                nodeUuid: nodeUuid,
-                                componentName: scriptName,
-                                existing: false
-                            }
-                        });
-                    } else {
-                        resolve({
-                            success: false,
-                            error: `Script '${scriptName}' was not found on node after addition. Available components: ${allComponentsInfo2.data.components.map((c: any) => c.type).join(', ')}`
-                        });
-                    }
-                } else {
-                    resolve({
-                        success: false,
-                        error: `Failed to verify script addition: ${allComponentsInfo2.error || 'Unable to get node components'}`
-                    });
-                }
-            }).catch((err: Error) => {
-                // Fallback: use the scene script
-                const options = {
-                    name: 'cocos-mcp-server',
-                    method: 'attachScript',
-                    args: [nodeUuid, scriptPath]
+        // Extract the component class name from the script path. Cocos still
+        // expects this name for create-component, but it is never used as the
+        // identity check for a custom script component.
+        const scriptName = scriptPath.split('/').pop()?.replace(/\.(?:ts|js)$/i, '');
+        if (!scriptName) {
+            return { success: false, error: 'Invalid script path' };
+        }
+
+        const scriptAssetUuid = await this.resolveScriptAssetUuid(scriptPath);
+        if (!scriptAssetUuid) {
+            return {
+                success: false,
+                error: `Unable to resolve the script asset UUID for '${scriptPath}'. Refusing a name-only attachment check.`,
+                instruction: 'Ensure the script is imported and compiled in Cocos Creator, then retry attach_script.',
+            };
+        }
+
+        // Idempotence must be UUID-based: getComponents reports a CID in type
+        // for custom scripts, and multiple assets can legally share a filename.
+        const before = await this.getComponents(nodeUuid);
+        if (before.success && before.data?.components) {
+            const existingScript = findScriptComponentByAssetUuid(before.data.components, scriptAssetUuid);
+            if (existingScript) {
+                return {
+                    success: true,
+                    message: `Script '${scriptName}' already exists on node`,
+                    data: {
+                        nodeUuid,
+                        componentName: scriptName,
+                        componentType: existingScript.type,
+                        scriptAssetUuid,
+                        existing: true,
+                    },
                 };
-                Editor.Message.request('scene', 'execute-scene-script', options).then((result: any) => {
-                    resolve(result);
-                }).catch(() => {
-                    resolve({ 
-                        success: false, 
-                        error: `Failed to attach script '${scriptName}': ${err.message}`,
-                        instruction: 'Please ensure the script is properly compiled and exported as a Component class. You can also manually attach the script through the Properties panel in the editor.'
-                    });
-                });
+            }
+        }
+
+        let directError: Error | null = null;
+        try {
+            await Editor.Message.request('scene', 'create-component', {
+                uuid: nodeUuid,
+                component: scriptName,
             });
-        });
+        } catch (error: any) {
+            directError = error instanceof Error ? error : new Error(String(error));
+
+            // A scene bridge may throw after scheduling the mutation. Re-read
+            // the UUID-backed postcondition before attempting a fallback so a
+            // transient transport failure cannot create a duplicate component.
+            const afterDirectError = await this.getComponents(nodeUuid);
+            if (afterDirectError.success && afterDirectError.data?.components) {
+                const attachedDespiteError = findScriptComponentByAssetUuid(
+                    afterDirectError.data.components,
+                    scriptAssetUuid,
+                );
+                if (attachedDespiteError) {
+                    return {
+                        success: true,
+                        message: `Script '${scriptName}' attached successfully`,
+                        data: {
+                            nodeUuid,
+                            componentName: scriptName,
+                            componentType: attachedDespiteError.type,
+                            scriptAssetUuid,
+                            existing: false,
+                            usedFallback: false,
+                            directApiReportedError: directError.message,
+                        },
+                    };
+                }
+            }
+
+            const options = {
+                name: 'cocos-mcp-server',
+                method: 'addComponentToNode',
+                args: [nodeUuid, scriptName],
+            };
+            try {
+                const fallbackResult = await Editor.Message.request('scene', 'execute-scene-script', options);
+                if (fallbackResult?.success === false) {
+                    throw new Error(fallbackResult.error || 'scene script rejected the component attachment');
+                }
+            } catch (fallbackError: any) {
+                return {
+                    success: false,
+                    error: `Failed to attach script '${scriptName}': direct API: ${directError.message}; scene script: ${fallbackError?.message || String(fallbackError)}`,
+                    instruction: 'Please ensure the script is properly compiled and exported as a Component class.',
+                };
+            }
+        }
+
+        // Both the direct and fallback paths must pass the same authoritative
+        // postcondition instead of trusting an API success response.
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const after = await this.getComponents(nodeUuid);
+        if (!after.success || !after.data?.components) {
+            return {
+                success: false,
+                error: `Failed to verify script addition: ${after.error || 'Unable to get node components'}`,
+            };
+        }
+
+        const addedScript = findScriptComponentByAssetUuid(after.data.components, scriptAssetUuid);
+        if (!addedScript) {
+            const available = after.data.components.map((component: any) => {
+                const uuid = getComponentScriptAssetUuid(component);
+                return uuid ? `${component.type} [script=${uuid}]` : component.type;
+            }).join(', ');
+            return {
+                success: false,
+                error: `Script '${scriptName}' (${scriptAssetUuid}) was not found on node after addition. Available components: ${available}`,
+            };
+        }
+
+        return {
+            success: true,
+            message: `Script '${scriptName}' attached successfully`,
+            data: {
+                nodeUuid,
+                componentName: scriptName,
+                componentType: addedScript.type,
+                scriptAssetUuid,
+                existing: false,
+                usedFallback: directError !== null,
+            },
+        };
     }
 
     private async getAvailableComponents(category: string = 'all'): Promise<ToolResponse> {

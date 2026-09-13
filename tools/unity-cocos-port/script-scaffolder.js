@@ -99,8 +99,9 @@ function scaffoldCSharpToTypeScript(csharpCode, classNameFallback = 'ScaffoldedC
 
   // 4. Build TypeScript output
   let ts = `import { _decorator, Component, Node, Vec3, Quat, Color, CCFloat, CCInteger, CCBoolean, CCString, AudioClip, tween } from 'cc';\n`;
-  ts += `import { GameManager, PlayableConfigManager } from 'playable-core';\n`;
-  ts += `import { SuperHtmlPlayable } from 'playable-sdk';\n\n`;
+  ts += `import { GameManager } from 'playable-core/GameManager';\n`;
+  ts += `import { PlayableConfigManager } from 'playable-core/config/PlayableConfigManager';\n`;
+  ts += `import { SuperHtmlPlayable } from 'playable-sdk/platform/SuperHtmlPlayable';\n\n`;
   ts += `const { ccclass, property } = _decorator;\n\n`;
   ts += `// Pre-allocated temp variables for Zero-GC in update loops\n`;
   ts += `const _tempVec3 = new Vec3();\n`;

@@ -26,6 +26,9 @@ require('./lib/auto-strip-ansi.cjs');
 
 const fs = require('fs');
 const path = require('path');
+const { auditResourceBoundary } = require('./resource-boundary.cjs');
+
+const FONT_MAX_BYTES = 100 * 1024;
 
 const USAGE = `Asset Import Gate
 
@@ -81,9 +84,15 @@ function walkMetas (dir, out) {
 }
 
 /** Gom các file log của editor, mới nhất trước. */
-function collectLogFiles () {
+function collectLogFiles (projectRoot = ROOT_DIR) {
     const files = [];
-    for (const candidate of LOG_CANDIDATES) {
+    const candidates = projectRoot === ROOT_DIR
+        ? LOG_CANDIDATES
+        : [
+            path.join(projectRoot, 'temp', 'logs', 'project.log'),
+            path.join(projectRoot, 'temp', 'asset-db', 'log'),
+        ];
+    for (const candidate of candidates) {
         let stat;
         try { stat = fs.statSync(candidate); } catch (e) { continue; }
         if (stat.isFile()) { files.push({ file: candidate, mtime: stat.mtimeMs }); continue; }
@@ -95,6 +104,51 @@ function collectLogFiles () {
         }
     }
     return files.sort((a, b) => b.mtime - a.mtime).map((f) => f.file);
+}
+
+function stableJsonStringify (value) {
+    if (Array.isArray(value)) {
+        return `[${value.map(stableJsonStringify).join(',')}]`;
+    }
+    if (value && typeof value === 'object') {
+        const keys = Object.keys(value).sort();
+        return `{${keys.map((key) => `${JSON.stringify(key)}:${stableJsonStringify(value[key])}`).join(',')}}`;
+    }
+    return JSON.stringify(value);
+}
+
+/**
+ * Cocos 3.8.x stores a plain JSON import at
+ * `library/<uuid-prefix>/<uuid>.json` as a cc.JsonAsset wrapper. A source edit
+ * can leave `.meta.imported=true` while this cache still contains the previous
+ * object; preview then executes stale gameplay config even though every
+ * source-only verifier is green.
+ */
+function inspectJsonAssetCache (projectRoot, assetFile, meta) {
+    if (meta?.importer !== 'json' || meta.imported !== true || path.extname(assetFile).toLowerCase() !== '.json') {
+        return null;
+    }
+    const uuid = String(meta.uuid || '').trim();
+    if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(uuid)) {
+        return { status: 'invalid-meta', cacheFile: null, detail: 'JSON meta thiếu UUID chuẩn của Cocos.' };
+    }
+    const cacheFile = path.join(projectRoot, 'library', uuid.slice(0, 2), `${uuid}.json`);
+    if (!fs.existsSync(cacheFile)) {
+        return { status: 'missing', cacheFile, detail: 'Không tìm thấy cc.JsonAsset cache tương ứng trong library/.' };
+    }
+    try {
+        const source = JSON.parse(fs.readFileSync(assetFile, 'utf8').replace(/^\uFEFF/, ''));
+        const imported = JSON.parse(fs.readFileSync(cacheFile, 'utf8').replace(/^\uFEFF/, ''));
+        if (imported?.__type__ !== 'cc.JsonAsset' || !Object.prototype.hasOwnProperty.call(imported, 'json')) {
+            return { status: 'invalid-cache', cacheFile, detail: 'Cache không phải wrapper cc.JsonAsset hợp lệ.' };
+        }
+        if (stableJsonStringify(source) !== stableJsonStringify(imported.json)) {
+            return { status: 'stale', cacheFile, detail: 'Nội dung source JSON khác object Cocos đang dùng trong preview.' };
+        }
+        return { status: 'fresh', cacheFile, detail: null };
+    } catch (error) {
+        return { status: 'invalid-cache', cacheFile, detail: `Không parse được source/cache JSON (${error.message}).` };
+    }
 }
 
 /**
@@ -153,7 +207,9 @@ function collectImportFailures (meta, subPath = [], out = [], stats = { checked:
 }
 
 function run (options = {}) {
-    const scanRoot = options.scanPath ? path.resolve(ROOT_DIR, options.scanPath) : ASSETS_DIR;
+    const projectRoot = options.projectRoot ? path.resolve(options.projectRoot) : ROOT_DIR;
+    const assetsDir = path.join(projectRoot, 'assets');
+    const scanRoot = options.scanPath ? path.resolve(projectRoot, options.scanPath) : assetsDir;
     const result = {
         name: 'Asset Import Status',
         status: 'PASS',
@@ -164,11 +220,16 @@ function run (options = {}) {
         importerStatesScanned: 0,
         failed: [],
         logsRead: [],
+        jsonCacheStatesScanned: 0,
+        staleJsonAssets: [],
+        fontFilesScanned: 0,
+        overBudgetFonts: [],
+        resourceBoundary: null,
     };
 
     if (!fs.existsSync(scanRoot)) {
         result.status = 'FAIL';
-        result.errors.push(`Không tìm thấy thư mục: ${path.relative(ROOT_DIR, scanRoot) || scanRoot}`);
+        result.errors.push(`Không tìm thấy thư mục: ${path.relative(projectRoot, scanRoot) || scanRoot}`);
         result.details = 'Đường dẫn quét không tồn tại.';
         return result;
     }
@@ -177,10 +238,11 @@ function run (options = {}) {
     result.scanned = metas.length;
 
     const notImported = [];
+    const libraryAvailable = fs.existsSync(path.join(projectRoot, 'library'));
     for (const metaFile of metas) {
         let meta;
         try { meta = JSON.parse(fs.readFileSync(metaFile, 'utf8')); } catch (e) {
-            result.errors.push(`${path.relative(ROOT_DIR, metaFile).replace(/\\/g, '/')}: .meta hỏng, không parse được JSON (${e.message})`);
+            result.errors.push(`${path.relative(projectRoot, metaFile).replace(/\\/g, '/')}: .meta hỏng, không parse được JSON (${e.message})`);
             continue;
         }
         const inspected = collectImportFailures(meta);
@@ -188,16 +250,48 @@ function run (options = {}) {
         for (const failure of inspected.failures) {
             notImported.push({ metaFile, meta: failure.meta, subPath: failure.subPath });
         }
+
+        const assetFile = metaFile.slice(0, -'.meta'.length);
+        if (path.extname(assetFile).toLowerCase() === '.ttf' && fs.existsSync(assetFile)) {
+            result.fontFilesScanned += 1;
+            const size = fs.statSync(assetFile).size;
+            if (size > FONT_MAX_BYTES) {
+                const asset = path.relative(projectRoot, assetFile).replace(/\\/g, '/');
+                result.overBudgetFonts.push({ asset, size, maxBytes: FONT_MAX_BYTES });
+                result.errors.push(`${asset} — FONT OVER BUDGET — ${(size / 1024).toFixed(1)} KiB vượt hard limit 100 KiB. `
+                    + 'Tạo subset source-bound bằng font:subset và verify glyph/visual trước preview.');
+            }
+        }
+
+        if (libraryAvailable) {
+            const cacheState = inspectJsonAssetCache(projectRoot, assetFile, meta);
+            if (cacheState) {
+                result.jsonCacheStatesScanned += 1;
+                if (cacheState.status !== 'fresh') {
+                    const asset = path.relative(projectRoot, assetFile).replace(/\\/g, '/');
+                    const cache = cacheState.cacheFile
+                        ? path.relative(projectRoot, cacheState.cacheFile).replace(/\\/g, '/')
+                        : null;
+                    result.staleJsonAssets.push({ asset, cache, status: cacheState.status });
+                    result.errors.push(`${asset} — JSON CACHE ${cacheState.status.toUpperCase()} — ${cacheState.detail} `
+                        + 'Reimport asset qua Cocos AssetDB trước khi chạy preview.');
+                }
+            }
+        }
+    }
+
+    if (!libraryAvailable) {
+        result.warnings.push('Chưa có library/ nên chưa thể chứng minh cc.JsonAsset cache khớp source; mở Cocos và reimport trước preview.');
     }
 
     if (notImported.length) {
-        const logFiles = collectLogFiles();
-        result.logsRead = logFiles.map((f) => path.relative(ROOT_DIR, f).replace(/\\/g, '/'));
+        const logFiles = collectLogFiles(projectRoot);
+        result.logsRead = logFiles.map((f) => path.relative(projectRoot, f).replace(/\\/g, '/'));
         const logTexts = logFiles.map(readTail);
 
         for (const { metaFile, meta, subPath } of notImported) {
             const assetFile = metaFile.slice(0, -'.meta'.length);
-            const rel = path.relative(ROOT_DIR, assetFile).replace(/\\/g, '/');
+            const rel = path.relative(projectRoot, assetFile).replace(/\\/g, '/');
             const subAsset = subPath.length ? `${rel}#subMeta:${subPath.join('/')}` : rel;
             const reason = findLogReason(path.basename(assetFile), logTexts);
             result.failed.push({
@@ -213,10 +307,37 @@ function run (options = {}) {
         result.status = 'FAIL';
     }
 
+    const boundaryManifest = path.join(projectRoot, 'tools', 'resource-boundary.json');
+    if (fs.existsSync(boundaryManifest)) {
+        try {
+            const boundary = auditResourceBoundary(projectRoot, 'tools/resource-boundary.json');
+            result.resourceBoundary = {
+                status: boundary.status,
+                manifestSha256: boundary.manifestSha256,
+                dynamicRootCount: boundary.dynamicRootCount,
+                dynamicFileCount: boundary.dynamicFileCount,
+                staticCatalogEntryCount: boundary.staticCatalogEntryCount,
+                catalog: boundary.catalog,
+                moveStates: boundary.moveStates,
+                misplacedStaticCount: boundary.misplacedStatic.length,
+                unclassifiedCount: boundary.unclassified.length,
+            };
+            for (const error of boundary.errors) {
+                result.errors.push(`RESOURCE BOUNDARY — ${error}`);
+            }
+        } catch (error) {
+            result.resourceBoundary = { status: 'FAIL', error: error.message };
+            result.errors.push(`RESOURCE BOUNDARY — ${error.message}`);
+        }
+    }
+
     if (result.errors.length) result.status = 'FAIL';
     result.details = result.status === 'PASS'
-        ? `${result.scanned} asset / ${result.importerStatesScanned} importer state đã import sạch.`
-        : `${result.failed.length} importer state lỗi trong ${result.scanned} asset.`;
+        ? `${result.scanned} asset / ${result.importerStatesScanned} importer state đã import sạch; `
+            + `${result.jsonCacheStatesScanned} cc.JsonAsset cache khớp source; ${result.fontFilesScanned} TTF trong budget; `
+            + `${result.resourceBoundary?.staticCatalogEntryCount || 0} static asset qua resource boundary.`
+        : `${result.failed.length} importer state lỗi, ${result.staleJsonAssets.length} JSON cache lỗi `
+            + `và ${result.overBudgetFonts.length} font quá budget trong ${result.scanned} asset.`;
     return result;
 }
 
@@ -253,4 +374,4 @@ function main () {
 
 if (require.main === module) main();
 
-module.exports = { run, collectImportFailures };
+module.exports = { FONT_MAX_BYTES, run, collectImportFailures, inspectJsonAssetCache, stableJsonStringify };

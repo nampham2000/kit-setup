@@ -1,7 +1,5 @@
-export { CameraController, CameraAngleMode } from './CameraController';
-export { Interactive3DHero } from './Interactive3DHero';
-export { PlayableAudioController } from './PlayableAudioController';
-export { PlayableCTAController } from './PlayableCTAController';
-export { PlayableEntry } from './PlayableEntry';
-export { PlayableTrackingController, type PlayableEventType } from './PlayableTrackingController';
-export { PlayableUIHUD } from './PlayableUIHUD';
+/**
+ * Component-free marker. Import every decorated Component from its concrete
+ * module so Cocos Creator never sees multiple Components on this script asset.
+ */
+export const PLAYABLE_CORE_COMPONENT_MODULE_LAYOUT = 1;

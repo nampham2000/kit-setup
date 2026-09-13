@@ -149,17 +149,17 @@ function parseBmFont(text) {
   return codepoints;
 }
 
-function inspectFontFile(file, requiredCharacters = '') {
-  const ext = path.extname(file).toLowerCase();
+function inspectFontBuffer(buffer, requiredCharacters = '', options = {}) {
+  const ext = String(options.ext || '.ttf').toLowerCase();
   let codepoints = new Set();
   let format = ext.slice(1).toUpperCase();
   let error = '';
   try {
     if (ext === '.fnt') {
-      codepoints = parseBmFont(fs.readFileSync(file, 'utf8'));
+      codepoints = parseBmFont(Buffer.isBuffer(buffer) ? buffer.toString('utf8') : String(buffer));
       format = 'BMFont';
     } else {
-      const parsed = sfntTables(fs.readFileSync(file));
+      const parsed = sfntTables(Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer));
       format = parsed.format || format;
       error = parsed.error || '';
       codepoints = cmapCodepoints(parsed.tables.get('cmap'));
@@ -190,9 +190,30 @@ function inspectFontFile(file, requiredCharacters = '') {
   };
 }
 
+function inspectFontFile(file, requiredCharacters = '') {
+  const ext = path.extname(file).toLowerCase();
+  try {
+    return inspectFontBuffer(fs.readFileSync(file), requiredCharacters, { ext });
+  } catch (inspectionError) {
+    return {
+      format: ext.slice(1).toUpperCase(),
+      glyphCount: 0,
+      scripts: [],
+      multilingual: false,
+      requiredCharacterCount: new Set(Array.from(String(requiredCharacters || '')).map((character) => character.codePointAt(0))).size,
+      requiredGlyphs: 0,
+      excessGlyphs: 0,
+      excessRatio: null,
+      reason: 'Font could not be inspected.',
+      error: inspectionError?.message || String(inspectionError),
+    };
+  }
+}
+
 module.exports = {
   SCRIPT_RANGES,
   cmapCodepoints,
+  inspectFontBuffer,
   inspectFontFile,
   parseBmFont,
   scriptsForCodepoints,

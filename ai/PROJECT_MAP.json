@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "generatedAt": "2026-09-13T09:28:43.852Z",
+    "generatedAt": "2026-09-13T11:12:55.905Z",
     "description": "Compact project manifest for AI Agents. Use this instead of scanning file trees.",
     "project": {
       "projectName": "cc_playable_framework",
@@ -20,944 +20,46 @@
   },
   "scenes": [
     {
-      "name": "Complete",
-      "path": "assets/Complete.scene",
-      "sizeKb": 25.8
-    },
-    {
       "name": "Gameplay",
       "path": "assets/Gameplay.scene",
-      "sizeKb": 13.3
-    },
-    {
-      "name": "Game",
-      "path": "assets/Game.scene",
-      "sizeKb": 54.4
-    },
-    {
-      "name": "MainMenu",
-      "path": "assets/MainMenu.scene",
-      "sizeKb": 5.1
+      "sizeKb": 14.1
     }
   ],
-  "prefabs": [
-    {
-      "name": "TutorialVFX",
-      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/levels/TutorialVFX.prefab",
-      "sizeKb": 39.2
-    },
-    {
-      "name": "artstudio",
-      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/levels/artstudio.prefab",
-      "sizeKb": 37.5
-    },
-    {
-      "name": "guestroom",
-      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/levels/guestroom.prefab",
-      "sizeKb": 43.2
-    },
-    {
-      "name": "AdBreakController",
-      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/ui/AdBreakController.prefab",
-      "sizeKb": 10
-    },
-    {
-      "name": "ButtonClose",
-      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/ui/ButtonClose.prefab",
-      "sizeKb": 3.9
-    },
-    {
-      "name": "Char_GamePlay",
-      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/ui/Char_GamePlay.prefab",
-      "sizeKb": 92.8
-    },
-    {
-      "name": "Fade",
-      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/ui/Fade.prefab",
-      "sizeKb": 3.5
-    },
-    {
-      "name": "GameplayUIAnimationRewardHandler",
-      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/ui/GameplayUIAnimationRewardHandler.prefab",
-      "sizeKb": 23.8
-    },
-    {
-      "name": "Logo02",
-      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/ui/Logo02.prefab",
-      "sizeKb": 10.9
-    },
-    {
-      "name": "PanelCoin",
-      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/ui/PanelCoin.prefab",
-      "sizeKb": 32.5
-    },
-    {
-      "name": "PanelLive",
-      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/ui/PanelLive.prefab",
-      "sizeKb": 89.5
-    },
-    {
-      "name": "Sparkle_Coin",
-      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/ui/Sparkle_Coin.prefab",
-      "sizeKb": 32.4
-    },
-    {
-      "name": "Star_trail_gameplay",
-      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/ui/Star_trail_gameplay.prefab",
-      "sizeKb": 44.7
-    },
-    {
-      "name": "UIparticleHit",
-      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/ui/UIparticleHit.prefab",
-      "sizeKb": 130.4
-    },
-    {
-      "name": "VFXTargetTrail",
-      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/ui/VFXTargetTrail.prefab",
-      "sizeKb": 35.9
-    },
-    {
-      "name": "hud",
-      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/ui/hud.prefab",
-      "sizeKb": 371.3
-    },
-    {
-      "name": "lose",
-      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/ui/lose.prefab",
-      "sizeKb": 32.3
-    },
-    {
-      "name": "win",
-      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/ui/win.prefab",
-      "sizeKb": 236.3
-    },
-    {
-      "name": "Star_trail_gameplay",
-      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/vfx/Star_trail_gameplay.prefab",
-      "sizeKb": 62.4
-    },
-    {
-      "name": "celebration",
-      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/vfx/celebration.prefab",
-      "sizeKb": 930.3
-    },
-    {
-      "name": "flash",
-      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/vfx/flash.prefab",
-      "sizeKb": 176.3
-    },
-    {
-      "name": "hint",
-      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/vfx/hint.prefab",
-      "sizeKb": 114.7
-    },
-    {
-      "name": "hit",
-      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/vfx/hit.prefab",
-      "sizeKb": 67.7
-    },
-    {
-      "name": "miss",
-      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/vfx/miss.prefab",
-      "sizeKb": 3.7
-    },
-    {
-      "name": "perfect",
-      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/vfx/perfect.prefab",
-      "sizeKb": 3.8
-    },
-    {
-      "name": "trail",
-      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/vfx/trail.prefab",
-      "sizeKb": 35.9
-    },
-    {
-      "name": "tutorial",
-      "path": "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/vfx/tutorial.prefab",
-      "sizeKb": 69.5
-    },
-    {
-      "name": "artstudio",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-no-sound-bg/hidden-suspect/levels/artstudio.prefab",
-      "sizeKb": 37.5
-    },
-    {
-      "name": "AdBreakController",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-no-sound-bg/hidden-suspect/ui/AdBreakController.prefab",
-      "sizeKb": 10
-    },
-    {
-      "name": "ButtonClose",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-no-sound-bg/hidden-suspect/ui/ButtonClose.prefab",
-      "sizeKb": 3.9
-    },
-    {
-      "name": "Char_GamePlay",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-no-sound-bg/hidden-suspect/ui/Char_GamePlay.prefab",
-      "sizeKb": 92.8
-    },
-    {
-      "name": "Fade",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-no-sound-bg/hidden-suspect/ui/Fade.prefab",
-      "sizeKb": 3.5
-    },
-    {
-      "name": "GameplayUIAnimationRewardHandler",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-no-sound-bg/hidden-suspect/ui/GameplayUIAnimationRewardHandler.prefab",
-      "sizeKb": 23.8
-    },
-    {
-      "name": "Logo02",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-no-sound-bg/hidden-suspect/ui/Logo02.prefab",
-      "sizeKb": 10.9
-    },
-    {
-      "name": "PanelCoin",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-no-sound-bg/hidden-suspect/ui/PanelCoin.prefab",
-      "sizeKb": 32.5
-    },
-    {
-      "name": "PanelLive",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-no-sound-bg/hidden-suspect/ui/PanelLive.prefab",
-      "sizeKb": 89.5
-    },
-    {
-      "name": "Sparkle_Coin",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-no-sound-bg/hidden-suspect/ui/Sparkle_Coin.prefab",
-      "sizeKb": 32.4
-    },
-    {
-      "name": "Star_trail_gameplay",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-no-sound-bg/hidden-suspect/ui/Star_trail_gameplay.prefab",
-      "sizeKb": 44.7
-    },
-    {
-      "name": "UIparticleHit",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-no-sound-bg/hidden-suspect/ui/UIparticleHit.prefab",
-      "sizeKb": 130.4
-    },
-    {
-      "name": "VFXTargetTrail",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-no-sound-bg/hidden-suspect/ui/VFXTargetTrail.prefab",
-      "sizeKb": 35.9
-    },
-    {
-      "name": "hud",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-no-sound-bg/hidden-suspect/ui/hud.prefab",
-      "sizeKb": 371.3
-    },
-    {
-      "name": "lose",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-no-sound-bg/hidden-suspect/ui/lose.prefab",
-      "sizeKb": 32.3
-    },
-    {
-      "name": "win",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-no-sound-bg/hidden-suspect/ui/win.prefab",
-      "sizeKb": 236.3
-    },
-    {
-      "name": "Star_trail_gameplay",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-no-sound-bg/hidden-suspect/vfx/Star_trail_gameplay.prefab",
-      "sizeKb": 62.4
-    },
-    {
-      "name": "celebration",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-no-sound-bg/hidden-suspect/vfx/celebration.prefab",
-      "sizeKb": 930.3
-    },
-    {
-      "name": "flash",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-no-sound-bg/hidden-suspect/vfx/flash.prefab",
-      "sizeKb": 176.3
-    },
-    {
-      "name": "hint",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-no-sound-bg/hidden-suspect/vfx/hint.prefab",
-      "sizeKb": 114.7
-    },
-    {
-      "name": "hit",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-no-sound-bg/hidden-suspect/vfx/hit.prefab",
-      "sizeKb": 67.7
-    },
-    {
-      "name": "miss",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-no-sound-bg/hidden-suspect/vfx/miss.prefab",
-      "sizeKb": 3.7
-    },
-    {
-      "name": "perfect",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-no-sound-bg/hidden-suspect/vfx/perfect.prefab",
-      "sizeKb": 3.8
-    },
-    {
-      "name": "trail",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-no-sound-bg/hidden-suspect/vfx/trail.prefab",
-      "sizeKb": 35.9
-    },
-    {
-      "name": "tutorial",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-no-sound-bg/hidden-suspect/vfx/tutorial.prefab",
-      "sizeKb": 69.5
-    },
-    {
-      "name": "artstudio",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-sound-bg/hidden-suspect/levels/artstudio.prefab",
-      "sizeKb": 37.5
-    },
-    {
-      "name": "AdBreakController",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-sound-bg/hidden-suspect/ui/AdBreakController.prefab",
-      "sizeKb": 10
-    },
-    {
-      "name": "ButtonClose",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-sound-bg/hidden-suspect/ui/ButtonClose.prefab",
-      "sizeKb": 3.9
-    },
-    {
-      "name": "Char_GamePlay",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-sound-bg/hidden-suspect/ui/Char_GamePlay.prefab",
-      "sizeKb": 92.8
-    },
-    {
-      "name": "Fade",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-sound-bg/hidden-suspect/ui/Fade.prefab",
-      "sizeKb": 3.5
-    },
-    {
-      "name": "GameplayUIAnimationRewardHandler",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-sound-bg/hidden-suspect/ui/GameplayUIAnimationRewardHandler.prefab",
-      "sizeKb": 23.8
-    },
-    {
-      "name": "Logo02",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-sound-bg/hidden-suspect/ui/Logo02.prefab",
-      "sizeKb": 10.9
-    },
-    {
-      "name": "PanelCoin",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-sound-bg/hidden-suspect/ui/PanelCoin.prefab",
-      "sizeKb": 32.5
-    },
-    {
-      "name": "PanelLive",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-sound-bg/hidden-suspect/ui/PanelLive.prefab",
-      "sizeKb": 89.5
-    },
-    {
-      "name": "Sparkle_Coin",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-sound-bg/hidden-suspect/ui/Sparkle_Coin.prefab",
-      "sizeKb": 32.4
-    },
-    {
-      "name": "Star_trail_gameplay",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-sound-bg/hidden-suspect/ui/Star_trail_gameplay.prefab",
-      "sizeKb": 44.7
-    },
-    {
-      "name": "UIparticleHit",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-sound-bg/hidden-suspect/ui/UIparticleHit.prefab",
-      "sizeKb": 130.4
-    },
-    {
-      "name": "VFXTargetTrail",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-sound-bg/hidden-suspect/ui/VFXTargetTrail.prefab",
-      "sizeKb": 35.9
-    },
-    {
-      "name": "hud",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-sound-bg/hidden-suspect/ui/hud.prefab",
-      "sizeKb": 371.3
-    },
-    {
-      "name": "lose",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-sound-bg/hidden-suspect/ui/lose.prefab",
-      "sizeKb": 32.3
-    },
-    {
-      "name": "win",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-sound-bg/hidden-suspect/ui/win.prefab",
-      "sizeKb": 236.3
-    },
-    {
-      "name": "Star_trail_gameplay",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-sound-bg/hidden-suspect/vfx/Star_trail_gameplay.prefab",
-      "sizeKb": 62.4
-    },
-    {
-      "name": "celebration",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-sound-bg/hidden-suspect/vfx/celebration.prefab",
-      "sizeKb": 930.3
-    },
-    {
-      "name": "flash",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-sound-bg/hidden-suspect/vfx/flash.prefab",
-      "sizeKb": 176.3
-    },
-    {
-      "name": "hint",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-sound-bg/hidden-suspect/vfx/hint.prefab",
-      "sizeKb": 114.7
-    },
-    {
-      "name": "hit",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-sound-bg/hidden-suspect/vfx/hit.prefab",
-      "sizeKb": 67.7
-    },
-    {
-      "name": "miss",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-sound-bg/hidden-suspect/vfx/miss.prefab",
-      "sizeKb": 3.7
-    },
-    {
-      "name": "perfect",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-sound-bg/hidden-suspect/vfx/perfect.prefab",
-      "sizeKb": 3.8
-    },
-    {
-      "name": "trail",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-sound-bg/hidden-suspect/vfx/trail.prefab",
-      "sizeKb": 35.9
-    },
-    {
-      "name": "tutorial",
-      "path": "assets/gameplay-bundles/hidden-suspect-easy-sound-bg/hidden-suspect/vfx/tutorial.prefab",
-      "sizeKb": 69.5
-    },
-    {
-      "name": "016_Trap",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-no-sound-bg/hidden-suspect/levels/016_Trap.prefab",
-      "sizeKb": 2.7
-    },
-    {
-      "name": "paperroom",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-no-sound-bg/hidden-suspect/levels/paperroom.prefab",
-      "sizeKb": 68.5
-    },
-    {
-      "name": "AdBreakController",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-no-sound-bg/hidden-suspect/ui/AdBreakController.prefab",
-      "sizeKb": 10
-    },
-    {
-      "name": "ButtonClose",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-no-sound-bg/hidden-suspect/ui/ButtonClose.prefab",
-      "sizeKb": 3.9
-    },
-    {
-      "name": "Char_GamePlay",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-no-sound-bg/hidden-suspect/ui/Char_GamePlay.prefab",
-      "sizeKb": 92.8
-    },
-    {
-      "name": "Fade",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-no-sound-bg/hidden-suspect/ui/Fade.prefab",
-      "sizeKb": 3.5
-    },
-    {
-      "name": "GameplayUIAnimationRewardHandler",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-no-sound-bg/hidden-suspect/ui/GameplayUIAnimationRewardHandler.prefab",
-      "sizeKb": 23.8
-    },
-    {
-      "name": "Logo02",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-no-sound-bg/hidden-suspect/ui/Logo02.prefab",
-      "sizeKb": 10.9
-    },
-    {
-      "name": "PanelCoin",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-no-sound-bg/hidden-suspect/ui/PanelCoin.prefab",
-      "sizeKb": 32.5
-    },
-    {
-      "name": "PanelLive",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-no-sound-bg/hidden-suspect/ui/PanelLive.prefab",
-      "sizeKb": 89.5
-    },
-    {
-      "name": "Sparkle_Coin",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-no-sound-bg/hidden-suspect/ui/Sparkle_Coin.prefab",
-      "sizeKb": 32.4
-    },
-    {
-      "name": "Star_trail_gameplay",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-no-sound-bg/hidden-suspect/ui/Star_trail_gameplay.prefab",
-      "sizeKb": 44.7
-    },
-    {
-      "name": "UIparticleHit",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-no-sound-bg/hidden-suspect/ui/UIparticleHit.prefab",
-      "sizeKb": 130.4
-    },
-    {
-      "name": "VFXTargetTrail",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-no-sound-bg/hidden-suspect/ui/VFXTargetTrail.prefab",
-      "sizeKb": 35.9
-    },
-    {
-      "name": "hud",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-no-sound-bg/hidden-suspect/ui/hud.prefab",
-      "sizeKb": 371.3
-    },
-    {
-      "name": "lose",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-no-sound-bg/hidden-suspect/ui/lose.prefab",
-      "sizeKb": 32.3
-    },
-    {
-      "name": "win",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-no-sound-bg/hidden-suspect/ui/win.prefab",
-      "sizeKb": 236.3
-    },
-    {
-      "name": "Star_trail_gameplay",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-no-sound-bg/hidden-suspect/vfx/Star_trail_gameplay.prefab",
-      "sizeKb": 62.4
-    },
-    {
-      "name": "celebration",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-no-sound-bg/hidden-suspect/vfx/celebration.prefab",
-      "sizeKb": 930.3
-    },
-    {
-      "name": "flash",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-no-sound-bg/hidden-suspect/vfx/flash.prefab",
-      "sizeKb": 176.3
-    },
-    {
-      "name": "hint",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-no-sound-bg/hidden-suspect/vfx/hint.prefab",
-      "sizeKb": 114.7
-    },
-    {
-      "name": "hit",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-no-sound-bg/hidden-suspect/vfx/hit.prefab",
-      "sizeKb": 67.7
-    },
-    {
-      "name": "miss",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-no-sound-bg/hidden-suspect/vfx/miss.prefab",
-      "sizeKb": 3.7
-    },
-    {
-      "name": "perfect",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-no-sound-bg/hidden-suspect/vfx/perfect.prefab",
-      "sizeKb": 3.8
-    },
-    {
-      "name": "trail",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-no-sound-bg/hidden-suspect/vfx/trail.prefab",
-      "sizeKb": 35.9
-    },
-    {
-      "name": "tutorial",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-no-sound-bg/hidden-suspect/vfx/tutorial.prefab",
-      "sizeKb": 69.5
-    },
-    {
-      "name": "016_Trap",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-sound-bg/hidden-suspect/levels/016_Trap.prefab",
-      "sizeKb": 2.7
-    },
-    {
-      "name": "paperroom",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-sound-bg/hidden-suspect/levels/paperroom.prefab",
-      "sizeKb": 68.5
-    },
-    {
-      "name": "AdBreakController",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-sound-bg/hidden-suspect/ui/AdBreakController.prefab",
-      "sizeKb": 10
-    },
-    {
-      "name": "ButtonClose",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-sound-bg/hidden-suspect/ui/ButtonClose.prefab",
-      "sizeKb": 3.9
-    },
-    {
-      "name": "Char_GamePlay",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-sound-bg/hidden-suspect/ui/Char_GamePlay.prefab",
-      "sizeKb": 92.8
-    },
-    {
-      "name": "Fade",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-sound-bg/hidden-suspect/ui/Fade.prefab",
-      "sizeKb": 3.5
-    },
-    {
-      "name": "GameplayUIAnimationRewardHandler",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-sound-bg/hidden-suspect/ui/GameplayUIAnimationRewardHandler.prefab",
-      "sizeKb": 23.8
-    },
-    {
-      "name": "Logo02",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-sound-bg/hidden-suspect/ui/Logo02.prefab",
-      "sizeKb": 10.9
-    },
-    {
-      "name": "PanelCoin",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-sound-bg/hidden-suspect/ui/PanelCoin.prefab",
-      "sizeKb": 32.5
-    },
-    {
-      "name": "PanelLive",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-sound-bg/hidden-suspect/ui/PanelLive.prefab",
-      "sizeKb": 89.5
-    },
-    {
-      "name": "Sparkle_Coin",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-sound-bg/hidden-suspect/ui/Sparkle_Coin.prefab",
-      "sizeKb": 32.4
-    },
-    {
-      "name": "Star_trail_gameplay",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-sound-bg/hidden-suspect/ui/Star_trail_gameplay.prefab",
-      "sizeKb": 44.7
-    },
-    {
-      "name": "UIparticleHit",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-sound-bg/hidden-suspect/ui/UIparticleHit.prefab",
-      "sizeKb": 130.4
-    },
-    {
-      "name": "VFXTargetTrail",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-sound-bg/hidden-suspect/ui/VFXTargetTrail.prefab",
-      "sizeKb": 35.9
-    },
-    {
-      "name": "hud",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-sound-bg/hidden-suspect/ui/hud.prefab",
-      "sizeKb": 371.3
-    },
-    {
-      "name": "lose",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-sound-bg/hidden-suspect/ui/lose.prefab",
-      "sizeKb": 32.3
-    },
-    {
-      "name": "win",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-sound-bg/hidden-suspect/ui/win.prefab",
-      "sizeKb": 236.3
-    },
-    {
-      "name": "Star_trail_gameplay",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-sound-bg/hidden-suspect/vfx/Star_trail_gameplay.prefab",
-      "sizeKb": 62.4
-    },
-    {
-      "name": "celebration",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-sound-bg/hidden-suspect/vfx/celebration.prefab",
-      "sizeKb": 930.3
-    },
-    {
-      "name": "flash",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-sound-bg/hidden-suspect/vfx/flash.prefab",
-      "sizeKb": 176.3
-    },
-    {
-      "name": "hint",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-sound-bg/hidden-suspect/vfx/hint.prefab",
-      "sizeKb": 114.7
-    },
-    {
-      "name": "hit",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-sound-bg/hidden-suspect/vfx/hit.prefab",
-      "sizeKb": 67.7
-    },
-    {
-      "name": "miss",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-sound-bg/hidden-suspect/vfx/miss.prefab",
-      "sizeKb": 3.7
-    },
-    {
-      "name": "perfect",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-sound-bg/hidden-suspect/vfx/perfect.prefab",
-      "sizeKb": 3.8
-    },
-    {
-      "name": "trail",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-sound-bg/hidden-suspect/vfx/trail.prefab",
-      "sizeKb": 35.9
-    },
-    {
-      "name": "tutorial",
-      "path": "assets/gameplay-bundles/hidden-suspect-hard-sound-bg/hidden-suspect/vfx/tutorial.prefab",
-      "sizeKb": 69.5
-    },
-    {
-      "name": "sewingroom",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-no-sound-bg/hidden-suspect/levels/sewingroom.prefab",
-      "sizeKb": 57.1
-    },
-    {
-      "name": "AdBreakController",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-no-sound-bg/hidden-suspect/ui/AdBreakController.prefab",
-      "sizeKb": 10
-    },
-    {
-      "name": "ButtonClose",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-no-sound-bg/hidden-suspect/ui/ButtonClose.prefab",
-      "sizeKb": 3.9
-    },
-    {
-      "name": "Char_GamePlay",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-no-sound-bg/hidden-suspect/ui/Char_GamePlay.prefab",
-      "sizeKb": 92.8
-    },
-    {
-      "name": "Fade",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-no-sound-bg/hidden-suspect/ui/Fade.prefab",
-      "sizeKb": 3.5
-    },
-    {
-      "name": "GameplayUIAnimationRewardHandler",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-no-sound-bg/hidden-suspect/ui/GameplayUIAnimationRewardHandler.prefab",
-      "sizeKb": 23.8
-    },
-    {
-      "name": "Logo02",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-no-sound-bg/hidden-suspect/ui/Logo02.prefab",
-      "sizeKb": 10.9
-    },
-    {
-      "name": "PanelCoin",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-no-sound-bg/hidden-suspect/ui/PanelCoin.prefab",
-      "sizeKb": 32.5
-    },
-    {
-      "name": "PanelLive",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-no-sound-bg/hidden-suspect/ui/PanelLive.prefab",
-      "sizeKb": 89.5
-    },
-    {
-      "name": "Sparkle_Coin",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-no-sound-bg/hidden-suspect/ui/Sparkle_Coin.prefab",
-      "sizeKb": 32.4
-    },
-    {
-      "name": "Star_trail_gameplay",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-no-sound-bg/hidden-suspect/ui/Star_trail_gameplay.prefab",
-      "sizeKb": 44.7
-    },
-    {
-      "name": "UIparticleHit",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-no-sound-bg/hidden-suspect/ui/UIparticleHit.prefab",
-      "sizeKb": 130.4
-    },
-    {
-      "name": "VFXTargetTrail",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-no-sound-bg/hidden-suspect/ui/VFXTargetTrail.prefab",
-      "sizeKb": 35.9
-    },
-    {
-      "name": "hud",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-no-sound-bg/hidden-suspect/ui/hud.prefab",
-      "sizeKb": 371.3
-    },
-    {
-      "name": "lose",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-no-sound-bg/hidden-suspect/ui/lose.prefab",
-      "sizeKb": 32.3
-    },
-    {
-      "name": "win",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-no-sound-bg/hidden-suspect/ui/win.prefab",
-      "sizeKb": 236.3
-    },
-    {
-      "name": "Star_trail_gameplay",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-no-sound-bg/hidden-suspect/vfx/Star_trail_gameplay.prefab",
-      "sizeKb": 62.4
-    },
-    {
-      "name": "celebration",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-no-sound-bg/hidden-suspect/vfx/celebration.prefab",
-      "sizeKb": 930.3
-    },
-    {
-      "name": "flash",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-no-sound-bg/hidden-suspect/vfx/flash.prefab",
-      "sizeKb": 176.3
-    },
-    {
-      "name": "hint",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-no-sound-bg/hidden-suspect/vfx/hint.prefab",
-      "sizeKb": 114.7
-    },
-    {
-      "name": "hit",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-no-sound-bg/hidden-suspect/vfx/hit.prefab",
-      "sizeKb": 67.7
-    },
-    {
-      "name": "miss",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-no-sound-bg/hidden-suspect/vfx/miss.prefab",
-      "sizeKb": 3.7
-    },
-    {
-      "name": "perfect",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-no-sound-bg/hidden-suspect/vfx/perfect.prefab",
-      "sizeKb": 3.8
-    },
-    {
-      "name": "trail",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-no-sound-bg/hidden-suspect/vfx/trail.prefab",
-      "sizeKb": 35.9
-    },
-    {
-      "name": "tutorial",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-no-sound-bg/hidden-suspect/vfx/tutorial.prefab",
-      "sizeKb": 69.5
-    },
-    {
-      "name": "sewingroom",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-sound-bg/hidden-suspect/levels/sewingroom.prefab",
-      "sizeKb": 57.1
-    },
-    {
-      "name": "AdBreakController",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-sound-bg/hidden-suspect/ui/AdBreakController.prefab",
-      "sizeKb": 10
-    },
-    {
-      "name": "ButtonClose",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-sound-bg/hidden-suspect/ui/ButtonClose.prefab",
-      "sizeKb": 3.9
-    },
-    {
-      "name": "Char_GamePlay",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-sound-bg/hidden-suspect/ui/Char_GamePlay.prefab",
-      "sizeKb": 92.8
-    },
-    {
-      "name": "Fade",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-sound-bg/hidden-suspect/ui/Fade.prefab",
-      "sizeKb": 3.5
-    },
-    {
-      "name": "GameplayUIAnimationRewardHandler",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-sound-bg/hidden-suspect/ui/GameplayUIAnimationRewardHandler.prefab",
-      "sizeKb": 23.8
-    },
-    {
-      "name": "Logo02",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-sound-bg/hidden-suspect/ui/Logo02.prefab",
-      "sizeKb": 10.9
-    },
-    {
-      "name": "PanelCoin",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-sound-bg/hidden-suspect/ui/PanelCoin.prefab",
-      "sizeKb": 32.5
-    },
-    {
-      "name": "PanelLive",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-sound-bg/hidden-suspect/ui/PanelLive.prefab",
-      "sizeKb": 89.5
-    },
-    {
-      "name": "Sparkle_Coin",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-sound-bg/hidden-suspect/ui/Sparkle_Coin.prefab",
-      "sizeKb": 32.4
-    },
-    {
-      "name": "Star_trail_gameplay",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-sound-bg/hidden-suspect/ui/Star_trail_gameplay.prefab",
-      "sizeKb": 44.7
-    },
-    {
-      "name": "UIparticleHit",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-sound-bg/hidden-suspect/ui/UIparticleHit.prefab",
-      "sizeKb": 130.4
-    },
-    {
-      "name": "VFXTargetTrail",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-sound-bg/hidden-suspect/ui/VFXTargetTrail.prefab",
-      "sizeKb": 35.9
-    },
-    {
-      "name": "hud",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-sound-bg/hidden-suspect/ui/hud.prefab",
-      "sizeKb": 371.3
-    },
-    {
-      "name": "lose",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-sound-bg/hidden-suspect/ui/lose.prefab",
-      "sizeKb": 32.3
-    },
-    {
-      "name": "win",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-sound-bg/hidden-suspect/ui/win.prefab",
-      "sizeKb": 236.3
-    },
-    {
-      "name": "Star_trail_gameplay",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-sound-bg/hidden-suspect/vfx/Star_trail_gameplay.prefab",
-      "sizeKb": 62.4
-    },
-    {
-      "name": "celebration",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-sound-bg/hidden-suspect/vfx/celebration.prefab",
-      "sizeKb": 930.3
-    },
-    {
-      "name": "flash",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-sound-bg/hidden-suspect/vfx/flash.prefab",
-      "sizeKb": 176.3
-    },
-    {
-      "name": "hint",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-sound-bg/hidden-suspect/vfx/hint.prefab",
-      "sizeKb": 114.7
-    },
-    {
-      "name": "hit",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-sound-bg/hidden-suspect/vfx/hit.prefab",
-      "sizeKb": 67.7
-    },
-    {
-      "name": "miss",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-sound-bg/hidden-suspect/vfx/miss.prefab",
-      "sizeKb": 3.7
-    },
-    {
-      "name": "perfect",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-sound-bg/hidden-suspect/vfx/perfect.prefab",
-      "sizeKb": 3.8
-    },
-    {
-      "name": "trail",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-sound-bg/hidden-suspect/vfx/trail.prefab",
-      "sizeKb": 35.9
-    },
-    {
-      "name": "tutorial",
-      "path": "assets/gameplay-bundles/hidden-suspect-normal-sound-bg/hidden-suspect/vfx/tutorial.prefab",
-      "sizeKb": 69.5
-    },
-    {
-      "name": "Unit_Knight_Jarek",
-      "path": "assets/dragon-crashers/units/Unit_Knight_Jarek.prefab",
-      "sizeKb": 139.4
-    }
-  ],
+  "prefabs": [],
   "scripts": {
-    "count": 34,
+    "count": 24,
     "byDir": [
       {
-        "dir": "assets/script/hidden-suspect",
+        "dir": "assets/script/shared/sdk/analytics",
         "names": [
-          "HiddenSuspectGame",
-          "HiddenSuspectSession"
+          "GameTrackingService"
         ]
       },
       {
-        "dir": "assets/script/pixel-light",
+        "dir": "assets/script/shared/sdk/platform",
         "names": [
-          "PixelLightAnimator",
-          "PixelLightGame",
-          "PixelLightPost"
+          "PlayableAdDownloadEvent",
+          "SuperHtmlPlayable"
+        ]
+      },
+      {
+        "dir": "assets/script/shared/sdk",
+        "names": [
+          "index"
+        ]
+      },
+      {
+        "dir": "assets/script/shared/core/utils",
+        "names": [
+          "GameUtils"
+        ]
+      },
+      {
+        "dir": "assets/script/shared/core/utils/pool",
+        "names": [
+          "NodePoolAdapter",
+          "ObjectPool",
+          "Poolable"
         ]
       },
       {
@@ -978,6 +80,7 @@
           "PlayableEntry",
           "PlayableTrackingController",
           "PlayableUIHUD",
+          "StaticAssetCatalog",
           "index"
         ]
       },
@@ -990,170 +93,70 @@
         ]
       },
       {
-        "dir": "assets/script/shared/core/utils",
-        "names": [
-          "GameUtils"
-        ]
-      },
-      {
-        "dir": "assets/script/shared/core/utils/pool",
-        "names": [
-          "NodePoolAdapter",
-          "ObjectPool",
-          "Poolable"
-        ]
-      },
-      {
         "dir": "assets/script/shared",
         "names": [
           "index"
-        ]
-      },
-      {
-        "dir": "assets/script/shared/sdk/analytics",
-        "names": [
-          "GameTrackingService"
-        ]
-      },
-      {
-        "dir": "assets/script/shared/sdk",
-        "names": [
-          "index"
-        ]
-      },
-      {
-        "dir": "assets/script/shared/sdk/platform",
-        "names": [
-          "PlayableAdDownloadEvent",
-          "SuperHtmlPlayable"
-        ]
-      },
-      {
-        "dir": "assets/script/unity-adapters",
-        "names": [
-          "UnityParticleHierarchyTransformSync",
-          "UnityParticleRateOverDistanceEmitter",
-          "UnityParticleSubEmitterFollower",
-          "UnitySpriteRendererColorAdapter"
-        ]
-      },
-      {
-        "dir": "assets/script/dragon",
-        "names": [
-          "DragonBattle",
-          "DragonGame"
         ]
       }
     ]
   },
   "assetsSummary": {
-    "audioCount": 103,
+    "audioCount": 0,
     "audio": {
-      "count": 103,
-      "totalKb": 2807.7,
-      "sample": [
-        "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/audio/celebrationStart.mp3",
-        "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/audio/celebrationTarget.mp3",
-        "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/audio/finderFocusComplete.mp3",
-        "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/audio/foundAccepted.mp3",
-        "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/audio/gameplayBgm.mp3",
-        "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/audio/levelIntro.mp3"
-      ],
-      "truncated": 97
-    },
-    "modelCount": 1,
-    "models": {
-      "count": 1,
-      "totalKb": 12.7,
-      "sample": [
-        "assets/unity_imported/ThirdParties/Hovl Studio/Magic effects pack/Models/Cylinder.fbx"
-      ],
+      "count": 0,
+      "totalKb": 0,
+      "sample": [],
       "truncated": 0
     },
-    "shaderCount": 7,
+    "modelCount": 0,
+    "models": {
+      "count": 0,
+      "totalKb": 0,
+      "sample": [],
+      "truncated": 0
+    },
+    "shaderCount": 0,
     "shaders": {
-      "count": 7,
-      "totalKb": 27.6,
-      "sample": [
-        "assets/effects/HiddenSuspectTCP2.effect",
-        "assets/effects/PixelLight.effect",
-        "assets/effects/PixelLightPost.effect",
-        "assets/effects/TCP2HybridShader2.effect",
-        "assets/effects/UnitySpriteRendererColor.effect",
-        "assets/effects/hidden-suspect-particle-alpha.effect"
-      ],
-      "truncated": 1
+      "count": 0,
+      "totalKb": 0,
+      "sample": [],
+      "truncated": 0
     },
     "materials": {
-      "count": 25,
-      "totalKb": 20.8,
-      "sample": [
-        "assets/materials/HiddenSuspectTutorialGlow.mtl",
-        "assets/materials/UnitySpriteRendererColor.mtl",
-        "assets/materials/UnitySpriteRendererColorOpaque.mtl",
-        "assets/materials/UnitySpriteRendererGlow.mtl",
-        "assets/unity_imported/JMO Assets/Cartoon FX Remaster/CFXR Assets/Graphics/cfxr star blurred add.mtl",
-        "assets/unity_imported/JMO Assets/Cartoon FX Remaster/CFXR Assets/Graphics/cfxr stretch trait blur add.trail.mtl"
-      ],
-      "truncated": 19
+      "count": 0,
+      "totalKb": 0,
+      "sample": [],
+      "truncated": 0
     },
     "textures": {
-      "count": 502,
-      "totalKb": 27795.7,
-      "sample": [
-        "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/backgrounds/end.jpg",
-        "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/backgrounds/game.jpg",
-        "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/ui/frame_hint_header.png",
-        "assets/gameplay-bundles/hidden-suspect-easy-no-sound-bg/hidden-suspect/backgrounds/end.jpg",
-        "assets/gameplay-bundles/hidden-suspect-easy-no-sound-bg/hidden-suspect/backgrounds/game.jpg",
-        "assets/gameplay-bundles/hidden-suspect-easy-no-sound-bg/hidden-suspect/ui/frame_hint_header.png"
-      ],
-      "truncated": 496
+      "count": 0,
+      "totalKb": 0,
+      "sample": [],
+      "truncated": 0
     },
     "animations": {
-      "count": 12,
-      "totalKb": 415.4,
-      "sample": [
-        "assets/animations/animationarrow/AnimationArrow.anim",
-        "assets/animations/arrow/Arrrow.anim",
-        "assets/animations/arrow/ZoomAnimation.anim",
-        "assets/animations/char_gameplay/Anim_CharGamePlay_Fun.anim",
-        "assets/animations/char_gameplay/Anim_CharGamePlay_Idle_1.anim",
-        "assets/animations/char_gameplay/Anim_CharGamePlay_Idle_2.anim"
-      ],
-      "truncated": 6
+      "count": 0,
+      "totalKb": 0,
+      "sample": [],
+      "truncated": 0
     },
     "prefabsInAssets": {
-      "count": 180,
-      "totalKb": 18892.4,
-      "sample": [
-        "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/levels/TutorialVFX.prefab",
-        "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/levels/artstudio.prefab",
-        "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/levels/guestroom.prefab",
-        "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/ui/AdBreakController.prefab",
-        "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/ui/ButtonClose.prefab",
-        "assets/gameplay-bundles/hidden-suspect-brief3/hidden-suspect/ui/Char_GamePlay.prefab"
-      ],
-      "truncated": 174
+      "count": 0,
+      "totalKb": 0,
+      "sample": [],
+      "truncated": 0
     },
     "unityImported": {
-      "exists": true,
+      "exists": false,
       "root": "assets/unity_imported",
-      "count": 117,
-      "totalKb": 8865.1,
-      "sample": [
-        "assets/unity_imported/JMO Assets/Cartoon FX Remaster/CFXR Assets/Graphics/cfxr star blurred add.mtl",
-        "assets/unity_imported/JMO Assets/Cartoon FX Remaster/CFXR Assets/Graphics/cfxr star blurred.png",
-        "assets/unity_imported/JMO Assets/Cartoon FX Remaster/CFXR Assets/Graphics/cfxr stretch trait blur add.trail.mtl",
-        "assets/unity_imported/JMO Assets/Cartoon FX Remaster/CFXR Assets/Graphics/cfxr stretch trait blur.png",
-        "assets/unity_imported/Module/ModuleAdBreak/UI/AdBreakGamePlay/ads_break_1.png",
-        "assets/unity_imported/Module/ModuleAdBreak/UI/AdBreakGamePlay/ads_break_2.png"
-      ],
-      "truncated": 111
+      "count": 0,
+      "totalKb": 0,
+      "sample": [],
+      "truncated": 0
     }
   },
   "configSummary": {
-    "fragmentCount": 7,
+    "fragmentCount": 0,
     "ctaKeys": [
       "googlePlayUrl",
       "appStoreUrl",
@@ -1174,9 +177,7 @@
     "gameplayKeys": [
       "targetTaps",
       "autoWinTimer",
-      "difficulty",
-      "activeBundle",
-      "briefs"
+      "difficulty"
     ],
     "cameraKeys": [
       "defaultMode",
@@ -1185,14 +186,12 @@
       "fovLandscape",
       "presets"
     ],
-    "customKeys": [
-      "dragon"
-    ],
+    "customKeys": [],
     "rawPreview": {
       "cta": {
-        "googlePlayUrl": "https://play.google.com/store/apps/details?id=com.ntt.hidden.suspect.find.seek",
-        "appStoreUrl": "",
-        "enableButtonPulse": false,
+        "googlePlayUrl": "https://play.google.com/store/apps/details?id=com.playable.ad",
+        "appStoreUrl": "https://apps.apple.com/app/id123456789",
+        "enableButtonPulse": true,
         "autoRedirectDelay": 0,
         "pulseScaleMultiplier": 1.08,
         "pulseDuration": 0.6
@@ -1209,116 +208,7 @@
       "gameplay": {
         "targetTaps": 3,
         "autoWinTimer": 0,
-        "difficulty": "normal",
-        "activeBundle": "hidden-suspect-easy-sound-bg",
-        "briefs": {
-          "hidden-suspect-brief3": {
-            "customConfig": "hiddenSuspect",
-            "description": "Unity source levels 1 and 3"
-          },
-          "hidden-suspect-easy-sound-bg": {
-            "customConfig": "hiddenSuspect",
-            "description": "CRT-845: level 3, BGM + SFX",
-            "ticket": "CRT-845",
-            "sourceLevel": 3,
-            "bgmEnabled": true,
-            "timeLimitSeconds": 600,
-            "initialHearts": 3,
-            "heartsUnlockSourceLevel": 1,
-            "firstTargetOnly": true,
-            "winCtaLabel": "Download Now",
-            "loseCtaLabel": "Try It Now",
-            "failureLogo": {
-              "scale": 0.2,
-              "top": 150
-            }
-          },
-          "hidden-suspect-normal-sound-bg": {
-            "customConfig": "hiddenSuspect",
-            "description": "CRT-846: level 13, BGM + SFX",
-            "ticket": "CRT-846",
-            "sourceLevel": 13,
-            "bgmEnabled": true,
-            "timeLimitSeconds": 600,
-            "initialHearts": 3,
-            "heartsUnlockSourceLevel": 1,
-            "firstTargetOnly": true,
-            "winCtaLabel": "Download Now",
-            "loseCtaLabel": "Try It Now",
-            "failureLogo": {
-              "scale": 0.2,
-              "top": 150
-            }
-          },
-          "hidden-suspect-hard-sound-bg": {
-            "customConfig": "hiddenSuspect",
-            "description": "CRT-847: level 15, BGM + SFX",
-            "ticket": "CRT-847",
-            "sourceLevel": 15,
-            "bgmEnabled": true,
-            "timeLimitSeconds": 600,
-            "initialHearts": 3,
-            "heartsUnlockSourceLevel": 1,
-            "firstTargetOnly": true,
-            "winCtaLabel": "Download Now",
-            "loseCtaLabel": "Try It Now",
-            "failureLogo": {
-              "scale": 0.2,
-              "top": 150
-            }
-          },
-          "hidden-suspect-easy-no-sound-bg": {
-            "customConfig": "hiddenSuspect",
-            "description": "CRT-859: level 3, SFX only",
-            "ticket": "CRT-859",
-            "sourceLevel": 3,
-            "bgmEnabled": false,
-            "timeLimitSeconds": 600,
-            "initialHearts": 3,
-            "heartsUnlockSourceLevel": 1,
-            "firstTargetOnly": true,
-            "winCtaLabel": "Download Now",
-            "loseCtaLabel": "Try It Now",
-            "failureLogo": {
-              "scale": 0.2,
-              "top": 150
-            }
-          },
-          "hidden-suspect-normal-no-sound-bg": {
-            "customConfig": "hiddenSuspect",
-            "description": "CRT-860: level 13, SFX only",
-            "ticket": "CRT-860",
-            "sourceLevel": 13,
-            "bgmEnabled": false,
-            "timeLimitSeconds": 600,
-            "initialHearts": 3,
-            "heartsUnlockSourceLevel": 1,
-            "firstTargetOnly": true,
-            "winCtaLabel": "Download Now",
-            "loseCtaLabel": "Try It Now",
-            "failureLogo": {
-              "scale": 0.2,
-              "top": 150
-            }
-          },
-          "hidden-suspect-hard-no-sound-bg": {
-            "customConfig": "hiddenSuspect",
-            "description": "CRT-861: level 15, SFX only",
-            "ticket": "CRT-861",
-            "sourceLevel": 15,
-            "bgmEnabled": false,
-            "timeLimitSeconds": 600,
-            "initialHearts": 3,
-            "heartsUnlockSourceLevel": 1,
-            "firstTargetOnly": true,
-            "winCtaLabel": "Download Now",
-            "loseCtaLabel": "Try It Now",
-            "failureLogo": {
-              "scale": 0.2,
-              "top": 150
-            }
-          }
-        }
+        "difficulty": "normal"
       },
       "camera": {
         "defaultMode": 0,
@@ -1397,6 +287,7 @@
     }
   ],
   "cliCheatSheet": {
+    "project.setup": "npm run setup",
     "portable.npm.policy": "node playable-shared-kit/tools/portable-npm-policy.cjs",
     "map.generate": "npm run ai:map",
     "scene.inspect": "npm run ai:scene -- <sceneName>",
@@ -1413,15 +304,17 @@
     "port.plan": "npm run ai:port:plan -- --project <UnityProjectRoot>",
     "port.scene": "npm run port:scene -- --scene <file.unity> --unity-root <UnityAssetsFolder> --out assets/<Name>.scene",
     "port.animation.oracle": "npm run ai:port:animation:oracle -- --src <UnityAnimOrDirectory> --unity-root <UnityProjectRoot> --out <oracle.json>",
+    "port.feedback.closure": "npm run ai:port:feedback:closure -- --project <UnityProjectRoot> --entry <AssetPath>",
     "mesh.path.audit": "node playable-shared-kit/tools/runtime-mesh-path-audit.cjs --config <audit.json>",
     "port.report": "npm run ai:port:report",
     "port.prefab": "node playable-shared-kit/tools/unity-cocos-port.cjs port --src <unity_prefab_or_dir> --out <cocos_prefab_or_dir>",
     "font.convert": "node playable-shared-kit/tools/font-converter.cjs --src <font> --out <assets/.../font.ttf>",
+    "font.subset": "npm run ai:font:subset -- --config tools/font-subsets.json --verify",
     "port.smart": "npm run port:smart -- --src <unity_dir> --out assets/",
     "port.closure": "npm run port:closure -- --prefab <file.prefab> --unity-root <UnityAssetsFolder>",
     "port.compile": "npm run port:compile -- --src <csharp_path> --out assets/script/",
     "port.script": "npm run port:script -- --src <csharp_path> --out assets/script/",
-    "shader.chain": "node playable-shared-kit/tools/shader-compiler/unity-shader-compiler.cjs chain --src <file.prefab|file.asset> --unity-root <UnityAssetsFolder>",
+    "shader.chain": "node playable-shared-kit/tools/shader-compiler/unity-shader-compiler.cjs chain --src <file.unity|file.prefab|file.asset> --unity-root <UnityAssetsFolder>",
     "shader.convert": "node playable-shared-kit/tools/shader-compiler/unity-shader-compiler.cjs convert --src <unity.shader> --out <assets/effects/X.effect>",
     "shader.batch": "node playable-shared-kit/tools/shader-compiler/unity-shader-compiler.cjs batch --dir <unity_shader_dir> --out-dir <assets/effects>",
     "shader.material": "node playable-shared-kit/tools/shader-compiler/unity-shader-compiler.cjs convert-mat --src <UnityMaterial.mat> --out <assets/materials/X.mtl>",
@@ -1441,6 +334,7 @@
     "model.import-policy": "npm run ai:model:optimize",
     "model.fbx-normalize": "npm run ai:fbx:normalize -- --src <Unity.fbx> --out <Cocos.fbx>",
     "audio.optimize": "npm run sound:optimize",
+    "resources.boundary": "npm run ai:resources:boundary",
     "assets.cleanup": "npm run cleanup:unused",
     "stats.resources": "npm run stats",
     "build.playable": "npm run build",

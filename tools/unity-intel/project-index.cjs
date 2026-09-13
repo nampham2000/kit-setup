@@ -22,13 +22,19 @@ const {
   buildGuidIndex,
 } = require('./guid-index.cjs');
 const { buildDependencyGraph } = require('./dependency-graph.cjs');
-const { readUtf8, readAssetEvidence } = require('./asset-reader.cjs');
+const {
+  MAX_TEXT_BYTES,
+  TEXT_EXTENSIONS,
+  readUtf8,
+  readAssetEvidence,
+} = require('./asset-reader.cjs');
 const { discoverPackageRoots } = require('./package-roots.cjs');
 const {
   analyzeCSharpSource,
   analyzeAsmdefSource,
   buildScriptIndex,
 } = require('./script-index.cjs');
+const { detectUnityEngineFeatureEvidence } = require('./engine-feature-closure.cjs');
 const {
   createCacheContext,
   loadIndexCache,
@@ -267,6 +273,7 @@ function scanAssetFile(file, metaFile) {
       complete: evidence.complete,
       error: evidence.error,
     },
+    engineFeatureEvidence: detectUnityEngineFeatureEvidence({ assetPath, extension, type, text }),
     scriptEvidence: type === 'script' ? analyzeCSharpSource(text) : undefined,
     assemblyEvidence: extension === '.asmdef' ? analyzeAsmdefSource(text, assetPath) : undefined,
   };
@@ -429,8 +436,10 @@ function buildUnityProjectSnapshot(options) {
   for (const file of deduplicatedFiles) {
     const metaFile = byFull.get(`${pathKey(file.full)}.meta`) || null;
     const extension = path.extname(file.full).toLowerCase();
+    const contentHashRequired = !file.directoryAsset &&
+      TEXT_EXTENSIONS.has(extension) && file.stat.size <= MAX_TEXT_BYTES;
     const stamp = fileStamp(file.stat, metaFile && metaFile.stat, file.directoryAsset ? null : file.full,
-      metaFile && metaFile.full, { hashContent: false, hashMeta: false });
+      metaFile && metaFile.full, { hashContent: contentHashRequired, hashMeta: !!metaFile });
     const entryKey = `${file.root.kind}:${file.root.packageName || ''}:${file.relative}`;
     const cached = previousEntries[entryKey];
     let record;

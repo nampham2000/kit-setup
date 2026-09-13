@@ -47,6 +47,7 @@ Options:
   --intent <kind>    project | scene | prefab | script | shader | feature | diagnostic. Default: project.
   --profile <name>   playable-core (default) | full-project. Core profile routes only the runnable playable loop.
   --entry-scene <path> Explicit indexed runtime scene (Assets/...unity) for project playable-core intent.
+  --dispositions <file>  Portable, hash-bound source-high disposition JSON outside the Unity project.
   --target <value>   Logical path/symbol cần tập trung; có thể lặp lại (intent khác project).
   --section <name>   features | assets | dependencies | unresolved | diagnostics | scenes | scripts.
   --search <text>    Lọc page theo chuỗi compact.
@@ -95,6 +96,7 @@ function parseArgs(argv) {
     const supported = new Set([
       'project', 'provider', 'unity', 'mcp-url', 'timeout-ms', 'request-timeout-ms', 'cache-dir', 'section',
       'search', 'severity', 'type', 'cursor', 'limit', 'out', 'intent', 'target', 'profile', 'entry-scene',
+      'dispositions',
     ]);
     if (!name || !supported.has(name)) throw new Error(`Option không hỗ trợ: ${argument}`);
     const value = equal ? equal[2] : valueAfter(argv, index, `--${name}`);
@@ -181,6 +183,7 @@ async function execute(options) {
       profile: options.profile || 'playable-core',
       targets: options.targets,
       entryScene: options.entryScene,
+      sourceDispositions: options.dispositions,
       indexCacheDir: options.cacheDir,
       // --cache-dir scopes the potentially large incremental index only. Mutation
       // receipts stay in the fixed user-local receipt store used by every port gate.

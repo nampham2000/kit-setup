@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
-const { inspectFontFile, scriptsForCodepoints } = require('./font-inspector.cjs');
+const { inspectFontBuffer, inspectFontFile, scriptsForCodepoints } = require('./font-inspector.cjs');
 
 function makeFormat12Font(groups) {
   const cmap = Buffer.alloc(12 + 16 + groups.length * 12);
@@ -63,4 +63,12 @@ test('BMFont and script classification stay deterministic', () => {
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('in-memory inspection verifies a generated subset before it is written', () => {
+  const buffer = makeFormat12Font([[0x20, 0x7e]]);
+  const info = inspectFontBuffer(buffer, 'Playable 123!', { ext: '.ttf' });
+  assert.equal(info.error, null);
+  assert.equal(info.requiredGlyphs, info.requiredCharacterCount);
+  assert.deepEqual(info.scripts, ['Basic Latin']);
 });

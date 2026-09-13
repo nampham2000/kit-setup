@@ -41,3 +41,8 @@ Danh sách lệnh hợp lệ duy nhất: `playable-shared-kit/ai/CAPABILITIES.js
 - `npm run ai:contract:verify` — đối chiếu mọi lệnh với CLI thật; exit 1 khi lệch.
 
 Bảng lệnh trong README này chỉ để người đọc; **nguồn sự thật là manifest**.
+
+## Consolidated starter workflow
+
+Run `npm run setup` in the game root after initializing the pinned submodule.
+See [porting retrospective and new-project workflow](ai/PORTING_RETROSPECTIVE.md) for lessons from Tape Jam, Harvest Tile, Hidden Suspect, Pixel Light and Dragon Crashers.

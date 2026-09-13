@@ -17,7 +17,7 @@ Use this skill when a playable project needs to adopt or update the shared analy
 ---
 
 ## 2. Standard Workflow
-1. Verify the project imports `GameTrackingService` from `playable-sdk`.
+1. Verify the project imports `GameTrackingService` from the concrete module `playable-sdk/analytics/GameTrackingService`; Component barrels must remain Component-free in Cocos Creator 3.8.x.
 2. Copy or update `assets/resources/TrackingConfig.json` from `playable-shared-kit/resources/TrackingConfig.json`.
 3. Wire the tracking calls in gameplay:
    - `GameTrackingService.init()` once at startup.

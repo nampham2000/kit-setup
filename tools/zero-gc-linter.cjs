@@ -15,6 +15,8 @@ require('./lib/auto-strip-ansi.cjs');
 
 const fs = require('fs');
 const path = require('path');
+const ts = require('typescript');
+const { lintCocosComponentModules } = require('./cocos-component-module-linter.cjs');
 
 function findProjectRoot(startDir) {
   let current = path.resolve(startDir);
@@ -166,58 +168,74 @@ function lintFile(filePath) {
     }
   }
 
-  // 3. Cocos chỉ chấp nhận MỘT Component mỗi file .ts
-  violations.push(...lintSingleComponent(relPath, lines));
-
-  // 4. resources.load('x') yêu cầu x nằm dưới assets/resources/
+  // 3. resources.load('x') yêu cầu x nằm dưới assets/resources/
   violations.push(...lintResourcePaths(relPath, lines));
+
+  // 4. Cocos 3.8.2+ moved Label outline/shadow state onto Label itself.
+  // Keeping the legacy Components emits a warning for every property write and
+  // leaves new ports depending on compatibility proxies that may disappear.
+  violations.push(...lintDeprecatedCocosLabelEffects(relPath, filePath, content));
 
   return violations;
 }
 
-/** Lớp cơ sở mà một class kế thừa thì Cocos coi là Component. */
-const COMPONENT_BASES = new Set([
-  'Component', 'Sprite', 'Label', 'Button', 'Camera', 'MeshRenderer', 'UIRenderer',
-  'Animation', 'Widget', 'Mask', 'Layout', 'ScrollView', 'Toggle', 'EditBox',
-  'ParticleSystem', 'ParticleSystem2D', 'Canvas', 'RenderRoot2D', 'UITransform',
-  'Collider', 'RigidBody', 'EventHandler',
-]);
+const DEPRECATED_LABEL_EFFECT_EXPORTS = new Set(['LabelOutline', 'LabelShadow']);
 
-const CLASS_DECL_RE = /^\s*(?:export\s+)?(?:default\s+)?(?:abstract\s+)?class\s+(\w+)\s+extends\s+(\w+)/;
+function lintDeprecatedCocosLabelEffects(relPath, filePath, content) {
+  const sourceFile = ts.createSourceFile(
+    filePath,
+    content,
+    ts.ScriptTarget.Latest,
+    true,
+    filePath.toLowerCase().endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+  );
+  const violations = [];
+  const ccNamespaces = new Set();
 
-/**
- * Một file .ts khai báo nhiều Component làm Cocos báo
- * "[Scene] Each script can have at most one Component" và KHÔNG chỉ bỏ qua file đó:
- * cả module graph sập, mọi custom component biến mất khỏi registry. Đo được trên
- * cc_playable_framework: 6 component trong một file -> 0/14 component đăng ký được.
- */
-function lintSingleComponent(relPath, lines) {
-  const found = [];
-  for (let i = 0; i < lines.length; i++) {
-    const m = CLASS_DECL_RE.exec(lines[i]);
-    if (!m) continue;
-    if (!COMPONENT_BASES.has(m[2])) continue;
-    // Chỉ tính class thực sự được đăng ký với engine.
-    let decorated = false;
-    for (let back = i - 1; back >= 0 && back >= i - 6; back--) {
-      const prev = lines[back].trim();
-      if (prev === '' || prev.startsWith('//') || prev.startsWith('*') || prev.startsWith('/*')) continue;
-      if (/^@ccclass\b/.test(prev)) { decorated = true; break; }
-      if (!prev.startsWith('@')) break;
+  const addViolation = (node, exportName) => {
+    const line = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
+    violations.push({
+      file: relPath,
+      line,
+      rule: 'DEPRECATED_COCOS_LABEL_EFFECT_COMPONENT',
+      severity: 'error',
+      message: `${exportName} is deprecated in Cocos Creator 3.8.2+. Configure Label.enableOutline/outlineColor/outlineWidth or Label.enableShadow/shadowColor/shadowOffset/shadowBlur directly instead.`,
+      snippet: sourceFile.text.slice(node.getStart(sourceFile), node.getEnd()).trim(),
+    });
+  };
+
+  for (const statement of sourceFile.statements) {
+    if (!ts.isImportDeclaration(statement)
+      || !ts.isStringLiteral(statement.moduleSpecifier)
+      || statement.moduleSpecifier.text !== 'cc'
+      || !statement.importClause?.namedBindings) {
+      continue;
     }
-    if (decorated) found.push({ line: i + 1, name: m[1], base: m[2] });
+    const bindings = statement.importClause.namedBindings;
+    if (ts.isNamespaceImport(bindings)) {
+      ccNamespaces.add(bindings.name.text);
+      continue;
+    }
+    for (const element of bindings.elements) {
+      const exportName = (element.propertyName || element.name).text;
+      if (DEPRECATED_LABEL_EFFECT_EXPORTS.has(exportName)) {
+        addViolation(element, exportName);
+      }
+    }
   }
 
-  if (found.length < 2) return [];
-  const names = found.map((f) => f.name).join(', ');
-  return found.slice(1).map((f) => ({
-    file: relPath,
-    line: f.line,
-    rule: 'COCOS_MULTIPLE_COMPONENTS',
-    severity: 'error',
-    message: `File khai báo ${found.length} Component (${names}). Cocos chỉ cho phép 1 — vi phạm làm SẬP toàn bộ module graph, mọi component khác cũng biến mất khỏi registry. Tách mỗi Component ra một file.`,
-    snippet: `class ${f.name} extends ${f.base}`,
-  }));
+  const visit = (node) => {
+    if (ts.isPropertyAccessExpression(node)
+      && ts.isIdentifier(node.expression)
+      && ccNamespaces.has(node.expression.text)
+      && DEPRECATED_LABEL_EFFECT_EXPORTS.has(node.name.text)) {
+      addViolation(node, node.name.text);
+    }
+    ts.forEachChild(node, visit);
+  };
+  ts.forEachChild(sourceFile, visit);
+
+  return violations;
 }
 
 /** Hậu tố sub-asset mà Cocos thêm vào đường dẫn khi load (foo.png -> foo/texture). */
@@ -286,6 +304,7 @@ function runLinter(options = {}) {
       allViolations.push(...fileViolations);
     }
   }
+  allViolations.push(...lintCocosComponentModules(tsFiles, { projectRoot: ROOT_DIR }));
 
   const errors = allViolations.filter((v) => v.severity === 'error');
   const warnings = allViolations.filter((v) => v.severity === 'warning');

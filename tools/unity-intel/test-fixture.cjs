@@ -4,6 +4,19 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
+const LINK_UNAVAILABLE_CODES = new Set([
+  'EACCES',
+  'EISDIR',
+  'EINVAL',
+  'ENOSYS',
+  'ENOTSUP',
+  'EPERM',
+]);
+
+function isLinkUnavailableError(error) {
+  return !!(error && LINK_UNAVAILABLE_CODES.has(error.code));
+}
+
 const GUIDS = Object.freeze({
   scene: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
   mainPrefab: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
@@ -111,4 +124,4 @@ function createUnityFixture(testContext) {
   return { root, assets: path.join(root, 'Assets'), write, GUIDS };
 }
 
-module.exports = { GUIDS, createUnityFixture };
+module.exports = { GUIDS, LINK_UNAVAILABLE_CODES, createUnityFixture, isLinkUnavailableError };
