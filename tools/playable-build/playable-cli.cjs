@@ -1009,6 +1009,8 @@ async function buildBriefs(options) {
 
   log(`Using Cocos Creator: ${cocosPath}`);
 
+  require('../cocos-build-preflight.cjs').assertProjectClosed(ROOT_DIR);
+
   const buildRoot = path.join(ROOT_DIR, 'build');
   if (clean && fs.existsSync(buildRoot)) {
     fs.rmSync(buildRoot, { recursive: true, force: true });
