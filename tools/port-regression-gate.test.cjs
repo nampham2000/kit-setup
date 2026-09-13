@@ -341,6 +341,11 @@ test('run refreshes once, executes declared rounds, and binds receipt to watched
   assert.equal(refreshes, 1);
   assert.deepEqual(runs, ['two-rounds:1', 'two-rounds:2']);
   assert.equal(checkRegressionReceipt({ project: root, portabilityCheck: false }).ok, true);
+  const expandedPath = path.join(root, ...DEFAULT_RECEIPT.split('/'));
+  const expanded = JSON.parse(fs.readFileSync(expandedPath, 'utf8'));
+  expanded.expandedEvidence = 'x'.repeat(300000);
+  fs.writeFileSync(expandedPath, JSON.stringify(expanded));
+  assert.equal(checkRegressionReceipt({ project: root, portabilityCheck: false }).ok, true);
 
   fs.appendFileSync(path.join(root, 'tools', 'qa', 'assert-lifecycle.js'), '// changed after PASS\n');
   assert.throws(() => checkRegressionReceipt({ project: root, portabilityCheck: false }),

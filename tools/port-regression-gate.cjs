@@ -705,7 +705,8 @@ function redactOutput(value, projectRoot) {
 
 function readReceipt(projectRoot, options = {}) {
   const file = resolveContained(projectRoot, options.receipt || DEFAULT_RECEIPT, 'receipt', { mustExist: true });
-  const value = readJsonBounded(file, MAX_REGISTRY_BYTES, 'REGRESSION_RECEIPT_INVALID');
+  // Expanded per-suite file hashes are larger than the compact registry input.
+  const value = readJsonBounded(file, 4 * 1024 * 1024, 'REGRESSION_RECEIPT_INVALID');
   if (value.schemaVersion !== RECEIPT_SCHEMA_VERSION || value.kind !== RECEIPT_KIND ||
       !value.snapshot || typeof value.snapshot.digest !== 'string' || !Array.isArray(value.suites)) {
     throw regressionError('REGRESSION_RECEIPT_INVALID', `Receipt phải là ${RECEIPT_KIND} schema v${RECEIPT_SCHEMA_VERSION}.`);
