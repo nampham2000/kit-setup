@@ -97,6 +97,7 @@ module.exports = function createAssetImportPorter(deps) {
       spriteTrimType: meshType && Number(meshType[1]) === 0 ? 'none' : 'auto',
       wrapModeS: unityWrapMode(text, 'wrapU'),
       wrapModeT: unityWrapMode(text, 'wrapV'),
+      ...require('./texture-sampling.cjs').unityTextureSampling(text),
       ...unitySpriteImportData(text),
     };
   }
@@ -134,6 +135,13 @@ module.exports = function createAssetImportPorter(deps) {
       );
     }
     if (kind === 'model') recoverModelMetaFromLibrary(dest, options);
+    if (kind === 'image') {
+      try {
+        require('./texture-alpha.cjs').applyUnityTextureAlpha(unityAsset.path, dest);
+      } catch (error) {
+        reporter.add('high', 'TEXTURE_ALPHA_IMPORT_UNRESOLVED', unityAsset.relativePath, dest, String(error));
+      }
+    }
     const importConfig = kind === 'image'
       ? { ...unityTextureImporterConfig(unityAsset.path), ...config }
       : config;

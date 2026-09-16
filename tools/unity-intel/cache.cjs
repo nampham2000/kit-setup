@@ -10,7 +10,7 @@ const CACHE_SCHEMA_VERSION = 2;
 // contract and content-bound stamps for every textual/serialized asset plus
 // its .meta. Coarse-timestamp filesystems such as exFAT must not reuse stale
 // evidence after same-size content replacement.
-const INDEXER_VERSION = 4;
+const INDEXER_VERSION = 5;
 
 const EXTRACTOR_FILES = [
   'schema.cjs',

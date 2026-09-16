@@ -118,6 +118,10 @@ function validateCceffectStructure(effectText, options = {}) {
     return { valid: false, errors: ['Empty or non-string effect content'], warnings };
   }
 
+  if (/#include\s*<builtin\/uniforms\/cc-fog>/.test(effectText)) {
+    errors.push('[EFX2001_INVALID_FOG_INCLUDE] Cocos 3.8 has no builtin/uniforms/cc-fog chunk. Fog uniforms are declared in builtin/uniforms/cc-global.');
+  }
+
   // Cocos 3.8.8 decides whether a CPU material is valid for ParticleSystem
   // with a case-sensitive `effectName.indexOf('particle')` check. A custom
   // effect can use the correct particle vertex ABI and still be rejected when

@@ -24,9 +24,7 @@ if (!isColorEnabled() && !process.env.PLAYABLE_KEEP_ANSI) {
       if (typeof chunk === 'string') {
         return original(stripAnsi(chunk), encoding, callback);
       }
-      if (Buffer.isBuffer(chunk)) {
-        return original(Buffer.from(stripAnsi(chunk.toString('utf8')), 'utf8'), encoding, callback);
-      }
+      // Binary streams (including node:test IPC) must remain byte-exact.
       return original(chunk, encoding, callback);
     };
   }

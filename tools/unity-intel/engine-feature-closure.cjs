@@ -195,6 +195,12 @@ function detectUnityEngineFeatureEvidence(input = {}) {
     addMarker(markers, 'primitive', 'unity-builtin-primitive');
   }
 
+  // Creator 3.8 Skybox.activate constructs its cube with primitives.box().
+  // A skybox therefore needs primitive even when no scene mesh is primitive.
+  if (/\bm_SkyboxMaterial:\s*\{\s*fileID:\s*(?!0\b)-?\d+/.test(text)) {
+    addMarker(markers, 'primitive', 'skybox-runtime-cube');
+  }
+
   if (/(?:^|\n)(?:OcclusionArea|OcclusionPortal):/m.test(text) ||
       /\buseOcclusionCulling\s*=/.test(runtimeText)) {
     addMarker(markers, 'occlusion-query', 'unity-occlusion-runtime');

@@ -6,7 +6,7 @@ const zlib = require('zlib');
 
 /**
  * Pure Node.js PNG Reader and Writer with zero external dependencies.
- * Supports decoding 8-bit RGBA and RGB PNGs, and encoding 8-bit RGBA PNGs.
+ * Supports decoding 8/16-bit PNGs, and encoding 8-bit RGBA PNGs.
  */
 
 // CRC-32 table for PNG chunk checksums
@@ -31,6 +31,11 @@ function calculateCrc(buf, offset, length) {
  * Decode a PNG buffer into raw RGBA pixels.
  */
 function decodePng(buffer) {
+  if (buffer.length >= 29 && buffer[24] === 16) {
+    const decoded = require('../resource-stats.cjs').decodePng(buffer);
+    if (!decoded) throw new Error('Unsupported or corrupt 16-bit PNG');
+    return {width: decoded.width, height: decoded.height, data: Buffer.from(decoded.rgba)};
+  }
   // Check PNG signature
   if (buffer.length < 8 || buffer[0] !== 0x89 || buffer[1] !== 0x50 || buffer[2] !== 0x4E || buffer[3] !== 0x47) {
     throw new Error('Invalid PNG signature');
@@ -106,9 +111,7 @@ function decodePng(buffer) {
         const pa = Math.abs(p - left);
         const pb = Math.abs(p - up);
         const pc = Math.abs(p - upLeft);
-        let pr = left;
-        if (pb < pa && pb < pc) pr = up;
-        else if (pc < pa) pr = upLeft;
+        const pr = pa <= pb && pa <= pc ? left : pb <= pc ? up : upLeft;
         val = (byte + pr) & 0xFF;
       } else {
         val = byte;
@@ -218,8 +221,18 @@ function packPbrOrmTexture(options) {
     defaultMetallic = 0.0,
     defaultRoughness = 0.5,
     defaultOcclusion = 1.0,
+    smoothnessScale = 1.0,
     outputPath,
   } = options;
+  // Unity applies sRGB decoding only to RGB, never to smoothness in alpha.
+  const sourceMetaPath = metallicGlossPath && metallicGlossPath + '.meta';
+  const metallicSrgb = options.metallicSrgb ?? Boolean(sourceMetaPath && fs.existsSync(sourceMetaPath)
+    && /sRGBTexture:\s*1/.test(fs.readFileSync(sourceMetaPath, 'utf8')));
+  const srgbByteToLinear = value => Math.round(255 * (value / 255 <= 0.04045
+    ? value / 255 / 12.92 : Math.pow((value / 255 + 0.055) / 1.055, 2.4)));
+  for (const source of [metallicGlossPath, occlusionPath, roughnessPath]) {
+    if (source && !fs.existsSync(source)) throw new Error(`PBR source texture does not exist: ${source}`);
+  }
 
   let metallicImg = null;
   let occlusionImg = null;
@@ -228,19 +241,19 @@ function packPbrOrmTexture(options) {
   if (metallicGlossPath && fs.existsSync(metallicGlossPath)) {
     try {
       metallicImg = decodePng(fs.readFileSync(metallicGlossPath));
-    } catch (e) {}
+    } catch (e) { throw new Error(`Cannot decode metallic/gloss map: ${e.message}`); }
   }
 
   if (occlusionPath && fs.existsSync(occlusionPath)) {
     try {
       occlusionImg = decodePng(fs.readFileSync(occlusionPath));
-    } catch (e) {}
+    } catch (e) { throw new Error(`Cannot decode occlusion map: ${e.message}`); }
   }
 
   if (roughnessPath && fs.existsSync(roughnessPath)) {
     try {
       roughnessImg = decodePng(fs.readFileSync(roughnessPath));
-    } catch (e) {}
+    } catch (e) { throw new Error(`Cannot decode roughness map: ${e.message}`); }
   }
 
   const width = metallicImg?.width || occlusionImg?.width || roughnessImg?.width || 256;
@@ -279,7 +292,7 @@ function packPbrOrmTexture(options) {
         const mIdx = (my * metallicImg.width + mx) * 4;
         // Unity MetallicGlossMap stores Smoothness in Alpha channel. Roughness = 255 - Smoothness
         const smoothness = metallicImg.data[mIdx + 3];
-        roughness = 255 - smoothness;
+        roughness = 255 - Math.round(smoothness * Math.max(0, Math.min(1, smoothnessScale)));
       }
 
       // 3. Metallic (B channel in Cocos ORM)
@@ -290,6 +303,7 @@ function packPbrOrmTexture(options) {
         const mIdx = (my * metallicImg.width + mx) * 4;
         // Unity Metallic is in R channel
         metallic = metallicImg.data[mIdx];
+        if (metallicSrgb) metallic = srgbByteToLinear(metallic);
       }
 
       ormBuffer[idx] = ao;           // R: AO

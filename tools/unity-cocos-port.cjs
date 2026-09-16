@@ -2383,6 +2383,11 @@ function prioritizedNames(primary, candidates, fallback) {
  * directional light mapped at 65000.
  */
 const UNITY_PUNCTUAL_INTENSITY_TO_LUMINANCE = 10000;
+// This heuristic does NOT reproduce Built-in Unity's distance attenuation.
+// Near-surface lights require the source _LightTextureB0 attenuation (or an
+// independently validated equivalent), not just a different intensity scale.
+// Cocos SphereLight's inverse-square/size attenuation can produce a saturated
+// ground spot even when a distant comparison appears acceptable.
 
 const COCOS_TEXTURE_WRAP_MODES = new Set(['repeat', 'clamp-to-edge', 'mirrored-repeat']);
 
@@ -2467,10 +2472,10 @@ function ensureImageAssetMeta(assetFile, config = {}) {
           imageUuidOrDatabaseUri: meta.uuid,
           isUuid: true,
           visible: false,
-          minfilter: 'linear',
-          magfilter: 'linear',
-          mipfilter: 'none',
-          anisotropy: 0,
+          minfilter: config.minfilter || 'linear',
+          magfilter: config.magfilter || 'linear',
+          mipfilter: config.mipfilter || 'none',
+          anisotropy: config.anisotropy ?? 0,
           unityCocosPortPendingImport: true,
         },
         ver: '1.0.22',
@@ -2491,10 +2496,10 @@ function ensureImageAssetMeta(assetFile, config = {}) {
       imageUuidOrDatabaseUri: meta.uuid,
       isUuid: true,
       visible: false,
-      minfilter: 'linear',
-      magfilter: 'linear',
-      mipfilter: 'none',
-      anisotropy: 0,
+      minfilter: config.minfilter || 'linear',
+      magfilter: config.magfilter || 'linear',
+      mipfilter: config.mipfilter || 'none',
+      anisotropy: config.anisotropy ?? 0,
     };
   }
 

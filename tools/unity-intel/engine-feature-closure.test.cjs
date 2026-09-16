@@ -26,6 +26,15 @@ function closure(records, included, adapters = []) {
   });
 }
 
+test('skybox requires the Cocos runtime cube module even without primitive scene meshes', () => {
+  const sky = record('Assets/Demo.unity', 'RenderSettings:\n  m_SkyboxMaterial: {fileID: 10304, guid: 0000000000000000f000000000000000, type: 0}\n');
+  const result = closure([sky], [sky.assetPath]);
+  assert.ok(result.requiredModules.includes('primitive'));
+  assert.ok(!result.disabledModules.includes('primitive'));
+  const empty = record('Assets/Empty.unity', 'RenderSettings:\n  m_SkyboxMaterial: {fileID: 0}\n');
+  assert.ok(!closure([empty], [empty.assetPath]).requiredModules.includes('primitive'));
+});
+
 test('AnimatorController and reachable Spine 4.2 skeleton evidence produce exact Cocos selectors', () => {
   const controller = record('Assets/Game/Tile.controller', '%YAML 1.1\n', { type: 'controller' });
   const spinePrefab = record('Assets/Game/Win.prefab', 'skeletonDataAsset: {fileID: 11400000, guid: abc}\n');

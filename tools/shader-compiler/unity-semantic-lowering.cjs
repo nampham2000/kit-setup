@@ -468,6 +468,28 @@ function lowerHlslToGlsl(code, options = {}) {
   // 10. Texture & Screen Built-in Constants Lowering
   out = lowerBuiltinConstants(out);
 
+  // GLES100 rejects integer initializers for floats and scalar swizzles emitted
+  // by Amplify. Prove the expression scalar before replacing a swizzle; vector
+  // expressions must retain their component selection.
+  out = out.replace(/(\bfloat\s+\w+\s*=\s*)([-+]?\d+)(\s*;)/g, '$1$2.0$3');
+  const scalars = new Set([...out.matchAll(/\bfloat\s+(\w+)/g)].map(m => m[1]));
+  out = out.replace(/\b(\w+)\.(x{2,4})\b/g, (m, name, sw) =>
+    scalars.has(name) ? `vec${sw.length}(${name})` : m);
+  const splats = [...out.matchAll(/\)\s*\.(x{2,4})\b/g)].reverse();
+  for (const match of splats) {
+    let start = match.index, depth = 1;
+    while (--start >= 0) {
+      if (out[start] === ')') depth++;
+      if (out[start] === '(' && --depth === 0) break;
+    }
+    if (start < 0 || /[\w]/.test(out[start - 1] || '')) continue;
+    const expr = out.slice(start + 1, match.index);
+    const reduced = expr.replace(/\b\w+\.[xyzwrgba]\b/g, '0.0');
+    const names = reduced.match(/\b[A-Za-z_]\w*\b/g) || [];
+    if (!names.every(n => scalars.has(n)) || /[,;{}]/.test(reduced)) continue;
+    out = out.slice(0, start) + `vec${match[1].length}(${expr})` + out.slice(match.index + match[0].length);
+  }
+
   return out;
 }
 

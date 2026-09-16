@@ -6,6 +6,13 @@ argument-hint: "Unity asset or script to port"
 
 # Unity to Cocos Creator 3.8.8+ Porting Skill
 
+Creator 3.8 skyboxes require the `primitive` engine feature: activation calls
+`cclegacy.primitives.box()` even when no authored scene mesh is a primitive.
+Include this dependency when deriving cropping from a nonzero Unity
+`RenderSettings.m_SkyboxMaterial`. A profile-only change is insufficient:
+regenerate the Preview engine, restart the target project if required, and
+verify the live Preview scene activates without a Skybox `reading 'box'` error.
+
 This skill provides step-by-step guidance and architectural rules for converting Unity hypercasual/casual gameplay into Cocos Creator 3.8.8+ TypeScript playable ads.
 
 ## 1. Automated Tooling First
@@ -606,3 +613,13 @@ Keep Optimize and Compress enabled. Before approving reduction, compare source
 and imported index counts for every submesh, especially planar backdrops; inspect
 both levels in Preview. Repair through Asset DB, preserving UUIDs, and reload
 the extension before reimport so an old listener cannot reapply the bad policy.
+
+### Unity scene visual closure (source-backed regression gates)
+
+- Preserve TextureImporter alpha source and sampler settings independently. `alphaUsage: 2` requires grayscale-derived alpha in the Cocos copy; `enableMipMap`, `filterMode`, and anisotropy must survive import. Never alter Unity source images. Use `texture-alpha.cjs` and `texture-sampling.cjs`, and keep their visual-import regression tests passing.
+- Do not assume Cocos primitive UV0/UV1 matches Unity built-in meshes. For baked scenes, export the active renderer mesh, effective static-batch submesh, renderer matrix and both UV channels from Unity; compare geometry and lightmap UVs before tuning material brightness.
+- Cocos EXR imports use RGBE. A Unity lightmap copied as EXR cannot be sampled by the built-in Cocos LDR lightmap decoder without an explicit decode adapter. Directional lightmaps also require Unity's normal-dependent direction decode. Keep visible sky and specular reflection separate.
+- Unity SH coefficients and Cocos normalized SH coefficients are different representations. Use `spherical-harmonics.cjs`, flip the Z-odd terms when changing handedness, and verify interpolated samples against Unity. Cocos light-probe consumers must be movable; static default mobility can leave the SH buffer empty.
+- Preserve baked-only lights without adding duplicate realtime lighting after baked lightmaps/probes are imported. Do not hide missing baked data by disabling lights without a verified bake replacement.
+- Preview evidence must confirm the loaded SceneGlobals values. AssetDB refresh, scene-open and shader import can complete asynchronously; a soft reload response alone is not proof that new serialized state is active.
+- RenderSettings fog is not proof of visible fog. Check the active camera rendering path and image effects. Built-in Deferred opaque rendering can ignore scene fog while forward transparent shaders still apply it. Use a source render with fog toggled and state restored to establish behavior before changing Cocos global fog.

@@ -20,6 +20,16 @@ mesh geometry to compensate for these material differences.
 
 ## Mandatory workflow
 
+For Editor shader import failures, repair the shared generator and add a portable
+regression fixture before regenerating project assets. In Creator 3.8, fog
+uniforms belong to `builtin/uniforms/cc-global`; there is no `cc-fog` uniform
+chunk. Amplify's unused hidden `_texcoord` and `__dirty` properties must not
+become material properties without live shader bindings (EFX3302). Preserve
+hidden properties that are referenced by source code, and preserve authored
+UV varying widths, including particle custom data in float4 UV channels.
+Passing static checks does not close the issue: reimport the affected effects,
+verify Editor compilation and exercise their particle variants in Preview.
+
 1. Run Unity port preflight before reading raw Unity source or writing output:
 
    ```bash
@@ -129,3 +139,13 @@ mesh geometry to compensate for these material differences.
 - Keep sampler declarations outside UBOs. Pack scalar/vector uniforms for std140 alignment and bind property targets explicitly.
 - Match source cull, depth test/write, blend, alpha clip and queue behavior before tuning color.
 - `--unity-uv` changes texture sampling convention for Unity-authored mesh UVs; never compensate by globally flipping mesh UVs when procedural shader code also reads `uv.y`.
+
+### Particle depth, capture and material-instance validation
+
+For Unity soft particles and GrabPass conversions, bind scene-depth/color render textures to the particle renderer's **material instance**, not only its shared parent material. Creator recompiles per-emitter instances and can retain default samplers from the parent. Initialize render textures before assigning camera targets; exclude particles and UI from opaque captures; remove destroyed renderers/materials from capture tracking. Validate both depth-contact fade and distortion with a non-black background in Preview. Check source render alignment (View, Local, Facing, Velocity) explicitly; camera-axis billboards alone do not cover these modes. A shader import pass does not verify these runtime contracts.
+
+Unbound GrabPass adapters must not draw an opaque black quad: use an explicit capture-ready uniform, bind on emitter activation and after material variant compilation, and keep descriptor bindings current. Prefab-edit views without an opaque capture should skip the refraction pass. Verify the actual refraction in the game Preview before accepting this fallback.
+
+For bright ground spots, isolate emitter lighting from particle alpha/depth. Built-in Unity point lights sample `_LightTextureB0` using squared distance normalized by range, while Cocos sphere lights use inverse-square and size attenuation. A universal luminance multiplier does not preserve the near-field result. Capture the live source attenuation table and account for Cocos exposure/light-meter scaling in a scoped adapter; do not dim every particle or globally change light import heuristics based on one scene.
+
+For Standard metallic/gloss imports, preserve TextureImporter sRGB decoding of RGB separately from linear alpha and apply `_GlossMapScale` before converting smoothness to roughness. The shared PBR packer accepts `smoothnessScale`, detects adjacent Unity metadata, and permits explicit `metallicSrgb` when metadata is unavailable. Do not silently substitute Cocos gamma-square approximations for source sRGB or normalize a scaled normal without checking Unity's reconstructed Z.

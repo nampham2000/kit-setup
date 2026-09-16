@@ -32,6 +32,52 @@ const { transpileShaderFile } = require('./unity-shader-compiler.cjs');
 const { UnityIncludeResolver } = require('./unity-include-resolver.cjs');
 const { convertUnityMatToCocosMtl, convertMatFile } = require('./unity-material-converter.cjs');
 
+describe('Particle shader import regressions', () => {
+  test('Unity bump default resolves to the Cocos normal texture', () => {
+    const effect = emitCocosEffect(parseShaderLab('Shader "Test/Normal" { Properties { _NormalMap ("Normal", 2D) = "bump" {} } SubShader { Pass { CGPROGRAM\n#pragma vertex vert\n#pragma fragment frag\nfloat4 vert(float4 v:POSITION):SV_POSITION{return v;}\nfloat4 frag():SV_Target{return 1;}\nENDCG } } }'));
+    assert.match(effect, /normalMap: \{ value: normal \}/);
+    assert.doesNotMatch(effect, /value: bump/);
+  });
+  test('Amplify scalar splats and float initializers compile in GLES100', () => {
+    const result = lowerHlslToGlsl('float lp = 1; float noise = 2; float4 a = (noise).xxxx; float4 b = ((1.0 + (uv.z - 0.0) * 2.0)).xxxx; float4 c = (vectorValue).xxxx;');
+    assert.match(result, /float lp = 1\.0;/);
+    assert.match(result, /vec4 a = vec4\(noise\)/);
+    assert.match(result, /vec4 b = vec4\(/);
+    assert.match(result, /\(vectorValue\)\.xxxx/);
+  });
+  const source = `Shader "Regression/Particle" {
+    Properties {
+      [HideInInspector] _texcoord ("", 2D) = "white" {}
+      [HideInInspector] __dirty ("", Int) = 1
+      [HideInInspector] _Used ("Used", Float) = 1
+    }
+    SubShader { Pass { CGPROGRAM
+      #pragma vertex vert
+      #pragma fragment frag
+      #pragma multi_compile_fog
+      float _Used;
+      struct appdata { float4 vertex : POSITION; };
+      struct v2f { float4 pos : SV_POSITION; UNITY_FOG_COORDS(1) };
+      v2f vert(appdata v) { v2f o; o.pos = UnityObjectToClipPos(v.vertex); return o; }
+      float4 frag(v2f i) : SV_Target { float4 col = _Used; UNITY_APPLY_FOG(i.fogCoord, col); return col; }
+    ENDCG } }
+  }`;
+  for (const mode of ['unlit', 'surface-pbr']) {
+    test(`${mode}: omit unused editor properties, preserve referenced hidden properties`, () => {
+      const effect = emitCocosEffect(parseShaderLab(source), { mode });
+      assert.doesNotMatch(effect, /cc-fog/);
+      assert.doesNotMatch(effect, /\btexcoord(?:_ST)?\s*:/);
+      assert.doesNotMatch(effect, /\bdirty\s*:/);
+      assert.match(effect, /\bused\s*:/);
+    });
+  }
+  test('validator rejects nonexistent fog chunk before Editor import', () => {
+    const effect = emitCocosEffect(parseShaderLab(source));
+    const result = validateCceffectStructure(effect + '\n#include <builtin/uniforms/cc-fog>');
+    assert.ok(result.errors.some(e => e.includes('EFX2001_INVALID_FOG_INCLUDE')));
+  });
+});
+
 describe('UCShaderTranspiler Test Suite', () => {
 
   describe('1. ShaderLab Parser', () => {

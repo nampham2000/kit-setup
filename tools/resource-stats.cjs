@@ -225,10 +225,12 @@ function decodePng(buffer) {
     else if (colorType === 4) bpp = 2; // Grayscale + Alpha
     else if (colorType === 6) bpp = 4; // RGBA
 
-    if (bitDepth !== 8) {
+    if (bitDepth !== 8 && bitDepth !== 16) {
       // Return metadata only if non-8-bit
       return { width, height, bitDepth, colorType, isOpaque: true, pixels: null };
     }
+
+    if (bitDepth === 16) bpp *= 2;
 
     const rowBytes = width * bpp;
     const stride = rowBytes + 1; // 1 byte filter type per scanline
@@ -271,19 +273,20 @@ function decodePng(buffer) {
       }
 
       // Convert scanline to standard 32-bit RGBA
+      const sample = offset => currentRow[offset * (bitDepth === 16 ? 2 : 1)];
       for (let x = 0; x < width; x++) {
         const dstIdx = (y * width + x) * 4;
         let r = 0, g = 0, b = 0, a = 255;
 
         if (colorType === 6) { // RGBA
-          r = currentRow[x * 4];
-          g = currentRow[x * 4 + 1];
-          b = currentRow[x * 4 + 2];
-          a = currentRow[x * 4 + 3];
+          r = sample(x * 4);
+          g = sample(x * 4 + 1);
+          b = sample(x * 4 + 2);
+          a = sample(x * 4 + 3);
         } else if (colorType === 2) { // RGB
-          r = currentRow[x * 3];
-          g = currentRow[x * 3 + 1];
-          b = currentRow[x * 3 + 2];
+          r = sample(x * 3);
+          g = sample(x * 3 + 1);
+          b = sample(x * 3 + 2);
         } else if (colorType === 3) { // Indexed / Palette
           const pIdx = currentRow[x];
           if (palette && pIdx * 3 + 2 < palette.length) {
@@ -295,10 +298,10 @@ function decodePng(buffer) {
             a = trns[pIdx];
           }
         } else if (colorType === 0) { // Grayscale
-          r = g = b = currentRow[x];
+          r = g = b = sample(x);
         } else if (colorType === 4) { // Grayscale + Alpha
-          r = g = b = currentRow[x * 2];
-          a = currentRow[x * 2 + 1];
+          r = g = b = sample(x * 2);
+          a = sample(x * 2 + 1);
         }
 
         if (a < 250) hasTransparent = true;

@@ -148,6 +148,7 @@
         "scene": {
             "script": "./dist/scene.js",
             "methods": [
+                "executeScript",
                 "createNewScene",
                 "addComponentToNode",
                 "removeComponentFromNode",

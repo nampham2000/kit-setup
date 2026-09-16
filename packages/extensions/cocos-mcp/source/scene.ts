@@ -2,6 +2,10 @@ import { join } from 'path';
 module.paths.push(join(Editor.App.path, 'node_modules'));
 
 export const methods: { [key: string]: (...any: any) => any } = {
+    executeScript(script: string) {
+        const cc = require('cc');
+        return new Function('cc', 'script', 'return eval(script);')(cc, script);
+    },
     /**
      * Create a new scene
      */

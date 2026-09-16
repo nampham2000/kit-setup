@@ -115,3 +115,15 @@ test('full-project remains an explicit escape hatch and invalid profiles fail cl
   assert.equal(scope.closure.includedCount, snapshot.assets.records.length);
   assert.throws(() => normalizePortProfile('everything'), error => error.code === 'UNITY_PORT_PROFILE_INVALID');
 });
+
+test('explicit indexed scene can be outside build settings and use a relative display path', () => {
+  const snapshot = snapshotFixture();
+  snapshot.scenes = [{ path: 'Scenes/Particle demo.unity', assetPath: 'Assets/Scenes/Particle demo.unity', scope: 'runtime', enabled: false }];
+  const entry = selectGameplayEntry(snapshot, { entryScene: 'Assets/Scenes/Particle demo.unity' });
+  assert.equal(entry.primary, 'Assets/Scenes/Particle demo.unity');
+  assert.equal(entry.needsDecision, false);
+  snapshot.scenes[0].scope = 'sample';
+  assert.equal(selectGameplayEntry(snapshot, { entryScene: entry.primary }).primary, entry.primary);
+  snapshot.scenes[0].scope = 'editor';
+  assert.throws(() => selectGameplayEntry(snapshot, { entryScene: 'Assets/Scenes/Particle demo.unity' }), { code: 'UNITY_PORT_ENTRY_SCENE_INVALID' });
+});

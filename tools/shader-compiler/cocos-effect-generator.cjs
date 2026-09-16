@@ -441,7 +441,9 @@ function formatYamlPropertyValue(prop) {
     return `[${val.join(', ')}]`;
   }
   if (prop.type === '2D' || prop.type === 'Cube' || prop.type === '3D') {
-    return prop.textureDefault || 'white';
+    // Unity's flat normal is called bump; Cocos registers normal-texture.
+    // Keeping bump makes Pass.resetTexture dereference an absent sampler.
+    return prop.textureDefault === 'bump' ? 'normal' : prop.textureDefault || 'white';
   }
   if (typeof prop.defaultValue === 'number') {
     return String(prop.defaultValue);
@@ -574,6 +576,7 @@ function buildCceffectYaml(docIR, passIR, uboInfo, options = {}) {
  * Emits Cocos Creator Surface Shader mode (--mode surface-pbr)
  */
 function emitSurfaceShaderEffect(docIR, passIR, options = {}) {
+  docIR = withoutUnusedHiddenProperties(docIR);
   const uboFields = [];
   const samplers = [];
   // Unity property name -> Cocos uniform name. Without this the emitted GLSL
@@ -759,9 +762,13 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
 
   const extraVaryings = collectExtraVaryings(programIR);
 
+  const outputStruct = (programIR.structs || []).find(s => s.name === vertFunc?.returnType);
+  const uvField = outputStruct?.fields.find(f => /^(uv|uv0|texcoord|texcoord0)$/.test(f.name));
+  const uvWidth = /(?:float|half|fixed|vec)([234])$/.exec(uvField?.type || '')?.[1] || '2';
+
   // 3. Determine Varyings (Stage IO)
   const varyings = [
-    'out vec2 v_uv;',
+    `out vec${uvWidth} v_uv;`,
   ];
   if (attributes.some(a => a.includes('a_color'))) {
     varyings.push('out vec4 v_color;');
@@ -822,7 +829,7 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
     '  #include <builtin/uniforms/cc-global>',
   ];
   if (!usesCocosSpriteTexture) vsIncludes.push('  #include <builtin/uniforms/cc-local>');
-  if (/cc_fog|cc_fogColor|UNITY_FOG/i.test(rawCode)) vsIncludes.push('  #include <builtin/uniforms/cc-fog>');
+  // Cocos 3.8 declares fog uniforms in cc-global; cc-fog is not an engine chunk.
   if (/cc_shadow|TRANSFER_SHADOW|SHADOW_COORDS/i.test(rawCode)) vsIncludes.push('  #include <builtin/uniforms/cc-shadow>');
   if (/cc_joints|cc_jointTexture|a_joints|a_weights/i.test(rawCode)) vsIncludes.push('  #include <builtin/uniforms/cc-skinning>');
 
@@ -908,7 +915,7 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
   // Vertex Main Entry
   vsLines.push('  vec4 vert () {');
   vsLines.push('    vec4 pos = vec4(a_position, 1.0);');
-  vsLines.push('    v_uv = a_texCoord;');
+  vsLines.push(`    v_uv = ${uvWidth === '2' ? 'a_texCoord' : uvWidth === '3' ? 'vec3(a_texCoord, 0.0)' : 'vec4(a_texCoord, 0.0, 0.0)'};`);
   if (varyings.some(v => v.includes('v_color'))) {
     vsLines.push('    v_color = a_color;');
   }
@@ -1100,7 +1107,7 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
     '  #include <builtin/uniforms/cc-global>',
   ];
   if (colorSamplerNames.length > 0) fsIncludes.push('  #include <common/color/gamma>');
-  if (/cc_fog|cc_fogColor|UNITY_APPLY_FOG/i.test(rawCode)) fsIncludes.push('  #include <builtin/uniforms/cc-fog>');
+  // Fog uniforms are already supplied by cc-global above.
   if (/cc_shadow|SHADOW_ATTENUATION/i.test(rawCode)) fsIncludes.push('  #include <builtin/uniforms/cc-shadow>');
   if (/cc_mainLitDir|Shade4PointLights|cc_forward_light/i.test(rawCode)) fsIncludes.push('  #include <builtin/uniforms/cc-forward-light>');
   if (docIR.family === 'PBR' || /cc-pbr|StandardPBR/i.test(rawCode)) fsIncludes.push('  #include <builtin/includes/cc-pbr>');
@@ -1227,7 +1234,7 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
     const colorName = colorProp ? (colorProp.cocosName || colorProp.name) : 'baseColor';
 
     if (hasTexture) {
-      const sample = lowerSrgbTextureSamples(`texture(${texName}, v_uv)`, colorSamplerNames);
+      const sample = lowerSrgbTextureSamples(`texture(${texName}, v_uv.xy)`, colorSamplerNames);
       fsLines.push(`    vec4 col = ${sample};`);
       if (colorProp) {
         fsLines.push(`    col *= ${colorName};`);
@@ -1253,7 +1260,20 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
 /**
  * Emits full .effect source code from ShaderDocumentIR
  */
+function withoutUnusedHiddenProperties(docIR) {
+  const source = (docIR.subShaders || []).flatMap(s => s.passes || [])
+    .map(p => p.program?.rawHlsl || '').join('\n');
+  return { ...docIR, properties: docIR.properties.filter(prop => {
+    if (!(prop.attributes || []).some(a => /^HideInInspector$/i.test(a))) return true;
+    // Amplify emits editor-only _texcoord/__dirty properties. An unused sampler
+    // is stripped during effect compilation, so its YAML property causes EFX3302.
+    // Preserve hidden properties that the shader actually references.
+    return new RegExp(`\\b${prop.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(source);
+  }) };
+}
+
 function emitCocosEffect(docIR, options = {}) {
+  docIR = withoutUnusedHiddenProperties(docIR);
   if (options.mode === 'surface-pbr') {
     return emitSurfaceShaderEffect(docIR, docIR.subShaders[0]?.passes[0] || { renderState: {} }, options);
   }

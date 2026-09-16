@@ -119,7 +119,7 @@ function logicalPath(value) {
 }
 
 function scoreGameplayScene(scene) {
-  const scenePath = logicalPath(scene && (scene.path || scene.assetPath));
+  const scenePath = logicalPath(scene && (scene.assetPath || scene.path));
   if (!scenePath) return null;
   let score = 0;
   if (scene.enabled) score += 30;
@@ -134,11 +134,12 @@ function scoreGameplayScene(scene) {
 function selectGameplayEntry(snapshot, options = {}) {
   const buildScenes = Array.isArray(snapshot && snapshot.buildScenes) ? snapshot.buildScenes : [];
   const viewScenes = snapshot && snapshot.views && Array.isArray(snapshot.views.scenes) ? snapshot.views.scenes : [];
+  const indexedScenes = Array.isArray(snapshot && snapshot.scenes) ? snapshot.scenes : [];
   const source = buildScenes.length ? buildScenes : viewScenes;
   if (options.entryScene !== undefined) {
     const requested = String(options.entryScene).replace(/\\/g, '/');
     const validPath = /^Assets\/.+\.unity$/.test(requested) && !requested.split('/').some(part => !part || part === '.' || part === '..');
-    const selected = source.find(scene => (scene.path || scene.assetPath) === requested && scene.indexed !== false && (!scene.scope || scene.scope === 'runtime'));
+    const selected = [...buildScenes, ...indexedScenes, ...viewScenes].find(scene => (scene.assetPath || scene.path) === requested && scene.indexed !== false && (!scene.scope || ['runtime', 'sample', 'vendor'].includes(scene.scope)));
     if (!validPath || !selected) {
       const error = new Error('Explicit entry scene must be an indexed runtime Unity scene in the project scene inventory.');
       error.code = 'UNITY_PORT_ENTRY_SCENE_INVALID';
@@ -206,8 +207,8 @@ function buildClosure(snapshot, seeds, options = {}) {
   return { paths, distances };
 }
 
-function classifyNonCore(assetPath, record) {
-  if (record && ['editor', 'sample', 'vendor'].includes(record.scope)) {
+function classifyNonCore(assetPath, record, explicitSampleClosure = false) {
+  if (record && (record.scope === 'editor' || (!explicitSampleClosure && ['sample', 'vendor'].includes(record.scope)))) {
     return {
       id: record.scope === 'editor' ? 'editor-only' : 'vendor-sample',
       disposition: 'defer',
@@ -326,11 +327,12 @@ function buildCoreGameplayScope(snapshot, options = {}) {
   const records = snapshot && snapshot.assets && snapshot.assets.records || [];
   const recordByPath = new Map(records.map(record => [logicalPath(record.assetPath || record.path), record]).filter(item => item[0]));
   const closure = buildClosure(snapshot, entry.primary ? [entry.primary] : []);
+  const explicitSampleClosure = entry.selection === 'explicit' && ['sample', 'vendor'].includes(recordByPath.get(entry.primary)?.scope);
   const includedPaths = new Set();
   const adapterPaths = new Set();
   const reachableNonCore = [];
   for (const assetPath of closure.paths) {
-    const rule = classifyNonCore(assetPath, recordByPath.get(assetPath));
+    const rule = classifyNonCore(assetPath, recordByPath.get(assetPath), explicitSampleClosure);
     if (rule) {
       adapterPaths.add(assetPath);
       reachableNonCore.push({ path: assetPath, rule });

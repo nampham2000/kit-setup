@@ -41,6 +41,12 @@ function parseArgs() {
       options.defaultRoughness = parseFloat(args[++i]);
     } else if (arg === '--default-occlusion') {
       options.defaultOcclusion = parseFloat(args[++i]);
+    } else if (arg === '--smoothness-scale') {
+      options.smoothnessScale = parseFloat(args[++i]);
+    } else if (arg === '--metallic-srgb') {
+      options.metallicSrgb = true;
+    } else if (arg === '--metallic-linear') {
+      options.metallicSrgb = false;
     }
   }
 
