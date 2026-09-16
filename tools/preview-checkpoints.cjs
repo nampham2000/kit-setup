@@ -695,9 +695,9 @@ function validateConfig(config, overrides = {}) {
       throw new Error(`cases[${index}].gestureKeepPressed phải là boolean`);
     }
     if (entry.gestures !== undefined
-      && (!Array.isArray(entry.gestures) || entry.gestures.length < 2 || entry.gestures.length > 8
+      && (!Array.isArray(entry.gestures) || entry.gestures.length < 2 || entry.gestures.length > 32
         || entry.gestures.some(gesture => typeof gesture !== 'string' || !gesture.trim()))) {
-      throw new Error(`cases[${index}].gestures phải có 2-8 gesture string`);
+      throw new Error(`cases[${index}].gestures phải có 2-32 gesture string`);
     }
     if (entry.gestureFromEvalBefore !== undefined) {
       if (!entry.evalBefore && !entry.evalBeforeFile) {
@@ -708,8 +708,8 @@ function validateConfig(config, overrides = {}) {
     }
     if (entry.gesturesFromEvalBefore !== undefined) {
       if (!Array.isArray(entry.gesturesFromEvalBefore)
-        || entry.gesturesFromEvalBefore.length < 2 || entry.gesturesFromEvalBefore.length > 8) {
-        throw new Error(`cases[${index}].gesturesFromEvalBefore phải có 2-8 gesture object`);
+        || entry.gesturesFromEvalBefore.length < 2 || entry.gesturesFromEvalBefore.length > 32) {
+        throw new Error(`cases[${index}].gesturesFromEvalBefore phải có 2-32 gesture object`);
       }
       if (!entry.evalBefore && !entry.evalBeforeFile) {
         throw new Error(`cases[${index}].gesturesFromEvalBefore cần evalBefore/evalBeforeFile`);

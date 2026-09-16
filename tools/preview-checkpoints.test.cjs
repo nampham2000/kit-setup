@@ -100,7 +100,7 @@ test('fails closed on build/file targets, duplicate names and unknown options', 
       gesturesFromEvalBefore: [
         { x1: 'a.x', y1: 'a.y', x2: 'a.x', y2: 'a.y', durationMs: 30, steps: 1 },
       ] }],
-  }), /2-8/);
+  }), /2-32/);
   assert.throws(() => validateConfig({
     url: 'http://localhost:7456', cases: [{ name: 'conflicting dynamic sequence', evalBefore: 'true',
       gesture: '0.5,0.5,0.5,0.5,30,1', gesturesFromEvalBefore: [
@@ -111,7 +111,7 @@ test('fails closed on build/file targets, duplicate names and unknown options', 
   assert.throws(() => validateConfig({
     url: 'http://localhost:7456', cases: [{ name: 'a', gestures: ['0.2,0.2,0.2,0.2,30,1'],
       gestureGapMs: 50 }],
-  }), /2-8/);
+  }), /2-32/);
   assert.throws(() => validateConfig({
     url: 'http://localhost:7456', previewDevice: 42, cases: [{ name: 'a' }],
   }), /previewDevice/);
@@ -124,6 +124,19 @@ test('fails closed on build/file targets, duplicate names and unknown options', 
   assert.throws(() => validateConfig({
     url: 'http://localhost:7456', postActionSeconds: -1, cases: [{ name: 'a' }],
   }), /postActionSeconds/);
+});
+
+test('full-level gesture sequences are bounded at 32 touches', () => {
+  const make = count => ({
+    url: 'http://localhost:7456',
+    cases: [{
+      name: 'full-level',
+      gestures: Array(count).fill('0.2,0.4,0.2,0.4,30,1'),
+    }],
+  });
+  assert.equal(validateConfig(make(16)).cases[0].parsedGestures.length, 16);
+  assert.equal(validateConfig(make(32)).cases[0].parsedGestures.length, 32);
+  assert.throws(() => validateConfig(make(33)), /2-32/);
 });
 
 test('optional semantic eval assertion fails closed on a bad oracle', () => {
@@ -301,6 +314,7 @@ test('output/reference paths reject an intermediate symlink or junction', t => {
   fs.mkdirSync(qaRoot, { recursive: true });
   const link = fs.mkdtempSync(path.join(qaRoot, 'preview-checkpoints-link-'));
   t.after(() => {
+    t.mock.restoreAll();
     fs.rmSync(link, { recursive: true, force: true });
   });
   const originalLstat = fs.lstatSync;

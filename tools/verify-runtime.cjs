@@ -81,7 +81,7 @@ Options:
                        playable boot được nhưng vẽ sai.
   --eval-before <js>   Chạy biểu thức trước gesture và trả evalBeforeResult.
   --gesture <spec>     Phát touch thật qua CDP: x1,y1,x2,y2,durationMs[,steps].
-                       Lặp option này 2-8 lần để kiểm nhiều tap trong cùng session.
+                       Lặp option này 2-32 lần để kiểm nhiều tap trong cùng session.
   --gesture-gap <ms>   Khoảng nghỉ giữa các gesture lặp. Default: 0.
                        Tọa độ 0..1 là tỉ lệ trong canvas; số >1 là viewport px.
   --gesture-hold-before-move <ms>
@@ -503,8 +503,8 @@ async function dispatchTouchGesture(session, sessionId, gesture, timing = {}) {
 }
 
 async function dispatchTouchGestureSequence(session, sessionId, gestures, timing = {}) {
-  if (!Array.isArray(gestures) || gestures.length < 1 || gestures.length > 8) {
-    throw new Error('gesture sequence phải có 1-8 gesture');
+  if (!Array.isArray(gestures) || gestures.length < 1 || gestures.length > 32) {
+    throw new Error('gesture sequence phải có 1-32 gesture');
   }
   const waitFor = timing.wait || wait;
   const gapMs = Math.max(0, Math.min(5000, Math.round(Number(timing.gapMs) || 0)));
