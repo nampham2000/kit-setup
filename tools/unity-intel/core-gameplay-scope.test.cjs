@@ -91,7 +91,7 @@ test('scene selection fails visibly when no unique gameplay candidate exists', (
   assert.notEqual(entry.confidence, 'high');
 });
 
-test('explicit sample scene selection seeds the correct closure without a name-score requirement', () => {
+test('explicit scene selection seeds the correct closure without a name-score requirement', () => {
   const snapshot = snapshotFixture();
   snapshot.buildScenes.push({ path: 'Assets/Scenes/Complete.unity', enabled: true, indexed: true, scope: 'runtime' });
   snapshot.assets.records.push({ assetPath: 'Assets/Scenes/Complete.unity', type: 'scene', scope: 'runtime' });
@@ -104,6 +104,39 @@ test('explicit sample scene selection seeds the correct closure without a name-s
   assert.equal(scope.pathSet.has('Assets/Game/Board.prefab'), false);
   for (const entryScene of ['Assets/Scenes/Missing.unity', 'Assets/../Scenes/Complete.unity', 'D:/Complete.unity', '']) {
     assert.throws(() => buildCoreGameplayScope(snapshot, { entryScene }), { code: 'UNITY_PORT_ENTRY_SCENE_INVALID' });
+  }
+});
+
+test('explicit vendor demo outside Build Settings uses the indexed asset path and its closure', () => {
+  for (const sceneScope of ['sample', 'vendor']) {
+    const snapshot = snapshotFixture();
+    const assetPath = 'Assets/Vendor/Demo AOE skills/Demo AOE skills.unity';
+    snapshot.scenes = [{ path: assetPath.slice(7), assetPath, scope: sceneScope, enabled: false }];
+    snapshot.assets.records.push({ assetPath, type: 'scene', scope: sceneScope });
+    const demoScript = 'Assets/Vendor/Demo AOE skills/DemoController.cs';
+    snapshot.assets.records.push({ assetPath: demoScript, type: 'script', scope: sceneScope });
+    snapshot.scriptIndex.scripts.push({ assetPath: demoScript, scope: sceneScope, declaredTypes: ['DemoController'] });
+    snapshot.dependencies.edges.push({ from: assetPath, to: demoScript, kind: 'asset' });
+    snapshot.dependencies.edges.push({ from: assetPath, to: 'Assets/Game/Audio/tap.mp3', kind: 'asset' });
+    const scope = buildCoreGameplayScope(snapshot, { entryScene: assetPath });
+    assert.equal(scope.entry.primary, assetPath);
+    assert.equal(scope.entry.selection, 'explicit');
+    assert.equal(scope.pathSet.has('Assets/Game/Audio/tap.mp3'), true);
+    assert.equal(scope.pathSet.has(demoScript), true);
+    assert.equal(scope.adapterPathSet.has(demoScript), false);
+    assert.equal(scope.pathSet.has('Assets/Game/Board.prefab'), false);
+    assert.equal(selectGameplayEntry(snapshot).primary, 'Assets/Scenes/Gameplay.unity');
+  }
+});
+
+test('explicit selection still rejects editor-only and unindexed scenes', () => {
+  const snapshot = snapshotFixture();
+  snapshot.scenes = [
+    { assetPath: 'Assets/Editor/Preview.unity', scope: 'editor', indexed: true },
+    { assetPath: 'Assets/Demo/Missing.unity', scope: 'sample', indexed: false },
+  ];
+  for (const entryScene of ['Assets/Editor/Preview.unity', 'Assets/Demo/Missing.unity']) {
+    assert.throws(() => selectGameplayEntry(snapshot, { entryScene }), { code: 'UNITY_PORT_ENTRY_SCENE_INVALID' });
   }
 });
 

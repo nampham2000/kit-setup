@@ -13,6 +13,20 @@ const {
   validateUnityProjectSnapshot,
 } = require('./index.cjs');
 const { createUnityFixture } = require('./test-fixture.cjs');
+const { selectGameplayEntry } = require('./core-gameplay-scope.cjs');
+
+test('explicit demo selection consumes the real scanner scene inventory outside Build Settings', t => {
+  const fixture = createUnityFixture(t);
+  const snapshot = buildUnityProjectSnapshot({ projectRoot: fixture.root, sourceRoot: fixture.assets, cache: false });
+  const sample = snapshot.scenes.find(scene => scene.scope === 'sample');
+  assert.ok(sample);
+  assert.notEqual(sample.path, sample.assetPath);
+  snapshot.buildScenes = snapshot.buildScenes.filter(scene => scene.path !== sample.assetPath);
+  const entry = selectGameplayEntry(snapshot, { entryScene: sample.assetPath });
+  assert.equal(entry.primary, sample.assetPath);
+  assert.equal(entry.selection, 'explicit');
+  assert.equal(entry.needsDecision, false);
+});
 
 test('canonical static snapshot resolves project, build scenes, GUIDs and runtime view', t => {
   const fixture = createUnityFixture(t);

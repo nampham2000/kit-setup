@@ -111,7 +111,8 @@ export class ObjectPool {
       throw new Error(`[ObjectPool] Object is already in use. key=${String(key)}`);
     }
 
-    this.meta.set(obj, { key, inUse: true });
+    if (m) m.inUse = true;
+    else this.meta.set(obj, { key, inUse: true });
     b.inUseCount++;
 
     b.cfg.onGet?.(obj);
@@ -142,7 +143,8 @@ export class ObjectPool {
     }
 
     b.cfg.onPut?.(obj);
-    this.meta.set(obj, { key, inUse: false });
+    if (m) m.inUse = false;
+    else this.meta.set(obj, { key, inUse: false });
     b.inUseCount = Math.max(0, b.inUseCount - 1);
 
     const max = b.cfg.max ?? Number.POSITIVE_INFINITY;
@@ -192,6 +194,7 @@ export class ObjectPool {
     for (let i = 0; i < count; i++) {
       const obj = b.cfg.create();
       b.createdCount++;
+      this.meta.set(obj, { key, inUse: false });
       b.cfg.onPut?.(obj);
       if (b.free.length < (b.cfg.max ?? Infinity)) b.free.push(obj);
       else {

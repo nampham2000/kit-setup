@@ -46,6 +46,20 @@ function fixture() {
   };
 }
 
+test('particle component evidence identifies neutrally named reachable prefabs', () => {
+  const snapshot = fixture();
+  snapshot.assets.records.push({ assetPath: 'Assets/Magic/Knives.prefab', type: 'prefab' });
+  snapshot.dependencies.edges.push({ from: 'Assets/Scenes/Loading.unity', to: 'Assets/Magic/Knives.prefab' });
+  const report = analyzeFeedbackClosure(snapshot, {
+    readAssetText(assetPath) {
+      return assetPath.endsWith('Knives.prefab') ? '%YAML 1.1\n--- !u!198 &123\nParticleSystem:\n' : '{}';
+    },
+  });
+  const candidate = report.candidates.find(item => item.assetPath.endsWith('Knives.prefab'));
+  assert.equal(candidate.kind, 'feedback-prefab');
+  assert.equal(candidate.feedbackRoot, true);
+});
+
 test('feedback closure finds bootstrap ScriptableObject/audio/pool/particle/material/texture chain and excludes orphan decoys', () => {
   const report = analyzeFeedbackClosure(fixture(), {
     readAssetText(assetPath) {

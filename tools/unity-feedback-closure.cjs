@@ -294,12 +294,15 @@ function analyzeFeedbackClosure(snapshot, options = {}) {
     if (!paths.distance.has(assetPath)) continue;
     const scriptableTypes = scriptableTypeForAsset(assetPath, record, edgeTargets, scriptByPath);
     typeCache.set(assetPath, scriptableTypes);
+    // Names are only a fallback: authored particle prefabs can be named Knives or Meteor.
+    const particlePrefab = record.type === 'prefab' && !FEEDBACK_NAME.test(assetPath) && typeof options.readAssetText === 'function' &&
+      /^--- !u!198 &/m.test(options.readAssetText(assetPath));
     const specEvidence = jsonSpecs.evidence.get(assetPath) || null;
     if (specEvidence && specEvidence.format === 'gameplay-json' ||
         /\.(?:csv|txt|bytes)$/i.test(assetPath) && /(?:^|\/)(?:config|data|db|level|gameplay)(?:\/|[^/]*)/i.test(assetPath)) {
       specificationRoots.add(assetPath);
     }
-    if (record.type === 'audio' || record.type === 'prefab' && FEEDBACK_NAME.test(assetPath) ||
+    if (particlePrefab || record.type === 'audio' || record.type === 'prefab' && FEEDBACK_NAME.test(assetPath) ||
         scriptableTypes.some(typeName => FEEDBACK_NAME.test(typeName))) feedbackRoots.add(assetPath);
   }
 
@@ -416,7 +419,11 @@ async function main(argv) {
   });
   const projectRoot = path.resolve(options.project);
   const coreScope = options.profile === 'playable-core'
-    ? buildCoreGameplayScope(result.snapshot, { profile: 'playable-core' })
+    ? buildCoreGameplayScope(result.snapshot, {
+      profile: 'playable-core',
+      ...(options.entries.find(entry => /\.unity$/i.test(entry))
+        ? { entryScene: options.entries.find(entry => /\.unity$/i.test(entry)) } : {}),
+    })
     : null;
   const coreAllowedPaths = coreScope
     ? expandCoreAllowedPaths(

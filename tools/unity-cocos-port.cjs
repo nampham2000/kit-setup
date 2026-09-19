@@ -1838,8 +1838,11 @@ class CocosAssetDatabase {
       return current.uuid || `${record.uuid}@${parsed.subId}`;
     }
 
-    const replacement = firstImportedSubMetaRecord(record.uuid, record.subMetas, importer);
-    return replacement?.uuid || '';
+    // A stale id no longer carries a reliable mesh name. Only a unique imported
+    // candidate is safe; choosing the first of several meshes silently changes geometry.
+    const replacements = subMetaRecords(record.uuid, record.subMetas, importer)
+      .filter(({ subMeta }) => !isPendingGeneratedSubMeta(subMeta));
+    return replacements.length === 1 ? replacements[0].uuid : '';
   }
 }
 
@@ -5798,6 +5801,15 @@ function repairGeneratedPrefabAssetRefs(prefabFile, cocosDb, reporter, options) 
     if (!value || typeof value !== 'object') return;
     if (value.__uuid__ && value.__expectedType__) {
       const currentUuid = cocosDb.currentSubAssetUuid(value.__uuid__, value.__expectedType__);
+      if (!currentUuid && value.__expectedType__ === 'cc.Mesh') {
+        const parsed = splitCocosSubAssetUuid(value.__uuid__);
+        const owner = cocosDb.records.find(record => record.uuid === parsed.baseUuid);
+        if (owner && parsed.subId && owner.importer === 'fbx') {
+          const error = new Error(`Cannot resolve stale mesh ${value.__uuid__} in ${prefabFile}; imported model has no unique replacement`);
+          error.code = 'COCOS_STALE_SUBASSET_UNRESOLVED';
+          throw error;
+        }
+      }
       if (currentUuid && currentUuid !== value.__uuid__) {
         repairs.push({ oldUuid: value.__uuid__, newUuid: currentUuid, expectedType: value.__expectedType__ });
         value.__uuid__ = currentUuid;
@@ -7593,12 +7605,26 @@ function findPendingImporterStates(root, limit = 64) {
   return pending;
 }
 
+function repairFinalizedPrefabRefs(options) {
+  if (options.dryRun || !options.out || !fs.existsSync(options.out)) return 0;
+  const db = new CocosAssetDatabase(options.cocosRoot);
+  db.scan({ readOnly: true });
+  const files = fs.statSync(options.out).isDirectory()
+    ? walkContainedFiles(options.out, (file) => file.endsWith('.prefab'), { recursive: true })
+    : walkContainedFiles(path.dirname(options.out), (file) => file.endsWith('.prefab'), { recursive: false });
+  const reporter = new Reporter();
+  let repaired = 0;
+  for (const file of files) repaired += repairGeneratedPrefabAssetRefs(file, db, reporter, options);
+  return repaired;
+}
+
 async function finalizeImportedAssets(options) {
   if (options.dryRun || options.shard || options.modelImportWaitMs === 0) return null;
   const importedRoot = path.join(options.cocosRoot, 'assets', 'unity_imported');
   if (!fs.existsSync(importedRoot)) return null;
   log('==> [Asset Import] Refreshing copied Unity dependencies through Cocos-MCP...');
   let client = null;
+  let dependenciesImported = false;
   try {
     client = await createMcpClient(options.cocosRoot, {
       timeoutMs: Math.max(10_000, Number(options.modelImportWaitMs) || DEFAULT_MODEL_IMPORT_WAIT_MS),
@@ -7620,9 +7646,18 @@ async function finalizeImportedAssets(options) {
       error.pending = pending;
       throw error;
     }
+    dependenciesImported = true;
+    const repaired = repairFinalizedPrefabRefs(options);
+    if (repaired) {
+      const outputRoot = fs.statSync(options.out).isDirectory() ? options.out : path.dirname(options.out);
+      const folder = `db://${toPosix(path.relative(options.cocosRoot, outputRoot))}`;
+      const refreshed = unwrapToolResult(await client.call('project_refresh_assets', { folder }));
+      if (refreshed?.success === false) throw new Error(refreshed.error || 'Repaired prefab import failed');
+    }
     log('  [ok] copied Unity dependencies are imported, including nested subMetas.');
-    return { attempted: true, complete: true, pending: [] };
+    return { attempted: true, complete: true, pending: [], repaired };
   } catch (error) {
+    if (dependenciesImported) throw error;
     const pending = findPendingImporterStates(importedRoot);
     if (!pending.length) {
       log(`  [info] Cocos-MCP refresh unavailable, but no pending importer state is recorded: ${error.message}`);
@@ -7733,6 +7768,7 @@ module.exports = {
   runSmartPort,
   finalizeEngineFeatures,
   finalizeImportedAssets,
+  repairFinalizedPrefabRefs,
   findPendingImporterStates,
   convertUnityPhysicsMaterialToCocos,
   resolveUnityPhysicsMaterialUuid,

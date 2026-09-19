@@ -46,7 +46,7 @@ Options:
   --refresh-cache    Bỏ static cache cũ.
   --intent <kind>    project | scene | prefab | script | shader | feature | diagnostic. Default: project.
   --profile <name>   playable-core (default) | full-project. Core profile routes only the runnable playable loop.
-  --entry-scene <path> Explicit indexed runtime scene (Assets/...unity) for project playable-core intent.
+  --entry-scene <path> Explicit indexed non-editor scene (Assets/...unity), including demos outside Build Settings.
   --dispositions <file>  Portable, hash-bound source-high disposition JSON outside the Unity project.
   --target <value>   Logical path/symbol cần tập trung; có thể lặp lại (intent khác project).
   --section <name>   features | assets | dependencies | unresolved | diagnostics | scenes | scripts.

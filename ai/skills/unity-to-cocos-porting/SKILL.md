@@ -56,7 +56,9 @@ This skill provides step-by-step guidance and architectural rules for converting
   static work only when preflight authorizes it. Keep unresolved source-integrity
   blockers and missing live visual acceptance evidence explicit.
 - For sample scene selection ties, use an evidenced `--entry-scene` from the indexed
-  runtime inventory. Do not rename source scenes to satisfy a naming heuristic.
+  scene inventory. An explicit vendor/demo scene need not be enabled or listed in
+  Build Settings; resolve its canonical `assetPath`, retaining the editor-only and
+  missing-scene rejection gates. Do not rename source scenes to satisfy a heuristic.
 - For Cocos `marionette` or other missing engine exports, inspect the failing module,
   source dependencies, configured features and applied preview evidence separately.
   Use the engine feature audit/apply workflow and reload preview; a checked Settings

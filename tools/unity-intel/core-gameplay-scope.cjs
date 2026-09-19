@@ -135,13 +135,17 @@ function selectGameplayEntry(snapshot, options = {}) {
   const buildScenes = Array.isArray(snapshot && snapshot.buildScenes) ? snapshot.buildScenes : [];
   const viewScenes = snapshot && snapshot.views && Array.isArray(snapshot.views.scenes) ? snapshot.views.scenes : [];
   const indexedScenes = Array.isArray(snapshot && snapshot.scenes) ? snapshot.scenes : [];
-  const source = buildScenes.length ? buildScenes : viewScenes;
+  const source = buildScenes.length ? buildScenes : indexedScenes.length ? indexedScenes : viewScenes;
   if (options.entryScene !== undefined) {
     const requested = String(options.entryScene).replace(/\\/g, '/');
     const validPath = /^Assets\/.+\.unity$/.test(requested) && !requested.split('/').some(part => !part || part === '.' || part === '..');
-    const selected = [...buildScenes, ...indexedScenes, ...viewScenes].find(scene => (scene.assetPath || scene.path) === requested && scene.indexed !== false && (!scene.scope || ['runtime', 'sample', 'vendor'].includes(scene.scope)));
+    // An explicit user target may be a vendor demo outside Build Settings.
+    // The indexed scene inventory is authoritative; path classification only
+    // guides automatic selection and must not veto that explicit target.
+    const selected = [...indexedScenes, ...buildScenes, ...viewScenes].find(scene =>
+      (scene.assetPath || scene.path) === requested && scene.indexed !== false && scene.scope !== 'editor');
     if (!validPath || !selected) {
-      const error = new Error('Explicit entry scene must be an indexed runtime Unity scene in the project scene inventory.');
+      const error = new Error('Explicit entry scene must be an indexed non-editor Unity scene in the project scene inventory.');
       error.code = 'UNITY_PORT_ENTRY_SCENE_INVALID';
       throw error;
     }
@@ -326,13 +330,17 @@ function buildCoreGameplayScope(snapshot, options = {}) {
   const entry = selectGameplayEntry(snapshot, options);
   const records = snapshot && snapshot.assets && snapshot.assets.records || [];
   const recordByPath = new Map(records.map(record => [logicalPath(record.assetPath || record.path), record]).filter(item => item[0]));
+  const explicitDemo = entry.selection === 'explicit' &&
+    ['sample', 'vendor'].includes(recordByPath.get(entry.primary)?.scope);
   const closure = buildClosure(snapshot, entry.primary ? [entry.primary] : []);
-  const explicitSampleClosure = entry.selection === 'explicit' && ['sample', 'vendor'].includes(recordByPath.get(entry.primary)?.scope);
   const includedPaths = new Set();
   const adapterPaths = new Set();
   const reachableNonCore = [];
   for (const assetPath of closure.paths) {
-    const rule = classifyNonCore(assetPath, recordByPath.get(assetPath), explicitSampleClosure);
+    const record = recordByPath.get(assetPath);
+    // The selected demo's reachable controls and effects are the requested game,
+    // not unrelated sample code. Editor-only dependencies remain excluded.
+    const rule = explicitDemo && record?.scope !== 'editor' ? null : classifyNonCore(assetPath, record);
     if (rule) {
       adapterPaths.add(assetPath);
       reachableNonCore.push({ path: assetPath, rule });

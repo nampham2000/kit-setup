@@ -43,7 +43,9 @@ export class UnityParticleHierarchyTransformSync extends Component {
 
       Quat.fromEuler(this._baseRotation, entry.baseEuler.x, entry.baseEuler.y, entry.baseEuler.z);
       Quat.multiply(this._targetRotation, this._rootRotation, this._baseRotation);
-      target.setRotation(this._targetRotation);
+      // _targetRotation already includes the root's world rotation. Applying it
+      // locally applies the parent a second time (e.g. -90 degrees becomes -180).
+      target.setWorldRotation(this._targetRotation);
     }
   }
 }
