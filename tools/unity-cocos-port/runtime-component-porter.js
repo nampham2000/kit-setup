@@ -26,6 +26,11 @@ const SUB_EMITTER_TYPE = {
 };
 
 const RUNTIME_SCRIPTS = {
+  particleRendererVisibility: {
+    className: 'UnityParticleRendererVisibility',
+    missingCode: 'PARTICLE_RENDERER_VISIBILITY_TEMPLATE_MISSING',
+    missingMessage: 'Disabled Unity particle renderers need a visibility adapter that preserves simulation',
+  },
   uiLayout: {
     className: 'UnityFixedLayoutGroup',
     missingCode: 'UI_LAYOUT_TEMPLATE_MISSING',
@@ -589,6 +594,19 @@ function createRuntimeComponentPorter(deps) {
     }
   }
 
+  function attachParticleRendererVisibility(builder, reporter) {
+    const script=RUNTIME_SCRIPTS.particleRendererVisibility;
+    const hidden=builder.objects.map((particle,id)=>({particle,id})).filter(({particle})=>particle?.unityRendererHidden);
+    if(!hidden.length)return;
+    const classId=readRuntimeScriptClassId(script,builder.cocosDb);
+    if(!classId) {
+      reporter.high('PARTICLE_RENDERER_VISIBILITY_SCRIPT_MISSING','','',script.missingMessage);
+      return;
+    }
+    for(const {particle,id} of hidden)builder.addComponent(particle.node.__id__,classId,
+      {source:cocosRef(id),rendererVisible:false},null,`cmp-unity-particle-visibility-${id}`);
+  }
+
   function attachParticleHierarchyTransformSync(builder, reporter) {
     const rootNodeId = 1;
     const rootNode = builder?.objects?.[rootNodeId];
@@ -720,6 +738,8 @@ function createRuntimeComponentPorter(deps) {
   }
 
   return {
+    ensureParticleRendererVisibilityScript: (options, reporter) => ensureRuntimeScript(RUNTIME_SCRIPTS.particleRendererVisibility, options, reporter),
+    attachParticleRendererVisibility,
     ensureParticleSubEmitterFollowerScript: (options, reporter) => ensureRuntimeScript(RUNTIME_SCRIPTS.particleSubEmitterFollower, options, reporter),
     ensureUiLayoutScript: (options, reporter, cocosDb) => {
       const script = RUNTIME_SCRIPTS.uiLayout;

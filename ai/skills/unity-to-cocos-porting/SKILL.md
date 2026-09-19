@@ -632,3 +632,13 @@ the extension before reimport so an old listener cannot reapply the bad policy.
 - Preserve baked-only lights without adding duplicate realtime lighting after baked lightmaps/probes are imported. Do not hide missing baked data by disabling lights without a verified bake replacement.
 - Preview evidence must confirm the loaded SceneGlobals values. AssetDB refresh, scene-open and shader import can complete asynchronously; a soft reload response alone is not proof that new serialized state is active.
 - RenderSettings fog is not proof of visible fog. Check the active camera rendering path and image effects. Built-in Deferred opaque rendering can ignore scene fog while forward transparent shaders still apply it. Use a source render with fog toggled and state restored to establish behavior before changing Cocos global fog.
+### Keep invisible particle drivers running
+
+`ParticleSystemRenderer.enabled=false` and render mode `None` hide geometry only.
+They do not stop particle simulation, collision callbacks or sub-emitters. Never
+map them to `cc.ParticleSystem.enabled=false`. The porter attaches
+`UnityParticleRendererVisibility` to hide CPU particle/trail models separately.
+Assert both an active simulation and an invisible renderer in Preview, then verify
+that source collision and sub-emitter counts still advance. Birth sub-emitters
+using rate-over-distance need an independent distance cursor per parent particle;
+a fixed rate per second and a capped sample of parents are not equivalent.

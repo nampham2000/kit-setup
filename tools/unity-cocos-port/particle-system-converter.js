@@ -1548,13 +1548,12 @@ function applyEmission(builder, particle, data) {
 function applyRenderer(builder, particle, data) {
   const renderer = refObject(builder.objects, particle?.renderer);
   if (!renderer || !data || typeof data !== 'object') return false;
-  // Cocos merges the renderer into cc.ParticleSystem. If Unity disables only
-  // ParticleSystemRenderer, disable the merged Cocos component as well;
-  // otherwise the template renderer remains visible after conversion.
-  if (data.m_Enabled != null) {
-    particle._enabled = bool(data.m_Enabled, true);
-  }
-  if (Number(data.m_RenderMode) === 5) particle._enabled = false; // Unity None: never fabricate a billboard.
+  // Renderer visibility does not disable simulation, collision callbacks or
+  // sub-emission. A nonserialized marker is consumed by the runtime porter.
+  Object.defineProperty(particle, 'unityRendererHidden', {
+    value: !bool(data.m_Enabled, true) || Number(data.m_RenderMode) === 5,
+    configurable: true, enumerable: false,
+  });
   renderer._renderMode = UNITY_RENDER_MODE_TO_COCOS[num(data.m_RenderMode, 0)] ?? 0;
   // Unity View=0, World=1, Local=2. Cocos CPU World=0 reads the
   // emitter WORLD rotation (including its ancestors), while View=2 uses
