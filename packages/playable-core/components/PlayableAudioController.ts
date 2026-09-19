@@ -1,219 +1,162 @@
-import { _decorator, Component, AudioClip, AudioSource, Node, resources } from 'cc';
+import { _decorator, Component, AudioClip, Node, input, Input, game, Game } from 'cc';
 import { SoundManager } from '../SoundManager';
-import { PlayableConfigManager } from '../config/index';
-import { superHtmlPlayable } from 'playable-sdk/platform/SuperHtmlPlayable';
+import { PlayableConfigManager } from '../config/PlayableConfigManager';
+import { DEFAULT_PLAYABLE_CONFIG } from '../config/PlayableConfig';
+import { AudioSystemConfig } from '../audio/AudioSystem';
+import { superHtmlPlayable } from '../../sdk/platform/SuperHtmlPlayable';
 
-const { ccclass, property } = _decorator;
+const { ccclass } = _decorator;
 
-/**
- * Controller for managing Playable audio lifecycle, SFX, BGM, and mute states.
- * All audio paths, autoplay states, and volume levels are loaded dynamically from `playable-config.json`.
- */
+/** Scene-facing facade. All playback is owned by the persistent SoundManager. */
 @ccclass('PlayableAudioController')
 export class PlayableAudioController extends Component {
   private static _instance: PlayableAudioController | null = null;
-
-  // Runtime audio clip assets and volumes loaded from config
   public bgmClip: AudioClip | null = null;
   public clickSfx: AudioClip | null = null;
   public successSfx: AudioClip | null = null;
   public winSfx: AudioClip | null = null;
-
-  public autoPlayBgm: boolean = true;
-  public bgmVolume: number = 0.6;
-  public sfxVolume: number = 1.0;
-
-  private _isMuted: boolean = false;
-  private _bgmSource: AudioSource | null = null;
-  private _sfxSource: AudioSource | null = null;
-  private _hasUnlockedAudio: boolean = false;
+  public autoPlayBgm = false;
+  public bgmVolume = 0;
+  public sfxVolume = 0;
+  private _manager: SoundManager | null = null;
+  private _isMuted = false;
+  private _hasUnlockedAudio = false;
+  private _hidden = false;
+  private _resumeBgm = false;
+  private _bgmStopped = false;
+  private _generation = 0;
+  private _unsubscribe: (() => void) | null = null;
   private _onMuteChangedCallbacks: Array<(isMuted: boolean) => void> = [];
+  public ready: Promise<void> = Promise.resolve();
 
-  public static get instance(): PlayableAudioController | null {
-    return this._instance;
-  }
+  public static get instance(): PlayableAudioController | null { return this._instance; }
+  public get isMuted(): boolean { return this._isMuted; }
 
-  public get isMuted(): boolean {
-    return this._isMuted;
-  }
-
-  onLoad(): void {
+  public onLoad(): void {
     if (PlayableAudioController._instance && PlayableAudioController._instance !== this) {
       this.node.destroy();
       return;
     }
     PlayableAudioController._instance = this;
-
-    this.applyConfig();
-
-    // Create internal AudioSources if not present
-    this._bgmSource = this.getComponent(AudioSource) || this.addComponent(AudioSource);
-    this._bgmSource.loop = true;
-    this._bgmSource.volume = this.bgmVolume;
-    this._bgmSource.playOnAwake = false;
-
-    const sfxNode = new Node('SFX_AudioSource');
-    sfxNode.parent = this.node;
-    this._sfxSource = sfxNode.addComponent(AudioSource);
-    this._sfxSource.loop = false;
-    this._sfxSource.volume = this.sfxVolume;
-    this._sfxSource.playOnAwake = false;
-
-    // Check platform audio policy (e.g. IronSource muted flag)
-    if (!superHtmlPlayable.is_audio()) {
-      this.setMute(true);
+    this._manager = SoundManager.instance;
+    if (!this._manager) {
+      const root = new Node('Shared Audio System');
+      root.parent = this.node.scene;
+      this._manager = root.addComponent(SoundManager);
     }
-
-    // Auto load audio clips from resources/sound configured in JSON
-    this.autoLoadAudioClips();
-
-    PlayableConfigManager.instance.onConfigChanged(() => {
-      this.applyConfig();
+    this._isMuted = !superHtmlPlayable.is_audio();
+    input.on(Input.EventType.TOUCH_START, this.unlockAudio, this);
+    input.on(Input.EventType.MOUSE_DOWN, this.unlockAudio, this);
+    game.on(Game.EVENT_HIDE, this.onHide, this);
+    game.on(Game.EVENT_SHOW, this.onShow, this);
+    this.ready = PlayableConfigManager.instance.ensureLoaded('playable-config').then(() => {
+      if (PlayableAudioController._instance !== this) return;
+      this._unsubscribe = PlayableConfigManager.instance.onConfigChanged(() => {
+        this.ready = this.applyConfig();
+        this.ready.catch(error => console.error('[AudioSystem] Configuration/preload failed', error));
+      });
+      return this.applyConfig();
     });
+    this.ready.catch(error => console.error('[AudioSystem] Configuration/preload failed', error));
   }
 
-  private applyConfig(): void {
-    const audioConfig = PlayableConfigManager.instance.audio;
-    if (audioConfig) {
-      this.autoPlayBgm = audioConfig.autoPlayBgm ?? this.autoPlayBgm;
-      this.bgmVolume = audioConfig.bgmVolume ?? this.bgmVolume;
-      this.sfxVolume = audioConfig.sfxVolume ?? this.sfxVolume;
-
-      if (this._bgmSource) {
-        this._bgmSource.volume = this._isMuted ? 0 : this.bgmVolume;
-      }
-      if (this._sfxSource) {
-        this._sfxSource.volume = this._isMuted ? 0 : this.sfxVolume;
-      }
-    }
-  }
-
-  private autoLoadAudioClips(): void {
+  private async applyConfig(): Promise<void> {
+    const generation = ++this._generation;
     const cfg = PlayableConfigManager.instance.audio;
-    if (!cfg) return;
-
-    if (!this.bgmClip && cfg.bgmSoundPath) {
-      resources.load(cfg.bgmSoundPath, AudioClip, (err, clip) => {
-        if (!err && clip) {
-          this.bgmClip = clip;
-          if (this.autoPlayBgm && !this._isMuted && (!this._bgmSource || !this._bgmSource.playing)) {
-            this.playBgm();
-          }
-        }
-      });
-    }
-
-    if (!this.clickSfx && cfg.clickSoundPath) {
-      resources.load(cfg.clickSoundPath, AudioClip, (err, clip) => {
-        if (!err && clip) this.clickSfx = clip;
-      });
-    }
-
-    if (!this.successSfx && cfg.successSoundPath) {
-      resources.load(cfg.successSoundPath, AudioClip, (err, clip) => {
-        if (!err && clip) this.successSfx = clip;
-      });
-    }
-
-    if (!this.winSfx && cfg.winSoundPath) {
-      resources.load(cfg.winSoundPath, AudioClip, (err, clip) => {
-        if (!err && clip) this.winSfx = clip;
-      });
-    }
+    const manager = this._manager!;
+    this.autoPlayBgm = cfg.autoPlayBgm;
+    this.bgmVolume = cfg.bgmVolume;
+    this.sfxVolume = cfg.sfxVolume;
+    manager.stopBGM();
+    this.bgmClip = null;
+    manager.setBGMVolume(this.bgmVolume);
+    manager.setSFXVolume(this.sfxVolume);
+    manager.muteBGM(this._isMuted);
+    manager.muteSFX(this._isMuted);
+    // Legacy path fields feed explicit template intents, without a second player.
+    const system = JSON.parse(JSON.stringify(cfg.system ?? DEFAULT_PLAYABLE_CONFIG.audio.system)) as AudioSystemConfig;
+    if (system.sounds['ui-click'] && !system.sounds['ui-click'].path) system.sounds['ui-click'].path = cfg.clickSoundPath;
+    if (system.sounds.success && !system.sounds.success.path) system.sounds.success.path = cfg.successSoundPath;
+    if (system.sounds.win && !system.sounds.win.path) system.sounds.win.path = cfg.winSoundPath;
+    const sfxReady = manager.configureAudio(system);
+    manager.audio?.setSuspended(this._hidden);
+    if (this._hasUnlockedAudio) manager.audio?.unlockFromGesture();
+    const bgmReady = cfg.bgmSoundPath ? manager.preload(cfg.bgmSoundPath) : Promise.resolve(null);
+    const [, bgm] = await Promise.all([sfxReady, bgmReady]);
+    if (generation !== this._generation) return;
+    this.bgmClip = bgm;
+    this.clickSfx = manager.getCachedAudio(system.sounds['ui-click']?.path ?? '');
+    this.successSfx = manager.getCachedAudio(system.sounds.success?.path ?? '');
+    this.winSfx = manager.getCachedAudio(system.sounds.win?.path ?? '');
+    // If the first gesture happened during loading, next gesture retries BGM.
+    // Do not manufacture an AudioContext or emit silent sounds to unlock it.
   }
 
-  start(): void {
-    if (this.autoPlayBgm && this.bgmClip && !this._isMuted) {
-      this.playBgm();
-    }
-  }
-
-  /**
-   * Resumes Web Audio Context on first touch event to comply with mobile browser autoplay policies.
-   */
+  /** Must be called from a real gesture; engine/browser owns the audio context. */
   public unlockAudio(): void {
-    if (this._hasUnlockedAudio) return;
     this._hasUnlockedAudio = true;
-
-    try {
-      const win = globalThis as any;
-      const audioCtx = win.AudioContext || win.webkitAudioContext;
-      if (audioCtx && audioCtx.state === 'suspended') {
-        audioCtx.resume();
-      }
-    } catch (e) {
-      // Ignore if not supported
-    }
-
-    if (this.autoPlayBgm && this.bgmClip && !this._isMuted && (!this._bgmSource || !this._bgmSource.playing)) {
-      this.playBgm();
-    }
+    this._manager?.audio?.unlockFromGesture();
+    if (this.autoPlayBgm && !this._bgmStopped) this.playBgm();
   }
-
   public playBgm(clip?: AudioClip): void {
-    const targetClip = clip || this.bgmClip;
-    if (!targetClip || !this._bgmSource) return;
-
-    this._bgmSource.clip = targetClip;
-    this._bgmSource.volume = this._isMuted ? 0 : this.bgmVolume;
-    this._bgmSource.play();
+    if (!this._hasUnlockedAudio || this._isMuted || this._hidden) return;
+    const target = clip ?? this.bgmClip;
+    if (!target) return;
+    this._bgmStopped = false;
+    this._manager?.playBGM(target);
   }
-
   public stopBgm(): void {
-    if (this._bgmSource) {
-      this._bgmSource.stop();
-    }
+    this._bgmStopped = true;
+    this._resumeBgm = false;
+    this._manager?.stopBGM();
   }
-
-  public playClickSfx(): void {
-    this.playSfx(this.clickSfx);
-  }
-
-  public playSuccessSfx(): void {
-    this.playSfx(this.successSfx);
-  }
-
-  public playWinSfx(): void {
-    this.playSfx(this.winSfx);
-  }
-
+  public playClickSfx(): void { this._manager?.playSound('ui-click'); }
+  public playSuccessSfx(): void { this._manager?.playSound('success'); }
+  public playWinSfx(): void { this._manager?.playSound('win'); }
+  /** Known template clip compatibility. New ports call SoundManager.playSound(id). */
   public playSfx(clip: AudioClip | null): void {
-    if (this._isMuted || !clip || !this._sfxSource) return;
-    this._sfxSource.playOneShot(clip, this.sfxVolume);
+    if (!clip) return;
+    if (clip === this.clickSfx) this.playClickSfx();
+    else if (clip === this.successSfx) this.playSuccessSfx();
+    else if (clip === this.winSfx) this.playWinSfx();
+    else if (this._hasUnlockedAudio && !this._isMuted && !this._hidden) this._manager?.playSFX(clip);
   }
-
-  public toggleMute(): boolean {
-    this.setMute(!this._isMuted);
-    return this._isMuted;
-  }
-
+  public toggleMute(): boolean { this.setMute(!this._isMuted); return this._isMuted; }
   public setMute(muted: boolean): void {
     this._isMuted = muted;
-
-    if (this._bgmSource) {
-      this._bgmSource.volume = muted ? 0 : this.bgmVolume;
-    }
-    if (this._sfxSource) {
-      this._sfxSource.volume = muted ? 0 : this.sfxVolume;
-    }
-
-    // Also notify core SoundManager if active
-    if (SoundManager.instance) {
-      SoundManager.instance.muteBGM(muted);
-      SoundManager.instance.muteSFX(muted);
-    }
-
-    // Notify listeners (such as UI Audio Button)
-    for (const cb of this._onMuteChangedCallbacks) {
-      cb(this._isMuted);
-    }
+    this._manager?.muteBGM(muted);
+    this._manager?.muteSFX(muted);
+    if (!muted && this.autoPlayBgm && !this._bgmStopped) this.playBgm();
+    for (const cb of this._onMuteChangedCallbacks) cb(muted);
   }
-
-  public addMuteListener(cb: (isMuted: boolean) => void): void {
-    this._onMuteChangedCallbacks.push(cb);
-  }
-
+  public addMuteListener(cb: (isMuted: boolean) => void): void { this._onMuteChangedCallbacks.push(cb); }
   public removeMuteListener(cb: (isMuted: boolean) => void): void {
-    this._onMuteChangedCallbacks = this._onMuteChangedCallbacks.filter(c => c !== cb);
+    const index = this._onMuteChangedCallbacks.indexOf(cb);
+    if (index >= 0) this._onMuteChangedCallbacks.splice(index, 1);
+  }
+  private onHide(): void {
+    this._hidden = true;
+    this._resumeBgm = this._manager?.isBGMPlaying() ?? false;
+    this._manager?.pauseBGM();
+    this._manager?.audio?.setSuspended(true);
+  }
+  private onShow(): void {
+    this._hidden = false;
+    this._manager?.audio?.setSuspended(false);
+    if (this._resumeBgm && !this._isMuted) this._manager?.resumeBGM();
+    this._resumeBgm = false;
+  }
+  public onDestroy(): void {
+    this._generation++;
+    this._unsubscribe?.();
+    input.off(Input.EventType.TOUCH_START, this.unlockAudio, this);
+    input.off(Input.EventType.MOUSE_DOWN, this.unlockAudio, this);
+    game.off(Game.EVENT_HIDE, this.onHide, this);
+    game.off(Game.EVENT_SHOW, this.onShow, this);
+    if (PlayableAudioController._instance !== this) return;
+    this._manager?.audio?.stopAll();
+    this._manager?.stopBGM();
+    this._onMuteChangedCallbacks.length = 0;
+    PlayableAudioController._instance = null;
   }
 }

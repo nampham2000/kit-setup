@@ -1,5 +1,7 @@
 import { _decorator, Component, AudioClip, AudioSource, Node, director, tween, Tween } from 'cc';
 import { GameUtils } from './utils/GameUtils';
+import { AudioSystem, AudioSystemConfig, validateAudioSystemConfig } from './audio/AudioSystem';
+import { CocosAudioBackend } from './audio/CocosAudioBackend';
 const { ccclass } = _decorator;
 
 const DEFAULT_BGM_VOLUME = 0.8;
@@ -12,6 +14,37 @@ interface LoopingSfxPlayback {
 
 @ccclass('PlayableCoreSoundManager')
 export class SoundManager extends Component {
+  /** Managed route for new gameplay ports; legacy playSFX remains source compatible. */
+  public audio: AudioSystem<AudioClip> | null = null;
+  private _managedBackend: CocosAudioBackend | null = null;
+  private _managedGeneration = 0;
+  private _destroyed = false;
+
+  public async configureAudio(config: AudioSystemConfig): Promise<void> {
+    validateAudioSystemConfig(config);
+    const unlocked = this.audio?.isUnlocked ?? false;
+    this.audio?.stopAll();
+    this._managedBackend?.destroy();
+    const generation = ++this._managedGeneration;
+    const backend = new CocosAudioBackend(this.node, config.maxSfxVoices, handle => system.complete(handle));
+    const system = new AudioSystem<AudioClip>(config, backend);
+    this._managedBackend = backend;
+    this.audio = system;
+    system.setVolume(this._sfxVolume);
+    system.setMuted(this._sfxMuted);
+    if (unlocked) system.unlockFromGesture();
+    await Promise.all(Object.keys(config.sounds).map(async id => {
+      const path = config.sounds[id].path;
+      if (!path) return;
+      const clip = await this.preload(path);
+      if (!this._destroyed && generation === this._managedGeneration) system.bind(id, clip);
+    }));
+  }
+
+  public playSound(id: string, gain: number = 1): number { return this.audio?.play(id, gain) ?? 0; }
+  public stopSound(handle: number): boolean { return this.audio?.stop(handle) ?? false; }
+  public getCachedAudio(path: string): AudioClip | null { return this._audioCache.get(path) ?? null; }
+  public update(dt: number): void { this.audio?.update(dt); }
   private _bgmVolume: number = DEFAULT_BGM_VOLUME;
   private _sfxVolume: number = DEFAULT_SFX_VOLUME;
 
@@ -62,6 +95,7 @@ export class SoundManager extends Component {
   }
 
   public preload(path: string): Promise<AudioClip> {
+    if (this._destroyed) return Promise.reject(new Error('[SoundManager] destroyed'));
     if (!path) {
       return Promise.reject(new Error('[SoundManager] preload: empty path'));
     }
@@ -76,6 +110,7 @@ export class SoundManager extends Component {
       try {
         const clip = await GameUtils.loadAsset<AudioClip>(path);
         if (!clip) throw new Error(`[SoundManager] Failed to load audio: ${path}`);
+        if (this._destroyed) throw new Error('[SoundManager] destroyed during load');
         clip.addRef();
         this._audioCache.set(path, clip);
         return clip;
@@ -294,6 +329,7 @@ export class SoundManager extends Component {
 
   public setSFXVolume(volume: number): void {
     this._sfxVolume = Math.max(0, Math.min(1, volume));
+    this.audio?.setVolume(this._sfxVolume);
     if (this._sfxAudioSource) {
       this._sfxAudioSource.volume = this._sfxVolume;
     }
@@ -320,6 +356,7 @@ export class SoundManager extends Component {
 
   public muteSFX(mute: boolean): void {
     this._sfxMuted = mute;
+    this.audio?.setMuted(mute);
     for (const playback of this._loopingSfx.values()) {
       if (playback) playback.source.volume = mute ? 0 : this._sfxVolume * playback.volume;
     }
@@ -334,6 +371,13 @@ export class SoundManager extends Component {
   }
 
   onDestroy() {
+    this._destroyed = true;
+    this._managedGeneration++;
+    this.audio?.stopAll();
+    this._managedBackend?.destroy();
+    this.audio = null;
+    this._managedBackend = null;
+    this.stopBGM();
     this.stopAllLoopingSFX();
     this.releaseAll();
     if (SoundManager._instance === this) {

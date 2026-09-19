@@ -17,6 +17,7 @@ const fs = require('fs');
 const path = require('path');
 const ts = require('typescript');
 const { lintCocosComponentModules } = require('./cocos-component-module-linter.cjs');
+const { lintManagedAudio } = require('./managed-audio-linter.cjs');
 
 function findProjectRoot(startDir) {
   let current = path.resolve(startDir);
@@ -305,6 +306,7 @@ function runLinter(options = {}) {
     }
   }
   allViolations.push(...lintCocosComponentModules(tsFiles, { projectRoot: ROOT_DIR }));
+  allViolations.push(...lintManagedAudio(tsFiles, { projectRoot: ROOT_DIR }));
 
   const errors = allViolations.filter((v) => v.severity === 'error');
   const warnings = allViolations.filter((v) => v.severity === 'warning');

@@ -3,6 +3,8 @@
  * Acts like a Unity ScriptableObject data asset for Cocos Creator 3.8.
  */
 
+import { AudioSystemConfig } from '../audio/AudioSystem';
+
 export interface IPlayableCTAConfig {
   googlePlayUrl: string;
   appStoreUrl: string;
@@ -13,6 +15,8 @@ export interface IPlayableCTAConfig {
 }
 
 export interface IPlayableAudioConfig {
+  /** Named intents for new ports. Missing field preserves legacy project config compatibility. */
+  system?: AudioSystemConfig;
   autoPlayBgm: boolean;
   bgmVolume: number;
   sfxVolume: number;
@@ -83,6 +87,14 @@ export const DEFAULT_PLAYABLE_CONFIG: IPlayableConfig = {
     pulseDuration: 0.6,
   },
   audio: {
+    system: {
+      maxSfxVoices: 8,
+      sounds: {
+        'ui-click': { path: '', cooldownMs: 0, maxConcurrent: 2, priority: 100, volume: 1, loop: false, stealable: true },
+        success: { path: '', cooldownMs: 0, maxConcurrent: 3, priority: 80, volume: 1, loop: false, stealable: true },
+        win: { path: '', cooldownMs: 0, maxConcurrent: 1, priority: 100, volume: 1, loop: false, stealable: false },
+      },
+    },
     autoPlayBgm: true,
     bgmVolume: 0.6,
     sfxVolume: 1.0,
