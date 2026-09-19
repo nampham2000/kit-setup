@@ -634,8 +634,9 @@ the extension before reimport so an old listener cannot reapply the bad policy.
 - RenderSettings fog is not proof of visible fog. Check the active camera rendering path and image effects. Built-in Deferred opaque rendering can ignore scene fog while forward transparent shaders still apply it. Use a source render with fog toggled and state restored to establish behavior before changing Cocos global fog.
 ### Keep invisible particle drivers running
 
-`ParticleSystemRenderer.enabled=false` and render mode `None` hide geometry only.
-They do not stop particle simulation, collision callbacks or sub-emitters. Never
+`ParticleSystemRenderer.enabled=false` hides particles and trails. Render mode
+`None` hides only particle geometry; enabled trails remain visible. Neither
+stops particle simulation, collision callbacks or sub-emitters. Never
 map them to `cc.ParticleSystem.enabled=false`. The porter attaches
 `UnityParticleRendererVisibility` to hide CPU particle/trail models separately.
 Assert both an active simulation and an invisible renderer in Preview, then verify

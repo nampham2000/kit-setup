@@ -1555,6 +1555,9 @@ function applyRenderer(builder, particle, data) {
     value: !bool(data.m_Enabled, true) || Number(data.m_RenderMode) === 5,
     configurable: true, enumerable: false,
   });
+  Object.defineProperty(particle, 'unityTrailsVisible', {
+    value: bool(data.m_Enabled, true), configurable: true, enumerable: false,
+  });
   renderer._renderMode = UNITY_RENDER_MODE_TO_COCOS[num(data.m_RenderMode, 0)] ?? 0;
   // Unity View=0, World=1, Local=2. Cocos CPU World=0 reads the
   // emitter WORLD rotation (including its ancestors), while View=2 uses

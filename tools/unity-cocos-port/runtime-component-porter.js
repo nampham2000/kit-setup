@@ -604,7 +604,7 @@ function createRuntimeComponentPorter(deps) {
       return;
     }
     for(const {particle,id} of hidden)builder.addComponent(particle.node.__id__,classId,
-      {source:cocosRef(id),rendererVisible:false},null,`cmp-unity-particle-visibility-${id}`);
+      {source:cocosRef(id),rendererVisible:false,trailsVisible:particle.unityTrailsVisible},null,`cmp-unity-particle-visibility-${id}`);
   }
 
   function attachParticleHierarchyTransformSync(builder, reporter) {

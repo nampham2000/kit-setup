@@ -15,14 +15,18 @@ for(const renderer of [{m_Enabled:false,m_RenderMode:0},{m_Enabled:true,m_Render
     const hidden=!renderer.m_Enabled||renderer.m_RenderMode===5;
     assert.equal(objects[0]._components.length,hidden?1:0);
     if(hidden)assert.deepEqual(objects[3].source,{__id__:1});
+    if(hidden)assert.equal(objects[3].trailsVisible,renderer.m_Enabled);
     assert.ok(!JSON.stringify(objects).includes('unityRendererHidden'));
   });
 }
 test('visibility adapter hides model and trails without stopping particles',()=>{
   const source=fs.readFileSync(path.join(__dirname,'runtime/UnityParticleRendererVisibility.ts'),'utf8');
-  const body=source.slice(source.indexOf('        if (this.rendererVisible'),source.lastIndexOf('\n    }')).replace(/ as any/g,'');
+  const body=source.slice(source.indexOf('        if (!this.source)'),source.lastIndexOf('\n    }')).replace(/ as any/g,'');
   const run=new Function(body);
   const ps={processor:{_model:{enabled:true}},trailModule:{_trailModel:{enabled:true},getModel(){return this._trailModel;}},stop(){throw new Error('Simulation must remain running');}};
   run.call({source:ps,rendererVisible:false});
   assert.equal(ps.processor._model.enabled,false);assert.equal(ps.trailModule._trailModel.enabled,false);
+  ps.processor._model.enabled=true;ps.trailModule._trailModel.enabled=true;
+  run.call({source:ps,rendererVisible:false,trailsVisible:true});
+  assert.equal(ps.processor._model.enabled,false);assert.equal(ps.trailModule._trailModel.enabled,true);
 });
