@@ -17,6 +17,28 @@ This skill provides step-by-step guidance and architectural rules for converting
 
 ## 1. Automated Tooling First
 
+### Particle Noise is a simulation contract
+
+- Never flatten Unity Noise curves into scalar Cocos Noise fields and report
+  parity. The builtin Cocos module adds fresh random position jitter each frame;
+  Unity uses a coherent curl field and includes it in velocity limiting.
+- Preserve the full `particle-noise-contract.js` output in source-bound config.
+  `runtime/UnityNoiseKernel.ts` and `runtime/UnityParticleNoise.ts` implement the
+  native-validated Medium (2D) kernel, seeded phase, Hermite strength curves,
+  frequency derivative gain, normalized octaves, damping and scroll. High/Low,
+  remap, random curves and rotation/size amount remain explicit obligations.
+- Install Noise after velocity animation and before limit. After limiting,
+  subtract the complete animated contribution from stored base velocity;
+  otherwise Noise accumulates again in the following frame. Keep Z reflection
+  for both the sampled position and returned vector. Do not change Shape/radius
+  or add guessed strength to break an erroneous uniform ring.
+- Require native field holdouts and matched-birth trajectory checks, followed
+  by source-bounded spatial spread and visible-pixel metrics across repeated
+  loops and two viewports. Native field accuracy is not whole-scene 95% fidelity.
+- A finite motion recording is not an equivalent replacement for a looping
+  emitter. Burst snapshots exactly on a boundary also require care: native
+  float accumulation may cross the boundary while a clamped double does not.
+
 ### Particle renderer frames and pivots
 
 - Before changing a particle Render Mode, read the source renderer alignment,

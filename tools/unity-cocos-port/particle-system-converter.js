@@ -1,5 +1,6 @@
 'use strict';
 const { particleRendererContract } = require('./particle-renderer-contract');
+const { particleNoiseContract } = require('./particle-noise-contract');
 
 const DEG_TO_RAD = Math.PI / 180;
 const UNITY_CURVE_MODE_TO_COCOS = {
@@ -1713,6 +1714,7 @@ function applyUnityParticleDataToCocos(builder, particleId, data = {}, rendererD
   const targetRenderer = refObject(builder.objects, particle.renderer);
   if (targetRenderer) targetRenderer._alignSpace = rendererContract.cocosAlignment;
   Object.defineProperty(particle, 'unityRendererContract', { value: rendererContract, configurable: true });
+  Object.defineProperty(particle, 'unityNoiseContract', { value: particleNoiseContract(data), configurable: true });
 
   return { applied };
 }

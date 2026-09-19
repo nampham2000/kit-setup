@@ -104,6 +104,10 @@ module.exports = function createParticlePorter(deps = {}) {
       const result = applyUnityParticleSystemToCocos(builder, particleId, doc, rendererDoc);
       const alignmentData = parseUnityRendererDoc(rendererDoc);
       const rendererContract = particleRendererContract(parseUnityParticleDoc(doc), alignmentData);
+      if (builder.objects[particleId]?.unityNoiseContract?.enabled) {
+        reporter.high('PARTICLE_NOISE_ADAPTER_REQUIRED', options.src || '', gameObject?.name || '',
+          'Unity curl Noise requires a native-validated adapter: preserve strength/scroll/amount curves, quality, damping, normalized octaves and pre-limit animated velocity. Builtin Cocos Noise is an approximation, not semantic parity.');
+      }
       const alignment = Number(alignmentData.m_RenderAlignment || 0);
       if (rendererContract.unsupported.length) {
         reporter.high('PARTICLE_RENDER_ALIGNMENT_ADAPTER_REQUIRED', options.src || '', gameObject?.name || '',

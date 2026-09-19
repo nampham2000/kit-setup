@@ -793,6 +793,10 @@
     {
       "id": "particle-renderer-frame-pivot-parity",
       "rule": "Khi particle bị xoay sai hoặc vòng tròn bị đất che một nửa, đọc renderer alignment, parent transform, rotation và pivot trước khi đổi Render Mode. Unity Local billboard dùng frame emitter và Euler clockwise (+X,+Y,-Z qua Z reflection), khác mesh (-X,-Y,+Z); Cocos billboard mặc định dùng camera axes dù alignSpace đã set. Dùng shared particle-renderer-contract cùng source-particle effect; chỉ lower Velocity mesh sang world rotation khi fixed +Z box, constant positive speed, zero gravity và không velocity/force/noise được chứng minh. Stretched pivot Y dịch theo velocity bằng 2*currentWidth*pivotY, không dùng lengthScale. Giữ material variant theo renderer và user override; import effect bằng AssetDB rồi bind UUID thực. Custom shader, pivot axes chưa đo, general velocity frame và Euler-over-lifetime cần adapter riêng và report high. Khóa native BakeMesh geometry, parent rotation, đúng burst time và preview ở hai viewport; không suy 95% từ static test."
+    },
+    {
+      "id": "particle-noise-curl-parity",
+      "rule": "Unity Noise không tương đương random position jitter của Cocos. Giữ full curve/quality/damping/scroll/octave trong particle-noise-contract và dùng native-validated adapter theo quality; không sửa Shape/radius/strength theo screenshot để phá vòng tròn. Noise là animated velocity trước limit; sau limit phải trừ animated contribution khỏi base velocity. Giữ Z reflection ở cả vị trí lấy mẫu và vector trả về. Khóa native field holdouts, matched-birth trajectories, spatial spread có min/max qua nhiều vòng và visible pixels ở hai viewport. Medium kernel có shared adapter; High/Low/remap/random curves/rotation-size amount chưa đo phải report high. Clip hữu hạn không thay được emitter looping, và field accuracy không phải whole-scene 95% fidelity."
     }
   ],
   "capabilities": {

@@ -127,12 +127,19 @@ test('cache from before the parity repairs cannot hide newly corrected output',(
   fs.writeFileSync(source,'source');fs.writeFileSync(output,'output');
   const cache=new PortCache(cacheFile,{},true,source);cache.record(source,output);cache.save();
   assert.equal(new PortCache(cacheFile,{},true,source).canSkip(source,output),true);
-  const legacy=JSON.parse(fs.readFileSync(cacheFile));legacy.version=1;fs.writeFileSync(cacheFile,JSON.stringify(legacy));
+  const legacy=JSON.parse(fs.readFileSync(cacheFile));legacy.version=4;fs.writeFileSync(cacheFile,JSON.stringify(legacy));
   assert.equal(new PortCache(cacheFile,{},true,source).canSkip(source,output),false);
 });
 function particleBuilder() {
   return {objects:[{}, {_textureAnimationModule:{__id__:2},renderer:{__id__:3}}, {_enable:false,_numTilesX:1,_numTilesY:1},{}],addParticleSystemFromTemplate:()=>1};
 }
+test('enabled native Noise remains an explicit high adapter obligation after conversion',()=>{
+  const b=particleBuilder(),r=reports(),porter=createParticlePorter();
+  porter.emitParticleSystem(0,1,'ParticleSystem:\n  autoRandomSeed: 0\n  randomSeed: 1234\n  NoiseModule:\n    enabled: 1\n    quality: 1\n    strength:\n      minMaxState: 1\n      scalar: 0.5',{name:'Buff'},b,r,{},new Map(),{});
+  assert.equal(b.objects[1].unityNoiseContract.strength.minMaxState,1);
+  assert.equal(b.objects[1].unityNoiseContract.randomSeed,1234);
+  assert.ok(r.entries.some(e=>e.level==='high'&&e.args[0]==='PARTICLE_NOISE_ADAPTER_REQUIRED'));
+});
 test('renderer View and emitter Local alignment use the correct Cocos CPU frames',()=>{
   for(const [source,expected] of [[0,2],[2,0]]){
     const b=particleBuilder();applyUnityParticleDataToCocos(b,1,{}, {m_RenderAlignment:source,m_RenderMode:4});
