@@ -120,7 +120,9 @@ test('renderer View and emitter Local alignment use the correct Cocos CPU frames
     assert.equal(b.objects[3]._alignSpace,expected);
   }
   const b=particleBuilder();applyUnityParticleDataToCocos(b,1,{}, {m_RenderMode:5,m_Enabled:1});
-  assert.equal(b.objects[1]._enabled,false);
+  assert.notEqual(b.objects[1]._enabled,false);
+  assert.equal(b.objects[1].unityRendererHidden,true);
+  assert.equal(b.objects[1].unityTrailsVisible,true);
 });
 test('Unity gradient alpha before first authored key remains constant',()=>{
   const b=particleBuilder();b.add=o=>b.objects.push(o)-1;b.objects[1].startColor={__id__:b.objects.push({})-1};
@@ -159,6 +161,17 @@ test('particle porter resolves Unity renderer material 1 for enabled trails',()=
   assert.equal(b.objects[1]._materials[1].__uuid__,'cocos-trail-mat');
   assert.deepEqual(usages,['particle','trail']);
   assert.ok(r.entries.some(e=>e.args[0]==='PARTICLE_TRAIL_MATERIAL_CONVERTED'));
+});
+test('null particle material does not shift the trail material into slot zero',()=>{
+  const db=new Map([['trail-mat',{guid:'trail-mat',path:'trail.mat',relativePath:'trail.mat'}]]);
+  const usages=[];
+  const porter=createParticlePorter({resolveUnityParticleMaterial:(a,_o,_d,_r,_n,_s,usage)=>{usages.push(usage);return {materialUuid:'trail-output'};}});
+  const renderer='ParticleSystemRenderer:\n  m_RenderMode: 5\n  m_Materials:\n  - {fileID: 0}\n  - {fileID: 2100000, guid: trail-mat, type: 2}';
+  const b=particleBuilder();
+  porter.emitParticleSystem(0,1,'ParticleSystem:\n  TrailModule:\n    enabled: 1',{name:'Trail'},b,reports(),{},db,{},renderer);
+  assert.deepEqual(usages,['trail']);
+  assert.equal(b.objects[1]._materials[1].__uuid__,'trail-output');
+  assert.equal(b.objects[3]._cpuMaterial,undefined);
 });
 test('Sprites UV mode never reuses stale grid tile counts',()=>{
   const b=particleBuilder();applyUnityParticleDataToCocos(b,1,{UVModule:{enabled:1,mode:1,tilesX:2,tilesY:3}});

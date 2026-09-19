@@ -25,7 +25,9 @@ module.exports = function createParticlePorter(deps = {}) {
   function rendererMaterialRefs(rendererDoc) {
     const rendererData = parseUnityRendererDoc(rendererDoc);
     const materials = Array.isArray(rendererData.m_Materials) ? rendererData.m_Materials : [];
-    return materials.filter((item) => item && typeof item === 'object' && String(item.guid || '').trim());
+    // Material indices are semantic: slot 0 particles, slot 1 trails. A null
+    // particle material must not shift the trail into the particle slot.
+    return materials.map((item) => item && typeof item === 'object' && String(item.guid || '').trim() ? item : null);
   }
 
   function isUnityDefaultParticleSystemMaterial(materialRef) {
