@@ -1292,7 +1292,8 @@ function applySizeModule(builder, particle, data) {
   module.separateAxes = bool(data.separateAxes, false);
   applyCurveRange(builder, refObject(builder.objects, module.size), data.curve);
   if (module.separateAxes) {
-    applyCurveRange(builder, refObject(builder.objects, module.x), data.x);
+    // Unity serializes size X as `curve`, including separate-axis mode.
+    applyCurveRange(builder, refObject(builder.objects, module.x), data.x || data.curve);
     applyCurveRange(builder, refObject(builder.objects, module.y), data.y);
     applyCurveRange(builder, refObject(builder.objects, module.z), data.z);
   } else {
@@ -1683,8 +1684,10 @@ function applyUnityParticleDataToCocos(builder, particleId, data = {}, rendererD
   particle.startRotation3D = forceMeshCommon3D || unityStartRotation3D;
   if (particle.startRotation3D) {
     count(applyCurveByRef(builder, particle, 'startRotationX', unityStartRotation3D ? initial.startRotationX : constantCurveRange(0), -1));
-    count(applyCurveByRef(builder, particle, 'startRotationY', unityStartRotation3D ? initial.startRotationY : constantCurveRange(0)));
-    count(applyCurveByRef(builder, particle, 'startRotationZ', initial.startRotation || constantCurveRange(0), -1));
+    // Mesh coordinates are reflected in Z. Axial rotations consequently map
+    // (-X,-Y,+Z), unlike the camera-facing billboard convention.
+    count(applyCurveByRef(builder, particle, 'startRotationY', unityStartRotation3D ? initial.startRotationY : constantCurveRange(0), forceMeshCommon3D ? -1 : 1));
+    count(applyCurveByRef(builder, particle, 'startRotationZ', initial.startRotation || constantCurveRange(0), forceMeshCommon3D ? 1 : -1));
   } else {
     count(applyCurveByRef(builder, particle, 'startRotationZ', initial.startRotation, -1));
   }

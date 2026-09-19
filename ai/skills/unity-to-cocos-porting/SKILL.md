@@ -642,3 +642,11 @@ Assert both an active simulation and an invisible renderer in Preview, then veri
 that source collision and sub-emitter counts still advance. Birth sub-emitters
 using rate-over-distance need an independent distance cursor per parent particle;
 a fixed rate per second and a capped sample of parents are not equivalent.
+
+## Validate mesh particle axes and serialized size fields
+
+For Unity mesh particles in a Z-reflected port, axial start angles map to (-X, -Y, +Z). Keep the camera-facing billboard convention separate. Unity mesh rotation uses Euler Z then X then Y; the stock Cocos 3.8.8 particle shader combines axes differently. A custom particle shader must preserve the Unity order, verified with baked vertices from at least two asymmetric combined-angle cases. A corrected curve sign alone does not prove runtime orientation parity.
+
+Unity SizeModule stores the X curve in `curve`, including separate-axis mode; Y/Z use `y`/`z`. Never leave a template X curve because `x` is absent. Compare every axis against the serialized source and actual particle size.
+
+Cocos 3.8.8 exposes an arc mode value corresponding to Unity BurstSpread but its emitter falls through to loop emission. Preserve per-burst distribution explicitly: a closed 360-degree arc has count intervals; an open arc includes both endpoints and has count-1 intervals. Validate count 3 and 7 against Unity, including replay and a frame spanning repeated bursts.
