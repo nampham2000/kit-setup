@@ -17,10 +17,10 @@
  */
 
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const { spawn, spawnSync } = require('child_process');
 const { color } = require('./lib/term-color.cjs');
+const { createRuntimeProfile, closeRuntimeProfile } = require('./lib/runtime-profile.cjs');
 
 const WEBSOCKET_REEXEC_ENV = 'PLAYABLE_VERIFY_RUNTIME_WEBSOCKET_REEXEC';
 
@@ -539,7 +539,8 @@ async function runOne(target, options) {
   const htmlFile = isUrl ? null : target;
   const browser = findBrowser(options.browser);
   const port = 9400 + Math.floor((Date.now() / 97) % 400);
-  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'playable-runtime-'));
+  const runtimeProfile = createRuntimeProfile(PROJECT_ROOT);
+  const userDataDir = runtimeProfile.directory;
 
   const child = spawn(browser, [
     '--headless=new',
@@ -553,7 +554,7 @@ async function runOne(target, options) {
     `--remote-debugging-port=${port}`,
     `--user-data-dir=${userDataDir}`,
     'about:blank',
-  ], { stdio: 'ignore', windowsHide: true });
+  ], { stdio: 'ignore', windowsHide: true, env: { ...process.env, TEMP: runtimeProfile.root, TMP: runtimeProfile.root, TMPDIR: runtimeProfile.root } });
 
   const result = {
     file: isUrl ? String(target) : path.relative(PROJECT_ROOT, htmlFile).replace(/\\/g, '/'),
@@ -822,12 +823,12 @@ async function runOne(target, options) {
         result.previewDeviceRestoreError = String(error && error.message ? error.message : error);
       }
     }
-    if (session) session.close();
-    try { child.kill(); } catch (_) { /* ignore */ }
-    try { fs.rmSync(userDataDir, { recursive: true, force: true }); } catch (_) { /* ignore */ }
+    result.profileCleanup = await closeRuntimeProfile(child, session, runtimeProfile);
+    if (!result.profileCleanup.ok) result.consoleWarnings.push(`[verify-runtime] ${result.profileCleanup.error}; retained ${userDataDir}`);
   }
 
   result.ok = result.exceptions.length === 0
+    && result.profileCleanup?.ok !== false
     && result.consoleErrors.length === 0
     && !result.previewDeviceError
     && !result.previewDeviceRestoreError

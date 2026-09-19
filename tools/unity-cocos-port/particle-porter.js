@@ -1,4 +1,5 @@
 'use strict';
+const { particleRendererContract } = require('./particle-renderer-contract');
 
 const {
   applyParticleRendererMesh,
@@ -102,10 +103,11 @@ module.exports = function createParticlePorter(deps = {}) {
     if (particleId) {
       const result = applyUnityParticleSystemToCocos(builder, particleId, doc, rendererDoc);
       const alignmentData = parseUnityRendererDoc(rendererDoc);
+      const rendererContract = particleRendererContract(parseUnityParticleDoc(doc), alignmentData);
       const alignment = Number(alignmentData.m_RenderAlignment || 0);
-      if ((alignment === 2 && Number(alignmentData.m_RenderMode || 0) !== 4) || (alignment !== 0 && alignment !== 2)) {
+      if (rendererContract.unsupported.length) {
         reporter.high('PARTICLE_RENDER_ALIGNMENT_ADAPTER_REQUIRED', options.src || '', gameObject?.name || '',
-          `Unity render alignment ${alignment} requires a source-frame shader adapter; Cocos built-in billboards use camera axes. Validate the generated effect in Preview.`);
+          `Unity renderer requires additional measured adapters: ${rendererContract.unsupported.join(', ')}. Validate the generated effect in Preview.`);
       }
       const meshRef = firstRendererMeshRef(rendererDoc);
       const mesh = resolveParticleRendererMesh(meshRef, gameObject, componentId, reporter, options, unityDb, cocosDb);
@@ -130,6 +132,8 @@ module.exports = function createParticlePorter(deps = {}) {
       const materialRef = materialRefs[0] || null;
       const usedBuiltInDefaultParticleMaterial = isUnityDefaultParticleSystemMaterial(materialRef);
       if (usedBuiltInDefaultParticleMaterial) {
+        if (rendererContract.requiresMaterialAdapter) reporter.high('PARTICLE_DEFAULT_RENDERER_ADAPTER_REQUIRED', options.src || '', gameObject?.name || '',
+          'Default particle material requires a renderer-specific source effect material; builtin material alone cannot carry pivot/frame state.');
         applyParticleRendererMaterial(builder, particleId, COCOS_PARTICLE_ADD_MATERIAL_UUID);
         reporter.low(
           'PARTICLE_DEFAULT_MATERIAL_MAPPED',
@@ -157,7 +161,7 @@ module.exports = function createParticlePorter(deps = {}) {
         }
       }
       const particleMaterial = resolveUnityParticleMaterial && materialAsset
-        ? resolveUnityParticleMaterial(materialAsset, options, unityDb, reporter, gameObject?.name || '', spriteTextureAsset)
+        ? resolveUnityParticleMaterial(materialAsset, options, unityDb, reporter, gameObject?.name || '', spriteTextureAsset, 'particle', rendererContract)
         : null;
       if (particleMaterial?.materialUuid) {
         applyParticleRendererMaterial(builder, particleId, particleMaterial.materialUuid, particleMaterial.textureUuid);

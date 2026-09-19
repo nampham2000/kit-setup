@@ -761,7 +761,7 @@ module.exports = function createMaterialPorter(deps) {
       || techniqueIndex === COCOS_PARTICLE_TECHNIQUE_ADD_MULTIPLY;
   }
 
-  function convertUnityParticleMaterialToCocos(materialAsset, options, unityDb, reporter, spriteTextureAsset = null, materialUsage = 'particle') {
+  function convertUnityParticleMaterialToCocos(materialAsset, options, unityDb, reporter, spriteTextureAsset = null, materialUsage = 'particle', rendererContract = null) {
     if (!materialAsset?.path || !fs.existsSync(materialAsset.path)) return null;
 
     const materialDoc = readUnityMaterialDoc(materialAsset.path);
@@ -774,6 +774,8 @@ module.exports = function createMaterialPorter(deps) {
     if (convertedDest && spriteTextureAsset) convertedDest = convertedDest.replace(/\.mtl$/i, `_sprite-${spriteTextureAsset.guid}.mtl`);
     if (convertedDest && materialUsage === 'trail') convertedDest = convertedDest.replace(/\.mtl$/i, '.trail.mtl');
     if (!convertedDest) return null;
+    const sourceAdapter = materialUsage === 'particle' && rendererContract?.requiresMaterialAdapter;
+    if (sourceAdapter) convertedDest = convertedDest.replace(/\.mtl$/i, `.renderer-${rendererContract.mode}-${rendererContract.sourceRendererPivot.join('_')}.mtl`);
 
     const particleShaderRef = getField(materialDoc, 'm_Shader', null);
     const particleShaderGuid = unityRefGuid(particleShaderRef);
@@ -891,6 +893,24 @@ module.exports = function createMaterialPorter(deps) {
       // Cocos default, so leaving the property off keeps the two in agreement.
     }
 
+    let sourceEffectUuid = '';
+    if (sourceAdapter && !tcp2ParticleMaterial) {
+      const effectFile = path.join(options.cocosRoot, 'assets/effects/unity-source-particle.effect');
+      if (!options.dryRun) {
+        const content = fs.readFileSync(path.join(__dirname, 'source-particle.effect'), 'utf8');
+        ensureDir(path.dirname(effectFile));
+        if (!fs.existsSync(effectFile) || fs.readFileSync(effectFile, 'utf8') !== content) fs.writeFileSync(effectFile, content);
+      }
+      const imported = readJsonIfExists(`${effectFile}.meta`);
+      if (imported?.importer === 'effect') sourceEffectUuid = imported.uuid || '';
+      if (!sourceEffectUuid) reporter.high('PARTICLE_RENDERER_EFFECT_IMPORT_REQUIRED', materialAsset.relativePath, '',
+        'Import assets/effects/unity-source-particle.effect through Cocos AssetDB, then rerun porter to bind the source renderer adapter.');
+      const [x,y,z,w] = rendererContract.sourceRendererPivot;
+      props.sourceRendererPivot = { __type__: 'cc.Vec4', x,y,z,w };
+    } else if (sourceAdapter) {
+      reporter.high('PARTICLE_RENDERER_CUSTOM_EFFECT_ADAPTER_REQUIRED', materialAsset.relativePath, '',
+        'TCP2 particle effect needs the source renderer frame/pivot ABI; builtin source adapter cannot replace its shading.');
+    }
     const materialData = {
       __type__: 'cc.Material',
       _name: String(getField(materialDoc, 'm_Name', materialAsset.stem) || materialAsset.stem),
@@ -898,7 +918,7 @@ module.exports = function createMaterialPorter(deps) {
       __editorExtras__: {},
       _native: '',
       _effectAsset: cocosUuid(
-        materialUsage === 'trail' ? BUILTIN_PARTICLE_TRAIL_EFFECT_UUID : (tcp2ParticleEffectUuid || BUILTIN_PARTICLE_EFFECT_UUID),
+        materialUsage === 'trail' ? BUILTIN_PARTICLE_TRAIL_EFFECT_UUID : (sourceEffectUuid || tcp2ParticleEffectUuid || BUILTIN_PARTICLE_EFFECT_UUID),
         'cc.EffectAsset',
       ),
       _techIdx: techniqueIndex,
@@ -916,12 +936,13 @@ module.exports = function createMaterialPorter(deps) {
 
     ensureDir(path.dirname(convertedDest));
     ensureDirectoryMetas(path.dirname(convertedDest), path.join(options.cocosRoot, 'assets'));
-    fs.writeFileSync(convertedDest, `${JSON.stringify(materialData, null, 2)}\n`, 'utf8');
+    const serialized = `${JSON.stringify(materialData, null, 2)}\n`;
+    if (!fs.existsSync(convertedDest) || fs.readFileSync(convertedDest, 'utf8') !== serialized) fs.writeFileSync(convertedDest, serialized, 'utf8');
     const meta = ensureMaterialAssetMeta(convertedDest, options);
     syncImportedMaterialLibraryCache(materialData, meta, options);
 
     const legacyDest = legacyUnityParticleMaterialAssetPath(materialAsset, options);
-    if (!spriteTextureAsset && legacyDest && legacyDest !== convertedDest && fs.existsSync(legacyDest)) {
+    if (!sourceAdapter && !spriteTextureAsset && legacyDest && legacyDest !== convertedDest && fs.existsSync(legacyDest)) {
       const legacyData = readJsonIfExists(legacyDest);
       if (legacyData?.__type__ === 'cc.Material' && legacyData?._effectAsset?.__uuid__ === BUILTIN_PARTICLE_EFFECT_UUID) {
         fs.unlinkSync(legacyDest);
@@ -935,10 +956,10 @@ module.exports = function createMaterialPorter(deps) {
     };
   }
 
-  function resolveUnityParticleMaterial(materialAsset, options, unityDb, reporter, gameObjectName, spriteTextureAsset = null, materialUsage = 'particle') {
+  function resolveUnityParticleMaterial(materialAsset, options, unityDb, reporter, gameObjectName, spriteTextureAsset = null, materialUsage = 'particle', rendererContract = null) {
     if (!materialAsset) return null;
 
-    const converted = convertUnityParticleMaterialToCocos(materialAsset, options, unityDb, reporter, spriteTextureAsset, materialUsage);
+    const converted = convertUnityParticleMaterialToCocos(materialAsset, options, unityDb, reporter, spriteTextureAsset, materialUsage, rendererContract);
     const baseDest = convertedUnityParticleMaterialAssetPath(materialAsset, options);
     const convertedDest = converted?.file || (materialUsage === 'trail' ? baseDest.replace(/\.mtl$/i, '.trail.mtl') : baseDest);
     let materialUuid = resolveStandaloneMaterialAssetUuid(convertedDest, options);

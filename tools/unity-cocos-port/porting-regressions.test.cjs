@@ -44,6 +44,25 @@ Material:
   const result=porter.convertUnityParticleMaterialToCocos({path:source,relativePath:'uv-mask.mat',stem:'Mask'},{cocosRoot:temp},new Map(),reports());
   const output=JSON.parse(fs.readFileSync(result.file,'utf8'));
   assert.deepEqual(output._props[0].mainTiling_Offset,{__type__:'cc.Vec4',x:1,y:.99,z:.2,w:-.3});
+  const {particleRendererContract}=require('./particle-renderer-contract');
+  const local=particleRendererContract({}, {m_RenderMode:0,m_RenderAlignment:2});
+  const report=reports();
+  const first=porter.convertUnityParticleMaterialToCocos({path:source,relativePath:'uv-mask.mat',stem:'Mask'},{cocosRoot:temp},new Map(),report,null,'particle',local);
+  assert.notEqual(first.file,result.file,'renderer state must not overwrite shared source material');
+  assert.ok(report.entries.some(e=>e.args[0]==='PARTICLE_RENDERER_EFFECT_IMPORT_REQUIRED'));
+  const effect=path.join(temp,'assets/effects/unity-source-particle.effect');
+  assert.ok(fs.existsSync(effect));
+  assert.equal(fs.existsSync(effect+'.meta'),false,'porter must leave effect import/UUID to AssetDB');
+  // Mock the AssetDB import receipt for this isolated fixture only.
+  fs.writeFileSync(effect+'.meta',JSON.stringify({importer:'effect',uuid:'fixture-imported-effect'}));
+  const second=porter.convertUnityParticleMaterialToCocos({path:source,relativePath:'uv-mask.mat',stem:'Mask'},{cocosRoot:temp},new Map(),reports(),null,'particle',local);
+  const adapted=JSON.parse(fs.readFileSync(second.file,'utf8'));
+  assert.equal(adapted._effectAsset.__uuid__,'fixture-imported-effect');
+  assert.deepEqual(adapted._props[0].sourceRendererPivot,{__type__:'cc.Vec4',x:0,y:0,z:0,w:2});
+  assert.deepEqual(JSON.parse(fs.readFileSync(result.file,'utf8')),output);
+  const stamp=fs.statSync(second.file).mtimeMs;
+  porter.convertUnityParticleMaterialToCocos({path:source,relativePath:'uv-mask.mat',stem:'Mask'},{cocosRoot:temp},new Map(),reports(),null,'particle',local);
+  assert.equal(fs.statSync(second.file).mtimeMs,stamp,'unchanged generation is idempotent');
 });
 const animation = createAnimationPorter({
   parseUnityYaml: file => [{classId:74,lines:fs.readFileSync(file,'utf8').split(/\r?\n/)}],

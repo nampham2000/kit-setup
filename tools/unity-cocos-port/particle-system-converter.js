@@ -1,4 +1,5 @@
 'use strict';
+const { particleRendererContract } = require('./particle-renderer-contract');
 
 const DEG_TO_RAD = Math.PI / 180;
 const UNITY_CURVE_MODE_TO_COCOS = {
@@ -1304,20 +1305,20 @@ function applySizeModule(builder, particle, data) {
   return true;
 }
 
-function applyRotationModule(builder, particle, data) {
+function applyRotationModule(builder, particle, data, rendererContract = null) {
   const module = refObject(builder.objects, particle?._rotationOvertimeModule);
   if (!module || !data || typeof data !== 'object') return false;
   const separateAxes = bool(data.separateAxes, false);
   setKnown(module, ['_enable', 'enable'], bool(data.enabled, false));
   setKnown(module, ['_separateAxes', 'separateAxes'], separateAxes);
   if (separateAxes) {
-    applyCurveRange(builder, refObject(builder.objects, module.x), data.x, -1);
-    applyCurveRange(builder, refObject(builder.objects, module.y), data.y);
-    applyCurveRange(builder, refObject(builder.objects, module.z), data.z || data.curve, -1);
+    applyCurveRange(builder, refObject(builder.objects, module.x), data.x, rendererContract?.eulerSigns[0] ?? -1);
+    applyCurveRange(builder, refObject(builder.objects, module.y), data.y, rendererContract?.eulerSigns[1] ?? 1);
+    applyCurveRange(builder, refObject(builder.objects, module.z), data.z || data.curve, rendererContract?.eulerSigns[2] ?? -1);
   } else {
     applyCurveRange(builder, refObject(builder.objects, module.x), data.x, -1);
     applyCurveRange(builder, refObject(builder.objects, module.y), data.y);
-    applyCurveRange(builder, refObject(builder.objects, module.z), data.curve || data.z);
+    applyCurveRange(builder, refObject(builder.objects, module.z), data.curve || data.z, rendererContract?.eulerSigns[2] ?? 1);
   }
   return true;
 }
@@ -1686,7 +1687,7 @@ function applyUnityParticleDataToCocos(builder, particleId, data = {}, rendererD
   const unityStartRotation3D = bool(initial.rotation3D, false);
   particle.startRotation3D = forceMeshCommon3D || unityStartRotation3D;
   if (particle.startRotation3D) {
-    count(applyCurveByRef(builder, particle, 'startRotationX', unityStartRotation3D ? initial.startRotationX : constantCurveRange(0), -1));
+    count(applyCurveByRef(builder, particle, 'startRotationX', unityStartRotation3D ? initial.startRotationX : constantCurveRange(0), particleRendererContract(data, rendererData).eulerSigns[0]));
     // Mesh coordinates are reflected in Z. Axial rotations consequently map
     // (-X,-Y,+Z), unlike the camera-facing billboard convention.
     count(applyCurveByRef(builder, particle, 'startRotationY', unityStartRotation3D ? initial.startRotationY : constantCurveRange(0), forceMeshCommon3D ? -1 : 1));
@@ -1699,7 +1700,7 @@ function applyUnityParticleDataToCocos(builder, particleId, data = {}, rendererD
   count(applyShapeModule(builder, particle, data.ShapeModule));
   count(applyEmission(builder, particle, data.EmissionModule));
   count(applySizeModule(builder, particle, data.SizeModule));
-  count(applyRotationModule(builder, particle, data.RotationModule));
+  count(applyRotationModule(builder, particle, data.RotationModule, particleRendererContract(data, rendererData)));
   count(applyColorModule(builder, particle, data.ColorModule));
   count(applyTextureAnimationModule(builder, particle, data.UVModule));
   count(applyNoiseModule(builder, particle, data.NoiseModule));
@@ -1708,6 +1709,10 @@ function applyUnityParticleDataToCocos(builder, particleId, data = {}, rendererD
   count(applyLimitVelocityModule(builder, particle, data.ClampVelocityModule));
   count(applyTrailModule(builder, particle, data.TrailModule));
   count(applyRenderer(builder, particle, rendererData));
+  const rendererContract = particleRendererContract(data, rendererData);
+  const targetRenderer = refObject(builder.objects, particle.renderer);
+  if (targetRenderer) targetRenderer._alignSpace = rendererContract.cocosAlignment;
+  Object.defineProperty(particle, 'unityRendererContract', { value: rendererContract, configurable: true });
 
   return { applied };
 }

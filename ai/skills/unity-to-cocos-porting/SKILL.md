@@ -17,6 +17,35 @@ This skill provides step-by-step guidance and architectural rules for converting
 
 ## 1. Automated Tooling First
 
+### Particle renderer frames and pivots
+
+- Before changing a particle Render Mode, read the source renderer alignment,
+  parent transform, initial/animated rotation and pivot. A ground ring cut in
+  half can be a Local billboard rendered with camera axes, not a depth offset.
+  Do not blanket-convert billboards to HorizontalBillboard: Local can encode an
+  arbitrary oriented plane. Preserve explicit user overrides separately.
+- Consume `particle-renderer-contract.js` in the porter and project adapters.
+  Native Unity BakeMesh probes distinguish clockwise Local billboard Euler
+  mapping (+X,+Y,-Z) from mesh mapping (-X,-Y,+Z), with Z-X-Y composition.
+  Cocos World alignment supplies emitter world rotation including its parent;
+  Cocos Local supplies only the node local rotation.
+- A mesh Velocity alignment may reuse emitter world rotation only when the
+  contract proves a fixed +Z box direction, positive constant speed, zero
+  gravity and no velocity/force/noise modules. Other velocity frames remain a
+  blocking adapter obligation. Missing fields are not proof of zero.
+- Unity stretched pivot Y displaces the quad along velocity by twice current
+  particle width times pivot Y, not by stretched length. Keep renderer-specific
+  material variants so shared materials do not acquire another emitter's pivot.
+- Import generated `unity-source-particle.effect` through AssetDB, then rerun
+  the porter to bind its actual UUID. The shader preserves builtin shading;
+  custom shading and Euler rotation-over-lifetime still need their adapters.
+  Import success alone does not establish runtime or visual parity.
+- Regression: `particle-renderer-contract.test.cjs`,
+  `particle-renderer-native.test.cjs`, and `porting-regressions.test.cjs` under
+  `tools/unity-cocos-port`. Check native geometry under a rotated parent,
+  source burst times, actual preview shader uniforms and bounded visible
+  pixels at source and portrait viewports before claiming the fix.
+
 ### Preview combat and filesystem pitfalls
 
 - Keep gameplay delivery first. For explicit preview-only acceptance use core verify with --preview-only --preview-url; keep all runtime, regression and evidence gates, exclude only packaged build. Never invent a build receipt.
@@ -26,6 +55,11 @@ This skill provides step-by-step guidance and architectural rules for converting
 - For Cocos canvas drag, do not pass design-space getUILocation coordinates to a world-space UITransform conversion. Bind the moving control's touch end/cancel as well as global movement and test that releasing really consumes or rejects the item and restores its position.
 
 ### Diagnose port blockers before stopping
+
+- Runtime browser profiles belong under the project `.ai/runtime-temp` (or
+  `PLAYABLE_RUNTIME_TEMP_DIR`), including Chrome TEMP/TMP. Close via CDP,
+  await process exit, retry locked-file cleanup and surface failure. Do not
+  silently ignore cleanup errors or accumulate profiles in the system drive.
 
 - Setup indexes Unity source before installing MCP. On large asset-library projects,
   a Node heap failure in this phase is a scanner failure, not a Unity connection

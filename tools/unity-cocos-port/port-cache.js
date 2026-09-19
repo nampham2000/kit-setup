@@ -28,7 +28,7 @@ const path = require('path');
 const { readTextureImportLimits } = require('./texture-import-limit');
 
 // v3 invalidates missing UI layouts and aspect-fitted sliced/tiled images.
-const CACHE_VERSION = 3;
+const CACHE_VERSION = 4; // Source renderer frame, pivot, and clockwise billboard Euler mapping.
 
 /** Dấu vân tay của một file: kích thước + mtime. Đủ nhạy, không cần đọc nội dung. */
 function fileStamp(file) {

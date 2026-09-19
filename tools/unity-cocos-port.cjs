@@ -2303,8 +2303,8 @@ function resolveUnityMaterialUuid(materialAsset, options, unityDb, cocosDb, repo
   return resolveUnityMaterialUuidImpl(materialAsset, options, unityDb, cocosDb, reporter, gameObjectName);
 }
 
-function resolveUnityParticleMaterial(materialAsset, options, unityDb, reporter, gameObjectName, spriteTextureAsset = null, materialUsage = 'particle') {
-  return resolveUnityParticleMaterialImpl(materialAsset, options, unityDb, reporter, gameObjectName, spriteTextureAsset, materialUsage);
+function resolveUnityParticleMaterial(materialAsset, options, unityDb, reporter, gameObjectName, spriteTextureAsset = null, materialUsage = 'particle', rendererContract = null) {
+  return resolveUnityParticleMaterialImpl(materialAsset, options, unityDb, reporter, gameObjectName, spriteTextureAsset, materialUsage, rendererContract);
 }
 
 function resolveBuiltinPrimitiveMeshUuid(...hints) {

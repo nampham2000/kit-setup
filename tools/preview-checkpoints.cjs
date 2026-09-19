@@ -953,6 +953,7 @@ async function main() {
         previewDevice: runtime.previewDevice,
         previewDeviceError: runtime.previewDeviceError,
         previewDeviceRestored: runtime.previewDeviceRestored,
+        profileCleanup: runtime.profileCleanup,
         previewDeviceRestoreError: runtime.previewDeviceRestoreError,
         exceptions: runtime.exceptions,
         consoleErrors: runtime.consoleErrors,
