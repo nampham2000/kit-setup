@@ -8,14 +8,20 @@ const BUILTIN_GUIDS = new Set([
   '0000000000000000f000000000000000',
 ]);
 
+// V8 can keep a complete multi-megabyte YAML string alive behind a 32-character
+// RegExp capture. Index records outlive parsing, so detach persisted captures.
+function detachedString(value) {
+  return Buffer.from(value, 'utf8').toString('utf8');
+}
+
 function extractGuidFromMeta(text) {
   const match = /(?:^|\r?\n)guid:\s*([0-9a-f]{32})(?:\r?\n|$)/i.exec(text || '');
-  return match ? match[1].toLowerCase() : null;
+  return match ? detachedString(match[1].toLowerCase()) : null;
 }
 
 function extractReferencedGuids(text) {
   const guids = new Set();
-  for (const match of String(text || '').matchAll(GUID_RE)) guids.add(match[1].toLowerCase());
+  for (const match of String(text || '').matchAll(GUID_RE)) guids.add(detachedString(match[1].toLowerCase()));
   return [...guids];
 }
 
@@ -50,7 +56,7 @@ function extractGuidReferences(text, options = {}) {
     const header = /^---\s+!u!(\d+)\s+&(-?\d+)/.exec(line);
     if (header) {
       classId = Number(header[1]);
-      objectId = header[2];
+      objectId = detachedString(header[2]);
       stack.length = 0;
       continue;
     }
@@ -65,7 +71,7 @@ function extractGuidReferences(text, options = {}) {
     }
     GUID_RE.lastIndex = 0;
     for (const match of line.matchAll(GUID_RE)) {
-      const guid = match[1].toLowerCase();
+      const guid = detachedString(match[1].toLowerCase());
       if (excluded.has(guid)) continue;
       let hasPointerEvidence = /\bfileID\s*:/i.test(line);
       // A split Unity PPtr is a mapping whose bare `guid` key sits directly
@@ -90,7 +96,7 @@ function extractGuidReferences(text, options = {}) {
         kind: referenceKind(fieldPath, provider),
         objectId,
         classId,
-        fieldPath: fieldPath || null,
+        fieldPath: fieldPath ? detachedString(fieldPath) : null,
         line: lineNumber,
         provider,
         resolution: 'exact',

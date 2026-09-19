@@ -27,6 +27,13 @@ This skill provides step-by-step guidance and architectural rules for converting
 
 ### Diagnose port blockers before stopping
 
+- Setup indexes Unity source before installing MCP. On large asset-library projects,
+  a Node heap failure in this phase is a scanner failure, not a Unity connection
+  failure. Persisted regex captures (GUID, fileID, field path) must own their small
+  strings instead of retaining the full YAML backing buffer. Keep the GC regression
+  in `tools/unity-intel/guid-index.test.cjs`; avoid concurrent scans of the same
+  project while the first cache is being built.
+
 - Use one npm forwarding separator: `npm run unity:intel:doctor -- --project <root>`.
   An extra standalone `--` is passed to the parser and fails before probing Unity;
   classify that as a command contract defect, not an Editor or MCP failure.
