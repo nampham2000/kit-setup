@@ -13,6 +13,8 @@ function run(contract,limit=false,imported=true){
 
 test('semantic eligibility accepts supported sources and rejects disabled or unsupported composition',()=>{
   assert.equal(canBindOrbit(spec()),true);
+  assert.equal(canBindOrbit({...spec(),simulationSpace:1,scalingMode:0}),true);
+  assert.equal(canBindOrbit({...spec(),simulationSpace:1,scalingMode:1}),false);
   assert.equal(canBindOrbit({...spec(),enabled:false}),false);
   assert.equal(canBindOrbit({...spec(),noiseEnabled:true}),false);
   assert.equal(canBindOrbit({...spec(),inWorldSpace:true}),false);

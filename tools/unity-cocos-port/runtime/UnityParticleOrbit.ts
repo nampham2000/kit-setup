@@ -1,8 +1,9 @@
-import { ParticleSystem } from 'cc';
+import { Mat4, ParticleSystem, Vec3 } from 'cc';
 import { UnityNoiseCurve, sampleNoiseCurve } from './UnityNoiseKernel';
 
 export interface UnityOrbitSpec {
     enabled: boolean; simulationSpace: number; inWorldSpace: boolean; limitEnabled: boolean;
+    scalingMode?: number;
     velocity: Record<string, UnityNoiseCurve>;
 }
 
@@ -23,12 +24,25 @@ export function orbitalDelta(out: Float64Array, x: number, y: number, z: number,
 export function installUnityParticleOrbit(system: ParticleSystem,spec: UnityOrbitSpec): void {
     const runtime=system as any;
     if(runtime.unityOrbit)return;
-    if(spec.simulationSpace!==0||spec.inWorldSpace||spec.limitEnabled)throw new Error('Orbital world/limit integration requires a measured adapter');
+    if((spec.simulationSpace!==0&&spec.simulationSpace!==1)||spec.inWorldSpace||spec.limitEnabled)throw new Error('Orbital custom-space/world-velocity/limit integration requires a measured adapter');
+    if(spec.simulationSpace===1&&spec.scalingMode!==0)throw new Error('World orbital nonhierarchical scaling requires a measured adapter');
     const curves=spec.velocity;
     for(const key of ['orbitalOffsetX','orbitalOffsetY','orbitalOffsetZ']) {
         if(curves[key].minMaxState!==0||curves[key].scalar!==0)throw new Error('Orbital offsets require a measured adapter');
     }
     const delta=new Float64Array(3);
+    const worldSpace=spec.simulationSpace===1;
+    const world=worldSpace?new Mat4():null,inverse=worldSpace?new Mat4():null,local=worldSpace?new Vec3():null;
+    if(worldSpace){
+        const processor=runtime.processor,update=processor.updateParticles;
+        Mat4.copy(world,system.node.worldMatrix);Mat4.invert(inverse,world);
+        // Cocos 3.8.8 CPU renderer does not call module.update. Refresh once
+        // per simulation step here, including moved/scaled emitter parents.
+        processor.updateParticles=function(dt:number):number {
+            system.node.getWorldMatrix(world);Mat4.invert(inverse,world);
+            return update.call(this,dt);
+        };
+    }
     const state=runtime.unityOrbit={samples:0,spec};
     system.velocityOvertimeModule.animate=function(p:any,dt:number):void {
         if(dt<=0)return;
@@ -37,8 +51,18 @@ export function installUnityParticleOrbit(system: ParticleSystem,spec: UnityOrbi
         // is not claimed; constants and deterministic curves are native-tested.
         const random=((Math.imul(p.randomSeed,1664525)+1013904223)>>>0)/4294967296;
 
-        orbitalDelta(delta,p.position.x,p.position.y,-p.position.z,sampleNoiseCurve(curves.orbitalX,age,random),sampleNoiseCurve(curves.orbitalY,age,random),sampleNoiseCurve(curves.orbitalZ,age,random),sampleNoiseCurve(curves.radial,age,random),dt);
-        const x=delta[0]+sampleNoiseCurve(curves.x,age,random),y=delta[1]+sampleNoiseCurve(curves.y,age,random),z=-(delta[2]+sampleNoiseCurve(curves.z,age,random));
+        // World particles still orbit in the emitter's local frame. Unity
+        // applies its full transform (including scale) to the resulting delta.
+        if(worldSpace)Vec3.transformMat4(local,p.position,inverse);
+        const position=worldSpace?local:p.position;
+        orbitalDelta(delta,position.x,position.y,-position.z,sampleNoiseCurve(curves.orbitalX,age,random),sampleNoiseCurve(curves.orbitalY,age,random),sampleNoiseCurve(curves.orbitalZ,age,random),sampleNoiseCurve(curves.radial,age,random),dt);
+        let x=delta[0]+sampleNoiseCurve(curves.x,age,random),y=delta[1]+sampleNoiseCurve(curves.y,age,random),z=-(delta[2]+sampleNoiseCurve(curves.z,age,random));
+        if(worldSpace){
+            const lx=x,ly=y,lz=z;
+            x=world.m00*lx+world.m04*ly+world.m08*lz;
+            y=world.m01*lx+world.m05*ly+world.m09*lz;
+            z=world.m02*lx+world.m06*ly+world.m10*lz;
+        }
         const speed=sampleNoiseCurve(curves.speedModifier,age,random);
         p.animatedVelocity.set(x,y,z);
         p.ultimateVelocity.set((p.velocity.x+x)*speed,(p.velocity.y+y)*speed,(p.velocity.z+z)*speed);

@@ -7,7 +7,9 @@ const names = ['UnityNoiseKernel', 'UnityParticleOrbit', 'UnityParticleOrbitAdap
 
 function unsupportedOrbitReasons(spec) {
   const reasons=[];
-  if(spec.simulationSpace!==0||spec.inWorldSpace)reasons.push('world-or-custom-space');
+  if(![0,1].includes(spec.simulationSpace)||spec.inWorldSpace)reasons.push('world-velocity-or-custom-space');
+  if(spec.simulationSpace===1&&spec.scalingMode!==0)reasons.push('world-nonhierarchical-scaling');
+  if(spec.simulationSpace===1&&spec.noiseEnabled)reasons.push('world-noise-composition');
   if(spec.limitEnabled)reasons.push('velocity-limit');
   if(spec.noiseEnabled && (!spec.noise?.enabled || unsupportedNoiseReasons(spec.noise,spec.limitEnabled).length || spec.velocity.speedModifier?.minMaxState!==0 || spec.velocity.speedModifier?.scalar!==1))reasons.push('noise-composition');
   for(const key of ['orbitalOffsetX','orbitalOffsetY','orbitalOffsetZ'])if(spec.velocity[key]?.minMaxState!==0||spec.velocity[key]?.scalar!==0)reasons.push(key);
@@ -47,7 +49,7 @@ function attachOrbitRuntime(builder, reporter, options) {
     }
     builder.addComponent(p.node.__id__, classId, {source:{__id__:id},sourceContract:JSON.stringify(spec)}, null, `cmp-unity-orbit-${id}`);
     reporter.low('PARTICLE_ORBIT_ADAPTER_BOUND', options.src || '', builder.objects[p.node.__id__]?._name || '',
-      'Native local orbital adapter attached with source curves; live visual acceptance still required.');
+      'Native orbital adapter attached with source curves and simulation frame; live visual acceptance still required.');
   }
 }
 

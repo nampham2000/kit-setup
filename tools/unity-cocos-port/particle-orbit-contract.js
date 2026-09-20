@@ -9,7 +9,7 @@ function active(c){
 function particleOrbitContract(p){
   const v=p.VelocityModule;
   if(!v?.enabled||!['orbitalX','orbitalY','orbitalZ','radial'].some(k=>active(v[k])))return {enabled:false};
-  return {enabled:true,version:1,simulationSpace:p.moveWithTransform,inWorldSpace:!!v.inWorldSpace,
+  return {enabled:true,version:1,simulationSpace:p.moveWithTransform,...(p.moveWithTransform===1?{scalingMode:p.scalingMode}:{}),inWorldSpace:!!v.inWorldSpace,
     noiseEnabled:!!p.NoiseModule?.enabled,...(p.NoiseModule?.enabled?{noise:particleNoiseContract(p)}:{}),limitEnabled:!!p.ClampVelocityModule?.enabled,velocity:JSON.parse(JSON.stringify(v))};
 }
 module.exports={particleOrbitContract};
