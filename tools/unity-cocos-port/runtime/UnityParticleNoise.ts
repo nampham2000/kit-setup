@@ -1,12 +1,12 @@
 import { ParticleSystem } from 'cc';
 import { UnityNoiseKernel, UnityNoiseSpec, sampleNoiseCurve } from './UnityNoiseKernel';
 
-// Installs the measured Medium-quality native curl kernel into the CPU module
+// Installs the measured Medium/High native curl kernels into the CPU module
 // chain. Unsupported native features stay explicit; do not silently approximate.
 export function installUnityParticleNoise(system: ParticleSystem, spec: UnityNoiseSpec, seed?: number): void {
     const runtime = system as any, processor = runtime.processor;
     if (runtime.unityNoise) return;
-    if (!spec.enabled || spec.quality !== 1 || spec.remapEnabled) throw new Error('Native Noise adapter requires Medium quality without remap');
+    if (!spec.enabled || (spec.quality !== 1 && spec.quality !== 2) || spec.remapEnabled) throw new Error('Native Noise adapter requires Medium/High quality without remap');
     if (spec.rotationAmount.minMaxState !== 0 || spec.rotationAmount.scalar !== 0 || spec.sizeAmount.minMaxState !== 0 || spec.sizeAmount.scalar !== 0) throw new Error('Noise rotation/size amount needs a measured adapter');
     for (const curve of [spec.strength,spec.strengthY,spec.strengthZ,spec.scrollSpeed,spec.positionAmount]) {
         if (curve.minMaxState !== 0 && curve.minMaxState !== 1) throw new Error('Noise random curves need a native random-channel oracle');

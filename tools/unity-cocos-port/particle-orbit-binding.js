@@ -2,13 +2,14 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { compressUuid } = require('./core-utils');
+const { unsupportedNoiseReasons } = require('./particle-noise-binding');
 const names = ['UnityNoiseKernel', 'UnityParticleOrbit', 'UnityParticleOrbitAdapter'];
 
 function unsupportedOrbitReasons(spec) {
   const reasons=[];
   if(spec.simulationSpace!==0||spec.inWorldSpace)reasons.push('world-or-custom-space');
   if(spec.limitEnabled)reasons.push('velocity-limit');
-  if(spec.noiseEnabled)reasons.push('noise-composition');
+  if(spec.noiseEnabled && (!spec.noise?.enabled || unsupportedNoiseReasons(spec.noise,spec.limitEnabled).length || spec.velocity.speedModifier?.minMaxState!==0 || spec.velocity.speedModifier?.scalar!==1))reasons.push('noise-composition');
   for(const key of ['orbitalOffsetX','orbitalOffsetY','orbitalOffsetZ'])if(spec.velocity[key]?.minMaxState!==0||spec.velocity[key]?.scalar!==0)reasons.push(key);
   for(const [key,c] of Object.entries(spec.velocity))if(c?.maxCurve&&[c.maxCurve,c.minCurve].some(v=>v?.m_Curve?.some(k=>k.weightedMode)))reasons.push(key+'-weighted');
   return reasons;

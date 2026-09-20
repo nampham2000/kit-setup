@@ -6,7 +6,7 @@ const names = ['UnityNoiseKernel', 'UnityParticleNoise', 'UnityParticleNoiseAdap
 
 function unsupportedNoiseReasons(spec, limitEnabled) {
   const reasons = [];
-  if (spec.quality !== 1) reasons.push('quality-other-than-Medium');
+  if (spec.quality !== 1 && spec.quality !== 2) reasons.push('quality-other-than-Medium-or-High');
   if (spec.remapEnabled) reasons.push('remap');
   if (limitEnabled) reasons.push('velocity-limit-integration');
   for (const name of ['rotationAmount', 'sizeAmount']) {
@@ -50,7 +50,7 @@ function attachNoiseRuntime(builder, reporter, options) {
     }
     builder.addComponent(p.node.__id__, classId, {source:{__id__:id},sourceContract:JSON.stringify(spec)}, null, `cmp-unity-noise-${id}`);
     reporter.low('PARTICLE_NOISE_ADAPTER_BOUND', options.src || '', builder.objects[p.node.__id__]?._name || '',
-      'Native Medium curl adapter attached with source curves; live visual acceptance still required.');
+      'Native Medium/High curl adapter attached with source curves; live visual acceptance still required.');
   }
 }
 

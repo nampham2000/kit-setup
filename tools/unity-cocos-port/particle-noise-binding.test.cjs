@@ -21,12 +21,17 @@ test('generic prefab porter binds native Noise without any AOE controller or too
   assert.match(cli,/attachNoiseRuntime\(builder, reporter, options\)/);
 });
 for(const [name,mutate,limit] of [
-  ['High',s=>s.quality=2,false],['Low',s=>s.quality=0,false],['remap',s=>s.remapEnabled=true,false],
+  ['Low',s=>s.quality=0,false],['remap',s=>s.remapEnabled=true,false],
   ['random curve',s=>s.strength.minMaxState=3,false],['size amount',s=>s.sizeAmount.scalar=1,false],
   ['weighted curve',s=>s.strength.maxCurve={m_Curve:[{weightedMode:1}]},false],['velocity limit',()=>{},true],
 ])test(`${name} cannot silently pass as native Noise`,()=>{
   const source=spec();mutate(source);const result=run(source,limit);
   assert.equal(result.objects.length,3);assert.equal(result.issues[0].code,'PARTICLE_NOISE_ADAPTER_REQUIRED');
+});
+test('High quality binds the native validated 3D curl adapter',()=>{
+  const source={...spec(),quality:2},result=run(source);
+  assert.deepEqual(result.issues,[]);assert.equal(result.objects.length,4);
+  assert.equal(JSON.parse(result.objects[3].sourceContract).quality,2);
 });
 test('unimported script blocks binding instead of inventing meta UUID',()=>{
   const result=run(spec(),false,false);

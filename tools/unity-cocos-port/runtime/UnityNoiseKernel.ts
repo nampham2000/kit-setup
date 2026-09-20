@@ -15,6 +15,10 @@ const permutation = new Uint8Array([
 ]);
 const gradientX = new Float64Array([0,0,Math.SQRT2,-Math.SQRT2,1,1,-1,-1]);
 const gradientY = new Float64Array([Math.SQRT2,-Math.SQRT2,0,0,1,-1,1,-1]);
+// Shuriken's 16 gradients differ from improved Perlin at indices 13–15.
+const highX = new Int8Array([1,-1,1,-1,1,-1,1,-1,0,0,0,0,1,-1,0,0]);
+const highY = new Int8Array([1,1,-1,-1,0,0,0,0,1,-1,1,-1,1,1,-1,-1]);
+const highZ = new Int8Array([0,0,0,0,1,1,-1,-1,1,1,-1,-1,0,0,1,-1]);
 
 export interface UnityNoiseKey { time: number; value: number; inSlope: number; outSlope: number; weightedMode?: number; }
 export interface UnityNoiseCurve {
@@ -90,17 +94,42 @@ export class UnityNoiseKernel {
         out[1] = dy0+v*(dy1-dy0)+dv*((n01+u*(n11-n01))-(n00+u*(n10-n00)));
     }
 
+    gradient3(out: Float64Array, x: number, y: number, z: number): void {
+        const ix=Math.floor(x), iy=Math.floor(y), iz=Math.floor(z), a=x-ix, b=y-iy, c=z-iz;
+        const u=a*a*a*(a*(a*6-15)+10), v=b*b*b*(b*(b*6-15)+10), w=c*c*c*(c*(c*6-15)+10);
+        const du=30*a*a*(a-1)*(a-1), dv=30*b*b*(b-1)*(b-1);
+        let dx=0, dy=0;
+        for(let i=0;i<2;i++) for(let j=0;j<2;j++) for(let k=0;k<2;k++) {
+            const h=permutation[(permutation[(permutation[(ix+i)&255]+iy+j)&255]+iz+k)&255]&15;
+            const gx=highX[h], gy=highY[h], gz=highZ[h];
+            const dot=gx*(a-i)+gy*(b-j)+gz*(c-k);
+            const wx=i?u:1-u, wy=j?v:1-v, wz=k?w:1-w;
+            dx+=(gx*wx+dot*(i?du:-du))*wy*wz;
+            dy+=(gy*wy+dot*(j?dv:-dv))*wx*wz;
+        }
+        out[0]=dx; out[1]=dy;
+    }
+
     sample(out: Float64Array, x: number, y: number, z: number, scroll: number, spec: UnityNoiseSpec): void {
         out[0] = 0; out[1] = 0; out[2] = 0;
         let frequency = spec.frequency, weight = 1, total = 0;
         const p = this.phase, g = this.derivative;
         for (let octave = 0; octave < spec.octaves; octave++) {
             const a = (x+p[0])*frequency, b = (y+p[1])*frequency, c = (z+p[2])*frequency, s = scroll*frequency;
-            this.gradient(g, a+s, b); const ax = g[0], ay = g[1];
-            this.gradient(g, c+s, a); const bx = g[0], by = g[1];
-            this.gradient(g, b+s, c); const cx = g[0], cy = g[1];
             const amount = frequency * weight;
-            out[0] += (ay-bx)*amount; out[1] += (cy-ax)*amount; out[2] += (by-cx)*amount;
+            if (spec.quality === 2) {
+                // High uses three 3D potentials, scrolling their third coordinate.
+                // Its first potential uses the unshifted X seed phase (Medium adds 100).
+                this.gradient3(g, c, b, (x+p[0]-100+scroll)*frequency); const ax=g[0], ay=g[1];
+                this.gradient3(g, b, a, c+s); const bx=g[0], by=g[1];
+                this.gradient3(g, a, c, b+s); const cx=g[0], cy=g[1];
+                out[0]+=(bx-cy)*amount; out[1]+=(ax-by)*amount; out[2]+=(cx-ay)*amount;
+            } else {
+                this.gradient(g, a+s, b); const ax = g[0], ay = g[1];
+                this.gradient(g, c+s, a); const bx = g[0], by = g[1];
+                this.gradient(g, b+s, c); const cx = g[0], cy = g[1];
+                out[0] += (ay-bx)*amount; out[1] += (cy-ax)*amount; out[2] += (by-cx)*amount;
+            }
             total += weight; weight *= spec.octaveMultiplier; frequency *= spec.octaveScale;
         }
         const divisor = total * (spec.damping ? spec.frequency : 1);
