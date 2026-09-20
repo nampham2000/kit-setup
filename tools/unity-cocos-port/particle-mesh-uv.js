@@ -19,6 +19,12 @@ function convertReflectedParticleMaterial(properties, options = {}) {
 // For Cocos texture coordinates (u,1-v), conjugating source uv-flow gives
 // target uv-(flow.x,-flow.y). Keep the sign independent of sampled color.
 function reflectedFlowOffset(x,y) { return [x,-y]; }
+// Native BakeTrailsMesh: newest-to-oldest U is unchanged; across the
+// camera-facing ribbon, imported Cocos V is 1-Unity V. Lit trail sampling
+// therefore needs the same conjugation, including the normal-map atlas.
+function convertReflectedLitTrailMaterial(properties) {
+  return convertReflectedParticleMaterial(properties);
+}
 const reflectedFlowGlsl=`vec2 flowOffset=sourceSample(flowTexture,flowUV,textureSrgb.z,textureAlpha.z).xy*mask.xy*distortion.z;
       #if AOE_REFLECTED_FLOW
         flowOffset.y=-flowOffset.y;
@@ -30,4 +36,4 @@ function patchReflectedFlow(source) {
   if(!source.includes(previous))throw new Error('Unknown particle flow shader contract');
   return source.replace(previous,reflectedFlowGlsl);
 }
-module.exports={reflectedST,reflectedFlowOffset,convertReflectedParticleMaterial,patchReflectedFlow};
+module.exports={reflectedST,reflectedFlowOffset,convertReflectedParticleMaterial,convertReflectedLitTrailMaterial,patchReflectedFlow};

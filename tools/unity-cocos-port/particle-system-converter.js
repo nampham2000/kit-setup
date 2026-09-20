@@ -575,21 +575,38 @@ function curveRangeLooksZero(data) {
   return Math.abs(curveRangeConstantValue(data)) < 1e-6;
 }
 
-function ensureCocosCurveRangeMaxAtLeast(curveRange, minimum) {
+function ensureCocosCurveRangeMaxAtLeast(builder, curveRange, minimum) {
   if (!curveRange || !Number.isFinite(minimum)) return false;
   const mode = num(curveRange.mode ?? curveRange._mode, 0);
   if (mode === 0) {
     if (num(curveRange.constant, 0) >= minimum) return false;
-    curveRange.constant = minimum;
+    const value=curveRange.constant/minimum;
+    curveRange.mode=1;curveRange.multiplier=minimum;
+    curveRange.spline=addRealCurve(builder,{m_Curve:[unityCurveKey(0,value),unityCurveKey(1,value)]});
+    delete curveRange.constant;
     return true;
   }
   if (mode === 3) {
     if (num(curveRange.constantMax, 0) >= minimum) return false;
-    curveRange.constantMax = minimum;
-    if (num(curveRange.constantMin, 0) > curveRange.constantMax) curveRange.constantMin = curveRange.constantMax;
+    curveRange.mode=2;curveRange.multiplier=minimum;
+    curveRange.splineMin=addRealCurve(builder,{m_Curve:[unityCurveKey(0,curveRange.constantMin/minimum),unityCurveKey(1,curveRange.constantMin/minimum)]});
+    curveRange.splineMax=addRealCurve(builder,{m_Curve:[unityCurveKey(0,curveRange.constantMax/minimum),unityCurveKey(1,curveRange.constantMax/minimum)]});
+    delete curveRange.constantMin;delete curveRange.constantMax;
     return true;
   }
   if (num(curveRange.multiplier, 0) >= minimum) return false;
+  const scale=curveRange.multiplier/minimum;
+  for(const key of ['spline','splineMin','splineMax']){
+    const curve=refObject(builder.objects,curveRange[key]);
+    if(curve)for(const value of curve._values){
+      value.value*=scale;
+      for(const side of ['left','right']){
+        const slope=value[side+'Tangent'];
+        if(Number.isFinite(slope))value[side+'TangentWeight']*=Math.hypot(1,slope*scale)/Math.hypot(1,slope);
+        value[side+'Tangent']*=scale;
+      }
+    }
+  }
   curveRange.multiplier = minimum;
   return true;
 }
@@ -1167,11 +1184,9 @@ function applyTrailModule(builder, particle, data) {
   // lifetime; cc.TrailModule.lifeTime is an absolute time in seconds.
   const startLifetime = cocosCurveRangeMaxValue(refObject(builder.objects, particle?.startLifetime), 1);
   applyCurveRange(builder, lifeTime, data.lifetime, startLifetime > 0 ? startLifetime : 1);
-  // cc.Trail sizes its vertex buffer from ceil(lifeTime.getMax()) and warns
-  // below 1s. Raising the floor is inert for the common case because
-  // ParticleSystemRendererCPU drops a trail as soon as its particle dies, so a
-  // trail element can never outlive the particle it is attached to.
-  ensureCocosCurveRangeMaxAtLeast(lifeTime, COCOS_TRAIL_MIN_LIFETIME);
+  // getMax() is an allocation envelope for curve modes, not their evaluated
+  // value. Preserve authored lifetime while reserving at least one second.
+  ensureCocosCurveRangeMaxAtLeast(builder, lifeTime, COCOS_TRAIL_MIN_LIFETIME);
   applyCurveRange(builder, refObject(builder.objects, module.widthRatio), data.widthOverTrail);
   applyGradientRange(builder, refObject(builder.objects, module.colorOverTrail), data.colorOverTrail);
   applyGradientRange(builder, refObject(builder.objects, module.colorOvertime), data.colorOverLifetime);
@@ -1392,6 +1407,7 @@ function restoreOrbitalSourceModules(builder, particleId, data) {
 }
 
 module.exports = {
+  applyTrailModule,
   restoreOrbitalSourceModules,
   applyUnityParticleDataToCocos,
   applyUnityParticleSystemToCocos,
