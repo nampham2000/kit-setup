@@ -138,6 +138,8 @@ test('enabled native Noise remains an explicit high adapter obligation after con
   porter.emitParticleSystem(0,1,'ParticleSystem:\n  autoRandomSeed: 0\n  randomSeed: 1234\n  NoiseModule:\n    enabled: 1\n    quality: 1\n    strength:\n      minMaxState: 1\n      scalar: 0.5',{name:'Buff'},b,r,{},new Map(),{});
   assert.equal(b.objects[1].unityNoiseContract.strength.minMaxState,1);
   assert.equal(b.objects[1].unityNoiseContract.randomSeed,1234);
+  b.objects[1].node={__id__:0};
+  require('./particle-noise-binding').attachNoiseRuntime(b,r,{dryRun:true,cocosRoot:__dirname});
   assert.ok(r.entries.some(e=>e.level==='high'&&e.args[0]==='PARTICLE_NOISE_ADAPTER_REQUIRED'));
 });
 test('renderer View and emitter Local alignment use the correct Cocos CPU frames',()=>{

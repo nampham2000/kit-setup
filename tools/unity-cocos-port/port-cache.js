@@ -28,7 +28,7 @@ const path = require('path');
 const { readTextureImportLimits } = require('./texture-import-limit');
 
 // v3 invalidates missing UI layouts and aspect-fitted sliced/tiled images.
-const CACHE_VERSION = 5; // Preserve native Noise contracts and require a validated curl adapter.
+const CACHE_VERSION = 6; // Generic Noise binding must run even for previously converted prefabs.
 
 /** Dấu vân tay của một file: kích thước + mtime. Đủ nhạy, không cần đọc nội dung. */
 function fileStamp(file) {

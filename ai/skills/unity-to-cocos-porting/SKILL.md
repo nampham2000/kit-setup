@@ -19,6 +19,15 @@ This skill provides step-by-step guidance and architectural rules for converting
 
 ### Particle Noise is a simulation contract
 
+- The generic prefab porter invokes `particle-noise-binding.js`: it stages the
+  shared kernel, installer and `UnityParticleNoiseAdapter` under `assets/script`
+  and attaches the source contract after AssetDB imports the component. Refresh
+  AssetDB and rerun if the script is not yet registered; never invent its meta.
+  Supported Medium emitters without velocity limiting need no AOE controller.
+  Velocity limiting still needs the separately validated integration adapter;
+  unsupported combinations report `PARTICLE_NOISE_ADAPTER_REQUIRED` high.
+  Run `particle-noise-binding.test.cjs` and `particle-noise-native.test.cjs`:
+  project-specific capture tools are evidence producers, not runtime dependencies.
 - Never flatten Unity Noise curves into scalar Cocos Noise fields and report
   parity. The builtin Cocos module adds fresh random position jitter each frame;
   Unity uses a coherent curl field and includes it in velocity limiting.
