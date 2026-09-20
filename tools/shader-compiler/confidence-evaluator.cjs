@@ -161,7 +161,7 @@ function calculateConfidenceBreakdown(docIR, effectText, validationResult = {}) 
   const hasGrabPass = (docIR.subShaders || []).some(s => (s.passes || []).some(p => p.isGrabPass));
   if (hasGrabPass) {
     visualRiskPenalty += 30;
-    deductions.push({ category: 'visualRisk', points: -30, reason: 'Shader uses GrabPass (requires RenderTexture pipeline in Cocos)' });
+    deductions.push({ category: 'visualRisk', points: -30, reason: 'Shader uses GrabPass: preserve capture timing/transparent queue, pixel texel size, projected camera-distance attenuation, normal unpack and coverage. An opaque-only texture is not a full GrabPass replacement; use screen-distortion-contract only for its recognized Hovl source and validate live.' });
   }
 
   if (validationResult.errors && validationResult.errors.length > 0) {
