@@ -15,6 +15,55 @@ verify the live Preview scene activates without a Skybox `reading 'box'` error.
 
 This skill provides step-by-step guidance and architectural rules for converting Unity hypercasual/casual gameplay into Cocos Creator 3.8.8+ TypeScript playable ads.
 
+### Reuse the measured VFX fixes
+
+Before porting a particle prefab, read `ai/particle-port-fixes.json` in the
+shared kit and run `node playable-shared-kit/tools/unity-cocos-port/particle-port-fix-audit.cjs --check`.
+The registry maps each resolved AOE bug to its reusable implementation, test,
+source gate and remaining integration scope. An adapter file existing in the
+kit is not evidence that a new prefab has it attached or that its visual output
+matches Unity. New project instances need their own source hash, runtime probe
+and bounded preview metrics.
+After fixing another port bug, add its source commit, reusable code or recipe,
+test and acceptance gate to that registry. The AOE source project runs
+`tools/aoe/particle-shared-coverage.test.cjs` to catch uncataloged fix commits.
+
+- Parse effective prefab instance overrides, source particle settings, mesh,
+  material, shader and sub-emitter ownership before changing size or position.
+  Check shape rotation through `particle-shape-rotation.js`; do not tune an
+  apparent screen offset without comparing native and Cocos birth positions.
+- For orbital velocity, preserve local or world simulation frame with
+  `particle-orbit-contract.js` and its adapter. Combine with the High/Medium
+  curl Noise kernel only for explicitly supported source combinations. Lock
+  matched-birth trajectories and left/center/right occupancy in two viewports.
+- For synchronous birth callbacks, Cocos 3.8.8 keeps world matrix/rotation in
+  module-scoped temporaries across the outer emission loop. A child emit can
+  overwrite them and shift later parent births. Use
+  `runtime/UnityParticleNestedEmission.ts` on the parent and test nested
+  source/child positions across repeats. Delayed or lateUpdate followers need
+  separate callback ownership checks.
+- If a new project needs synchronous birth/death or burst catch-up, stage the
+  shared, zero-allocation runtime modules with
+  `node playable-shared-kit/tools/unity-cocos-port/particle-runtime-stage.cjs --cocos-root <project> --feature <birth|death|burst|all>`.
+  The command preserves existing edits and never writes `.meta`; reimport with
+  AssetDB. Bind the source and target from the source prefab rather than a
+  demo-specific effect index, then test callback count, terminal position and
+  frame-boundary behavior. Use `--check` for a read-only parity audit.
+- At birth, initialize active rotation, size and color modules using
+  `UnityParticleBirthState`. Check the very first rendered frame; a clean later
+  frame can hide a giant mesh or white flash at time zero. Use source-derived
+  impact capacity bounds for overlapping parents and children.
+- Keep particle and trail material slots, trail lifetime, renderer visibility,
+  mesh UV reflection, flow UV direction, alignment, pivot and render sorting
+  distinct. Use the shared conversion contracts and preserve per-renderer
+  material identity. Port authored HDR target format and sRGB mip/alpha
+  semantics; inspect actual GPU attachment/readback before changing tint.
+- Treat vendor shader details, exact sub-emitter callback ordering, terminal
+  death position and Cocos burst catch-up as source-conditional work. The AOE
+  project contains measured examples, but a new port needs its own source
+  closure and browser acceptance. Unbound or unsupported combinations are
+  `high` fidelity gaps, not implied by a shared helper's presence.
+
 ## 1. Automated Tooling First
 
 ### Particle Noise is a simulation contract

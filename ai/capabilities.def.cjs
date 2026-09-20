@@ -487,6 +487,38 @@ const CAPABILITIES = [
   },
 
   {
+    id: 'port.particle-fix-audit',
+    group: 'port',
+    title: 'Đối chiếu các VFX fix đã đo với shared kit trước khi port particle mới',
+    npm: null,
+    cmd: `node ${TOOLS}/unity-cocos-port/particle-port-fix-audit.cjs --check`,
+    args: [],
+    optional: ['--check', '--help'],
+    when: 'Trước mỗi Unity particle/VFX port hoặc sau khi thêm một bug-fix VFX dùng lại.',
+    outputs: ['JSON: mã nguồn, test, mức áp dụng và gate cho 17 nhóm fix'],
+    limits: ['Registry PASS chỉ chứng minh shared files và instruction hiện diện; mỗi prefab mới vẫn cần source oracle, AssetDB binding và visual acceptance.'],
+    status: 'ok',
+    probe: 'help',
+    probeCmd: `node ${TOOLS}/unity-cocos-port/particle-port-fix-audit.cjs --help`,
+    expect: ['--check', '--help'],
+  },
+  {
+    id: 'port.particle-runtime-stage',
+    group: 'port',
+    title: 'Đưa adapter birth/death/burst đã đo vào project mới',
+    npm: null,
+    cmd: `node ${TOOLS}/unity-cocos-port/particle-runtime-stage.cjs`,
+    args: ['--cocos-root <path>', '--feature <birth|death|burst|all>'],
+    optional: ['--check', '--help'],
+    when: 'Sau khi source closure xác nhận cần callback birth/death đồng bộ hoặc burst catch-up.',
+    outputs: ['assets/script/UnityParticle*.ts; JSON trạng thái staged/unchanged/conflict'],
+    limits: ['Không ghi `.meta`, không ghi đè user edit; cần AssetDB reimport, bind đúng source/target và test theo source.'],
+    status: 'ok',
+    probe: 'help',
+    probeCmd: `node ${TOOLS}/unity-cocos-port/particle-runtime-stage.cjs --help`,
+    expect: ['--cocos-root', '--feature', '--check'],
+  },
+  {
     id: 'port.prefab',
     group: 'port',
     title: 'Port prefab / mesh / material Unity sang Cocos',
@@ -1698,6 +1730,7 @@ const CORE_RULES = [
   { id: 'shared-audio-intent-porting', rule: "Khi port Unity gameplay sound, dùng SoundManager.playSound(id) qua AudioSystem trong shared kit; không tạo AudioSource/playOneShot hoặc dùng legacy playSFX/playLoopingSFX trong gameplay mới. Policy ở audio.system của playable-config qua PlayableConfigManager; preload bằng PlayableAudioController.ready trước input, unlock trong gesture thật. Commit tools/audio-port-map.json v1 với entries gồm id, sourceEvidence[{path,sha256,callback}], runtimeConsumer, regression, policyDisposition preserved/adapted và reason khi adapted. Trace callback phase/count, clip/volume/loop, owner stop/pause/fade và priority Unity (0 cao nhất) trước mapping; cooldown/concurrency/voice stealing mẫu không được tự coi là Unity semantics. Giữ gameplay state/callback dù sound bị reject; kiểm riêng requested/played/rejected/stolen, exact owner handle, hai vòng lifecycle và gesture thật. Pitch/spatial/mixer/virtual voice chưa hỗ trợ phải report evidence gap, không giả parity. ai:lint và ai:verify chặn đường bypass trong core port hoặc project có audio map/managed call. Xem packages/playable-core/audio/README.md và examples/audio-system/use-cases.md trong shared kit." },
   { id: 'particle-renderer-frame-pivot-parity', rule: 'Khi particle bị xoay sai hoặc vòng tròn bị đất che một nửa, đọc renderer alignment, parent transform, rotation và pivot trước khi đổi Render Mode. Unity Local billboard dùng frame emitter và Euler clockwise (+X,+Y,-Z qua Z reflection), khác mesh (-X,-Y,+Z); Cocos billboard mặc định dùng camera axes dù alignSpace đã set. Dùng shared particle-renderer-contract cùng source-particle effect; chỉ lower Velocity mesh sang world rotation khi fixed +Z box, constant positive speed, zero gravity và không velocity/force/noise được chứng minh. Stretched pivot Y dịch theo velocity bằng 2*currentWidth*pivotY, không dùng lengthScale. Giữ material variant theo renderer và user override; import effect bằng AssetDB rồi bind UUID thực. Custom shader, pivot axes chưa đo, general velocity frame và Euler-over-lifetime cần adapter riêng và report high. Khóa native BakeMesh geometry, parent rotation, đúng burst time và preview ở hai viewport; không suy 95% từ static test.' },
   { id: 'particle-noise-curl-parity', rule: 'Unity Noise không tương đương random position jitter của Cocos. Giữ full curve/quality/damping/scroll/octave trong particle-noise-contract và dùng native-validated adapter theo quality; không sửa Shape/radius/strength theo screenshot để phá vòng tròn. Noise là animated velocity trước limit; sau limit phải trừ animated contribution khỏi base velocity. Giữ Z reflection ở cả vị trí lấy mẫu và vector trả về. Khóa native field holdouts, matched-birth trajectories, spatial spread có min/max qua nhiều vòng và visible pixels ở hai viewport. Medium kernel có shared adapter; High/Low/remap/random curves/rotation-size amount chưa đo phải report high. Clip hữu hạn không thay được emitter looping, và field accuracy không phải whole-scene 95% fidelity.' },
+  { id: 'particle-port-fix-registry', rule: 'Trước mỗi Unity particle/VFX port, đọc playable-shared-kit/ai/particle-port-fixes.json và chạy particle-port-fix-audit --check. Registry phân biệt fix tự động với adapter cần source oracle và logic còn riêng project; file helper tồn tại không chứng minh prefab mới đã bind hay pixel parity. Cocos 3.8.8 dùng ma trận/rotation tạm toàn module trong ParticleSystem.emit: callback birth đồng bộ emit con có thể làm particle cha tiếp theo lệch vị trí. Với link birth đồng bộ, dùng UnityParticleNestedEmission trên source, kiểm tâm birth cha/con và phân bố trái/giữa/phải qua nhiều replay ở hai viewport. Kiểm first-frame rotation/size/color, source-derived impact capacity, orbital frame, Noise, trail/material slot, UV reflection, HDR/sRGB và console. Vendor shader, death terminal integration và burst catch-up phải có closure cùng acceptance riêng; không tự coi shared helper là semantic parity.' },
 ];
 
 module.exports = { CAPABILITIES, CORE_RULES, TOOLS };

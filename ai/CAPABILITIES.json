@@ -4,7 +4,7 @@
     "source": "playable-shared-kit/ai/capabilities.def.cjs",
     "generatedBy": "npm run ai:sync",
     "contractCheck": "npm run ai:contract:verify",
-    "count": 59
+    "count": 61
   },
   "coreRules": [
     {
@@ -797,6 +797,10 @@
     {
       "id": "particle-noise-curl-parity",
       "rule": "Unity Noise không tương đương random position jitter của Cocos. Giữ full curve/quality/damping/scroll/octave trong particle-noise-contract và dùng native-validated adapter theo quality; không sửa Shape/radius/strength theo screenshot để phá vòng tròn. Noise là animated velocity trước limit; sau limit phải trừ animated contribution khỏi base velocity. Giữ Z reflection ở cả vị trí lấy mẫu và vector trả về. Khóa native field holdouts, matched-birth trajectories, spatial spread có min/max qua nhiều vòng và visible pixels ở hai viewport. Medium kernel có shared adapter; High/Low/remap/random curves/rotation-size amount chưa đo phải report high. Clip hữu hạn không thay được emitter looping, và field accuracy không phải whole-scene 95% fidelity."
+    },
+    {
+      "id": "particle-port-fix-registry",
+      "rule": "Trước mỗi Unity particle/VFX port, đọc playable-shared-kit/ai/particle-port-fixes.json và chạy particle-port-fix-audit --check. Registry phân biệt fix tự động với adapter cần source oracle và logic còn riêng project; file helper tồn tại không chứng minh prefab mới đã bind hay pixel parity. Cocos 3.8.8 dùng ma trận/rotation tạm toàn module trong ParticleSystem.emit: callback birth đồng bộ emit con có thể làm particle cha tiếp theo lệch vị trí. Với link birth đồng bộ, dùng UnityParticleNestedEmission trên source, kiểm tâm birth cha/con và phân bố trái/giữa/phải qua nhiều replay ở hai viewport. Kiểm first-frame rotation/size/color, source-derived impact capacity, orbital frame, Noise, trail/material slot, UV reflection, HDR/sRGB và console. Vendor shader, death terminal integration và burst catch-up phải có closure cùng acceptance riêng; không tự coi shared helper là semantic parity."
     }
   ],
   "capabilities": {
@@ -1349,6 +1353,44 @@
           "Mặc định ẩn mã mức low; dùng --all để xem hết."
         ],
         "verify": "npm run ai:verify:prefab",
+        "status": "ok"
+      },
+      {
+        "id": "port.particle-fix-audit",
+        "title": "Đối chiếu các VFX fix đã đo với shared kit trước khi port particle mới",
+        "run": "node playable-shared-kit/tools/unity-cocos-port/particle-port-fix-audit.cjs --check",
+        "command": "node playable-shared-kit/tools/unity-cocos-port/particle-port-fix-audit.cjs --check",
+        "optional": [
+          "--check",
+          "--help"
+        ],
+        "when": "Trước mỗi Unity particle/VFX port hoặc sau khi thêm một bug-fix VFX dùng lại.",
+        "outputs": [
+          "JSON: mã nguồn, test, mức áp dụng và gate cho 17 nhóm fix"
+        ],
+        "limits": [
+          "Registry PASS chỉ chứng minh shared files và instruction hiện diện; mỗi prefab mới vẫn cần source oracle, AssetDB binding và visual acceptance."
+        ],
+        "verify": null,
+        "status": "ok"
+      },
+      {
+        "id": "port.particle-runtime-stage",
+        "title": "Đưa adapter birth/death/burst đã đo vào project mới",
+        "run": "node playable-shared-kit/tools/unity-cocos-port/particle-runtime-stage.cjs --cocos-root <path> --feature <birth|death|burst|all>",
+        "command": "node playable-shared-kit/tools/unity-cocos-port/particle-runtime-stage.cjs --cocos-root <path> --feature <birth|death|burst|all>",
+        "optional": [
+          "--check",
+          "--help"
+        ],
+        "when": "Sau khi source closure xác nhận cần callback birth/death đồng bộ hoặc burst catch-up.",
+        "outputs": [
+          "assets/script/UnityParticle*.ts; JSON trạng thái staged/unchanged/conflict"
+        ],
+        "limits": [
+          "Không ghi `.meta`, không ghi đè user edit; cần AssetDB reimport, bind đúng source/target và test theo source."
+        ],
+        "verify": null,
         "status": "ok"
       },
       {

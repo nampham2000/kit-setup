@@ -1,0 +1,284 @@
+[
+  {
+    "step": 0.01,
+    "samples": [
+      {
+        "time": 0.01,
+        "parentCount": 1,
+        "parentPosition": [
+          1.02,
+          2.03,
+          3.04
+        ],
+        "parentLife": 0.0400000028,
+        "childCount": 0,
+        "childPosition": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "childLife": 0.0
+      },
+      {
+        "time": 0.02,
+        "parentCount": 1,
+        "parentPosition": [
+          1.04,
+          2.06,
+          3.08
+        ],
+        "parentLife": 0.0300000012,
+        "childCount": 0,
+        "childPosition": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "childLife": 0.0
+      },
+      {
+        "time": 0.03,
+        "parentCount": 1,
+        "parentPosition": [
+          1.06,
+          2.09,
+          3.12
+        ],
+        "parentLife": 0.0200000014,
+        "childCount": 0,
+        "childPosition": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "childLife": 0.0
+      },
+      {
+        "time": 0.04,
+        "parentCount": 1,
+        "parentPosition": [
+          1.07999992,
+          2.12,
+          3.15999985
+        ],
+        "parentLife": 0.0100000026,
+        "childCount": 0,
+        "childPosition": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "childLife": 0.0
+      },
+      {
+        "time": 0.049999997,
+        "parentCount": 1,
+        "parentPosition": [
+          1.0999999,
+          2.14999986,
+          3.19999981
+        ],
+        "parentLife": 0.0,
+        "childCount": 0,
+        "childPosition": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "childLife": 0.0
+      },
+      {
+        "time": 0.06,
+        "parentCount": 0,
+        "parentPosition": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "parentLife": 0.0,
+        "childCount": 1,
+        "childPosition": [
+          1.11999989,
+          2.17999983,
+          3.23999977
+        ],
+        "childLife": 1.0
+      },
+      {
+        "time": 0.07,
+        "parentCount": 0,
+        "parentPosition": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "parentLife": 0.0,
+        "childCount": 1,
+        "childPosition": [
+          1.11999989,
+          2.17999983,
+          3.23999977
+        ],
+        "childLife": 0.99
+      },
+      {
+        "time": 0.08,
+        "parentCount": 0,
+        "parentPosition": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "parentLife": 0.0,
+        "childCount": 1,
+        "childPosition": [
+          1.11999989,
+          2.17999983,
+          3.23999977
+        ],
+        "childLife": 0.98
+      }
+    ]
+  },
+  {
+    "step": 0.02,
+    "samples": [
+      {
+        "time": 0.02,
+        "parentCount": 1,
+        "parentPosition": [
+          1.04,
+          2.06,
+          3.08
+        ],
+        "parentLife": 0.0300000012,
+        "childCount": 0,
+        "childPosition": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "childLife": 0.0
+      },
+      {
+        "time": 0.04,
+        "parentCount": 1,
+        "parentPosition": [
+          1.07999992,
+          2.12,
+          3.15999985
+        ],
+        "parentLife": 0.0100000026,
+        "childCount": 0,
+        "childPosition": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "childLife": 0.0
+      },
+      {
+        "time": 0.06,
+        "parentCount": 0,
+        "parentPosition": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "parentLife": 0.0,
+        "childCount": 1,
+        "childPosition": [
+          1.11999989,
+          2.17999983,
+          3.23999977
+        ],
+        "childLife": 0.98
+      },
+      {
+        "time": 0.08,
+        "parentCount": 0,
+        "parentPosition": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "parentLife": 0.0,
+        "childCount": 1,
+        "childPosition": [
+          1.11999989,
+          2.17999983,
+          3.23999977
+        ],
+        "childLife": 0.960000038
+      },
+      {
+        "time": 0.099999994,
+        "parentCount": 0,
+        "parentPosition": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "parentLife": 0.0,
+        "childCount": 1,
+        "childPosition": [
+          1.11999989,
+          2.17999983,
+          3.23999977
+        ],
+        "childLife": 0.94
+      },
+      {
+        "time": 0.12,
+        "parentCount": 0,
+        "parentPosition": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "parentLife": 0.0,
+        "childCount": 1,
+        "childPosition": [
+          1.11999989,
+          2.17999983,
+          3.23999977
+        ],
+        "childLife": 0.92
+      },
+      {
+        "time": 0.14,
+        "parentCount": 0,
+        "parentPosition": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "parentLife": 0.0,
+        "childCount": 1,
+        "childPosition": [
+          1.11999989,
+          2.17999983,
+          3.23999977
+        ],
+        "childLife": 0.900000036
+      },
+      {
+        "time": 0.16,
+        "parentCount": 0,
+        "parentPosition": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "parentLife": 0.0,
+        "childCount": 1,
+        "childPosition": [
+          1.11999989,
+          2.17999983,
+          3.23999977
+        ],
+        "childLife": 0.88
+      }
+    ]
+  }
+]
