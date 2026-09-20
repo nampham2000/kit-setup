@@ -11,9 +11,10 @@ test('flow displacement conjugates V after ST, scrolling, and nonzero mask',()=>
     assert.ok(Math.abs(reflectedST(scale,offset,speed,t,1-v)-delta[1]-(1-source))<1e-12);
     assert.equal(delta[0],flow[0]*mask[0]*power);
   }
-  const props={distortion:{x:0,y:1,z:.36},flowST:{x:1,y:2,z:0,w:.2}};
+  const props={distortion:{x:0,y:1,z:.36},flowST:{x:1,y:2,z:0,w:.2},normalST:{x:.5,y:2,z:0,w:.3}};
   const mapped=convertReflectedParticleMaterial(props,{reflectedFlow:true});
   assert.equal(mapped.distortion.y,-1);assert.equal(mapped.flowST.w,-1.2);
+  assert.equal(mapped.normalST.w,-1.3);assert.equal(props.normalST.w,.3);
   const original='mainUV-=sourceSample(flowTexture,flowUV,textureSrgb.z,textureAlpha.z).xy*mask.xy*distortion.z;';
   const patched=patchReflectedFlow(original);
   assert.match(patched,/flowOffset.y=-flowOffset.y/);

@@ -8,7 +8,7 @@ function reflectedST(scaleY,offsetY,speedY,time,cocosV) {
 function convertReflectedParticleMaterial(properties, options = {}) {
   if (properties.distortion?.z && !options.reflectedFlow) throw new Error('Flow distortion needs a separately validated UV adapter');
   const result=JSON.parse(JSON.stringify(properties));
-  for(const key of ['mainST','noiseST','flowST','maskST']) {
+  for(const key of ['mainST','noiseST','flowST','maskST','normalST']) {
     const st=result[key];
     if(st)st.w=1-st.y-st.w;
   }
