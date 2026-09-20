@@ -1,6 +1,7 @@
 'use strict';
 const { particleRendererContract } = require('./particle-renderer-contract');
 const { particleNoiseContract } = require('./particle-noise-contract');
+const { particleOrbitContract } = require('./particle-orbit-contract');
 
 const DEG_TO_RAD = Math.PI / 180;
 const UNITY_CURVE_MODE_TO_COCOS = {
@@ -32,13 +33,6 @@ const UNITY_RENDER_MODE_TO_COCOS = {
   4: 4, // Mesh
   5: 0, // None
 };
-const ORBITAL_FALLBACK_LATERAL_STRENGTH = 1;
-const ORBITAL_FALLBACK_LIFT_STRENGTH = 0.56;
-const ORBITAL_FALLBACK_ANGULAR_SPEED_SCALE = 0.74;
-const ORBITAL_FALLBACK_HEMISPHERE_RADIUS_SCALE = 1.08;
-const ORBITAL_FALLBACK_SHAPE_RADIUS_SCALE = 1;
-const ORBITAL_FALLBACK_PHASE_SPREAD = Math.PI;
-const ORBITAL_FALLBACK_SAMPLE_COUNT = 72;
 const UNITY_GRAVITY_ACCELERATION = 9.81;
 const COCOS_TRAIL_MIN_LIFETIME = 1;
 // cc.ShapeModule.emit() dispatches per shape and each emitter only implements a
@@ -760,121 +754,6 @@ function constantCurveRange(value) {
   };
 }
 
-function decayingCurveRange(startValue, endValue) {
-  const safeStart = Math.max(startValue, endValue);
-  return curveRangeFromSamples([
-    { time: 0, value: safeStart },
-    { time: 0.22, value: safeStart * 0.82 },
-    { time: 0.55, value: ((safeStart * 0.35) + endValue) * 0.5 },
-    { time: 0.82, value: endValue * 1.2 },
-    { time: 1, value: endValue },
-  ]);
-}
-
-function orbitalVelocitySamples(
-  maxOffset,
-  cycles,
-  direction,
-  fadeStart,
-  endRadiusRatio,
-  phaseOffset = 0,
-  startRadiusRatio = 0,
-  linearRadius = false,
-) {
-  const sampleCount = ORBITAL_FALLBACK_SAMPLE_COUNT;
-  const orbitPositions = [];
-
-  for (let index = 0; index <= sampleCount; index += 1) {
-    const time = index / sampleCount;
-    const radiusRatio = linearRadius
-      ? startRadiusRatio + ((endRadiusRatio - startRadiusRatio) * time)
-      : smoothstep01(time / 0.18)
-        * (1 + ((endRadiusRatio - 1) * smoothstep01((time - fadeStart) / Math.max(1 - fadeStart, 1e-6))));
-    const orbitRadius = maxOffset * radiusRatio;
-    const angle = (direction * cycles * Math.PI * 2 * time) + phaseOffset;
-    orbitPositions.push({
-      time,
-      x: Math.cos(angle) * orbitRadius,
-      z: Math.sin(angle) * orbitRadius,
-    });
-  }
-
-  const xSamples = [];
-  const zSamples = [];
-  for (let index = 0; index < orbitPositions.length; index += 1) {
-    const previous = orbitPositions[Math.max(index - 1, 0)];
-    const next = orbitPositions[Math.min(index + 1, orbitPositions.length - 1)];
-    const deltaTime = Math.max(next.time - previous.time, 1e-6);
-    xSamples.push({
-      time: orbitPositions[index].time,
-      value: (next.x - previous.x) / deltaTime,
-    });
-    zSamples.push({
-      time: orbitPositions[index].time,
-      value: (next.z - previous.z) / deltaTime,
-    });
-  }
-
-  return {
-    x: xSamples,
-    z: zSamples,
-  };
-}
-
-function orbitalVelocityCurveRanges(
-  maxOffset,
-  cycles,
-  direction,
-  fadeStart,
-  endRadiusRatio,
-  phaseSpread = 0,
-  startRadiusRatio = 0,
-  linearRadius = false,
-) {
-  if (Math.abs(phaseSpread) > 1e-6) {
-    const halfSpread = phaseSpread * 0.5;
-    const minSamples = orbitalVelocitySamples(
-      maxOffset,
-      cycles,
-      direction,
-      fadeStart,
-      endRadiusRatio,
-      -halfSpread,
-      startRadiusRatio,
-      linearRadius,
-    );
-    const maxSamples = orbitalVelocitySamples(
-      maxOffset,
-      cycles,
-      direction,
-      fadeStart,
-      endRadiusRatio,
-      halfSpread,
-      startRadiusRatio,
-      linearRadius,
-    );
-    return {
-      x: curveRangeFromTwoSamples(minSamples.x, maxSamples.x),
-      z: curveRangeFromTwoSamples(minSamples.z, maxSamples.z),
-    };
-  }
-
-  const samples = orbitalVelocitySamples(
-    maxOffset,
-    cycles,
-    direction,
-    fadeStart,
-    endRadiusRatio,
-    0,
-    startRadiusRatio,
-    linearRadius,
-  );
-  return {
-    x: curveRangeFromSamples(samples.x),
-    z: curveRangeFromSamples(samples.z),
-  };
-}
-
 function shapeSupportsArcApproximation(shapeModule) {
   const shapeType = num(shapeModule?._shapeType ?? shapeModule?.shapeType, -1);
   return shapeType === 1 || shapeType === 2;
@@ -895,206 +774,6 @@ function shapeTypeValue(shapeModule) {
 function shapeScaleValue(shapeModule) {
   const scale = shapeModule?._scale || {};
   return Math.max(Math.abs(num(scale.x, 1)), Math.abs(num(scale.y, 1)), Math.abs(num(scale.z, 1)), 1);
-}
-
-function shapeOrbitalBounds(shapeModule) {
-  const shapeType = shapeTypeValue(shapeModule);
-  const scale = shapeScaleValue(shapeModule);
-  const boxThickness = shapeModule?.boxThickness || {};
-  const radius = Math.abs(num(shapeModule?.radius, 0)) * scale;
-  const length = Math.abs(num(shapeModule?.length, 0)) * scale;
-  const angle = Math.abs(num(shapeModule?._angle, 0));
-  const boxExtent = Math.max(
-    Math.abs(num(boxThickness.x, 0)),
-    Math.abs(num(boxThickness.y, 0)),
-    Math.abs(num(boxThickness.z, 0)),
-  ) * scale;
-  const coneTopRadius = shapeType === 2 ? radius + (length * Math.tan(angle)) : radius;
-  const lateralRadius = Math.max(coneTopRadius, boxExtent, radius, 0.05);
-  const startRadius = shapeType === 2 ? Math.max(radius, lateralRadius * 0.12) : lateralRadius * 0.18;
-  const height = shapeType === 2 ? length : 0;
-  return {
-    shapeType,
-    radius,
-    startRadius,
-    lateralRadius,
-    height,
-  };
-}
-
-function shapeOrbitalExtent(shapeModule) {
-  return shapeOrbitalBounds(shapeModule).lateralRadius;
-}
-
-function shapeOrbitalPhaseSpread(shapeModule) {
-  const shapeType = shapeTypeValue(shapeModule);
-  const extent = shapeOrbitalExtent(shapeModule);
-  if (extent <= 0.08) return 0;
-  if (shapeType === 2 || shapeType === 4) return ORBITAL_FALLBACK_PHASE_SPREAD;
-  if (shapeType === 1 || shapeType === 3) return Math.PI * 1.1;
-  return Math.PI * 0.8;
-}
-
-function forceOrbitalShapeEmission(shapeModule) {
-  const shapeType = shapeTypeValue(shapeModule);
-  if (shapeType === 2) {
-    shapeModule.emitFrom = 0;
-    shapeModule.radiusThickness = 1;
-    shapeModule.randomPositionAmount = 0;
-    if (num(shapeModule.arcMode, 0) === 0) {
-      shapeModule.arcMode = 3;
-    }
-  } else if (shapeType === 1) {
-    shapeModule.emitFrom = 1;
-    shapeModule.radiusThickness = 0;
-    shapeModule.randomPositionAmount = 0;
-  } else if (shapeType === 3 || shapeType === 4) {
-    shapeModule.emitFrom = 2;
-    shapeModule.radiusThickness = 0;
-    shapeModule.randomPositionAmount = 0;
-  }
-  normalizeShapeEmitFrom(shapeModule);
-}
-
-function shouldUseOrbitalCurveApproximation(builder, particle, data) {
-  if (!data || typeof data !== 'object') return false;
-  if (!bool(data.enabled, false)) return false;
-  if (curveRangeLooksZero(data.orbitalY)) return false;
-  if (!curveRangeLooksZero(data.x) || !curveRangeLooksZero(data.z)) return false;
-  return true;
-}
-
-function applyOrbitalArcApproximation(builder, particle, data) {
-  const shapeModule = refObject(builder.objects, particle?._shapeModule);
-  if (!shapeSupportsArcApproximation(shapeModule)) return false;
-  if (curveRangeLooksZero(data?.orbitalY)) return false;
-  if (!curveRangeLooksZero(data?.x) || !curveRangeLooksZero(data?.z)) return false;
-
-  const arcSpeed = refObject(builder.objects, shapeModule.arcSpeed);
-  if (!arcSpeed) return false;
-
-  applyCurveRange(builder, arcSpeed, data.orbitalY);
-  if (num(shapeModule.arcMode, 0) === 0) {
-    shapeModule.arcMode = 1;
-  }
-  return true;
-}
-
-function applyOrbitalCurveApproximation(builder, particle, module, data) {
-  if (!shouldUseOrbitalCurveApproximation(builder, particle, data)) return false;
-
-  const shapeModule = refObject(builder.objects, particle?._shapeModule);
-  const isHemisphere = shapeTypeValue(shapeModule) === 4;
-  const orbitalY = curveRangeConstantValue(data.orbitalY);
-  const radial = curveRangeConstantValue(data.radial);
-  const speedModifier = Math.max(curveRangeConstantValue(data.speedModifier), 1);
-  const bounds = shapeOrbitalBounds(shapeModule);
-  const radius = bounds.lateralRadius;
-  const linearRadius = bounds.shapeType === 2 && bounds.height > 0;
-  if (linearRadius) {
-    forceOrbitalShapeEmission(shapeModule);
-  }
-  const lifetime = clamp(
-    cocosCurveRangeConstantValue(refObject(builder.objects, particle?.startLifetime), 1),
-    0.05,
-    30,
-  );
-  const baseCycles = clamp(
-    (Math.abs(orbitalY) * lifetime / (Math.PI * 2)) * (1 + ((speedModifier - 1) * 0.08)),
-    isHemisphere ? 0.35 : 0.42,
-    1.6,
-  );
-  const cycles = clamp(
-    baseCycles * ORBITAL_FALLBACK_ANGULAR_SPEED_SCALE * (isHemisphere ? 0.92 : 1),
-    isHemisphere ? 0.32 : 0.38,
-    1.6,
-  );
-  const tangentialSpeed = Math.max(
-    Math.abs(orbitalY) * radius * 0.9 * ORBITAL_FALLBACK_LATERAL_STRENGTH,
-    Math.abs(radial) * 1.35 * ORBITAL_FALLBACK_LATERAL_STRENGTH,
-    0.18 * ORBITAL_FALLBACK_LATERAL_STRENGTH,
-  );
-  const baseMaxOffset = (tangentialSpeed * lifetime) / Math.max(baseCycles * Math.PI * 2, 1e-6);
-  const shapeMaxOffset = radius * ORBITAL_FALLBACK_SHAPE_RADIUS_SCALE * (isHemisphere ? ORBITAL_FALLBACK_HEMISPHERE_RADIUS_SCALE : 1);
-  const maxOffset = linearRadius
-    ? Math.max(radius - bounds.radius, radius * 0.1)
-    : clamp(
-      Math.max(baseMaxOffset, shapeMaxOffset),
-      radius * 0.35,
-      radius * (isHemisphere ? 1.08 : 1.15),
-    );
-  const fadeStart = clamp(
-    (isHemisphere ? 0.56 : 0.5) - (Math.max(-radial, 0) * 0.2),
-    isHemisphere ? 0.38 : 0.32,
-    isHemisphere ? 0.58 : 0.5,
-  );
-  const startRadiusRatio = 0;
-  const endRadiusRatio = linearRadius
-    ? 1
-    : clamp(
-      0.06 + ((speedModifier - 1) * 0.02) - (Math.max(-radial, 0) * 0.08),
-      0.02,
-      0.1,
-    );
-  const direction = orbitalY < 0 ? -1 : 1;
-  const phaseSpread = shapeOrbitalPhaseSpread(shapeModule) * (isHemisphere ? 0.85 : 1);
-  const velocityCurves = orbitalVelocityCurveRanges(
-    maxOffset,
-    cycles,
-    direction,
-    fadeStart,
-    endRadiusRatio,
-    phaseSpread,
-    startRadiusRatio,
-    linearRadius,
-  );
-
-  applyCurveRange(builder, refObject(builder.objects, module.x), velocityCurves.x);
-  applyCurveRange(builder, refObject(builder.objects, module.z), velocityCurves.z);
-  if (linearRadius && curveRangeLooksZero(data.y)) {
-    applyCurveRange(builder, refObject(builder.objects, particle?.startSpeed), constantCurveRange(0));
-    applyCurveRange(builder, refObject(builder.objects, module.y), constantCurveRange(bounds.height / lifetime));
-  }
-  return true;
-}
-
-function applyOrbitalLimitVelocityApproximation(builder, particle, data) {
-  const module = refObject(builder.objects, particle?._limitVelocityOvertimeModule);
-  if (!module || !data || typeof data !== 'object') return false;
-
-  const shapeModule = refObject(builder.objects, particle?._shapeModule);
-  const isHemisphere = shapeTypeValue(shapeModule) === 4;
-  const orbitalY = curveRangeConstantValue(data.orbitalY);
-  const radial = curveRangeConstantValue(data.radial);
-  const speedModifier = Math.max(curveRangeConstantValue(data.speedModifier), 1);
-  const radius = shapeOrbitalExtent(shapeModule);
-  const tangentialSpeed = Math.max(
-    Math.abs(orbitalY) * radius * 0.9 * ORBITAL_FALLBACK_LATERAL_STRENGTH,
-    Math.abs(radial) * 1.35 * ORBITAL_FALLBACK_LATERAL_STRENGTH,
-    0.18 * ORBITAL_FALLBACK_LATERAL_STRENGTH,
-  );
-  const lateralLimitStart = clamp(
-    (tangentialSpeed * (isHemisphere ? 0.95 : 1.1)) + (Math.max(-radial, 0) * 0.12),
-    isHemisphere ? 0.16 : 0.12,
-    Math.max(tangentialSpeed * 1.45, isHemisphere ? 0.34 : 0.28),
-  );
-  const lateralLimitEnd = clamp(
-    lateralLimitStart * (isHemisphere ? 0.3 : 0.24),
-    isHemisphere ? 0.035 : 0.025,
-    Math.max(radius * 0.18, isHemisphere ? 0.095 : 0.07),
-  );
-
-  setKnown(module, ['_enable', 'enable'], true);
-  module.separateAxes = true;
-  module.space = bool(data.inWorldSpace, false) ? 0 : 1;
-  module.dampen = isHemisphere
-    ? clamp(0.42 + ((speedModifier - 1) * 0.06), 0.42, 0.54)
-    : clamp(0.48 + ((speedModifier - 1) * 0.08), 0.48, 0.62);
-  applyCurveRange(builder, refObject(builder.objects, module.limitX), decayingCurveRange(lateralLimitStart, lateralLimitEnd));
-  applyCurveRange(builder, refObject(builder.objects, module.limitZ), decayingCurveRange(lateralLimitStart, lateralLimitEnd));
-  applyCurveRange(builder, refObject(builder.objects, module.limitY), constantCurveRange(2));
-  applyCurveRange(builder, refObject(builder.objects, module.limit), constantCurveRange(2));
-  return true;
 }
 
 function gradientTime(value) {
@@ -1336,32 +1015,8 @@ function applyVelocityModule(builder, particle, data) {
   applyCurveRange(builder, refObject(builder.objects, module.speedModifier), data.speedModifier);
   if (!enabled) return true;
 
-  const usedOrbitalCurveApproximation = applyOrbitalCurveApproximation(builder, particle, module, data);
-  const usedOrbitalArcApproximation = !usedOrbitalCurveApproximation
-    && applyOrbitalArcApproximation(builder, particle, data);
-
-  if (usedOrbitalCurveApproximation) {
-    applyCurveRange(builder, refObject(builder.objects, module.speedModifier), constantCurveRange(1));
-  }
-
-  if (usedOrbitalCurveApproximation && !curveRangeLooksZero(data.y)) {
-    const speedModifier = Math.max(curveRangeConstantValue(data.speedModifier), 1);
-    const upwardDamping = clamp((1 / Math.pow(speedModifier, 0.7)) * ORBITAL_FALLBACK_LIFT_STRENGTH, 0.45, 0.7);
-    applyCurveRange(builder, refObject(builder.objects, module.y), data.y, upwardDamping);
-  }
-
-  const orbitalY = curveRangeConstantValue(data.orbitalY);
-  const radial = curveRangeConstantValue(data.radial);
-  const lateral = Math.abs(orbitalY) + Math.abs(radial);
-  if (!usedOrbitalArcApproximation && !usedOrbitalCurveApproximation && lateral > 1e-6) {
-    if (curveRangeLooksZero(data.x)) {
-      applyCurveRange(builder, refObject(builder.objects, module.x), twoConstantCurveRange(-Math.abs(orbitalY || lateral), Math.abs(orbitalY || lateral)));
-    }
-    if (curveRangeLooksZero(data.z)) {
-      const zSpread = Math.max(Math.abs(radial), Math.abs(orbitalY) * 0.35);
-      applyCurveRange(builder, refObject(builder.objects, module.z), twoConstantCurveRange(-zSpread, zSpread));
-    }
-  }
+  // Orbital is integrated from position by UnityParticleOrbit, never by
+  // invented lateral velocities or mutations of the emission shape.
   return true;
 }
 
@@ -1714,6 +1369,7 @@ function applyUnityParticleDataToCocos(builder, particleId, data = {}, rendererD
   const targetRenderer = refObject(builder.objects, particle.renderer);
   if (targetRenderer) targetRenderer._alignSpace = rendererContract.cocosAlignment;
   Object.defineProperty(particle, 'unityRendererContract', { value: rendererContract, configurable: true });
+  Object.defineProperty(particle, 'unityOrbitContract', { value: particleOrbitContract(data), configurable: true });
   Object.defineProperty(particle, 'unityNoiseContract', { value: particleNoiseContract(data), configurable: true });
 
   return { applied };
@@ -1728,7 +1384,15 @@ function applyUnityParticleSystemToCocos(builder, particleId, unityDoc, renderer
   );
 }
 
+function restoreOrbitalSourceModules(builder, particleId, data) {
+  const particle=builder.objects[particleId];
+  applyCurveByRef(builder,particle,'startSpeed',data.InitialModule.startSpeed);
+  applyShapeModule(builder,particle,data.ShapeModule);
+  applyVelocityModule(builder,particle,data.VelocityModule);
+}
+
 module.exports = {
+  restoreOrbitalSourceModules,
   applyUnityParticleDataToCocos,
   applyUnityParticleSystemToCocos,
   applyUnitySerializedOverrides,

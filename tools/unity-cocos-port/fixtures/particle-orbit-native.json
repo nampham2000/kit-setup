@@ -1,0 +1,3258 @@
+{
+  "kernel": [
+    {
+      "omega": [
+        0,
+        2,
+        0
+      ],
+      "radial": 0,
+      "dt": 0.01,
+      "position": [
+        1.06379592,
+        2.005,
+        2.98540139
+      ],
+      "velocity": [
+        0.4,
+        0.5,
+        0.6
+      ],
+      "total": [
+        6.37959766,
+        0.5,
+        -1.459865
+      ]
+    },
+    {
+      "omega": [
+        0,
+        2,
+        0
+      ],
+      "radial": 0,
+      "dt": 0.03333333,
+      "position": [
+        1.2112937,
+        2.016667,
+        2.946491
+      ],
+      "velocity": [
+        0.4,
+        0.5,
+        0.6
+      ],
+      "total": [
+        6.31205368,
+        0.5,
+        -1.710934
+      ]
+    },
+    {
+      "omega": [
+        0,
+        2,
+        0
+      ],
+      "radial": 1.5,
+      "dt": 0.01,
+      "position": [
+        1.06804454,
+        2.013018,
+        2.99734569
+      ],
+      "velocity": [
+        0.4,
+        0.5,
+        0.6
+      ],
+      "total": [
+        6.80445957,
+        1.30177784,
+        -0.265435576
+      ]
+    },
+    {
+      "omega": [
+        0,
+        2,
+        0
+      ],
+      "radial": 1.5,
+      "dt": 0.03333333,
+      "position": [
+        1.22731364,
+        2.04339743,
+        2.98559141
+      ],
+      "velocity": [
+        0.4,
+        0.5,
+        0.6
+      ],
+      "total": [
+        6.83250237,
+        1.30204487,
+        -0.5535501
+      ]
+    },
+    {
+      "omega": [
+        1,
+        2,
+        3
+      ],
+      "radial": 0,
+      "dt": 0.01,
+      "position": [
+        1.00376987,
+        2.0039947,
+        3.00674653
+      ],
+      "velocity": [
+        0.4,
+        0.5,
+        0.6
+      ],
+      "total": [
+        0.3769926,
+        0.3994708,
+        0.6746489
+      ]
+    },
+    {
+      "omega": [
+        1,
+        2,
+        3
+      ],
+      "radial": 0,
+      "dt": 0.03333333,
+      "position": [
+        1.012247,
+        2.01115656,
+        3.02403045
+      ],
+      "velocity": [
+        0.4,
+        0.5,
+        0.6
+      ],
+      "total": [
+        0.37095347,
+        0.3375225,
+        0.717802644
+      ]
+    },
+    {
+      "omega": [
+        1,
+        2,
+        3
+      ],
+      "radial": 1.5,
+      "dt": 0.01,
+      "position": [
+        1.00777793,
+        2.01200867,
+        3.01877618
+      ],
+      "velocity": [
+        0.4,
+        0.5,
+        0.6
+      ],
+      "total": [
+        0.777798057,
+        1.20085526,
+        1.87761366
+      ]
+    },
+    {
+      "omega": [
+        1,
+        2,
+        3
+      ],
+      "radial": 1.5,
+      "dt": 0.03333333,
+      "position": [
+        1.0256151,
+        2.03781271,
+        3.06416416
+      ],
+      "velocity": [
+        0.4,
+        0.5,
+        0.6
+      ],
+      "total": [
+        0.7723907,
+        1.13623428,
+        1.92232192
+      ]
+    }
+  ],
+  "motion": [
+    {
+      "name": "Buff 6",
+      "step": 1,
+      "position": [
+        1.27064133,
+        2.005,
+        2.90351963
+      ],
+      "velocity": [
+        27.0641384,
+        0.5,
+        -9.648041
+      ]
+    },
+    {
+      "name": "Buff 6",
+      "step": 2,
+      "position": [
+        1.5328505,
+        2.01000023,
+        2.7822516
+      ],
+      "velocity": [
+        26.220911,
+        0.5,
+        -12.1268072
+      ]
+    },
+    {
+      "name": "Buff 6",
+      "step": 3,
+      "position": [
+        1.78428078,
+        2.01500034,
+        2.63680863
+      ],
+      "velocity": [
+        25.14302,
+        0.5,
+        -14.5443
+      ]
+    },
+    {
+      "name": "Buff 6",
+      "step": 4,
+      "position": [
+        2.02261615,
+        2.02000046,
+        2.468033
+      ],
+      "velocity": [
+        23.8335419,
+        0.5,
+        -16.87756
+      ]
+    },
+    {
+      "name": "Buff 6",
+      "step": 5,
+      "position": [
+        2.24559379,
+        2.02500057,
+        2.27699566
+      ],
+      "velocity": [
+        22.29777,
+        0.5,
+        -19.1037464
+      ]
+    },
+    {
+      "name": "Buff 6",
+      "step": 6,
+      "position": [
+        2.45102644,
+        2.03000069,
+        2.06499529
+      ],
+      "velocity": [
+        20.54327,
+        0.5,
+        -21.20004
+      ]
+    },
+    {
+      "name": "Buff 6",
+      "step": 7,
+      "position": [
+        2.636827,
+        2.0350008,
+        1.83355522
+      ],
+      "velocity": [
+        18.580061,
+        0.5,
+        -23.14401
+      ]
+    },
+    {
+      "name": "Buff 6",
+      "step": 8,
+      "position": [
+        2.80103087,
+        2.040001,
+        1.584417
+      ],
+      "velocity": [
+        16.420393,
+        0.5,
+        -24.9138279
+      ]
+    },
+    {
+      "name": "Buff 6",
+      "step": 9,
+      "position": [
+        2.94182014,
+        2.045001,
+        1.31953049
+      ],
+      "velocity": [
+        14.0789318,
+        0.5,
+        -26.4886532
+      ]
+    },
+    {
+      "name": "Buff 6",
+      "step": 10,
+      "position": [
+        3.05754662,
+        2.05000114,
+        1.04104483
+      ],
+      "velocity": [
+        11.5726519,
+        0.5,
+        -27.84857
+      ]
+    },
+    {
+      "name": "Buff 6",
+      "step": 11,
+      "position": [
+        3.1467545,
+        2.05500126,
+        0.751292467
+      ],
+      "velocity": [
+        8.920794,
+        0.5,
+        -28.975235
+      ]
+    },
+    {
+      "name": "Buff 6",
+      "step": 12,
+      "position": [
+        3.2082,
+        2.06000137,
+        0.452774346
+      ],
+      "velocity": [
+        6.14455271,
+        0.5,
+        -29.8518124
+      ]
+    },
+    {
+      "name": "Buff 6",
+      "step": 13,
+      "position": [
+        3.24087334,
+        2.06500149,
+        0.148140043
+      ],
+      "velocity": [
+        3.26734114,
+        0.5,
+        -30.46343
+      ]
+    },
+    {
+      "name": "Buff 6",
+      "step": 14,
+      "position": [
+        3.24401641,
+        2.0700016,
+        -0.159832627
+      ],
+      "velocity": [
+        0.314312369,
+        0.5,
+        -30.7972679
+      ]
+    },
+    {
+      "name": "Buff 6",
+      "step": 15,
+      "position": [
+        3.21713948,
+        2.07500172,
+        -0.468261927
+      ],
+      "velocity": [
+        -2.6876874,
+        0.5,
+        -30.8429317
+      ]
+    },
+    {
+      "name": "Buff 6",
+      "step": 16,
+      "position": [
+        3.160036,
+        2.08000183,
+        -0.7741872
+      ],
+      "velocity": [
+        -5.7103343,
+        0.5,
+        -30.5925312
+      ]
+    },
+    {
+      "name": "Buff 6",
+      "step": 17,
+      "position": [
+        3.072795,
+        2.085002,
+        -1.07459736
+      ],
+      "velocity": [
+        -8.72411251,
+        0.5,
+        -30.04102
+      ]
+    },
+    {
+      "name": "Buff 6",
+      "step": 18,
+      "position": [
+        2.95580959,
+        2.090002,
+        -1.36646032
+      ],
+      "velocity": [
+        -11.6985273,
+        0.5,
+        -29.1863
+      ]
+    },
+    {
+      "name": "Buff 6",
+      "step": 19,
+      "position": [
+        2.8097856,
+        2.09500217,
+        -1.64675319
+      ],
+      "velocity": [
+        -14.6023941,
+        0.5,
+        -28.0292912
+      ]
+    },
+    {
+      "name": "Buff 6",
+      "step": 20,
+      "position": [
+        2.63574171,
+        2.10000229,
+        -1.91249573
+      ],
+      "velocity": [
+        -17.4043846,
+        0.5,
+        -26.5742588
+      ]
+    },
+    {
+      "name": "Buff 6",
+      "step": 21,
+      "position": [
+        2.43501329,
+        2.1050024,
+        -2.16078329
+      ],
+      "velocity": [
+        -20.0728359,
+        0.5,
+        -24.82876
+      ]
+    },
+    {
+      "name": "Buff 6",
+      "step": 22,
+      "position": [
+        2.209246,
+        2.11000252,
+        -2.388821
+      ],
+      "velocity": [
+        -22.5767326,
+        0.5,
+        -22.8037624
+      ]
+    },
+    {
+      "name": "Buff 6",
+      "step": 23,
+      "position": [
+        1.96038961,
+        2.11500263,
+        -2.59395647
+      ],
+      "velocity": [
+        -24.8856373,
+        0.5,
+        -20.5135632
+      ]
+    },
+    {
+      "name": "Buff 6",
+      "step": 24,
+      "position": [
+        1.69068766,
+        2.12000275,
+        -2.77371645
+      ],
+      "velocity": [
+        -26.9702034,
+        0.5,
+        -17.9760017
+      ]
+    },
+    {
+      "name": "Buff 6",
+      "step": 25,
+      "position": [
+        1.4026618,
+        2.12500286,
+        -2.92583776
+      ],
+      "velocity": [
+        -28.80258,
+        0.5,
+        -15.2121344
+      ]
+    },
+    {
+      "name": "Buff 6",
+      "step": 26,
+      "position": [
+        1.09909391,
+        2.130003,
+        -3.04830146
+      ],
+      "velocity": [
+        -30.3567829,
+        0.5,
+        -12.2463741
+      ]
+    },
+    {
+      "name": "Buff 6",
+      "step": 27,
+      "position": [
+        0.7830032,
+        2.135003,
+        -3.13936257
+      ],
+      "velocity": [
+        -31.6090717,
+        0.5,
+        -9.106115
+      ]
+    },
+    {
+      "name": "Buff 6",
+      "step": 28,
+      "position": [
+        0.457618922,
+        2.1400032,
+        -3.19757938
+      ],
+      "velocity": [
+        -32.53843,
+        0.5,
+        -5.82168531
+      ]
+    },
+    {
+      "name": "Buff 6",
+      "step": 29,
+      "position": [
+        0.126352787,
+        2.14500332,
+        -3.22184157
+      ],
+      "velocity": [
+        -33.1266136,
+        0.5,
+        -2.42622328
+      ]
+    },
+    {
+      "name": "Buff 6",
+      "step": 30,
+      "position": [
+        -0.207236648,
+        2.15000343,
+        -3.21139145
+      ],
+      "velocity": [
+        -33.3589439,
+        0.5,
+        1.0450083
+      ]
+    },
+    {
+      "name": "Buff 6",
+      "step": 31,
+      "position": [
+        -0.539478958,
+        2.15500355,
+        -3.16584682
+      ],
+      "velocity": [
+        -33.22423,
+        0.5,
+        4.554458
+      ]
+    },
+    {
+      "name": "Buff 6",
+      "step": 32,
+      "position": [
+        -0.866632342,
+        2.16000366,
+        -3.08521748
+      ],
+      "velocity": [
+        -32.71534,
+        0.5,
+        8.062931
+      ]
+    },
+    {
+      "name": "Buff 6",
+      "step": 33,
+      "position": [
+        -1.18492436,
+        2.16500378,
+        -2.96991634
+      ],
+      "velocity": [
+        -31.82921,
+        0.5,
+        11.5301094
+      ]
+    },
+    {
+      "name": "Buff 6",
+      "step": 34,
+      "position": [
+        -1.490598,
+        2.170004,
+        -2.82077
+      ],
+      "velocity": [
+        -30.5673542,
+        0.5,
+        14.914628
+      ]
+    },
+    {
+      "name": "Buff 6",
+      "step": 35,
+      "position": [
+        -1.77995443,
+        2.175004,
+        -2.63902
+      ],
+      "velocity": [
+        -28.9356422,
+        0.5,
+        18.1750011
+      ]
+    },
+    {
+      "name": "Buff 6",
+      "step": 36,
+      "position": [
+        -2.04940271,
+        2.18000412,
+        -2.42632437
+      ],
+      "velocity": [
+        -26.9448223,
+        0.5,
+        21.269556
+      ]
+    },
+    {
+      "name": "Buff 6",
+      "step": 37,
+      "position": [
+        -2.29550576,
+        2.18500423,
+        -2.184748
+      ],
+      "velocity": [
+        -24.6103,
+        0.5,
+        24.15764
+      ]
+    },
+    {
+      "name": "Buff 6",
+      "step": 38,
+      "position": [
+        -2.515028,
+        2.19000435,
+        -1.91675019
+      ],
+      "velocity": [
+        -21.952219,
+        0.5,
+        26.79977
+      ]
+    },
+    {
+      "name": "Buff 6",
+      "step": 39,
+      "position": [
+        -2.70498228,
+        2.19500446,
+        -1.625169
+      ],
+      "velocity": [
+        -18.9954243,
+        0.5,
+        29.1581116
+      ]
+    },
+    {
+      "name": "Buff 6",
+      "step": 40,
+      "position": [
+        -2.86267519,
+        2.20000458,
+        -1.31319642
+      ],
+      "velocity": [
+        -15.7692852,
+        0.5,
+        31.197258
+      ]
+    },
+    {
+      "name": "Buff 6",
+      "step": 41,
+      "position": [
+        -2.9857502,
+        2.20500469,
+        -0.9843482
+      ],
+      "velocity": [
+        -12.3074961,
+        0.5,
+        32.8848228
+      ]
+    },
+    {
+      "name": "Buff 6",
+      "step": 42,
+      "position": [
+        -3.07222867,
+        2.21000481,
+        -0.642430842
+      ],
+      "velocity": [
+        -8.647842,
+        0.5,
+        34.1917343
+      ]
+    },
+    {
+      "name": "Buff 6",
+      "step": 43,
+      "position": [
+        -3.120548,
+        2.215005,
+        -0.291501045
+      ],
+      "velocity": [
+        -4.83192873,
+        0.5,
+        35.09298
+      ]
+    },
+    {
+      "name": "Buff 6",
+      "step": 44,
+      "position": [
+        -3.12959361,
+        2.220005,
+        0.0641786456
+      ],
+      "velocity": [
+        -0.904554963,
+        0.5,
+        35.56797
+      ]
+    },
+    {
+      "name": "Buff 6",
+      "step": 45,
+      "position": [
+        -3.098728,
+        2.22500515,
+        0.4201901
+      ],
+      "velocity": [
+        3.08657217,
+        0.5,
+        35.6011467
+      ]
+    },
+    {
+      "name": "Buff 6",
+      "step": 46,
+      "position": [
+        -3.02781487,
+        2.23000526,
+        0.772011757
+      ],
+      "velocity": [
+        7.091313,
+        0.5,
+        35.18217
+      ]
+    },
+    {
+      "name": "Buff 6",
+      "step": 47,
+      "position": [
+        -2.91723514,
+        2.23500538,
+        1.11507678
+      ],
+      "velocity": [
+        11.0579777,
+        0.5,
+        34.3064957
+      ]
+    },
+    {
+      "name": "Buff 6",
+      "step": 48,
+      "position": [
+        -2.76789856,
+        2.24000549,
+        1.44483209
+      ],
+      "velocity": [
+        14.9336624,
+        0.5,
+        32.9755249
+      ]
+    },
+    {
+      "name": "Buff 6",
+      "step": 49,
+      "position": [
+        -2.58124733,
+        2.24500561,
+        1.75679994
+      ],
+      "velocity": [
+        18.6651287,
+        0.5,
+        31.1967812
+      ]
+    },
+    {
+      "name": "Buff 6",
+      "step": 50,
+      "position": [
+        -2.35925317,
+        2.25000572,
+        2.0466423
+      ],
+      "velocity": [
+        22.19942,
+        0.5,
+        28.9842319
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 1,
+      "position": [
+        0.953603446,
+        2.0557878,
+        3.03807139
+      ],
+      "velocity": [
+        -4.639656,
+        5.57876873,
+        3.807135
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 2,
+      "position": [
+        0.9046684,
+        2.10990524,
+        3.07532477
+      ],
+      "velocity": [
+        -4.89350653,
+        5.41173267,
+        3.72533369
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 3,
+      "position": [
+        0.853247941,
+        2.162264,
+        3.11177635
+      ],
+      "velocity": [
+        -5.1420455,
+        5.235875,
+        3.64515352
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 4,
+      "position": [
+        0.7993953,
+        2.21277714,
+        3.14744163
+      ],
+      "velocity": [
+        -5.38526249,
+        5.05129147,
+        3.566523
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 5,
+      "position": [
+        0.743163168,
+        2.26135921,
+        3.18233657
+      ],
+      "velocity": [
+        -5.623216,
+        4.85819626,
+        3.48949
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 6,
+      "position": [
+        0.6846042,
+        2.30792475,
+        3.21647644
+      ],
+      "velocity": [
+        -5.85589457,
+        4.656542,
+        3.41398287
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 7,
+      "position": [
+        0.6237709,
+        2.35239,
+        3.249877
+      ],
+      "velocity": [
+        -6.08333445,
+        4.446519,
+        3.34004927
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 8,
+      "position": [
+        0.560716033,
+        2.3946712,
+        3.2825532
+      ],
+      "velocity": [
+        -6.30548668,
+        4.22810364,
+        3.2676177
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 9,
+      "position": [
+        0.495492131,
+        2.43468475,
+        3.3145206
+      ],
+      "velocity": [
+        -6.522391,
+        4.00134373,
+        3.19673586
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 10,
+      "position": [
+        0.428152233,
+        2.47234654,
+        3.345794
+      ],
+      "velocity": [
+        -6.73399,
+        3.76616764,
+        3.12733221
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 11,
+      "position": [
+        0.358749539,
+        2.5075717,
+        3.376388
+      ],
+      "velocity": [
+        -6.94027,
+        3.52250385,
+        3.05940676
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 12,
+      "position": [
+        0.28733772,
+        2.54027367,
+        3.406318
+      ],
+      "velocity": [
+        -7.14118242,
+        3.27018547,
+        2.99298334
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 13,
+      "position": [
+        0.2139714,
+        2.57036662,
+        3.43559813
+      ],
+      "velocity": [
+        -7.33663225,
+        3.009284,
+        2.92801428
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 14,
+      "position": [
+        0.138706565,
+        2.59776115,
+        3.46424317
+      ],
+      "velocity": [
+        -7.526485,
+        2.73944187,
+        2.86449957
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 15,
+      "position": [
+        0.06160023,
+        2.622367,
+        3.49226761
+      ],
+      "velocity": [
+        -7.71063375,
+        2.46056366,
+        2.80243921
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 16,
+      "position": [
+        -0.0172886923,
+        2.644092,
+        3.51968551
+      ],
+      "velocity": [
+        -7.88889265,
+        2.17250633,
+        2.74178553
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 17,
+      "position": [
+        -0.0978991762,
+        2.66284132,
+        3.54651117
+      ],
+      "velocity": [
+        -8.06104851,
+        1.87491226,
+        2.68256235
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 18,
+      "position": [
+        -0.180167377,
+        2.67851734,
+        3.57275844
+      ],
+      "velocity": [
+        -8.226821,
+        1.56759071,
+        2.624722
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 19,
+      "position": [
+        -0.264026761,
+        2.69102,
+        3.59844112
+      ],
+      "velocity": [
+        -8.385937,
+        1.25025558,
+        2.56826448
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 20,
+      "position": [
+        -0.349406958,
+        2.70024657,
+        3.6235733
+      ],
+      "velocity": [
+        -8.538021,
+        0.9226446,
+        2.51321363
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 21,
+      "position": [
+        -0.4362339,
+        2.70609117,
+        3.64816833
+      ],
+      "velocity": [
+        -8.682696,
+        0.584447861,
+        2.459498
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 22,
+      "position": [
+        -0.524428368,
+        2.70844483,
+        3.67223978
+      ],
+      "velocity": [
+        -8.81944752,
+        0.235355377,
+        2.40714121
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 23,
+      "position": [
+        -0.6139063,
+        2.70719457,
+        3.695801
+      ],
+      "velocity": [
+        -8.947797,
+        -0.125038147,
+        2.35611963
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 24,
+      "position": [
+        -0.7045773,
+        2.70222569,
+        3.71886539
+      ],
+      "velocity": [
+        -9.06710148,
+        -0.4968996,
+        2.3064332
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 25,
+      "position": [
+        -0.796344638,
+        2.69341874,
+        3.741446
+      ],
+      "velocity": [
+        -9.176732,
+        -0.880705833,
+        2.258058
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 26,
+      "position": [
+        -0.8891037,
+        2.68065214,
+        3.763556
+      ],
+      "velocity": [
+        -9.275908,
+        -1.27667141,
+        2.21099424
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 27,
+      "position": [
+        -0.9827424,
+        2.66380119,
+        3.785208
+      ],
+      "velocity": [
+        -9.363873,
+        -1.68510628,
+        2.165194
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 28,
+      "position": [
+        -1.0771389,
+        2.64273834,
+        3.80641484
+      ],
+      "velocity": [
+        -9.439642,
+        -2.10629654,
+        2.12068129
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 29,
+      "position": [
+        -1.1721617,
+        2.61733341,
+        3.82718945
+      ],
+      "velocity": [
+        -9.502275,
+        -2.54050446,
+        2.077456
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 30,
+      "position": [
+        -1.26766837,
+        2.5874536,
+        3.84754419
+      ],
+      "velocity": [
+        -9.550662,
+        -2.98799229,
+        2.03547049
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 31,
+      "position": [
+        -1.36350489,
+        2.55296564,
+        3.86749148
+      ],
+      "velocity": [
+        -9.583647,
+        -3.44880772,
+        1.99472487
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 32,
+      "position": [
+        -1.45950425,
+        2.51373386,
+        3.88704348
+      ],
+      "velocity": [
+        -9.599932,
+        -3.92318916,
+        1.95519507
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 33,
+      "position": [
+        -1.55548573,
+        2.46962214,
+        3.90621257
+      ],
+      "velocity": [
+        -9.598143,
+        -4.41118431,
+        1.916905
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 34,
+      "position": [
+        -1.6512537,
+        2.42049527,
+        3.925011
+      ],
+      "velocity": [
+        -9.576793,
+        -4.912698,
+        1.879831
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 35,
+      "position": [
+        -1.74659646,
+        2.36621833,
+        3.94345021
+      ],
+      "velocity": [
+        -9.534271,
+        -5.427706,
+        1.84392512
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 36,
+      "position": [
+        -1.8412863,
+        2.30665922,
+        3.96154261
+      ],
+      "velocity": [
+        -9.46898,
+        -5.955922,
+        1.80923522
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 37,
+      "position": [
+        -1.93507648,
+        2.24168873,
+        3.97929955
+      ],
+      "velocity": [
+        -9.379013,
+        -6.497061,
+        1.77568972
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 38,
+      "position": [
+        -2.02770138,
+        2.17118239,
+        3.996733
+      ],
+      "velocity": [
+        -9.2624855,
+        -7.050645,
+        1.74333632
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 39,
+      "position": [
+        -2.11887574,
+        2.09502149,
+        4.013854
+      ],
+      "velocity": [
+        -9.117432,
+        -7.616102,
+        1.71210349
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 40,
+      "position": [
+        -2.20829272,
+        2.01309514,
+        4.03067446
+      ],
+      "velocity": [
+        -8.941693,
+        -8.192646,
+        1.6820389
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 41,
+      "position": [
+        -2.29562354,
+        1.92530191,
+        4.04720545
+      ],
+      "velocity": [
+        -8.733077,
+        -8.779323,
+        1.65309489
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 42,
+      "position": [
+        -2.380516,
+        1.8315531,
+        4.063458
+      ],
+      "velocity": [
+        -8.489246,
+        -9.37488,
+        1.6252476
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 43,
+      "position": [
+        -2.46259546,
+        1.73177278,
+        4.07944345
+      ],
+      "velocity": [
+        -8.207936,
+        -9.978031,
+        1.59854472
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 44,
+      "position": [
+        -2.541461,
+        1.62590241,
+        4.095173
+      ],
+      "velocity": [
+        -7.88654757,
+        -10.5870361,
+        1.57293856
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 45,
+      "position": [
+        -2.61668825,
+        1.51390231,
+        4.11065674
+      ],
+      "velocity": [
+        -7.522721,
+        -11.20001,
+        1.54838145
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 46,
+      "position": [
+        -2.6878264,
+        1.39575529,
+        4.125906
+      ],
+      "velocity": [
+        -7.113809,
+        -11.8147011,
+        1.52492106
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 47,
+      "position": [
+        -2.7544,
+        1.27147055,
+        4.14093161
+      ],
+      "velocity": [
+        -6.65735674,
+        -12.4284744,
+        1.5025574
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 48,
+      "position": [
+        -2.81590748,
+        1.14108515,
+        4.155744
+      ],
+      "velocity": [
+        -6.150741,
+        -13.03854,
+        1.48124278
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 49,
+      "position": [
+        -2.87182283,
+        1.00467038,
+        4.17035341
+      ],
+      "velocity": [
+        -5.59153032,
+        -13.6414757,
+        1.46092951
+      ]
+    },
+    {
+      "name": "Buff 1",
+      "step": 50,
+      "position": [
+        -2.92159581,
+        0.862334132,
+        4.18477058
+      ],
+      "velocity": [
+        -4.97729254,
+        -14.2336245,
+        1.441713
+      ]
+    }
+  ],
+  "velocity": {
+    "Buff 6": {
+      "enabled": true,
+      "x": {
+        "serializedVersion": "2",
+        "minMaxState": 0,
+        "scalar": 0,
+        "minScalar": 0,
+        "maxCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        },
+        "minCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        }
+      },
+      "y": {
+        "serializedVersion": "2",
+        "minMaxState": 0,
+        "scalar": 0,
+        "minScalar": 0,
+        "maxCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        },
+        "minCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        }
+      },
+      "z": {
+        "serializedVersion": "2",
+        "minMaxState": 0,
+        "scalar": 0,
+        "minScalar": 0,
+        "maxCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        },
+        "minCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        }
+      },
+      "orbitalX": {
+        "serializedVersion": "2",
+        "minMaxState": 1,
+        "scalar": 1,
+        "minScalar": 0,
+        "maxCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        },
+        "minCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        }
+      },
+      "orbitalY": {
+        "serializedVersion": "2",
+        "minMaxState": 1,
+        "scalar": 14,
+        "minScalar": 9,
+        "maxCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0.6454530954360962,
+              "inSlope": 0.3545469045639038,
+              "outSlope": 0.3545469045639038,
+              "tangentMode": 34,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 1,
+              "inSlope": 0.3545469045639038,
+              "outSlope": 0.3545469045639038,
+              "tangentMode": 34,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        },
+        "minCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        }
+      },
+      "orbitalZ": {
+        "serializedVersion": "2",
+        "minMaxState": 1,
+        "scalar": 1,
+        "minScalar": 0,
+        "maxCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        },
+        "minCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        }
+      },
+      "orbitalOffsetX": {
+        "serializedVersion": "2",
+        "minMaxState": 0,
+        "scalar": 0,
+        "minScalar": 0,
+        "maxCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        },
+        "minCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        }
+      },
+      "orbitalOffsetY": {
+        "serializedVersion": "2",
+        "minMaxState": 0,
+        "scalar": 0,
+        "minScalar": 0,
+        "maxCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        },
+        "minCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        }
+      },
+      "orbitalOffsetZ": {
+        "serializedVersion": "2",
+        "minMaxState": 0,
+        "scalar": 0,
+        "minScalar": 0,
+        "maxCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        },
+        "minCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        }
+      },
+      "radial": {
+        "serializedVersion": "2",
+        "minMaxState": 0,
+        "scalar": 0,
+        "minScalar": 0,
+        "maxCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 1,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 34,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 1,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 34,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        },
+        "minCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        }
+      },
+      "speedModifier": {
+        "serializedVersion": "2",
+        "minMaxState": 0,
+        "scalar": 1,
+        "minScalar": 1,
+        "maxCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 1,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 1,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        },
+        "minCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 1,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 1,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        }
+      },
+      "inWorldSpace": false
+    },
+    "Buff 1": {
+      "enabled": true,
+      "x": {
+        "serializedVersion": "2",
+        "minMaxState": 0,
+        "scalar": 0,
+        "minScalar": 0,
+        "maxCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        },
+        "minCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        }
+      },
+      "y": {
+        "serializedVersion": "2",
+        "minMaxState": 0,
+        "scalar": 0,
+        "minScalar": 0,
+        "maxCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        },
+        "minCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        }
+      },
+      "z": {
+        "serializedVersion": "2",
+        "minMaxState": 0,
+        "scalar": 0,
+        "minScalar": 0,
+        "maxCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        },
+        "minCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        }
+      },
+      "orbitalX": {
+        "serializedVersion": "2",
+        "minMaxState": 1,
+        "scalar": 1,
+        "minScalar": 0,
+        "maxCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        },
+        "minCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        }
+      },
+      "orbitalY": {
+        "serializedVersion": "2",
+        "minMaxState": 1,
+        "scalar": 1,
+        "minScalar": 0,
+        "maxCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        },
+        "minCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        }
+      },
+      "orbitalZ": {
+        "serializedVersion": "2",
+        "minMaxState": 1,
+        "scalar": 15,
+        "minScalar": 0,
+        "maxCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0.20000000298023224,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 1,
+              "inSlope": 2,
+              "outSlope": 2,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        },
+        "minCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        }
+      },
+      "orbitalOffsetX": {
+        "serializedVersion": "2",
+        "minMaxState": 0,
+        "scalar": 0,
+        "minScalar": 0,
+        "maxCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        },
+        "minCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        }
+      },
+      "orbitalOffsetY": {
+        "serializedVersion": "2",
+        "minMaxState": 0,
+        "scalar": 0,
+        "minScalar": 0,
+        "maxCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        },
+        "minCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        }
+      },
+      "orbitalOffsetZ": {
+        "serializedVersion": "2",
+        "minMaxState": 0,
+        "scalar": 0,
+        "minScalar": 0,
+        "maxCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        },
+        "minCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        }
+      },
+      "radial": {
+        "serializedVersion": "2",
+        "minMaxState": 1,
+        "scalar": 4,
+        "minScalar": 0,
+        "maxCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 1,
+              "inSlope": -2.5471668243408203,
+              "outSlope": -2.5471668243408203,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.1592082679271698
+            },
+            {
+              "serializedVersion": "3",
+              "time": 0.699999988079071,
+              "value": 0.20000000298023224,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        },
+        "minCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        }
+      },
+      "speedModifier": {
+        "serializedVersion": "2",
+        "minMaxState": 0,
+        "scalar": 1,
+        "minScalar": 1,
+        "maxCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 1,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 1,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        },
+        "minCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 1,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 1,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        }
+      },
+      "inWorldSpace": false
+    }
+  },
+  "sourceProbes": {
+    "capture-orbital-kernel.cs": "2d24a1b19f772f2692fcfa6b6e02e0f9c7d8376ebcbb4d42477703a2fd34df5c",
+    "capture-orbit-motion.cs": "cd9dd908cf1e22ec39316c1afcc4dbaec54992dd3e91a8c200767368d9eebf23"
+  },
+  "negativeRadial": [
+    {
+      "omega": [
+        0,
+        2,
+        0
+      ],
+      "radial": -1.5,
+      "dt": 0.01,
+      "position": [
+        0.00634932332,
+        0.0119821616,
+        0.0178498328
+      ],
+      "velocity": [
+        0,
+        0,
+        0
+      ],
+      "total": [
+        -0.365067661,
+        -0.8017838,
+        -1.2150166
+      ]
+    },
+    {
+      "omega": [
+        0,
+        2,
+        0
+      ],
+      "radial": -1.5,
+      "dt": 0.03333333,
+      "position": [
+        -0.00402770564,
+        -0.00672611967,
+        -0.009842729
+      ],
+      "velocity": [
+        0,
+        0,
+        0
+      ],
+      "total": [
+        -0.460567147,
+        -0.801783562,
+        -1.18092084
+      ]
+    },
+    {
+      "omega": [
+        0,
+        2,
+        0
+      ],
+      "radial": -6,
+      "dt": 0.01,
+      "position": [
+        -0.006396584,
+        -0.0120713525,
+        -0.0179827
+      ],
+      "velocity": [
+        0,
+        0,
+        0
+      ],
+      "total": [
+        -1.63965845,
+        -3.2071352,
+        -4.79827
+      ]
+    },
+    {
+      "omega": [
+        0,
+        2,
+        0
+      ],
+      "radial": -6,
+      "dt": 0.03333333,
+      "position": [
+        0.0119763054,
+        0.02,
+        0.029267177
+      ],
+      "velocity": [
+        0,
+        0,
+        0
+      ],
+      "total": [
+        1.82192636,
+        3.20713472,
+        4.731614
+      ]
+    },
+    {
+      "omega": [
+        1,
+        2,
+        3
+      ],
+      "radial": -1.5,
+      "dt": 0.01,
+      "position": [
+        0.00598970335,
+        0.0119761406,
+        0.0179777183
+      ],
+      "velocity": [
+        0,
+        0,
+        0
+      ],
+      "total": [
+        -0.401029646,
+        -0.8023859,
+        -1.20222807
+      ]
+    },
+    {
+      "omega": [
+        1,
+        2,
+        3
+      ],
+      "radial": -1.5,
+      "dt": 0.03333333,
+      "position": [
+        -0.003359709,
+        -0.00670706667,
+        -0.0101029724
+      ],
+      "velocity": [
+        0,
+        0,
+        0
+      ],
+      "total": [
+        -0.4005708,
+        -0.8000825,
+        -1.20391464
+      ]
+    },
+    {
+      "omega": [
+        1,
+        2,
+        3
+      ],
+      "radial": -6,
+      "dt": 0.01,
+      "position": [
+        -0.006034285,
+        -0.01206528,
+        -0.0181115288
+      ],
+      "velocity": [
+        0,
+        0,
+        0
+      ],
+      "total": [
+        -1.60342848,
+        -3.206528,
+        -4.811153
+      ]
+    },
+    {
+      "omega": [
+        1,
+        2,
+        3
+      ],
+      "radial": -6,
+      "dt": 0.03333333,
+      "position": [
+        0.00999003649,
+        0.0199433453,
+        0.0300410017
+      ],
+      "velocity": [
+        0,
+        0,
+        0
+      ],
+      "total": [
+        1.602365,
+        3.2009232,
+        4.81523657
+      ]
+    }
+  ]
+}
