@@ -14,6 +14,8 @@ function unsupportedOrbitReasons(spec) {
   return reasons;
 }
 
+function canBindOrbit(spec) { return !!spec.enabled && unsupportedOrbitReasons(spec).length === 0; }
+
 function stageOrbitRuntime(options) {
   if (options.dryRun) return;
   for (const name of names) {
@@ -48,4 +50,4 @@ function attachOrbitRuntime(builder, reporter, options) {
   }
 }
 
-module.exports = { unsupportedOrbitReasons, stageOrbitRuntime, attachOrbitRuntime };
+module.exports = { canBindOrbit, unsupportedOrbitReasons, stageOrbitRuntime, attachOrbitRuntime };

@@ -1,6 +1,6 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
-const {attachOrbitRuntime,stageOrbitRuntime}=require('./particle-orbit-binding');
+const {attachOrbitRuntime,stageOrbitRuntime,canBindOrbit}=require('./particle-orbit-binding');
 const constant=scalar=>({minMaxState:0,scalar});
 const spec=()=>({enabled:true,simulationSpace:0,inWorldSpace:false,limitEnabled:false,velocity:{orbitalOffsetX:constant(0),orbitalOffsetY:constant(0),orbitalOffsetZ:constant(0),orbitalX:constant(0),orbitalY:constant(3),orbitalZ:constant(0),radial:constant(0)}});
 function run(contract,limit=false,imported=true){
@@ -10,6 +10,13 @@ function run(contract,limit=false,imported=true){
   attachOrbitRuntime(builder,{high:(code,a,b,message)=>issues.push({code,message}),low(){}},{dryRun:true,cocosRoot:path.join(__dirname,'fixtures/not-a-cocos-project')});
   return {objects,issues};
 }
+
+test('semantic eligibility accepts supported sources and rejects disabled or unsupported composition',()=>{
+  assert.equal(canBindOrbit(spec()),true);
+  assert.equal(canBindOrbit({...spec(),enabled:false}),false);
+  assert.equal(canBindOrbit({...spec(),noiseEnabled:true}),false);
+  assert.equal(canBindOrbit({...spec(),inWorldSpace:true}),false);
+});
 test('generic prefab porter binds native Orbit without any AOE controller or tool',()=>{
   const source=spec(),result=run(source);
   assert.deepEqual(result.issues,[]);
