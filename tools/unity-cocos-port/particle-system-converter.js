@@ -3,6 +3,8 @@ const { particleRendererContract } = require('./particle-renderer-contract');
 const { particleNoiseContract } = require('./particle-noise-contract');
 const { particleOrbitContract } = require('./particle-orbit-contract');
 
+const { particleShapeRotation } = require('./particle-shape-rotation');
+
 const DEG_TO_RAD = Math.PI / 180;
 const UNITY_CURVE_MODE_TO_COCOS = {
   0: 0, // Constant
@@ -959,11 +961,7 @@ function applyShapeModule(builder, particle, data) {
   module._angle = num(data.angle, 0) * DEG_TO_RAD;
   module._position = unityVectorToCocos(data.m_Position || data.position, module._position || { x: 0, y: 0, z: 0 });
   const rotation = vec3(data.m_Rotation || data.rotation, { x: 0, y: 0, z: 0 });
-  module._rotation = vec3({
-    x: -rotation.x,
-    y: rotation.y,
-    z: -rotation.z,
-  }, { x: 0, y: 0, z: 0 });
+  module._rotation = vec3(particleShapeRotation(rotation), { x: 0, y: 0, z: 0 });
   module._scale = vec3(data.m_Scale || data.scale, module._scale || { x: 1, y: 1, z: 1 });
   if (!enabled || shouldUsePointShapeFallback(data)) {
     setKnown(module, ['_shapeType'], 0);
