@@ -141,6 +141,12 @@ function performTextureAssetDiagnostics(textureName = '') {
   return {
     textureName,
     colorSpace,
+    samplingContract: colorSpace === 'sRGB' ? {
+      requiresImporterEvidence: true,
+      mipReduction: 'linear-rgb-independent-alpha',
+      runtimeAdapter: 'tools/unity-cocos-port/runtime/UnitySrgbTexture.ts',
+      acceptance: 'Verify native smallest mip and GPU sRGB storage; shader-side decode alone does not preserve filtering or mip reduction. Disable software decode when hardware decoding is bound.',
+    } : null,
     normalMapGreenInvert: isNormal, // DirectX standard normals have inverted Y compared to Cocos/GL
     packing,
   };
