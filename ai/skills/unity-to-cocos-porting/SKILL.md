@@ -50,6 +50,14 @@ This skill provides step-by-step guidance and architectural rules for converting
 
 ### Particle renderer frames and pivots
 
+- A ring that appears to grow/shrink may be a texture panner on a constant-size
+  mesh. Read active Size modules, material panner and mesh UVs before editing
+  lifetime curves. If native/imported vertex pairs prove `Vc = 1 - Vu`, use
+  `particle-mesh-uv.js`: `offsetVc = 1 - scaleV - offsetVu`,
+  `speedVc = -speedVu`, retaining scale. Create per-renderer material variants;
+  do not mutate a shared billboard material or the common particle shader.
+  Flow distortion requires separate validation. Test multiple fixed source
+  phases plus the previously accepted Noise emitters before accepting the fix.
 - Before changing a particle Render Mode, read the source renderer alignment,
   parent transform, initial/animated rotation and pivot. A ground ring cut in
   half can be a Local billboard rendered with camera axes, not a depth offset.
