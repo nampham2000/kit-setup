@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="description" content="Review playable briefs in sequence.">
+  <title>Game Hub</title>
+  <link rel="stylesheet" href="hub.css">
+  <script src="hub.js" defer></script>
+</head>
+<body>
+  <header>
+    <div class="brand"><span class="mark" id="mark" aria-hidden="true">G</span><div><small id="subtitle">PLAYABLE / BRIEF REVIEW</small><h1 id="title">Game Hub</h1></div></div>
+    <span id="count" aria-live="polite"></span>
+  </header>
+  <main>
+    <aside>
+      <label for="brief">GAME BRIEF</label>
+      <select id="brief" aria-label="Select game brief"></select>
+      <ol id="playlist"></ol>
+      <p class="hint">After reviewing a brief, select <strong>Next</strong> to continue.</p>
+      <details><summary>Build name</summary><p id="build-name"></p></details>
+    </aside>
+    <section class="player" aria-label="Playable preview">
+      <div id="stage"><p id="status" role="status">Loading game list…</p></div>
+      <nav aria-label="Game controls">
+        <button id="prev" disabled>← Previous</button>
+        <button id="replay" disabled>Replay</button>
+        <button id="next" class="primary" disabled>Next →</button>
+      </nav>
+    </section>
+  </main>
+</body>
+</html>

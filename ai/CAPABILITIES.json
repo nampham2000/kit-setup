@@ -4,7 +4,7 @@
     "source": "playable-shared-kit/ai/capabilities.def.cjs",
     "generatedBy": "npm run ai:sync",
     "contractCheck": "npm run ai:contract:verify",
-    "count": 61
+    "count": 63
   },
   "coreRules": [
     {
@@ -1986,6 +1986,25 @@
         ],
         "verify": null,
         "status": "ok"
+      },
+      {
+        "id": "game-hub.verify",
+        "title": "Kiểm hash và inventory của game hub đã tạo",
+        "run": "npm run hub:verify",
+        "command": "node playable-shared-kit/tools/game-hub.cjs verify --out <dir>",
+        "optional": [
+          "--project <dir>",
+          "--json"
+        ],
+        "when": "Sau mỗi lần tạo hoặc cập nhật game hub, trước preview/deploy.",
+        "outputs": [
+          "stdout hoặc JSON: ok, output path, game count, issues"
+        ],
+        "limits": [
+          "Chỉ xác minh file, manifest, inventory và SHA-256; vẫn phải mở hub qua HTTP và thao tác controls để claim browser acceptance."
+        ],
+        "verify": null,
+        "status": "partial"
       }
     ],
     "optimize": [
@@ -2234,6 +2253,33 @@
         "limits": [],
         "verify": null,
         "status": "ok"
+      },
+      {
+        "id": "game-hub.create",
+        "title": "Tạo game hub review theo thứ tự các playable brief được chỉ định",
+        "run": "npm run hub:create",
+        "command": "node playable-shared-kit/tools/game-hub.cjs create --brief <id>",
+        "optional": [
+          "--brief <id>",
+          "--all",
+          "--title <text>",
+          "--subtitle <text>",
+          "--out <dir>",
+          "--project <dir>",
+          "--build",
+          "--jobs <n>",
+          "--force",
+          "--json"
+        ],
+        "when": "Khi developer yêu cầu game hub, trang review brief tuần tự hoặc gom các playable brief cụ thể vào một UI Previous/Replay/Next.",
+        "outputs": [
+          "game-hubs/<hub-id>/: index.html, hub.css, hub.js, manifest.json, games/*.html, .game-hub.json"
+        ],
+        "limits": [
+          "Chỉ stage exact common_min build của brief đã chọn. Tạo hub không đồng nghĩa đã preview hoặc deploy; chỉ dùng --force sau khi kiểm tra output không thuộc generator."
+        ],
+        "verify": null,
+        "status": "partial"
       },
       {
         "id": "deploy.preview",

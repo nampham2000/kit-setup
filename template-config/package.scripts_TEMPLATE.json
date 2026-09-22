@@ -34,6 +34,8 @@
     "cleanup:delete": "node playable-shared-kit/tools/unused-asset-cleanup.cjs --delete",
     "config:types": "node playable-shared-kit/tools/config-typings-generator.cjs",
     "briefs:check": "node playable-shared-kit/tools/gameplay-brief-validator.cjs",
+    "hub:create": "node playable-shared-kit/tools/game-hub.cjs create",
+    "hub:verify": "node playable-shared-kit/tools/game-hub.cjs verify",
     "scene:boilerplate": "node playable-shared-kit/tools/generate-boilerplate-scene.cjs",
     "mcp:sync": "powershell -NoProfile -ExecutionPolicy Bypass -File playable-shared-kit/tools/mcp-clients-sync.ps1",
     "mcp:verify": "powershell -NoProfile -ExecutionPolicy Bypass -File playable-shared-kit/tools/mcp-clients-sync.ps1 -VerifyOnly",
