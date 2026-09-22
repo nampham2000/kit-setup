@@ -14,7 +14,8 @@ function checkCreatorTypesVersion(version) {
         // Check whether the npm command is available
         const npmCheck = spawnSync(npmCmd, ["--version"], { 
             stdio: 'pipe',
-            shell: process.platform === "win32"
+            shell: process.platform === "win32",
+            timeout: 5000
         });
         
         if (npmCheck.error || npmCheck.status !== 0) {
@@ -25,7 +26,8 @@ function checkCreatorTypesVersion(version) {
         // Fetch the published version list
         const result = spawnSync(npmCmd, ["view", "@cocos/creator-types", "versions"], { 
             stdio: 'pipe',
-            shell: process.platform === "win32"
+            shell: process.platform === "win32",
+            timeout: 5000
         });
         
         if (result.error || result.status !== 0) {

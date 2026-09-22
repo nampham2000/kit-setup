@@ -2,8 +2,22 @@ export class SuperHtmlPlayable {
   private googlePlayUrl = '';
   private appStoreUrl = '';
 
-  download(): void {
-    (globalThis as any).super_html?.download?.();
+  download(options?: { automatic?: boolean }): void {
+    const host = globalThis as any;
+    if (typeof host.super_html?.download === 'function') {
+      host.super_html.download();
+      return;
+    }
+    // Timed redirects have no click gesture. Navigate the current tab in Preview
+    // instead of opening a popup that the browser may silently block.
+    if (!options?.automatic) return;
+    const url = this.get_download_url();
+    if (!url) return;
+    if (typeof host.mraid?.open === 'function') {
+      host.mraid.open(url);
+      return;
+    }
+    host.location?.assign(url);
   }
 
   game_end(): void {
