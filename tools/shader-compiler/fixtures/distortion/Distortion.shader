@@ -27,19 +27,19 @@ Shader "Hovl/Particles/Distortion"
     }
 
 
-	Category 
+	Category
 	{
 		SubShader
 		{
 			Tags { "Queue"="Transparent" "IgnoreProjector"="True" "RenderType"="Transparent" "PreviewType"="Plane" }
 			Blend SrcAlpha OneMinusSrcAlpha
 			Cull Off
-			Lighting Off 
+			Lighting Off
 			ZWrite Off
 			Fog { Mode Off}
 			GrabPass{ }
 
-			Pass {		
+			Pass {
 				CGPROGRAM
 				#pragma vertex vert
 				#pragma fragment frag
@@ -51,17 +51,17 @@ Shader "Hovl/Particles/Distortion"
 				uniform sampler2D _GrabTexture;
 				uniform sampler2D _NormalMap;
 				uniform float4 _NormalMap_ST;
-				uniform float _Distortionpower;	
-				uniform float4 _GrabTexture_TexelSize;	
+				uniform float _Distortionpower;
+				uniform float4 _GrabTexture_TexelSize;
 
-				struct appdata_t 
+				struct appdata_t
 				{
 					float4 vertex : POSITION;
 					fixed4 color : COLOR;
-					float4 texcoord : TEXCOORD0;				
+					float4 texcoord : TEXCOORD0;
 				};
 
-				struct v2f 
+				struct v2f
 				{
 					float4 vertex : SV_POSITION;
 					fixed4 color : COLOR;
@@ -70,7 +70,7 @@ Shader "Hovl/Particles/Distortion"
 					#ifdef SOFTPARTICLES_ON
 					float4 projPos : TEXCOORD3;
 					#endif
-				};			
+				};
 
 				v2f vert ( appdata_t v  )
 				{
@@ -81,14 +81,14 @@ Shader "Hovl/Particles/Distortion"
 						COMPUTE_EYEDEPTH(o.projPos.z);
 					#endif
 					o.color = v.color;
-					
+
 					#if UNITY_UV_STARTS_AT_TOP
 					half scale = -1.0;
 					#else
 					half scale = 1.0;
 					#endif
 					o.texcoord.xy = (float2(o.vertex.x, o.vertex.y*scale) + o.vertex.w) * 0.5;
-					o.texcoord.zw = o.vertex.w;					
+					o.texcoord.zw = o.vertex.w;
 					#if UNITY_SINGLE_PASS_STEREO
 					o.texcoord.xy = TransformStereoScreenSpaceTex(o.texcoord.xy, o.texcoord.w);
 					#endif
@@ -115,10 +115,10 @@ Shader "Hovl/Particles/Distortion"
 					col.a = saturate(col.a * clampResult89);
 					return col;
 				}
-				ENDCG 
+				ENDCG
 			}
-		}	
-	}	
+		}
+	}
 }
 /*ASEBEGIN
 Version=15401

@@ -131,6 +131,12 @@ function loadSoundManager() {
     if (request === './utils/GameUtils') {
       return { GameUtils: { loadAsset: async () => null } };
     }
+    if (request === './audio/AudioSystem') {
+      return { AudioSystem: class {}, validateAudioSystemConfig: () => undefined };
+    }
+    if (request === './audio/CocosAudioBackend') {
+      return { CocosAudioBackend: class {} };
+    }
     return originalLoad.call(this, request, parent, isMain);
   };
   try {
