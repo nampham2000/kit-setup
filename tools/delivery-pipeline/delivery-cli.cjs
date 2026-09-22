@@ -104,6 +104,18 @@ function writeSetupFile(target, source, force) {
   return true;
 }
 
+function loadInitProject(projectInput) {
+  const root = fs.realpathSync(path.resolve(projectInput));
+  let packageName = '';
+  const packageFile = path.join(root, 'package.json');
+  if (fs.existsSync(packageFile)) packageName = readJson(packageFile).name || '';
+  try { return gameHub.loadProject(root); }
+  catch (error) {
+    if (!/Missing assets\/resources\/playable-config\.json|must define gameplay\.briefs/.test(error.message)) throw error;
+    return { root, briefs: {}, packageName };
+  }
+}
+
 function ensureDeliveryIgnore(projectRoot) {
   const file = path.join(projectRoot, '.gitignore');
   const current = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
@@ -114,13 +126,14 @@ function ensureDeliveryIgnore(projectRoot) {
 }
 
 function init(options) {
-  const project = gameHub.loadProject(options.project);
+  const project = loadInitProject(options.project);
   const configFile = resolveWithin(project.root, options.config, 'Delivery config');
   let changed = 0;
   if (!fs.existsSync(configFile) || options.force) {
     const template = readJson(CONFIG_TEMPLATE);
     template.jobs = Math.min(Math.max(os.cpus().length > 2 ? os.cpus().length - 1 : 1, 1), 8);
-    template.hubs[0].briefs = Object.keys(project.briefs);
+    const discovered = Object.keys(project.briefs);
+    template.hubs[0].briefs = discovered.length ? discovered : template.hubs[0].briefs;
     template.hubs[0].title = project.packageName ? gameHub.titleCase(project.packageName) : 'Playable Review';
     fs.mkdirSync(path.dirname(configFile), { recursive: true });
     fs.writeFileSync(configFile, stableJson(template));

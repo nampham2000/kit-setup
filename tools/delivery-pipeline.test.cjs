@@ -78,6 +78,18 @@ test('init discovers current briefs and does not overwrite existing setup by def
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
+test('init supports a new project before gameplay briefs exist', () => {
+  const root = fixture();
+  try {
+    fs.unlinkSync(path.join(root, 'configs', 'playable-delivery.json'));
+    fs.writeFileSync(path.join(root, 'assets', 'resources', 'playable-config.json'), JSON.stringify({ gameplay: {} }));
+    const result = execute({ command: 'init', project: root, config: 'configs/playable-delivery.json', dryRun: false, force: false, json: false });
+    assert.equal(result.ok, true);
+    const config = JSON.parse(fs.readFileSync(path.join(root, 'configs', 'playable-delivery.json'), 'utf8'));
+    assert.deepEqual(config.hubs[0].briefs, ['replace-with-brief-id']);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
 test('help and invalid config are fail-closed before output mutation', () => {
   const root = fixture();
   try {
