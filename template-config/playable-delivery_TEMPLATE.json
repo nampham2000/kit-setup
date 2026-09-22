@@ -1,0 +1,23 @@
+{
+  "$schema": "../playable-shared-kit/template-config/playable-delivery.schema.json",
+  "schemaVersion": 1,
+  "jobs": 4,
+  "hubs": [
+    {
+      "id": "all-briefs",
+      "title": "Playable Review",
+      "subtitle": "PLAYABLE / BRIEF REVIEW",
+      "briefs": ["replace-with-brief-id"]
+    }
+  ],
+  "delivery": {
+    "provider": "none",
+    "siteDir": ".delivery/site",
+    "netlify": {
+      "siteIdEnv": "NETLIFY_SITE_ID"
+    },
+    "githubPages": {
+      "branch": "gh-pages"
+    }
+  }
+}

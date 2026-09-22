@@ -4,7 +4,7 @@
     "source": "playable-shared-kit/ai/capabilities.def.cjs",
     "generatedBy": "npm run ai:sync",
     "contractCheck": "npm run ai:contract:verify",
-    "count": 63
+    "count": 66
   },
   "coreRules": [
     {
@@ -2005,6 +2005,26 @@
         ],
         "verify": null,
         "status": "partial"
+      },
+      {
+        "id": "delivery.verify",
+        "title": "Xác minh read-only toàn bộ hub và site delivery",
+        "run": "npm run delivery:verify",
+        "command": "node playable-shared-kit/tools/delivery-pipeline.cjs verify",
+        "optional": [
+          "--project <dir>",
+          "--config <file>",
+          "--json"
+        ],
+        "when": "Sau khi prepare hoặc trước khi deploy lại site đã đóng gói.",
+        "outputs": [
+          "stdout hoặc JSON: brief count, hub count, file/hash issues"
+        ],
+        "limits": [
+          "Không thay thế browser smoke test hoặc kiểm tra HTTP của URL production."
+        ],
+        "verify": null,
+        "status": "partial"
       }
     ],
     "optimize": [
@@ -2277,6 +2297,55 @@
         ],
         "limits": [
           "Chỉ stage exact common_min build của brief đã chọn. Tạo hub không đồng nghĩa đã preview hoặc deploy; chỉ dùng --force sau khi kiểm tra output không thuộc generator."
+        ],
+        "verify": null,
+        "status": "partial"
+      },
+      {
+        "id": "delivery.init",
+        "title": "Khởi tạo config, GitHub Actions và hướng dẫn delivery cho project",
+        "run": "npm run delivery:init",
+        "command": "node playable-shared-kit/tools/delivery-pipeline.cjs init",
+        "optional": [
+          "--project <dir>",
+          "--config <file>",
+          "--force",
+          "--json"
+        ],
+        "when": "Một lần sau khi tạo project mới hoặc khi project chưa có configs/playable-delivery.json.",
+        "outputs": [
+          "configs/playable-delivery.json",
+          ".github/workflows/playable-delivery.yml",
+          "PLAYABLE_DELIVERY.md"
+        ],
+        "limits": [
+          "Không ghi đè config, workflow hoặc guide đã tùy chỉnh nếu thiếu --force. CI build cần Windows self-hosted runner có Cocos Creator."
+        ],
+        "verify": null,
+        "status": "partial"
+      },
+      {
+        "id": "delivery.run",
+        "title": "Build song song các brief, đóng gói nhiều hub và deploy bằng một lệnh",
+        "run": "npm run delivery",
+        "command": "node playable-shared-kit/tools/delivery-pipeline.cjs run",
+        "optional": [
+          "--project <dir>",
+          "--config <file>",
+          "--jobs <n>",
+          "--provider <none|netlify|github-pages>",
+          "--skip-build",
+          "--dry-run",
+          "--json"
+        ],
+        "when": "Khi cần build và giao một batch brief/game hub đã khai báo trong playable-delivery.json.",
+        "outputs": [
+          "game-hubs/<hub-id>",
+          ".delivery/site",
+          "URL Netlify hoặc GitHub Pages khi publish"
+        ],
+        "limits": [
+          "Deploy chỉ chạy sau khi toàn bộ exact common_min artifact, hub manifest và delivery SHA-256 pass. Netlify cần NETLIFY_AUTH_TOKEN và NETLIFY_SITE_ID; GitHub Pages CI cần Pages permission."
         ],
         "verify": null,
         "status": "partial"

@@ -1,0 +1,84 @@
+name: Playable Delivery
+
+on:
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: Publish target
+        required: true
+        default: netlify
+        type: choice
+        options:
+          - netlify
+          - github-pages
+          - package-only
+      jobs:
+        description: Parallel Cocos build workers
+        required: true
+        default: "4"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: playable-delivery
+  cancel-in-progress: false
+
+jobs:
+  build-and-package:
+    runs-on: [self-hosted, windows]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build briefs and package hubs
+        shell: pwsh
+        run: npm run delivery:prepare -- --jobs "${{ inputs.jobs }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: playable-delivery-site
+          path: .delivery/site
+          include-hidden-files: true
+          if-no-files-found: error
+
+  netlify:
+    if: inputs.provider == 'netlify'
+    needs: build-and-package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: playable-delivery-site
+          path: site
+      - name: Deploy production site
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+        run: npx --yes netlify-cli deploy --dir site --prod --site "$NETLIFY_SITE_ID"
+
+  github-pages:
+    if: inputs.provider == 'github-pages'
+    needs: build-and-package
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: playable-delivery-site
+          path: site
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: site
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

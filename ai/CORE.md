@@ -127,6 +127,7 @@ Chạy `npm run ai:contract:verify` để chứng minh manifest khớp với CLI
 | Sau khi port/fix một behavior hoặc visual đã từng sai, và bắt buộc trong port.core.verify. Khởi tạo một lần bằng `npm run ai:verify:regressions:init -- --risk <id>` rồi commit registry, matrix, oracle và reference. | `npm run ai:verify:regressions` | Registry mặc định là `tools/port-regressions.json` và phải nằm trong Git cùng matrix, eval/oracle, Unity reference và mọi watchFiles; file chỉ có trên máy hiện tại làm gate fail. Mỗi risk có contract riêng: input cần real gesture + semantic eval; input-concurrency cần `gestures[]` + pre/post overlap/reservation metrics; hold-drag cần gestureHoldBeforeMoveMs; transparent hold cần gestureKeepPressed; raycast cần positive+negative gesture tags; animation cần requiredTrace; particle-vfx cần semantic eval + screenshotRegion và bounded min/max screenshot metrics. Nếu tag `spatial-distribution`, mỗi case phải khai báo >=3 `requiredSpatialMetrics` có min/max trong requiredEvalMetrics ở ít nhất hai viewport explicit; runtime-mesh-animation cần linear-path + curved-path, Unity reference, ordered trace và bounded metrics; visual cần Unity reference; level-lifecycle cần win tag và chạy ít nhất 2 rounds. `requiredEvalMetrics`/`requiredEvalBeforeMetrics` fail-closed nếu eval thiếu metric, không finite hoặc vượt min/max. Runtime mesh animation phải chứng minh actionStarted=0 trước gesture và >=1 sau gesture; evalBefore không được tự gọi action đang test. Dùng metric cho UV span/error, position, direction dot, root scale và thickness; `{ok:true}` đơn lẻ không đủ. Trước run, tool gọi Cocos `editorRuntime_reload_preview` với refreshAssets=true để tránh test bundle TypeScript cũ. `--no-refresh` chỉ dùng khi chủ ý và được ghi rõ trong receipt. Receipt bind SHA-256 của registry, matrix, eval/reference và watchFiles; thay đổi byte sau PASS làm `check` fail stale. Tool không tự đánh giá pixel parity ngoài oracle/reference contract. `--suite <id>` chỉ re-run suite đã chọn rồi merge vào receipt base khi base cùng snapshot và đủ mọi suite còn lại; receipt thiếu/stale hoặc suite lạ phải fail trước preview. Không dùng selective rerun để bỏ qua suite fail. |
 | BẮT BUỘC cùng với `verify.all`. | `npm run ai:lint` | Cocos Creator 3.8.x chỉ cho một `@ccclass` kế thừa `cc.Component` trên mỗi module TypeScript; linter resolve base qua local/relative import và tính cả Component re-export qua barrel. `@ccclass` data/serializable không kế thừa `cc.Component` không bị tính. Mỗi Component concrete ở file riêng; shared base ở file riêng; marker/barrel phải Component-free và consumer import concrete module trực tiếp. Cocos Creator 3.8.2+ đã deprecate `LabelOutline` và `LabelShadow`; linter fail khi TypeScript còn import hoặc truy cập hai Component này. Dùng trực tiếp `Label.enableOutline/outlineColor/outlineWidth` và `Label.enableShadow/shadowColor/shadowOffset/shadowBlur` để tránh warning runtime nhưng vẫn giữ exact styling nguồn. |
 | Sau mỗi lần tạo hoặc cập nhật game hub, trước preview/deploy. | `npm run hub:verify` | Chỉ xác minh file, manifest, inventory và SHA-256; vẫn phải mở hub qua HTTP và thao tác controls để claim browser acceptance. |
+| Sau khi prepare hoặc trước khi deploy lại site đã đóng gói. | `npm run delivery:verify` | Không thay thế browser smoke test hoặc kiểm tra HTTP của URL production. |
 
 ### Tối ưu
 
@@ -148,6 +149,8 @@ Chạy `npm run ai:contract:verify` để chứng minh manifest khớp với CLI
 | Sau khi verify sạch. | `npm run build` | Playable nên dưới 3.5 MB; verifier sẽ cảnh báo khi vượt. |
 | Khi build lỗi hoặc mới clone repo. | `npm run doctor` | — |
 | Khi developer yêu cầu game hub, trang review brief tuần tự hoặc gom các playable brief cụ thể vào một UI Previous/Replay/Next. | `npm run hub:create` | Chỉ stage exact common_min build của brief đã chọn. Tạo hub không đồng nghĩa đã preview hoặc deploy; chỉ dùng --force sau khi kiểm tra output không thuộc generator. |
+| Một lần sau khi tạo project mới hoặc khi project chưa có configs/playable-delivery.json. | `npm run delivery:init` | Không ghi đè config, workflow hoặc guide đã tùy chỉnh nếu thiếu --force. CI build cần Windows self-hosted runner có Cocos Creator. |
+| Khi cần build và giao một batch brief/game hub đã khai báo trong playable-delivery.json. | `npm run delivery` | Deploy chỉ chạy sau khi toàn bộ exact common_min artifact, hub manifest và delivery SHA-256 pass. Netlify cần NETLIFY_AUTH_TOKEN và NETLIFY_SITE_ID; GitHub Pages CI cần Pages permission. |
 | Khi cần gửi bản chạy thử cho người khác. | `npm run deploy` | — |
 
 ### Tri thức & bộ nhớ
@@ -459,6 +462,12 @@ Những tool sau **không làm được việc mà tên gọi gợi ý**. Đọc
   - Chỉ stage exact common_min build của brief đã chọn. Tạo hub không đồng nghĩa đã preview hoặc deploy; chỉ dùng --force sau khi kiểm tra output không thuộc generator.
 - **`game-hub.verify`** (npm run hub:verify)
   - Chỉ xác minh file, manifest, inventory và SHA-256; vẫn phải mở hub qua HTTP và thao tác controls để claim browser acceptance.
+- **`delivery.init`** (npm run delivery:init)
+  - Không ghi đè config, workflow hoặc guide đã tùy chỉnh nếu thiếu --force. CI build cần Windows self-hosted runner có Cocos Creator.
+- **`delivery.run`** (npm run delivery)
+  - Deploy chỉ chạy sau khi toàn bộ exact common_min artifact, hub manifest và delivery SHA-256 pass. Netlify cần NETLIFY_AUTH_TOKEN và NETLIFY_SITE_ID; GitHub Pages CI cần Pages permission.
+- **`delivery.verify`** (npm run delivery:verify)
+  - Không thay thế browser smoke test hoặc kiểm tra HTTP của URL production.
 - **`ai.sync`** (npm run ai:sync)
   - `CC_PLAYABLE_AI_SYNC_PROJECT_ONLY=1` chỉ skip deploy skill vào user-home; mọi artifact/skill nằm trong project Git vẫn phải generate, copy và render đầy đủ. Mặc định vẫn deploy cả project lẫn user-home.
 - **`memory.doctor`** (npm run memory:doctor -- --json)

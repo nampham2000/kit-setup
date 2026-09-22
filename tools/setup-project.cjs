@@ -38,6 +38,7 @@ function setup(project) {
   npm('install locked project dependencies', ['ci']);
   npm('install Cocos MCP runtime', ['ci', '--omit=dev', '--ignore-scripts'], path.join(kit, 'packages/extensions/cocos-mcp'));
   node('sync packages, extensions, scripts and launchers', 'sync-shared-kit.cjs');
+  node('initialize playable delivery workflow', 'delivery-pipeline.cjs', ['init']);
   for (const name of fs.readdirSync(path.join(kit, 'packages/extensions'))) {
     const cwd = path.join(project, 'extensions', name);
     if (fs.existsSync(path.join(kit, 'packages/extensions', name, 'package-lock.json'))) npm(`install ${name} runtime`, ['ci', '--omit=dev', '--ignore-scripts'], cwd);
@@ -57,7 +58,7 @@ function setup(project) {
 }
 
 if (require.main === module) {
-  if (process.argv.includes('--help')) console.log('Usage: node playable-shared-kit/tools/setup-project.cjs [project-root]\nInstalls locked dependencies, syncs the pinned shared kit and verifies memory/contracts. Does not fetch a newer kit or overwrite game settings.');
+  if (process.argv.includes('--help')) console.log('Usage: node playable-shared-kit/tools/setup-project.cjs [project-root]\nInstalls locked dependencies, syncs the pinned shared kit, initializes playable delivery, and verifies memory/contracts. Does not fetch a newer kit or overwrite game settings.');
   else try { setup(path.resolve(process.argv[2] || path.join(__dirname, '../..'))); }
   catch (error) { console.error(error.message); process.exitCode = 1; }
 }
