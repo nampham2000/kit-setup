@@ -164,7 +164,7 @@ export class AssetAdvancedTools implements ToolExecutor {
             },
             {
                 name: 'compress_textures',
-                description: 'Apply the portable PlayableTransparent compressed-texture preset to PNG/JPG/JPEG assets',
+                description: 'Apply the portable project texture policy (or PlayableTransparent fallback) to PNG/JPG/JPEG assets',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -205,7 +205,7 @@ export class AssetAdvancedTools implements ToolExecutor {
             },
             {
                 name: 'enforce_texture_compression_policy',
-                description: 'Ensure PlayableTransparent WebP preset exists and assign it to every PNG/JPG/JPEG through Cocos Asset DB',
+                description: 'Apply tools/texture-compression-policy.json, or the PlayableTransparent fallback, through Cocos Asset DB',
                 inputSchema: {
                     type: 'object',
                     properties: {

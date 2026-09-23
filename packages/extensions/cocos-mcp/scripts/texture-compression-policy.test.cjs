@@ -1,15 +1,19 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const test = require('node:test');
 const {
+  PLAYABLE_OPAQUE_PRESET_ID,
   PLAYABLE_TRANSPARENT_PRESET_ID,
   TextureCompressionPolicy,
   isPlayableTextureUrl,
   normalizeWebpQuality,
 } = require('../dist/texture-compression-policy.js');
 
-function makeEditor({ preset = null } = {}) {
+function makeEditor({ preset = null, projectRoot = '' } = {}) {
   let profile = { userPreset: preset ? { [preset.id]: preset.value } : {}, genMipmaps: false };
   let profileWrites = 0;
   const assets = [
@@ -31,6 +35,7 @@ function makeEditor({ preset = null } = {}) {
   const calls = [];
   return {
     editor: {
+      Project: projectRoot ? { path: projectRoot } : undefined,
       Profile: {
         async getProject(name, key) {
           assert.equal(name, 'builder');
@@ -100,6 +105,37 @@ test('extension policy creates WebP 50 fallback and applies it to PNG/JPG/JPEG o
     assert.equal(fixture.profileWrites, 1);
   } finally {
     delete global.Editor;
+  }
+});
+
+test('project policy applies PlayableOpaque by default and preserves the current preset for game backgrounds', async () => {
+  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'texture-policy-'));
+  fs.mkdirSync(path.join(projectRoot, 'tools'));
+  fs.writeFileSync(path.join(projectRoot, 'tools', 'texture-compression-policy.json'), JSON.stringify({
+    version: 1,
+    default: { presetId: PLAYABLE_OPAQUE_PRESET_ID, presetName: 'PlayableOpaque', quality: 20 },
+    overrides: [{
+      pathPrefix: 'db://assets/nested',
+      presetId: PLAYABLE_TRANSPARENT_PRESET_ID,
+      presetName: 'PlayableTransparent',
+      quality: 50,
+    }],
+  }));
+  const fixture = makeEditor({ projectRoot });
+  global.Editor = fixture.editor;
+  try {
+    const report = await new TextureCompressionPolicy().enforceAll();
+    assert.equal(report.complete, true);
+    assert.equal(report.preset.id, PLAYABLE_OPAQUE_PRESET_ID);
+    assert.equal(report.presets.length, 2);
+    assert.equal(fixture.profile.userPreset[PLAYABLE_OPAQUE_PRESET_ID].options.web.webp.quality, 20);
+    assert.equal(fixture.profile.userPreset[PLAYABLE_TRANSPARENT_PRESET_ID].options.web.webp.quality, 50);
+    assert.equal(fixture.metas.get('png').userData.compressSettings.presetId, PLAYABLE_OPAQUE_PRESET_ID);
+    assert.equal(fixture.metas.get('jpg').userData.compressSettings.presetId, PLAYABLE_OPAQUE_PRESET_ID);
+    assert.equal(fixture.metas.get('jpeg').userData.compressSettings.presetId, PLAYABLE_TRANSPARENT_PRESET_ID);
+  } finally {
+    delete global.Editor;
+    fs.rmSync(projectRoot, { recursive: true, force: true });
   }
 });
 

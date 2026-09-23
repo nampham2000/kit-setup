@@ -17,10 +17,15 @@ Before building, always run the automated asset optimization tools:
    npm run ai:texture:compress -- --verify
    ```
    The shared Cocos extension also listens to `asset-db:asset-add` and
-   `asset-db:asset-change`. Every `.png`, `.jpg`, and `.jpeg` is assigned the
-   existing `PlayableTransparent` / `Playable Transparent` preset. If neither
-   exists, the extension creates a WebP quality 50 preset. If an existing alias
-   is not exactly WebP 50, it is normalized instead of being trusted by name.
+   `asset-db:asset-change`. A project may commit
+   `tools/texture-compression-policy.json` with one `default` preset and
+   `overrides[].pathPrefix`; the longest matching prefix wins. This supports,
+   for example, `PlayableOpaque` for UI while map backgrounds retain
+   `PlayableTransparent`. Without that file every `.png`, `.jpg`, and `.jpeg`
+   uses the existing `PlayableTransparent` / `Playable Transparent` preset. If
+   neither exists, the extension creates a WebP quality 50 preset. Each declared
+   preset is normalized to its configured WebP quality instead of being trusted
+   by name.
    The policy persists
    `useCompressTexture=true` plus its `presetId` through the Cocos Profile and
    Asset DB APIs. Never patch image `.meta` files directly.
