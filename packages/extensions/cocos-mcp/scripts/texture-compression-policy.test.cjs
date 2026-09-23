@@ -139,6 +139,37 @@ test('project policy applies PlayableOpaque by default and preserves the current
   }
 });
 
+test('concurrent asset enforcement preserves every project-policy preset', async () => {
+  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'texture-policy-concurrent-'));
+  fs.mkdirSync(path.join(projectRoot, 'tools'));
+  fs.writeFileSync(path.join(projectRoot, 'tools', 'texture-compression-policy.json'), JSON.stringify({
+    version: 1,
+    default: { presetId: PLAYABLE_OPAQUE_PRESET_ID, presetName: 'PlayableOpaque', quality: 20 },
+    overrides: [{
+      pathPrefix: 'db://assets/nested',
+      presetId: PLAYABLE_TRANSPARENT_PRESET_ID,
+      presetName: 'PlayableTransparent',
+      quality: 50,
+    }],
+  }));
+  const fixture = makeEditor({ projectRoot });
+  global.Editor = fixture.editor;
+  try {
+    const policy = new TextureCompressionPolicy();
+    const [opaque, transparent] = await Promise.all([
+      policy.enforceAsset('png'),
+      policy.enforceAsset('jpeg'),
+    ]);
+    assert.equal(opaque.status, 'updated');
+    assert.equal(transparent.status, 'updated');
+    assert.equal(fixture.profile.userPreset[PLAYABLE_OPAQUE_PRESET_ID].options.web.webp.quality, 20);
+    assert.equal(fixture.profile.userPreset[PLAYABLE_TRANSPARENT_PRESET_ID].options.web.webp.quality, 50);
+  } finally {
+    delete global.Editor;
+    fs.rmSync(projectRoot, { recursive: true, force: true });
+  }
+});
+
 test('extension policy normalizes a spaced Playable Transparent alias to WebP 50', async () => {
   const fixture = makeEditor({
     preset: {

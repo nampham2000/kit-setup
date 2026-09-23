@@ -159,6 +159,7 @@ function assetIdentity(payload: any): string | null {
 export class TextureCompressionPolicy {
     private fullScan: Promise<TexturePolicyReport> | null = null;
     private readonly assetInFlight = new Set<string>();
+    private presetMutation: Promise<void> = Promise.resolve();
 
     async enforceAll(options: TexturePolicyOptions = {}): Promise<TexturePolicyReport> {
         if (this.fullScan) return this.fullScan;
@@ -251,6 +252,20 @@ export class TextureCompressionPolicy {
     }
 
     private async ensurePreset(options: TexturePolicyOptions): Promise<TexturePolicyReport['preset']> {
+        const previous = this.presetMutation;
+        let release!: () => void;
+        this.presetMutation = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        await previous;
+        try {
+            return await this.ensurePresetExclusive(options);
+        } finally {
+            release();
+        }
+    }
+
+    private async ensurePresetExclusive(options: TexturePolicyOptions): Promise<TexturePolicyReport['preset']> {
         const profileApi: any = (Editor as any).Profile;
         if (!profileApi?.getProject || !profileApi?.setProject) {
             throw new Error('Editor.Profile project API is unavailable; cannot ensure texture compression preset.');
