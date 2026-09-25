@@ -1,0 +1,496 @@
+// Unity particle material semantics for Cocos CPU particles.
+// Evidence (tools/port/unity-particle-material-oracle.cs, Unity 6 URP, Linear project): particle vertex colours are
+// linearized and blending happens in linear space; Particles/Standard Unlit = _Color * vc * tex; legacy
+// "Particles/Alpha Blended Premultiply" = vc * tex * vc.a with alpha vc.a^2 * tex.a (Blend One OneMinusSrcAlpha);
+// URP Particles/Simple Lit = albedo * vc * (ambient + sum NdotL * light) with emission only under _EMISSION;
+// URP Lit on a particle ignores the vertex colour (albedo * 0.96 * lighting + specular + emission).
+//
+// unityColor           serialized ShaderLab main colour (_BaseColor/_Color/_TintColor)
+// unityEmission        linear emission colour (zero unless the source keyword is active)
+// unityColorSpace      x: decode texture sRGB, y: vertex colour linearized, z: main colour linearized,
+//                      w: linear project (encode the linear result for the RGBA8 target)
+// unityParticleParams  x: formula (0 standard, 1 legacy tinted x2, 2 legacy premultiply, 3 legacy soft additive,
+//                      4 legacy multiply, 5 legacy multiply double, 6 premultiply by alpha), y: vertex colour weight
+//                      (0 = ignored, URP Lit), z: lighting (0 unlit, 1 simple lit, 2 PBR lit), w: alpha clip (0 = off)
+// unityPbrParams       x: perceptual smoothness, y: metallic
+// unityLight*/unityAmbient*  Unity light rig as serialized (sRGB colours, separate intensities), linearized here with
+//                      the exact sRGB curve when unityColorSpace.w is set (Cocos' linear:true/SRGBToLinear are x^2).
+// Blending: one technique per Unity blend factor pair. Without CC_USE_FLOAT_OUTPUT the target is RGBA8 gamma and
+// fixed-function blending happens in gamma space (exact over black, up to ~60/255 off for half-transparent smoke);
+// with float output (project macro ENABLE_FLOAT_OUTPUT) blending happens in the near-linear x^2 domain.
+CCEffect %{
+  temporaries:
+    blendAlpha: &blendAlpha
+      targets:
+      - blend: true
+        blendSrc: src_alpha
+        blendDst: one_minus_src_alpha
+        blendSrcAlpha: zero
+        blendDstAlpha: one
+    blendPremultiply: &blendPremultiply
+      targets:
+      - blend: true
+        blendSrc: one
+        blendDst: one_minus_src_alpha
+        blendSrcAlpha: zero
+        blendDstAlpha: one
+    blendAdditive: &blendAdditive
+      targets:
+      - blend: true
+        blendSrc: src_alpha
+        blendDst: one
+        blendSrcAlpha: zero
+        blendDstAlpha: one
+    blendAdditiveOne: &blendAdditiveOne
+      targets:
+      - blend: true
+        blendSrc: one
+        blendDst: one
+        blendSrcAlpha: zero
+        blendDstAlpha: one
+    blendSoftAdditive: &blendSoftAdditive
+      targets:
+      - blend: true
+        blendSrc: one
+        blendDst: one_minus_src_color
+        blendSrcAlpha: zero
+        blendDstAlpha: one
+    blendMultiply: &blendMultiply
+      targets:
+      - blend: true
+        blendSrc: dst_color
+        blendDst: zero
+        blendSrcAlpha: zero
+        blendDstAlpha: one
+    blendMultiplyDouble: &blendMultiplyDouble
+      targets:
+      - blend: true
+        blendSrc: dst_color
+        blendDst: src_color
+        blendSrcAlpha: zero
+        blendDstAlpha: one
+    depthTransparent: &depthTransparent { depthTest: true, depthWrite: false }
+    depthOpaque: &depthOpaque { depthTest: true, depthWrite: true }
+    cullNone: &cullNone { cullMode: none }
+    props: &props
+      mainTexture:            { value: white }
+      mainTiling_Offset:      { value: [1, 1, 0, 0] }
+      sourceRendererPivot:    { value: [0, 0, 0, 0] }
+      unityColor:             { value: [1, 1, 1, 1], editor: { type: vector } }
+      unityEmission:          { value: [0, 0, 0, 0], editor: { type: vector } }
+      unityColorSpace:        { value: [0, 0, 0, 0], editor: { type: vector } }
+      unityParticleParams:    { value: [0, 1, 0, 0], editor: { type: vector } }
+      unityPbrParams:         { value: [0.5, 0, 0, 0], editor: { type: vector } }
+      unityLightDirection0:   { value: [0, 1, 0, 0] }
+      unityLightDirection1:   { value: [0, 1, 0, 0] }
+      unityLightColor0:       { value: [1, 1, 1, 1], editor: { type: vector } }
+      unityLightColor1:       { value: [1, 1, 1, 1], editor: { type: vector } }
+      unityLightIntensities:  { value: [0, 0, 0, 0] }
+      unityAmbientSky:        { value: [0, 0, 0, 1], editor: { type: vector } }
+      unityAmbientEquator:    { value: [0, 0, 0, 1], editor: { type: vector } }
+      unityAmbientGround:     { value: [0, 0, 0, 1], editor: { type: vector } }
+      unityAmbientParams:     { value: [1, 0, 0, 0] }
+  techniques:
+  - name: alpha-blend
+    passes:
+    - vert: unity-particle-vs:lpvs_main
+      frag: unity-particle-fs:frag
+      rasterizerState: *cullNone
+      depthStencilState: *depthTransparent
+      blendState: *blendAlpha
+      properties: *props
+    - vert: unity-particle-vs:lpvs_main
+      frag: unity-particle-fs:frag
+      phase: deferred-forward
+      rasterizerState: *cullNone
+      depthStencilState: *depthTransparent
+      blendState: *blendAlpha
+      propertyIndex: 0
+  - name: premultiply
+    passes:
+    - vert: unity-particle-vs:lpvs_main
+      frag: unity-particle-fs:frag
+      rasterizerState: *cullNone
+      depthStencilState: *depthTransparent
+      blendState: *blendPremultiply
+      properties: *props
+    - vert: unity-particle-vs:lpvs_main
+      frag: unity-particle-fs:frag
+      phase: deferred-forward
+      rasterizerState: *cullNone
+      depthStencilState: *depthTransparent
+      blendState: *blendPremultiply
+      propertyIndex: 0
+  - name: additive
+    passes:
+    - vert: unity-particle-vs:lpvs_main
+      frag: unity-particle-fs:frag
+      rasterizerState: *cullNone
+      depthStencilState: *depthTransparent
+      blendState: *blendAdditive
+      properties: *props
+    - vert: unity-particle-vs:lpvs_main
+      frag: unity-particle-fs:frag
+      phase: deferred-forward
+      rasterizerState: *cullNone
+      depthStencilState: *depthTransparent
+      blendState: *blendAdditive
+      propertyIndex: 0
+  - name: additive-one
+    passes:
+    - vert: unity-particle-vs:lpvs_main
+      frag: unity-particle-fs:frag
+      rasterizerState: *cullNone
+      depthStencilState: *depthTransparent
+      blendState: *blendAdditiveOne
+      properties: *props
+    - vert: unity-particle-vs:lpvs_main
+      frag: unity-particle-fs:frag
+      phase: deferred-forward
+      rasterizerState: *cullNone
+      depthStencilState: *depthTransparent
+      blendState: *blendAdditiveOne
+      propertyIndex: 0
+  - name: soft-additive
+    passes:
+    - vert: unity-particle-vs:lpvs_main
+      frag: unity-particle-fs:frag
+      rasterizerState: *cullNone
+      depthStencilState: *depthTransparent
+      blendState: *blendSoftAdditive
+      properties: *props
+    - vert: unity-particle-vs:lpvs_main
+      frag: unity-particle-fs:frag
+      phase: deferred-forward
+      rasterizerState: *cullNone
+      depthStencilState: *depthTransparent
+      blendState: *blendSoftAdditive
+      propertyIndex: 0
+  - name: multiply
+    passes:
+    - vert: unity-particle-vs:lpvs_main
+      frag: unity-particle-fs:frag
+      rasterizerState: *cullNone
+      depthStencilState: *depthTransparent
+      blendState: *blendMultiply
+      properties: *props
+    - vert: unity-particle-vs:lpvs_main
+      frag: unity-particle-fs:frag
+      phase: deferred-forward
+      rasterizerState: *cullNone
+      depthStencilState: *depthTransparent
+      blendState: *blendMultiply
+      propertyIndex: 0
+  - name: multiply-double
+    passes:
+    - vert: unity-particle-vs:lpvs_main
+      frag: unity-particle-fs:frag
+      rasterizerState: *cullNone
+      depthStencilState: *depthTransparent
+      blendState: *blendMultiplyDouble
+      properties: *props
+    - vert: unity-particle-vs:lpvs_main
+      frag: unity-particle-fs:frag
+      phase: deferred-forward
+      rasterizerState: *cullNone
+      depthStencilState: *depthTransparent
+      blendState: *blendMultiplyDouble
+      propertyIndex: 0
+  - name: opaque
+    passes:
+    - vert: unity-particle-vs:lpvs_main
+      frag: unity-particle-fs:frag
+      rasterizerState: *cullNone
+      depthStencilState: *depthOpaque
+      properties: *props
+    - vert: unity-particle-vs:lpvs_main
+      frag: unity-particle-fs:frag
+      phase: deferred-forward
+      rasterizerState: *cullNone
+      depthStencilState: *depthOpaque
+      propertyIndex: 0
+}%
+
+CCProgram unity-particle-fs %{
+  precision highp float;
+  #include <builtin/uniforms/cc-global>
+  #include <builtin/internal/embedded-alpha>
+
+  in vec2 uv;
+  in vec4 color;
+  in vec3 v_worldPos;
+  in vec3 v_worldNormal;
+
+  uniform sampler2D mainTexture;
+  uniform UnityParticleFS {
+    vec4 unityColor;
+    vec4 unityEmission;
+    vec4 unityColorSpace;
+    vec4 unityParticleParams;
+    vec4 unityPbrParams;
+    vec4 unityLightDirection0;
+    vec4 unityLightDirection1;
+    vec4 unityLightColor0;
+    vec4 unityLightColor1;
+    vec4 unityLightIntensities;
+    vec4 unityAmbientSky;
+    vec4 unityAmbientEquator;
+    vec4 unityAmbientGround;
+    vec4 unityAmbientParams;
+  };
+
+  // Unity converts with the exact sRGB transfer function; Cocos' SRGBToLinear/LinearToSRGB are x^2 / sqrt(x).
+  vec3 unitySrgbToLinear (vec3 c) {
+    return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), c));
+  }
+
+  vec3 unityLinearToSrgb (vec3 c) {
+    c = max(c, vec3(0.0));
+    return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), c));
+  }
+
+  vec3 toLinear (vec3 value, float enabled) {
+    return enabled > 0.5 ? unitySrgbToLinear(value) : value;
+  }
+
+  vec3 unityTrilightAmbient (vec3 normal) {
+    float up = max(normal.y, 0.0);
+    float down = max(-normal.y, 0.0);
+    vec3 sky = toLinear(unityAmbientSky.rgb, unityColorSpace.w);
+    vec3 equator = toLinear(unityAmbientEquator.rgb, unityColorSpace.w);
+    vec3 ground = toLinear(unityAmbientGround.rgb, unityColorSpace.w);
+    vec3 ambient = normal.y >= 0.0 ? mix(equator, sky, up) : mix(equator, ground, down);
+    return ambient * unityAmbientParams.x;
+  }
+
+  // URP DirectBRDFSpecular (same compact Cook-Torrance as the urp-lit port).
+  float unityDirectSpecular (vec3 normal, vec3 lightDirection, vec3 viewDirection, float perceptualRoughness) {
+    vec3 halfDirection = normalize(lightDirection + viewDirection);
+    float noH = max(dot(normal, halfDirection), 0.0);
+    float loH = max(dot(lightDirection, halfDirection), 0.0);
+    float roughness = max(perceptualRoughness * perceptualRoughness, 0.0078125);
+    float roughness2 = max(roughness * roughness, 0.000061035);
+    float d = noH * noH * (roughness2 - 1.0) + 1.00001;
+    float normalization = roughness * 4.0 + 2.0;
+    return roughness2 / max((d * d) * max(0.1, loH * loH) * normalization, 0.000001);
+  }
+
+  vec3 unityLight (vec3 albedo, vec3 normal, vec3 viewDirection, vec3 lightDirection, vec3 lightColor, float intensity, float model) {
+    float noL = max(dot(normal, normalize(lightDirection)), 0.0);
+    vec3 radiance = toLinear(lightColor, unityColorSpace.w) * intensity * noL;
+    if (model < 1.5) return albedo * radiance;
+    float metallic = unityPbrParams.y;
+    vec3 diffuse = albedo * (1.0 - mix(0.04, 1.0, metallic));
+    vec3 specular = mix(vec3(0.04), albedo, metallic)
+      * unityDirectSpecular(normal, normalize(lightDirection), viewDirection, 1.0 - unityPbrParams.x);
+    return (diffuse + specular) * radiance;
+  }
+
+  vec4 frag () {
+    vec4 tex = CCSampleWithAlphaSeparated(mainTexture, uv);
+    tex.rgb = toLinear(tex.rgb, unityColorSpace.x);
+    vec4 vc = color;
+    vc.rgb = toLinear(vc.rgb, unityColorSpace.y);
+    vc = mix(vec4(1.0), vc, unityParticleParams.y);
+    vec4 tint = vec4(toLinear(unityColor.rgb, unityColorSpace.z), unityColor.a);
+
+    float formula = unityParticleParams.x;
+    vec4 col;
+    if (formula < 0.5) {
+      col = tint * vc * tex;
+    } else if (formula < 1.5) {
+      col = 2.0 * vc * tint * tex;
+    } else if (formula < 2.5) {
+      col = vc * tex * vc.a;
+    } else if (formula < 3.5) {
+      col = vc * tex;
+      col.rgb *= col.a;
+    } else if (formula < 4.5) {
+      col = vc * tex;
+      col = mix(vec4(1.0), col, col.a);
+    } else if (formula < 5.5) {
+      col = vec4(tex.rgb * vc.rgb * 2.0, vc.a * tex.a);
+      col = mix(vec4(0.5), col, col.a);
+    } else {
+      col = tint * vc * tex;
+    }
+
+    if (unityParticleParams.w > 0.0 && col.a < unityParticleParams.w) discard;
+
+    float model = unityParticleParams.z;
+    if (model > 0.5) {
+      vec3 normal = normalize(v_worldNormal);
+      bool orthographic = cc_matProj[3][3] > 0.5;
+      vec3 viewDirection = orthographic ? normalize(cc_matViewInv[2].xyz) : normalize(cc_cameraPos.xyz - v_worldPos);
+      vec3 albedo = col.rgb;
+      vec3 lit = unityLight(albedo, normal, viewDirection, unityLightDirection0.xyz, unityLightColor0.rgb, unityLightIntensities.x, model)
+        + unityLight(albedo, normal, viewDirection, unityLightDirection1.xyz, unityLightColor1.rgb, unityLightIntensities.y, model);
+      vec3 ambientAlbedo = model < 1.5 ? albedo : albedo * (1.0 - mix(0.04, 1.0, unityPbrParams.y));
+      col.rgb = lit + unityTrilightAmbient(normal) * ambientAlbedo;
+    }
+    if (formula > 5.5) col.rgb *= col.a;
+    col.rgb += unityEmission.rgb;
+
+    // Encode with the exact sRGB curve (Unity). Under CC_USE_FLOAT_OUTPUT the frame stays in the Cocos linear domain
+    // shared by the URP Lit port and the grading pass (x^2 in, sqrt out), so store the encoded colour squared: the
+    // final encode returns it exactly and blending happens in that near-linear domain like Unity.
+    vec3 encoded = unityColorSpace.w > 0.5 ? unityLinearToSrgb(col.rgb) : col.rgb;
+    #if CC_USE_FLOAT_OUTPUT
+      col.rgb = encoded * encoded;
+    #else
+      col.rgb = encoded;
+    #endif
+    return col;
+  }
+}%
+
+// Adapted from Cocos Creator 3.8.8 builtin/internal/particle-vs-legacy (MIT, Xiamen Yaji Software) through the
+// shared kit's source-particle.effect: same Unity renderer pivot adapter, plus world position/normal outputs.
+CCProgram unity-particle-vs %{
+
+precision highp float;
+#include <common/math/transform>
+#include <builtin/internal/particle-common>
+#include <builtin/uniforms/cc-local>
+
+in vec3 a_texCoord1;  // size
+in vec3 a_texCoord2;  // rotation
+in vec4 a_color;
+
+in vec3 a_texCoord;  // xy:vertex index,z:frame index
+#if !CC_INSTANCE_PARTICLE
+ in vec3 a_position;  // center position
+#endif
+#if CC_INSTANCE_PARTICLE
+ in vec4 a_texCoord4; // xyz:position,z:frame index
+#endif
+
+#if CC_RENDER_MODE == RENDER_MODE_STRETCHED_BILLBOARD
+  in vec3 a_color1; // velocity.x, velocity.y, velocity.z, scale
+#endif
+
+#if CC_RENDER_MODE == RENDER_MODE_MESH
+  in vec3 a_texCoord3;  // mesh vertices
+  in vec3 a_normal;     // mesh normal
+  in vec4 a_color1;     // mesh color
+#endif
+
+out vec3 v_worldPos;
+out vec3 v_worldNormal;
+
+uniform SourceRenderer { vec4 sourceRendererPivot; };
+vec4 sourceEuler(vec3 e) {
+  vec3 s=sin(e*0.5),c=cos(e*0.5);
+  return vec4(s.x*c.y*c.z+c.x*s.y*s.z,
+              c.x*s.y*c.z-s.x*c.y*s.z,
+              c.x*c.y*s.z-s.x*s.y*c.z,
+              c.x*c.y*c.z+s.x*s.y*s.z);
+}
+vec4 lpvs_main () {
+  vec3 compScale = scale.xyz * a_texCoord1;
+  #if !CC_INSTANCE_PARTICLE
+    vec4 pos = vec4(a_position.xyz, 1);
+  #endif
+  #if CC_INSTANCE_PARTICLE
+    vec4 pos = vec4(a_texCoord4.xyz, 1);
+  #endif
+  #if CC_RENDER_MODE == RENDER_MODE_STRETCHED_BILLBOARD
+    vec4 velocity = vec4(a_color1.xyz, 0);
+  #endif
+
+  #if !CC_USE_WORLD_SPACE
+    // simulate in world space. apply cc_matWorld matrix on CPU side.
+    pos = cc_matWorld * pos;
+    #if CC_RENDER_MODE == RENDER_MODE_STRETCHED_BILLBOARD
+      velocity = cc_matWorld * velocity;
+    #endif
+  #endif
+
+  #pragma define INDENTIFY_NEG_QUAT 10.0
+
+  #if ROTATION_OVER_TIME_MODULE_ENABLE
+    vec3 rotTmp = a_texCoord2;
+    float mulFactor = 1.0;
+    if (rotTmp.x > INDENTIFY_NEG_QUAT * 0.5) {
+        rotTmp.x -= INDENTIFY_NEG_QUAT;
+        mulFactor = -1.0;
+    }
+    vec4 rot = vec4(rotTmp, 0.0);
+    rot.w = mulFactor * sqrt(abs(1.0 - rot.x * rot.x - rot.y * rot.y - rot.z * rot.z));
+  #endif
+  #if !ROTATION_OVER_TIME_MODULE_ENABLE
+    #if CC_RENDER_MODE != RENDER_MODE_MESH
+      #if CC_RENDER_MODE == RENDER_MODE_BILLBOARD
+        vec3 rotEuler = a_texCoord2;
+      #elif CC_RENDER_MODE == RENDER_MODE_STRETCHED_BILLBOARD
+        vec3 rotEuler = vec3(0.);
+      #endif
+      #if CC_RENDER_MODE != RENDER_MODE_BILLBOARD && CC_RENDER_MODE != RENDER_MODE_STRETCHED_BILLBOARD
+        vec3 rotEuler = vec3(0., 0., a_texCoord2.z);
+      #endif
+      vec4 rot = quaternionFromEuler(rotEuler);
+      #if CC_RENDER_MODE == RENDER_MODE_BILLBOARD
+        if(sourceRendererPivot.w == 2.0) rot=sourceEuler(rotEuler);
+      #endif
+    #endif
+    #if CC_RENDER_MODE == RENDER_MODE_MESH
+      vec4 rot = sourceEuler(a_texCoord2);
+    #endif
+  #endif
+
+  // Unity billboard normals face the camera (ParticleSystemRenderer normalDirection = 1); mesh particles keep theirs.
+  v_worldNormal = cc_matViewInv[2].xyz;
+  #if CC_RENDER_MODE != RENDER_MODE_MESH
+    vec2 cornerOffset = vec2((a_texCoord.xy - 0.5));
+
+    #if CC_RENDER_MODE == RENDER_MODE_BILLBOARD || CC_RENDER_MODE == RENDER_MODE_VERTICAL_BILLBOARD
+      #if CC_RENDER_MODE == RENDER_MODE_BILLBOARD
+        if(sourceRendererPivot.w == 2.0) {
+          vec3 offset=vec3(cornerOffset*compScale.xy,0.0);
+          rotateVecFromQuat(offset,rot);
+          rotateVecFromQuat(offset,nodeRotation);
+          pos.xyz+=offset;
+        } else {
+          computeVertPos(pos, cornerOffset, rot, compScale, cc_matViewInv);
+        }
+      #else
+        computeVertPos(pos, cornerOffset, rot, compScale, cc_matViewInv);
+      #endif
+    #elif CC_RENDER_MODE == RENDER_MODE_STRETCHED_BILLBOARD
+      if (dot(velocity.xyz,velocity.xyz)>0.0)
+        pos.xyz+=normalize(velocity.xyz)*(2.0*compScale.y*sourceRendererPivot.y);
+      computeVertPos(pos, cornerOffset, rot, compScale, cc_cameraPos.xyz, velocity, frameTile_velLenScale.z, frameTile_velLenScale.w, a_texCoord.x);
+    #elif RENDER_MODE_HORIZONTAL_BILLBOARD
+      computeVertPos(pos, cornerOffset, rot, compScale);
+    #endif
+
+    color = a_color;
+  #endif
+  #if CC_RENDER_MODE == RENDER_MODE_MESH
+    mat3 rotMat = quatToMat3(rot);
+    mat3 nodeMat = quatToMat3(nodeRotation);
+    rotMat = nodeMat * rotMat;
+    rot = mat3ToQuat(rotMat);
+
+    mat4 xformNoScale = matrixFromRT(rot, pos.xyz);
+    mat4 xform = matFromRTS(rot, pos.xyz, compScale);
+    pos = xform * vec4(a_texCoord3, 1);
+    vec4 normal = xformNoScale * vec4(a_normal, 0);
+    v_worldNormal = normal.xyz;
+    color = a_color * a_color1;
+  #endif
+
+  #if !CC_INSTANCE_PARTICLE
+    uv = computeUV(a_texCoord.z, a_texCoord.xy, frameTile_velLenScale.xy) * mainTiling_Offset.xy + mainTiling_Offset.zw;
+  #endif
+  #if CC_INSTANCE_PARTICLE
+    uv = computeUV(a_texCoord4.w, a_texCoord.xy, frameTile_velLenScale.xy) * mainTiling_Offset.xy + mainTiling_Offset.zw;
+  #endif
+
+  v_worldPos = pos.xyz;
+  pos = cc_matViewProj * pos;
+
+  return pos;
+}
+
+}%

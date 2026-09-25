@@ -1,4 +1,4 @@
-import { _decorator, Camera, CCString, Component, js, Material, rendering, Texture2D, Vec4, view } from 'cc';
+import { _decorator, Camera, CCString, Component, js, Layers, Material, rendering, Texture2D, Vec4, view } from 'cc';
 import { PlayableConfigManager } from '../config/PlayableConfigManager';
 
 const { ccclass, property, requireComponent } = _decorator;
@@ -23,6 +23,37 @@ interface BuiltinSettingsLike extends Component {
     msaa: { enabled: boolean; sampleCount: number };
     colorGrading: { enabled: boolean; material: Material | null; contribute: number; colorGradingMap: Texture2D | null };
   };
+}
+
+interface ResizeCameraLike { visibility: number; window: { renderWindowId: number } }
+interface PipelineBuilderLike {
+  windowResize?: (ppl: unknown, window: { renderWindowId: number }, camera: ResizeCameraLike, width: number, height: number) => void;
+  __unityFullPipelineResize?: boolean;
+}
+
+/**
+ * Cocos 3.8.8's builtin pipeline allocates a render window's Radiance/MSAA targets in windowResize once per camera
+ * drawing to that window, with that camera's HDR decision (rendering/custom/framework.ts warns about the collision).
+ * With float output the full-pipeline 3D camera wants RGBA16F, then the UI camera re-adds the same targets as RGBA8,
+ * so the RGBA16F MSAA resolve into the RGBA8 radiance fails (blitFramebuffer GL_INVALID_OPERATION) and the 3D frame
+ * is black. Replay the full-pipeline camera's resize after any other camera resized the same window.
+ */
+function keepFullPipelineWindowTargets(): void {
+  const registry = (rendering as unknown as { customPipelineBuilderMap?: Map<string, PipelineBuilderLike> }).customPipelineBuilderMap;
+  const builder = registry?.get('Builtin');
+  if (!builder?.windowResize || builder.__unityFullPipelineResize) return;
+  const original = builder.windowResize.bind(builder);
+  const fullCameraByWindow = new Map<number, ResizeCameraLike>();
+  builder.windowResize = (ppl, window, camera, width, height) => {
+    original(ppl, window, camera, width, height);
+    if ((camera.visibility & Layers.Enum.DEFAULT) !== 0) {
+      fullCameraByWindow.set(window.renderWindowId, camera);
+      return;
+    }
+    const fullCamera = fullCameraByWindow.get(window.renderWindowId);
+    if (fullCamera && fullCamera.window === window) original(ppl, window, fullCamera, width, height);
+  };
+  builder.__unityFullPipelineResize = true;
 }
 
 /**
@@ -90,6 +121,7 @@ export class UnityUrpPostProcess extends Component {
     settings.colorGrading.material = this.gradingMaterial;
     settings.colorGrading.colorGradingMap = this._placeholderLut;
     settings.colorGrading.contribute = 1;
+    keepFullPipelineWindowTargets();
     // Re-enable so the component pushes the updated settings object to the camera.
     component.enabled = false;
     component.enabled = true;

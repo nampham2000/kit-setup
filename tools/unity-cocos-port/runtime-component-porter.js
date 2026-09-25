@@ -53,6 +53,11 @@ const RUNTIME_SCRIPTS = {
     missingCode: 'PARTICLE_RATE_OVER_DISTANCE_EMITTER_TEMPLATE_MISSING',
     missingMessage: 'Unity particle Rate over Distance needs a runtime script adapter, but the template is missing',
   },
+  particleDepthSort: {
+    className: 'UnityParticleDepthSort',
+    missingCode: 'PARTICLE_DEPTH_SORT_TEMPLATE_MISSING',
+    missingMessage: 'Unity back-to-front particle sorting needs its runtime adapter, but the template is missing',
+  },
   spriteRendererColorAdapter: {
     className: 'UnitySpriteRendererColorAdapter',
     missingCode: 'SPRITE_RENDERER_COLOR_ADAPTER_TEMPLATE_MISSING',
@@ -646,6 +651,35 @@ function createRuntimeComponentPorter(deps) {
     );
   }
 
+  // Unity sorts every transparent ParticleSystemRenderer back to front by its particle bounds; Cocos sorts by
+  // priority then pass hash. Attach UnityParticleDepthSort to each particle-system root (a node with a ParticleSystem
+  // and no ParticleSystem ancestor) so every ported system gets a distance-derived priority.
+  function attachParticleDepthSort(builder, reporter) {
+    const script = RUNTIME_SCRIPTS.particleDepthSort;
+    const roots = [];
+    const walk = (nodeId, underParticle) => {
+      const node = builder.objects[nodeId];
+      if (!node || node.__type__ !== 'cc.Node') return;
+      const hasParticle = nodeHasParticleSystemComponent(builder, nodeId);
+      if (hasParticle && !underParticle) roots.push(nodeId);
+      for (const childRef of node._children || []) walk(Number(childRef?.__id__), underParticle || hasParticle);
+    };
+    walk(1, false);
+    if (!roots.length) return;
+    const helperClassId = readRuntimeScriptClassId(script, builder.cocosDb);
+    if (!helperClassId) {
+      reporter.medium('PARTICLE_DEPTH_SORT_SCRIPT_MISSING', '', builder.objects[1]?._name || '',
+        `Particle sorting needs ${toPosix(scriptTargetPath(script))} but the script was not found in Cocos assets`);
+      return;
+    }
+    for (const nodeId of roots) {
+      if (nodeHasComponentType(builder, nodeId, helperClassId)) continue;
+      builder.addComponent(nodeId, helperClassId, {}, null, `cmp-unity-particle-depth-sort-${nodeId}`);
+    }
+    reporter.low('PARTICLE_DEPTH_SORT', '', builder.objects[1]?._name || '',
+      `Attached ${script.className} to ${roots.length} particle root(s) for Unity back-to-front transparent sorting`);
+  }
+
   function attachParticleRateOverDistanceEmitters(model, builder, reporter) {
     const script = RUNTIME_SCRIPTS.particleRateOverDistanceEmitter;
     const helperClassId = readRuntimeScriptClassId(script, builder.cocosDb);
@@ -750,6 +784,8 @@ function createRuntimeComponentPorter(deps) {
     ensureParticleHierarchyTransformSyncScript: (options, reporter) => ensureRuntimeScript(RUNTIME_SCRIPTS.particleHierarchyTransformSync, options, reporter),
     ensureParticleRateOverDistanceEmitterScript: (options, reporter) => ensureRuntimeScript(RUNTIME_SCRIPTS.particleRateOverDistanceEmitter, options, reporter),
     ensureSpriteRendererColorAdapterScript: (options, reporter) => ensureRuntimeScript(RUNTIME_SCRIPTS.spriteRendererColorAdapter, options, reporter),
+    ensureParticleDepthSortScript: (options, reporter) => ensureRuntimeScript(RUNTIME_SCRIPTS.particleDepthSort, options, reporter),
+    attachParticleDepthSort,
     ensureSpriteRendererColorAssets,
     attachParticleSubEmitterFollowers,
     attachParticleHierarchyTransformSync,

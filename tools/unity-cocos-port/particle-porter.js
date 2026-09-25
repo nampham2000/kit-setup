@@ -19,6 +19,7 @@ module.exports = function createParticlePorter(deps = {}) {
     recordPendingMeshRepair,
     resolveUnityBuiltinMeshUuid,
     resolveUnityParticleMaterial,
+    resolveUnityBuiltinParticleMaterial,
     unityRefGuid,
     unityRefFileId,
   } = deps;
@@ -130,7 +131,18 @@ module.exports = function createParticlePorter(deps = {}) {
 
       const materialRefs = rendererMaterialRefs(rendererDoc);
       const materialRef = materialRefs[0] || null;
-      const usedBuiltInDefaultParticleMaterial = isUnityDefaultParticleSystemMaterial(materialRef);
+      // Unity built-in particle materials (Default-ParticleSystem / Default-Particle) keep their source blend,
+      // formula and texture through unity-particle.effect; particle-add.mtl is only the last-resort fallback.
+      const builtinMaterial = materialRef && String(materialRef.guid || '').toLowerCase() === UNITY_BUILTIN_RESOURCE_GUID
+        && resolveUnityBuiltinParticleMaterial
+        ? resolveUnityBuiltinParticleMaterial(unityRefFileId(materialRef), options, reporter, rendererContract)
+        : null;
+      if (builtinMaterial?.materialUuid) {
+        applyParticleRendererMaterial(builder, particleId, builtinMaterial.materialUuid, builtinMaterial.textureUuid);
+        reporter.low('PARTICLE_BUILTIN_MATERIAL_PORTED', `UnityBuiltin/${unityRefFileId(materialRef)}`, gameObject?.name || '',
+          'Unity built-in particle material was ported through unity-particle.effect', builtinMaterial.file || builtinMaterial.materialUuid);
+      }
+      const usedBuiltInDefaultParticleMaterial = !builtinMaterial?.materialUuid && isUnityDefaultParticleSystemMaterial(materialRef);
       if (usedBuiltInDefaultParticleMaterial) {
         if (rendererContract.requiresMaterialAdapter) reporter.high('PARTICLE_DEFAULT_RENDERER_ADAPTER_REQUIRED', options.src || '', gameObject?.name || '',
           'Default particle material requires a renderer-specific source effect material; builtin material alone cannot carry pivot/frame state.');

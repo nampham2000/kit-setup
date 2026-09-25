@@ -31,6 +31,14 @@ const {
   unityProjectIsLinear,
   unityTextureIsSrgb,
 } = require('./legacy-preview-material');
+const {
+  UNITY_PARTICLE_EFFECT_PATH,
+  UNITY_PARTICLE_EFFECT_TEMPLATE,
+  UNITY_BUILTIN_TEXTURE_DIR,
+  BUILTIN_PARTICLE_MATERIALS,
+  resolveUnityParticleSemantics,
+  unityParticleMaterialData,
+} = require('./unity-particle-material');
 
 const UNITY_BUILTIN_SHADER_GUID = '0000000000000000f000000000000000';
 const COCOS_PARTICLE_TECHNIQUE_ADD = 0;
@@ -182,6 +190,8 @@ module.exports = function createMaterialPorter(deps) {
     return fallback;
   }
 
+  // Active keywords only: Unity 2021+ lists them in m_ValidKeywords (m_InvalidKeywords are dormant), older
+  // materials in the space-separated m_ShaderKeywords string.
   function getUnityMaterialKeywords(materialDoc) {
     const block = deps.getIndentedBlock(materialDoc, 'm_ValidKeywords');
     const keywords = new Set();
@@ -189,6 +199,8 @@ module.exports = function createMaterialPorter(deps) {
       const match = /^\s*-\s+(.+?)\s*$/.exec(String(line || ''));
       if (match) keywords.add(match[1]);
     }
+    const legacy = getField(materialDoc, 'm_ShaderKeywords', '');
+    if (typeof legacy === 'string') for (const keyword of legacy.split(/\s+/)) if (keyword) keywords.add(keyword);
     return keywords;
   }
 
@@ -502,6 +514,114 @@ module.exports = function createMaterialPorter(deps) {
       );
       return '';
     }
+  }
+
+  // Writes assets/effects/unity-particle.effect and returns its uuid once Cocos AssetDB has imported it; the porter
+  // never authors the effect .meta. Until then callers keep the previous builtin-particle conversion.
+  function importedUnityParticleEffectUuid(options, reporter) {
+    const effectFile = path.join(options.cocosRoot, UNITY_PARTICLE_EFFECT_PATH);
+    if (!options.dryRun) {
+      const text = fs.readFileSync(UNITY_PARTICLE_EFFECT_TEMPLATE, 'utf8');
+      ensureDir(path.dirname(effectFile));
+      ensureDirectoryMetas(path.dirname(effectFile), path.join(options.cocosRoot, 'assets'));
+      if (!fs.existsSync(effectFile) || fs.readFileSync(effectFile, 'utf8') !== text) fs.writeFileSync(effectFile, text, 'utf8');
+    }
+    const imported = readJsonIfExists(`${effectFile}.meta`);
+    if (imported?.importer === 'effect' && imported.uuid) return imported.uuid;
+    if (!options._unityParticleEffectImportReported) {
+      options._unityParticleEffectImportReported = true;
+      reporter.high('UNITY_PARTICLE_EFFECT_IMPORT_REQUIRED', toPosix(UNITY_PARTICLE_EFFECT_PATH), '',
+        'Import assets/effects/unity-particle.effect through Cocos AssetDB, then rerun the port so particle materials keep Unity blend/colour semantics (builtin particle fallback used meanwhile)');
+    }
+    return '';
+  }
+
+  // Writes a Unity particle material through unity-particle.effect (blend factors, formula, lighting and colour
+  // space from the source material). `source` carries either a parsed material doc or a built-in material entry.
+  function writeUnityParticleMaterial(source, dest, options, unityDb, reporter, extra = {}) {
+    const { name, relativePath, shaderGuid, shaderFileId, shaderName, floats, colors, keywords, texEnvs } = source;
+    const semantics = resolveUnityParticleSemantics({ shaderGuid, shaderFileId, shaderName, keywords, floats, colors });
+    const mainTexEnv = extra.spriteTextureAsset ? null : (texEnvs?._BaseMap?.m_Texture?.guid ? texEnvs._BaseMap : texEnvs?._MainTex || texEnvs?._BaseMap || null);
+    let textureAsset = null;
+    let textureUuid = '';
+    let textureSrgb = true;
+    if (source.builtinTexture) {
+      const file = path.join(options.cocosRoot, UNITY_BUILTIN_TEXTURE_DIR, `${source.builtinTexture}.png`);
+      textureUuid = fs.existsSync(file) ? resolveCurrentTextureUuid(file) : '';
+      if (!textureUuid) {
+        reporter.high('UNITY_BUILTIN_PARTICLE_TEXTURE_MISSING', relativePath, name,
+          `Export the Unity built-in "${source.builtinTexture}" texture (tools/unity-cocos-port/unity-builtin-particle-textures.cs with OUTPUT_DIR=<cocos>/${UNITY_BUILTIN_TEXTURE_DIR}), let Cocos import it, then rerun the port`);
+      }
+    } else {
+      textureAsset = extra.spriteTextureAsset
+        || (unityRefGuid(mainTexEnv?.m_Texture) ? unityDb.get(unityRefGuid(mainTexEnv.m_Texture)) : null);
+      textureUuid = textureAsset ? resolveUnityTextureUuid(textureAsset, options, reporter, { particleTexture: true }) : '';
+      textureSrgb = unityTextureIsSrgb(textureAsset);
+      if (textureAsset && !textureUuid) {
+        reporter.medium('PARTICLE_TEXTURE_PENDING', relativePath, name, 'Particle texture is not imported by Cocos yet; rerun the port after AssetDB import to bind it');
+      }
+    }
+    const materialData = unityParticleMaterialData({
+      semantics,
+      colors,
+      textureUuid,
+      textureSrgb,
+      linear: unityProjectIsLinear(options.unityRoot),
+      applyActiveColorSpace: extra.rendererContract?.applyActiveColorSpace !== false,
+      mainTexEnv,
+      sourceRendererPivot: extra.rendererContract?.requiresMaterialAdapter ? extra.rendererContract.sourceRendererPivot : null,
+      effectUuid: extra.effectUuid,
+      name,
+    });
+    reporter[semantics.supported ? 'low' : 'high'](semantics.supported ? 'UNITY_PARTICLE_MATERIAL_PORTED' : 'CUSTOM_SHADER_NOT_PORTED', relativePath, name,
+      `${shaderName || `builtin:${shaderFileId}`} -> unity-particle ${semantics.technique}/${semantics.formula}/${semantics.lighting}${semantics.vertexColor ? '' : '/no-vertex-colour'}`);
+    for (const note of semantics.notes) reporter.medium('UNITY_PARTICLE_MATERIAL_APPROXIMATED', relativePath, name, note);
+    if (semantics.lighting !== 'unlit') {
+      reporter.medium('UNITY_PARTICLE_LIGHT_RIG_BINDING_REQUIRED', relativePath, name,
+        'Lit particle material: bind the source scene light rig (unityLightDirection/Color/Intensities, unityAmbient*) like the URP Lit port');
+    }
+    // A project that renders through a light rig keeps its bound lighting values across re-ports.
+    const previous = readJsonIfExists(dest);
+    const previousProps = previous?._effectAsset?.__uuid__ === materialData._effectAsset.__uuid__ ? previous?._props?.[0] || {} : {};
+    for (const key of Object.keys(previousProps)) {
+      if (/^unity(Light|Ambient)/.test(key)) materialData._props[0][key] = previousProps[key];
+    }
+    if (options.dryRun) return { file: fs.existsSync(dest) ? dest : '', textureUuid };
+    ensureDir(path.dirname(dest));
+    ensureDirectoryMetas(path.dirname(dest), path.join(options.cocosRoot, 'assets'));
+    const serialized = `${JSON.stringify(materialData, null, 2)}\n`;
+    if (!fs.existsSync(dest) || fs.readFileSync(dest, 'utf8') !== serialized) fs.writeFileSync(dest, serialized, 'utf8');
+    const meta = ensureMaterialAssetMeta(dest, options);
+    syncImportedMaterialLibraryCache(materialData, meta, options);
+    return { file: dest, textureUuid };
+  }
+
+  // Unity built-in particle materials (Default-ParticleSystem 10308, Default-Particle 10301) referenced directly by
+  // a ParticleSystemRenderer. Returns { materialUuid, textureUuid, file } or null for other built-ins.
+  function resolveUnityBuiltinParticleMaterial(materialFileId, options, reporter, rendererContract = null) {
+    const builtin = BUILTIN_PARTICLE_MATERIALS[Number(materialFileId)];
+    if (!builtin) return null;
+    const effectUuid = importedUnityParticleEffectUuid(options, reporter);
+    if (!effectUuid) return null;
+    let dest = path.join(options.cocosRoot, UNITY_BUILTIN_TEXTURE_DIR, `${builtin.name}.mtl`);
+    if (rendererContract?.requiresMaterialAdapter) {
+      dest = dest.replace(/\.mtl$/i, `.renderer-${rendererContract.mode}-${rendererContract.sourceRendererPivot.join('_')}.mtl`);
+    }
+    if (rendererContract && rendererContract.applyActiveColorSpace === false) dest = dest.replace(/\.mtl$/i, '.gamma-vertex.mtl');
+    const written = writeUnityParticleMaterial({
+      name: builtin.name,
+      relativePath: `UnityBuiltin/${builtin.name}`,
+      shaderGuid: UNITY_BUILTIN_SHADER_GUID,
+      shaderFileId: builtin.shaderFileId,
+      shaderName: '',
+      floats: builtin.floats,
+      colors: builtin.colors,
+      keywords: new Set(),
+      texEnvs: {},
+      builtinTexture: builtin.texture,
+    }, dest, options, null, reporter, { rendererContract, effectUuid });
+    const materialUuid = written?.file ? resolveStandaloneMaterialAssetUuid(written.file, options) : '';
+    return materialUuid ? { materialUuid, textureUuid: written.textureUuid || '', file: written.file } : null;
   }
 
   function ensureLegacyPreviewEffect(options, reporter) {
@@ -878,6 +998,23 @@ module.exports = function createMaterialPorter(deps) {
     }
     const tcp2ParticleMaterial = TCP2_HYBRID_SHADER_2_GUIDS.has(particleShaderGuid)
       || /(?:Toony Colors Pro 2|TCP2).*Hybrid Shader 2/i.test(particleShaderName);
+    const unityParticleEffectUuid = materialUsage === 'particle' && !tcp2ParticleMaterial
+      ? importedUnityParticleEffectUuid(options, reporter)
+      : '';
+    if (unityParticleEffectUuid) {
+      return writeUnityParticleMaterial({
+        name: String(getField(materialDoc, 'm_Name', materialAsset.stem) || materialAsset.stem),
+        relativePath: materialAsset.relativePath,
+        shaderGuid: particleShaderGuid,
+        shaderFileId: String(particleShaderRef?.fileID || ''),
+        shaderName: particleShaderGuid === UNITY_BUILTIN_SHADER_GUID ? '' : particleShaderName,
+        floats: parseUnitySerializedScalarMap(materialDoc, 'm_Floats'),
+        colors: parseUnitySerializedScalarMap(materialDoc, 'm_Colors'),
+        keywords: getUnityMaterialKeywords(materialDoc),
+        texEnvs: parseUnityTextureEnvMap(materialDoc),
+      }, rendererContract?.applyActiveColorSpace === false ? convertedDest.replace(/\.mtl$/i, '.gamma-vertex.mtl') : convertedDest,
+      options, unityDb, reporter, { spriteTextureAsset, rendererContract, effectUuid: unityParticleEffectUuid });
+    }
     const tcp2ParticleEffectUuid = tcp2ParticleMaterial
       ? ensureTcp2HybridParticleEffect(options, reporter)
       : '';
@@ -1199,5 +1336,6 @@ module.exports = function createMaterialPorter(deps) {
     resolveUnitySpriteRendererMaterialUuid,
     convertUnityParticleMaterialToCocos,
     resolveUnityParticleMaterial,
+    resolveUnityBuiltinParticleMaterial,
   };
 };

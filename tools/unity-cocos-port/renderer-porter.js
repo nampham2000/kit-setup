@@ -261,7 +261,9 @@ module.exports = function createRendererPorter(deps) {
         reporter,
         options,
       })
-      : nodeId;
+      : builtinMeshUuid && deps.builtinPrimitiveOwnerNode
+        ? deps.builtinPrimitiveOwnerNode({ builder, nodeId, meshRef, meshUuid, gameObject, seed: componentId, reporter })
+        : nodeId;
     builder.addMeshRenderer(ownerNodeId, componentId, meshUuid, materialUuids, componentFileId, {
       castShadows: Number(getField(doc, 'm_CastShadows', 1) || 0) !== 0,
       receiveShadows: Number(getField(doc, 'm_ReceiveShadows', 1) || 0) !== 0,

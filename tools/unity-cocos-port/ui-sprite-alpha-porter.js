@@ -157,11 +157,63 @@ function ensureUiSpriteAlphaSepMaterial(options, reporter, spriteAlpha, deps) {
   return meta.uuid;
 }
 
+const WORLD_UI_EFFECT_TEMPLATE = path.join(__dirname, 'unity-world-ui-sprite.effect');
+const WORLD_UI_EFFECT_PATH = path.join('assets', 'effects', 'UnityWorldUISprite.effect');
+const WORLD_UI_MATERIAL_PATH = path.join('assets', 'unity_imported', '_builtin', 'UnityWorldUISprite.mtl');
+
+// Material for UI Images under a Unity WorldSpace Canvas (depth tested, float-output aware). The effect is written
+// from the kit template and bound only after Cocos AssetDB imported it; until then sprites keep the default material.
+function ensureWorldUiSpriteMaterial(options, reporter, deps) {
+  if (options._worldUiSpriteMaterialUuid !== undefined) return options._worldUiSpriteMaterialUuid;
+  const effectFile = path.join(options.cocosRoot, WORLD_UI_EFFECT_PATH);
+  if (!options.dryRun) {
+    const text = fs.readFileSync(WORLD_UI_EFFECT_TEMPLATE, 'utf8');
+    ensureDir(path.dirname(effectFile));
+    deps.ensureDirectoryMetas(path.dirname(effectFile), path.join(options.cocosRoot, 'assets'));
+    if (!fs.existsSync(effectFile) || fs.readFileSync(effectFile, 'utf8') !== text) fs.writeFileSync(effectFile, text, 'utf8');
+  }
+  const effectMeta = readJsonIfExists(`${effectFile}.meta`);
+  if (!(effectMeta?.importer === 'effect' && effectMeta.uuid)) {
+    reporter.high('UNITY_WORLD_UI_EFFECT_IMPORT_REQUIRED', toPosix(WORLD_UI_EFFECT_PATH), '',
+      'Import assets/effects/UnityWorldUISprite.effect through Cocos AssetDB, then rerun the port so world-space Canvas images depth-test like Unity');
+    options._worldUiSpriteMaterialUuid = '';
+    return '';
+  }
+  const materialFile = path.join(options.cocosRoot, WORLD_UI_MATERIAL_PATH);
+  const materialData = {
+    __type__: 'cc.Material',
+    _name: 'UnityWorldUISprite',
+    _objFlags: 0,
+    __editorExtras__: {},
+    _native: '',
+    _effectAsset: cocosUuid(effectMeta.uuid, 'cc.EffectAsset'),
+    _techIdx: 0,
+    _defines: [{ USE_TEXTURE: true, IS_GRAY: false, CC_USE_EMBEDDED_ALPHA: false }],
+    _states: [{ rasterizerState: {}, depthStencilState: {}, blendState: { targets: [{}] } }],
+    _props: [{}],
+  };
+  if (options.dryRun) {
+    options._worldUiSpriteMaterialUuid = stableUuid(`material:${toPosix(path.relative(options.cocosRoot, materialFile))}`);
+    return options._worldUiSpriteMaterialUuid;
+  }
+  deps.ensureDirectoryMetas(path.dirname(materialFile), path.join(options.cocosRoot, 'assets'));
+  ensureDir(path.dirname(materialFile));
+  const serialized = `${JSON.stringify(materialData, null, 2)}\n`;
+  if (!fs.existsSync(materialFile) || fs.readFileSync(materialFile, 'utf8') !== serialized) fs.writeFileSync(materialFile, serialized, 'utf8');
+  const meta = ensureMaterialAssetMeta(materialFile, options);
+  writeMaterialLibraryCache(options, deps, meta.uuid, materialData);
+  options._worldUiSpriteMaterialUuid = meta.uuid;
+  reporter.low('UNITY_WORLD_UI_SPRITE_MATERIAL', toPosix(path.relative(options.cocosRoot, materialFile)), '',
+    'World-space Canvas images use the depth-tested, float-output-aware UnityWorldUISprite material', meta.uuid);
+  return meta.uuid;
+}
+
 module.exports = function createUiSpriteAlphaPorter(deps) {
   return {
     unitySpriteAlpha,
     ensureUiSpriteAlphaSepMaterial: (options, reporter, spriteAlpha) => (
       ensureUiSpriteAlphaSepMaterial(options, reporter, spriteAlpha, deps)
     ),
+    ensureWorldUiSpriteMaterial: (options, reporter) => ensureWorldUiSpriteMaterial(options, reporter, deps),
   };
 };

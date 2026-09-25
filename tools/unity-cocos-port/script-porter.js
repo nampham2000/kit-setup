@@ -111,7 +111,7 @@ module.exports = function createScriptPorter(deps) {
         if (builder.nodeMapByGameObject.has(fileId)) return cocosRef(builder.nodeMapByGameObject.get(fileId));
         if (builder.nodeMapByTransform.has(fileId)) return cocosRef(builder.nodeMapByTransform.get(fileId));
         if (builder.componentMap.has(fileId)) return cocosRef(builder.componentMap.get(fileId));
-        reporter.low('SCRIPT_FIELD_REF_UNRESOLVED', source, fieldName, `Serialized reference ${fileId} could not be mapped yet`);
+        reporter.medium('SCRIPT_FIELD_REF_UNRESOLVED', source, fieldName, `Serialized reference ${fileId} could not be mapped; the Cocos field stays null`);
         return null;
       }
       const out = {};
@@ -150,6 +150,25 @@ module.exports = function createScriptPorter(deps) {
     }
 
     reporter.low('SPINE_SKELETON_MAPPED', model.file, '', 'Unity SkeletonGraphic was mapped to Cocos sp.Skeleton');
+  }
+
+  // Nearest ancestor Canvas decides how Unity draws an Image: WorldSpace (m_RenderMode 2) is scene geometry of a
+  // 3D camera (ZTest LEqual, linear blending); screen-space canvases are ported to the Cocos UI camera.
+  function underWorldSpaceCanvas(gameObject, model) {
+    const seen = new Set();
+    let transformId = gameObject?.transformId;
+    while (transformId && !seen.has(transformId)) {
+      seen.add(transformId);
+      const transform = model?.transforms?.get(transformId);
+      if (!transform) break;
+      const owner = model.gameObjects?.get(transform.gameObjectId);
+      for (const id of owner?.components || []) {
+        const canvas = model.componentDocs?.get(id);
+        if (Number(canvas?.classId || 0) === 223) return Number(getField(canvas, 'm_RenderMode', 0) || 0) === 2;
+      }
+      transformId = transform.parentId;
+    }
+    return false;
   }
 
   function emitMonoBehaviour(nodeId, componentId, doc, model, builder, reporter, options, unityDb, cocosDb, gameObject) {
@@ -219,7 +238,7 @@ module.exports = function createScriptPorter(deps) {
         spriteUuid,
         getField(doc, 'm_Color', { r: 1, g: 1, b: 1, a: 1 }),
         `cmp-sprite-${componentId}`,
-        { preserveAspect, ...imageFill },
+        { preserveAspect, ...imageFill, worldSpaceCanvas: underWorldSpaceCanvas(gameObject, model) },
       );
       return;
     }

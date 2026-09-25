@@ -103,6 +103,7 @@ const {
   resolveUnityMaterialUuid: resolveUnityMaterialUuidImpl,
   resolveUnitySpriteRendererMaterialUuid: resolveUnitySpriteRendererMaterialUuidImpl,
   resolveUnityParticleMaterial: resolveUnityParticleMaterialImpl,
+  resolveUnityBuiltinParticleMaterial,
 } = createMaterialPorter({
   parseUnityScalar,
   parseUnityYaml,
@@ -172,6 +173,7 @@ const {
   handleMissingModel: handleMissingModelImpl,
   resolveLibraryAssetUuid,
   fbxMeshOwnerNode: (...args) => fbxMeshOwnerNode(...args),
+  builtinPrimitiveOwnerNode: (...args) => builtinPrimitiveOwnerNode(...args),
 });
 
 const {
@@ -192,6 +194,7 @@ const {
   unityRefGuid,
   unityRefFileId,
   fbxMeshOwnerNode: (...args) => fbxMeshOwnerNode(...args),
+  builtinPrimitiveOwnerNode: (...args) => builtinPrimitiveOwnerNode(...args),
 });
 
 const { emitParticleSystem: emitParticleSystemImpl } = createParticlePorter({
@@ -199,6 +202,7 @@ const { emitParticleSystem: emitParticleSystemImpl } = createParticlePorter({
   recordPendingMeshRepair,
   resolveUnityBuiltinMeshUuid,
   resolveUnityParticleMaterial,
+  resolveUnityBuiltinParticleMaterial,
   unityRefGuid,
   unityRefFileId,
 });
@@ -253,6 +257,7 @@ const {
 const {
   unitySpriteAlpha,
   ensureUiSpriteAlphaSepMaterial,
+  ensureWorldUiSpriteMaterial,
 } = createUiSpriteAlphaPorter({
   ensureDirectoryMetas,
   libraryJsonPathForUuid,
@@ -1243,6 +1248,34 @@ function unityRefFileId(value) {
 function unityRefGuid(value) {
   if (!value || typeof value !== 'object') return '';
   return String(value.guid || '');
+}
+
+// Unity addresses an object inside a PrefabInstance (when the file does not serialize it as a stripped
+// document) by (instanceFileID ^ sourceFileID) & 0x7FFFFFFFFFFFFFFF, composing the same way through every
+// nesting level. Removals (m_RemovedGameObjects) and object references use these ids. Non-numeric (synthetic)
+// ids have no Unity counterpart and yield ''.
+const UNITY_FILE_ID_MASK = (1n << 63n) - 1n;
+function unityDerivedFileId(instanceFileId, sourceFileId) {
+  if (!/^-?\d+$/.test(String(instanceFileId)) || !/^-?\d+$/.test(String(sourceFileId))) return '';
+  const instance = BigInt.asUintN(64, BigInt(String(instanceFileId)));
+  const source = BigInt.asUintN(64, BigInt(String(sourceFileId)));
+  return ((instance ^ source) & UNITY_FILE_ID_MASK).toString();
+}
+
+// Register the Unity ids that the outer file uses for objects of a flattened nested PrefabInstance, so removals,
+// property overrides and serialized references resolve to the cloned Cocos nodes/components.
+function registerDerivedNestedIds(builder, nestedBuilder, instanceFileId, idMap) {
+  let registered = 0;
+  for (const mapName of ['nodeMapByGameObject', 'nodeMapByTransform', 'componentMap']) {
+    for (const [sourceId, nestedId] of nestedBuilder[mapName].entries()) {
+      const derived = unityDerivedFileId(instanceFileId, sourceId);
+      const outerId = idMap ? idMap.get(nestedId) : nestedId;
+      if (!derived || !Number.isInteger(outerId) || builder[mapName].has(derived)) continue;
+      builder[mapName].set(derived, outerId);
+      registered++;
+    }
+  }
+  return registered;
 }
 
 function vec2(x = 0, y = 0) {
@@ -2597,6 +2630,28 @@ function resolveBuiltinPrimitiveMeshUuid(...hints) {
 
 function isUnityBuiltinExtraRef(ref) {
   return unityRefGuid(ref) === UNITY_BUILTIN_EXTRA_GUID;
+}
+
+// Unity built-in primitives whose texture mapping differs from the Cocos primitive once the Unity -> Cocos z mirror
+// is applied. Evidence (Unity 6 CreatePrimitive vs Cocos primitives.fbx, both read back): Unity Plane uv =
+// ((5 - x)/10, (5 - z)/10); Cocos plane uv = ((x + 5)/10, (z + 5)/10) sampled with a top-left texture origin, so every
+// world point (X, Z) -> (X, -Z) samples the texel rotated 180 degrees about the plane centre. A Ry(180) carrier
+// restores Unity's texel at every point; the plane is symmetric, so geometry, normal and colliders are unchanged.
+const UNITY_BUILTIN_PRIMITIVE_BASIS = {
+  plane: { position: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 1, z: 0, w: 0 }, euler: { x: 0, y: 180, z: 0 } },
+};
+
+function builtinPrimitiveOwnerNode({ builder, nodeId, meshRef, meshUuid, gameObject, seed = '', reporter }) {
+  const primitive = isUnityBuiltinExtraRef(meshRef) ? UNITY_BUILTIN_MESH_FILE_ID_TO_PRIMITIVE[unityRefFileId(meshRef)] : '';
+  const basis = primitive ? UNITY_BUILTIN_PRIMITIVE_BASIS[primitive] : null;
+  if (!builder || nodeId == null || !meshUuid || !basis) return nodeId;
+  const existing = builder.fbxMeshCarrier(nodeId, meshUuid);
+  if (existing != null) return existing;
+  const carrierId = builder.ensureFbxMeshCarrier(nodeId, meshUuid, basis,
+    `node-${sanitizeFileId(gameObject?.name || 'mesh')}-builtin-${primitive}-${sanitizeFileId(String(seed || meshUuid))}`, ` (${primitive} basis)`);
+  reporter?.low('BUILTIN_PRIMITIVE_BASIS_APPLIED', `UnityBuiltin/Mesh/${unityRefFileId(meshRef)}`, gameObject?.name || '',
+    `Unity built-in ${primitive} mounted on a Ry(180) carrier so its texture mapping matches Unity`);
+  return carrierId;
 }
 
 function resolveUnityBuiltinMeshUuid(meshRef, ...hints) {
@@ -4788,7 +4843,15 @@ function buildNestedPrefabPropertyOverrides(gameObject, transform, sourceModel, 
     }
     const sourceDoc = sourceModel.componentDocs.get(sourceFileId);
     if (!sourceDoc || Number(sourceDoc.classId) !== 114) continue;
-    if (scriptContext) overrides.push(...buildNestedScriptFieldOverrides(sourceDoc, sourceFileId, props, scriptContext));
+    if (scriptContext) {
+      for (const override of buildNestedScriptFieldOverrides(sourceDoc, sourceFileId, props, scriptContext)) {
+        if (!override.deferredUnityRef) { overrides.push(override); continue; }
+        // A linked Cocos prefab instance cannot hold a reference into the outer prefab without a TargetOverrideInfo.
+        scriptContext.reporter?.medium('NESTED_SCRIPT_REF_OVERRIDE_UNMAPPED', nestedPrefab.sourceAsset?.relativePath || '',
+          override.propertyPath, 'Object reference override on a linked nested prefab instance was not ported (needs flattening or a TargetOverrideInfo)',
+          String(unityRefFileId(override.deferredUnityRef)));
+      }
+    }
     if (!hasField(sourceDoc, 'm_Text') && !hasField(sourceDoc, 'm_text')) continue;
 
     const localId = `cmp-label-${sourceFileId}`;
@@ -4871,6 +4934,12 @@ function applyNestedScriptFieldOverrides(nestedBuilder, nestedPrefab, ctx) {
     const component = Number.isInteger(componentId) ? nestedBuilder.objects[componentId] : null;
     if (!component) continue;
     for (const override of buildNestedScriptFieldOverrides(sourceDoc, sourceFileId, props, ctx)) {
+      if (override.deferredUnityRef) {
+        (nestedBuilder.deferredObjectRefs ||= []).push({
+          componentId, propertyPath: override.propertyPath, unityRef: override.deferredUnityRef, source: model.file,
+        });
+        continue;
+      }
       component[override.propertyPath] = override.value;
       applied++;
     }
@@ -4900,6 +4969,12 @@ function buildNestedScriptFieldOverrides(sourceDoc, sourceFileId, props, ctx) {
     if (UNITY_MONOBEHAVIOUR_HEADER_FIELDS.has(propertyPath)) continue;
     if (script.memberNames && !script.memberNames.has(propertyPath)) continue;
     let value = raw;
+    if (value && typeof value === 'object' && !unityRefGuid(value) && unityRefFileId(value)) {
+      // A reference to an object in the outer file (e.g. a variant's ShellExplosion.m_ExplosionParticles pointing
+      // at an added nested explosion instance). It only exists once the whole outer tree is emitted.
+      out.push({ localId, propertyPath, deferredUnityRef: value });
+      continue;
+    }
     if (value && typeof value === 'object') {
       const guid = unityRefGuid(value);
       const asset = guid ? unityDb.get(guid) : null;
@@ -4942,6 +5017,45 @@ function nestedPrefabNeedsParticleOverrideFlattening(nestedPrefab) {
     if (Object.keys(props).some((propertyPath) => /^m_Materials\.Array\.data\[\d+\]$/.test(propertyPath))) {
       return true;
     }
+  }
+  return false;
+}
+
+// Object-reference overrides collected while flattening nested prefabs, resolved once every node/component of
+// this file exists (stripped and derived ids included). Cleared so an enclosing builder never re-resolves them
+// against its own id space.
+function resolveDeferredObjectRefs(builder, reporter) {
+  for (const ref of builder.deferredObjectRefs || []) {
+    const fileId = unityRefFileId(ref.unityRef);
+    const targetId = builder.componentMap.get(fileId)
+      ?? builder.nodeMapByGameObject.get(fileId)
+      ?? builder.nodeMapByTransform.get(fileId);
+    const component = builder.objects[ref.componentId];
+    if (!component) continue;
+    if (Number.isInteger(targetId)) {
+      component[ref.propertyPath] = cocosRef(targetId);
+      reporter.low('NESTED_SCRIPT_REF_OVERRIDE_WIRED', ref.source || '', ref.propertyPath,
+        'Object reference override from the outer prefab was wired to the flattened target', fileId);
+    } else {
+      reporter.medium('NESTED_SCRIPT_REF_OVERRIDE_UNRESOLVED', ref.source || '', ref.propertyPath,
+        'Object reference override could not be resolved; the source prefab value was kept', fileId);
+    }
+  }
+  builder.deferredObjectRefs = [];
+}
+
+// Unity serializes a stripped component/GameObject of a PrefabInstance only when something outside the instance
+// references it (e.g. Tanks! Demo shell variants: ShellExplosion.m_ExplosionParticles -> the ParticleSystem of an
+// added explosion instance). A linked Cocos prefab instance cannot be the target of such a reference, so these
+// instances are flattened and their stripped ids mapped to the cloned components.
+function nestedPrefabHasExternallyReferencedObjects(nestedPrefab, outerModel) {
+  const instanceId = nestedPrefab?.overrideInfo?.fileId;
+  if (!instanceId || !outerModel?.componentDocs) return false;
+  for (const doc of outerModel.componentDocs.values()) {
+    if (!doc?.stripped) continue;
+    const classId = Number(doc.classId || 0);
+    if (classId === 4 || classId === 224) continue;
+    if (unityRefFileId(getField(doc, 'm_PrefabInstance')) === instanceId) return true;
   }
   return false;
 }
@@ -5052,7 +5166,9 @@ function applyNestedParticlePrefabOverrides(builder, nestedPrefab, reporter, opt
       const materialAsset = unityDb.get(unityRefGuid(materialOverride[1]));
       const material = materialAsset
         ? resolveUnityParticleMaterial(materialAsset, options, unityDb, reporter, gameObject.name)
-        : null;
+        : String(unityRefGuid(materialOverride[1])).toLowerCase() === '0000000000000000f000000000000000'
+          ? resolveUnityBuiltinParticleMaterial(unityRefFileId(materialOverride[1]), options, reporter)
+          : null;
       if (material?.materialUuid) {
         applyParticleRendererMaterial(
           builder,
@@ -5309,11 +5425,11 @@ class CocosPrefabBuilder {
 
   // Child node holding a Cocos FBX mesh under the Unity->Cocos mesh-space basis (fbx-mesh-basis.js); shared by
   // the renderer and a MeshCollider of the same mesh on that node. `carrier` is already in Cocos space.
-  ensureFbxMeshCarrier(nodeId, meshUuid, carrier, fileId) {
+  ensureFbxMeshCarrier(nodeId, meshUuid, carrier, fileId, nameSuffix = FBX_MESH_CARRIER_NAME_SUFFIX) {
     const key = `${nodeId}|${meshUuid}`;
     if (this.fbxMeshCarriers.has(key)) return this.fbxMeshCarriers.get(key);
     const parent = this.objects[nodeId];
-    const id = this.addNode(`${parent?._name || 'Mesh'}${FBX_MESH_CARRIER_NAME_SUFFIX}`, nodeId, null, parent?._layer ?? 1, true, fileId);
+    const id = this.addNode(`${parent?._name || 'Mesh'}${nameSuffix}`, nodeId, null, parent?._layer ?? 1, true, fileId);
     const node = this.objects[id];
     node._lpos = vec3(carrier.position.x, carrier.position.y, carrier.position.z);
     node._lrot = quat(carrier.rotation.x, carrier.rotation.y, carrier.rotation.z, carrier.rotation.w);
@@ -5923,14 +6039,19 @@ class CocosPrefabBuilder {
     if (config.preserveAspect && [0, 3].includes(Number(config.spriteType ?? 0))) this.applyPreserveAspectSize(nodeId, spriteUuid);
     const spriteAlpha = unitySpriteAlpha(unityColor, 1);
     const hasChildren = (this.objects[nodeId]?._children || []).length > 0;
-    const customMaterialUuid = spriteAlpha < 1 && hasChildren
+    const worldUiMaterialUuid = config.worldSpaceCanvas ? ensureWorldUiSpriteMaterial(this.options, this.reporter) : '';
+    if (worldUiMaterialUuid && spriteAlpha < 1 && hasChildren) {
+      this.reporter.medium('UI_SPRITE_ALPHA_SEP_SKIPPED_WORLD_SPACE', this.options.src || '', String(unityComponentId),
+        'World-space Canvas image with children and alpha < 1 keeps the depth-tested world UI material; child alpha separation is not applied');
+    }
+    const customMaterialUuid = worldUiMaterialUuid || (spriteAlpha < 1 && hasChildren
       ? ensureUiSpriteAlphaSepMaterial(this.options, this.reporter, spriteAlpha)
-      : '';
+      : '');
     return this.addComponent(nodeId, 'cc.Sprite', {
       _customMaterial: customMaterialUuid ? cocosUuid(customMaterialUuid, 'cc.Material') : null,
       _srcBlendFactor: 2,
       _dstBlendFactor: 4,
-      _color: unityColorToCocos(unityColor, customMaterialUuid ? 255 : null),
+      _color: unityColorToCocos(unityColor, customMaterialUuid && !worldUiMaterialUuid ? 255 : null),
       _spriteFrame: spriteUuid ? cocosUuid(spriteUuid, 'cc.SpriteFrame') : null,
       _type: Number(config.spriteType ?? 0),
       _fillType: Number(config.fillType ?? 0),
@@ -6212,11 +6333,13 @@ function buildCocosPrefabBuilder(model, outputFile, options, reporter, unityDb, 
   const orderedRoots = wrapRoots ? [...model.roots].sort((a, b) => unityRootOrder(a, model) - unityRootOrder(b, model)) : model.roots;
   for (const root of orderedRoots) emitNodeRecursive(root, rootParentId, model, builder, layerResolver, reporter, options, unityDb, cocosDb);
   emitComponents(model, builder, reporter, options, unityDb, cocosDb);
+  resolveDeferredObjectRefs(builder, reporter);
   require('./unity-cocos-port/ui-layout-porter').finalizeUnityLayouts(builder);
   runtimeComponentPorter.attachParticleSubEmitterFollowers(model, builder, reporter);
   runtimeComponentPorter.attachParticleRateOverDistanceEmitters(model, builder, reporter);
   runtimeComponentPorter.attachParticleHierarchyTransformSync(builder, reporter);
   runtimeComponentPorter.attachParticleRendererVisibility(builder, reporter);
+  runtimeComponentPorter.attachParticleDepthSort(builder, reporter);
   require('./unity-cocos-port/particle-orbit-binding').attachOrbitRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-noise-binding').attachNoiseRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-birth-state-binding').attachBirthStateRuntime(builder, reporter, options);
@@ -6582,6 +6705,7 @@ function portPrefab(options, reporter) {
   runtimeComponentPorter.ensureParticleHierarchyTransformSyncScript(options, reporter);
   runtimeComponentPorter.ensureParticleRendererVisibilityScript(options, reporter);
   runtimeComponentPorter.ensureParticleRateOverDistanceEmitterScript(options, reporter);
+  runtimeComponentPorter.ensureParticleDepthSortScript(options, reporter);
   runtimeComponentPorter.ensureSpriteRendererColorAdapterScript(options, reporter);
   runtimeComponentPorter.ensureSpriteRendererColorAssets(options, reporter);
   const cocosDb = new CocosAssetDatabase(options.cocosRoot);
@@ -6964,7 +7088,9 @@ function emitNodeRecursive(transform, parentNodeId, model, builder, layerResolve
 
   const layerValue = layerResolver(gameObject.layer, gameObject.name);
   const flattenParticleOverrides = nestedPrefabNeedsParticleOverrideFlattening(gameObject.nestedPrefab);
-  if ((parentNodeId == null || flattenParticleOverrides) && gameObject.nestedPrefab?.model) {
+  const flattenReferencedObjects = !flattenParticleOverrides && parentNodeId != null
+    && nestedPrefabHasExternallyReferencedObjects(gameObject.nestedPrefab, model);
+  if ((parentNodeId == null || flattenParticleOverrides || flattenReferencedObjects) && gameObject.nestedPrefab?.model) {
     const nestedOptions = {
       ...options,
       src: gameObject.nestedPrefab.sourceAsset?.path || options.src,
@@ -6995,6 +7121,11 @@ function emitNodeRecursive(transform, parentNodeId, model, builder, layerResolve
       for (const [unityComponentId, nestedComponentId] of nestedBuilder.componentMap.entries()) {
         const componentId = flattened.idMap.get(nestedComponentId);
         if (Number.isInteger(componentId)) builder.componentMap.set(unityComponentId, componentId);
+      }
+      registerDerivedNestedIds(builder, nestedBuilder, gameObject.nestedPrefab.overrideInfo?.fileId, flattened.idMap);
+      for (const ref of nestedBuilder.deferredObjectRefs || []) {
+        const componentId = flattened.idMap.get(ref.componentId);
+        if (Number.isInteger(componentId)) (builder.deferredObjectRefs ||= []).push({ ...ref, componentId });
       }
       for (const [unityComponentId, componentDoc] of model.componentDocs.entries()) {
         if (!componentDoc?.stripped) continue;
@@ -7063,6 +7194,13 @@ function emitNodeRecursive(transform, parentNodeId, model, builder, layerResolve
     );
     builder.nodeMapByGameObject.set(gameObject.fileId, nodeId);
     builder.nodeMapByTransform.set(transform.fileId, nodeId);
+    // The outer file addresses the linked instance's root by derived id (e.g. m_RemovedGameObjects of a variant).
+    const linkedInstanceId = gameObject.nestedPrefab.overrideInfo?.fileId;
+    const linkedRoot = gameObject.nestedPrefab.model?.roots?.[0];
+    const derivedRootTransform = linkedRoot ? unityDerivedFileId(linkedInstanceId, linkedRoot.fileId) : '';
+    const derivedRootGameObject = linkedRoot ? unityDerivedFileId(linkedInstanceId, linkedRoot.gameObjectId) : '';
+    if (derivedRootTransform && !builder.nodeMapByTransform.has(derivedRootTransform)) builder.nodeMapByTransform.set(derivedRootTransform, nodeId);
+    if (derivedRootGameObject && !builder.nodeMapByGameObject.has(derivedRootGameObject)) builder.nodeMapByGameObject.set(derivedRootGameObject, nodeId);
     for (const childId of transform.children) {
       const child = model.transforms.get(childId);
       if (!child) {
@@ -8363,6 +8501,10 @@ module.exports = {
   synthesizeStrippedRootForPrefabVariant,
   matchModelMaterialOverrides,
   buildNestedScriptFieldOverrides,
+  unityDerivedFileId,
+  registerDerivedNestedIds,
+  nestedPrefabHasExternallyReferencedObjects,
+  resolveDeferredObjectRefs,
   parseUnityYaml,
   main,
 };
