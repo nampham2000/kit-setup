@@ -15,6 +15,7 @@ const {
   PREVIEW_REQUIRED_SCRIPTS,
   RESUME_PACKET_KIND,
   REQUIRED_SCRIPTS,
+  applyEngineFeatureReplacements,
   atomicWriteJson,
   buildResumePacket,
   currentTargetHashes,
@@ -23,6 +24,7 @@ const {
   initCorePort,
   parseArgs,
   persistStaticScaffoldReceipt,
+  readEngineFeatureReplacements,
   resumeCorePort,
   resolveContained,
   runRequiredGates,
@@ -30,6 +32,7 @@ const {
   scaffoldCorePort,
   validateManifest,
   verifyCorePort,
+  verifyEngineFeatureReplacements,
 } = require('./core-gameplay-port.cjs');
 
 function projectFixture(t) {
@@ -616,6 +619,105 @@ test('init verifies the Unity-derived Cocos feature closure before writing gamep
   const manifest = JSON.parse(fs.readFileSync(path.join(fixture.cocos, result.manifest), 'utf8'));
   assert.equal(manifest.engineFeatures.selectors.spineBackend, 'spine-4.2');
   assert.deepEqual(manifest.engineFeatures.disabledModules, ['primitive', 'debug-renderer']);
+});
+
+function physicsClosureBrief() {
+  const brief = fakeBrief();
+  brief.engineFeatureClosure = {
+    schemaVersion: 1,
+    status: 'required',
+    requiredModules: ['3d', 'physics-ammo'],
+    disabledModules: ['primitive'],
+    selectors: { physicsBackend: 'physics-ammo', physics2dBackend: null, spineBackend: null },
+    evidence: [
+      { module: '3d', sources: ['Assets/Scenes/Gameplay.unity'], signals: ['unity-mesh-renderer'] },
+      { module: 'physics-ammo', sources: ['Assets/Game/Gameplay.cs'], signals: ['BULLET_REQUIRED_FOR_CAPSULECOLLIDER_SWEEP_QUERY'] },
+    ],
+    blockers: [],
+  };
+  return brief;
+}
+
+function writeReplacements(fixture, replacements) {
+  const file = path.join(fixture.cocos, 'tools', 'engine-feature-replacements.json');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify({ schemaVersion: 1, kind: 'cc-playable-engine-feature-replacements', replacements }));
+  return file;
+}
+
+const PHYSICS_REPLACEMENT = {
+  modules: ['physics-ammo'],
+  reason: 'Taps use exact convex-hull ray/sphere casts and blocking uses the Unity OverlapCapsule oracle.',
+  regressionSuites: ['tap-raycast', 'blocking-oracle'],
+};
+
+test('init removes Git-tracked replaced engine features from the preview and records them in the manifest', async t => {
+  const fixture = projectFixture(t);
+  const brief = physicsClosureBrief();
+  const file = writeReplacements(fixture, [PHYSICS_REPLACEMENT]);
+  const ensured = [];
+  const result = await initCorePort({ unityProject: fixture.unity, cocosProject: fixture.cocos }, {
+    runPreflight: async () => ({ brief }),
+    async ensureEngineFeatures(_root, options) { ensured.push(options); return { complete: true }; },
+  });
+  assert.equal(ensured.length, 1);
+  assert.deepEqual(ensured[0].requiredModules, ['3d']);
+  assert.deepEqual(ensured[0].disabledModules, ['primitive', 'physics-ammo'], 'the replaced backend is removed from the preview');
+  assert.equal(ensured[0].physicsBackend, undefined);
+  assert.deepEqual(result.engineFeatures.replacedModules, ['physics-ammo']);
+  const manifest = JSON.parse(fs.readFileSync(path.join(fixture.cocos, result.manifest), 'utf8'));
+  assert.equal(manifest.engineFeatures.selectors.physicsBackend, null);
+  assert.deepEqual(manifest.engineFeatures.evidence.map(item => item.module), ['3d']);
+  assert.equal(manifest.engineFeatures.replaced[0].evidence[0].signals[0], 'BULLET_REQUIRED_FOR_CAPSULECOLLIDER_SWEEP_QUERY');
+  assert.deepEqual(manifest.engineFeatures.replacementsFile, { path: 'tools/engine-feature-replacements.json', sha256: hashFile(file) });
+  validateManifest(fixture.cocos, path.join(fixture.cocos, result.manifest));
+});
+
+test('stale or partial engine feature replacements fail before any manifest write', async t => {
+  const fixture = projectFixture(t);
+  writeReplacements(fixture, [{ ...PHYSICS_REPLACEMENT, modules: ['physics-cannon'] }]);
+  await assert.rejects(initCorePort({ unityProject: fixture.unity, cocosProject: fixture.cocos }, {
+    runPreflight: async () => ({ brief: physicsClosureBrief() }),
+    ensureEngineFeatures: async () => ({ complete: true }),
+  }), error => error.code === 'CORE_PORT_ENGINE_FEATURE_REPLACEMENT_STALE');
+
+  const brief2d = fakeBrief();
+  brief2d.engineFeatureClosure = {
+    schemaVersion: 1, status: 'required',
+    requiredModules: ['physics-2d', 'physics-2d-box2d'], disabledModules: [],
+    selectors: { physicsBackend: null, physics2dBackend: 'physics-2d-box2d', spineBackend: null },
+    evidence: ['physics-2d', 'physics-2d-box2d'].map(module => ({ module, sources: ['Assets/Game/Gameplay.cs'], signals: ['unity-physics-2d-runtime'] })),
+    blockers: [],
+  };
+  writeReplacements(fixture, [{ ...PHYSICS_REPLACEMENT, modules: ['physics-2d-box2d'] }]);
+  await assert.rejects(initCorePort({ unityProject: fixture.unity, cocosProject: fixture.cocos }, {
+    runPreflight: async () => ({ brief: brief2d }),
+    ensureEngineFeatures: async () => ({ complete: true }),
+  }), error => error.code === 'CORE_PORT_ENGINE_FEATURE_REPLACEMENTS_INVALID');
+
+  writeReplacements(fixture, [{ ...PHYSICS_REPLACEMENT, reason: 'short' }]);
+  assert.throws(() => readEngineFeatureReplacements(fixture.cocos), error => error.code === 'CORE_PORT_ENGINE_FEATURE_REPLACEMENTS_INVALID');
+  assert.equal(fs.existsSync(path.join(fixture.cocos, '.ai', 'port', 'core-gameplay.json')), false);
+});
+
+test('core verify requires unchanged replacements backed by mandatory regression suites', t => {
+  const fixture = projectFixture(t);
+  const file = writeReplacements(fixture, [PHYSICS_REPLACEMENT]);
+  const closure = applyEngineFeatureReplacements(physicsClosureBrief().engineFeatureClosure, readEngineFeatureReplacements(fixture.cocos));
+  const registry = suites => () => ({ suites });
+  const mandatory = [{ id: 'tap-raycast', mandatory: true }, { id: 'blocking-oracle', mandatory: true }];
+  assert.deepEqual(verifyEngineFeatureReplacements(fixture.cocos, closure, { loadRegistry: registry(mandatory) }), {
+    status: 'verified', modules: ['physics-ammo'], suites: ['tap-raycast', 'blocking-oracle'],
+  });
+  assert.throws(() => verifyEngineFeatureReplacements(fixture.cocos, closure, { loadRegistry: registry(mandatory.slice(0, 1)) }),
+    error => error.code === 'CORE_PORT_ENGINE_FEATURE_REPLACEMENT_UNPROVEN');
+  assert.throws(() => verifyEngineFeatureReplacements(fixture.cocos, closure, {
+    loadRegistry: registry([mandatory[0], { id: 'blocking-oracle', mandatory: false }]),
+  }), error => error.code === 'CORE_PORT_ENGINE_FEATURE_REPLACEMENT_UNPROVEN');
+  fs.appendFileSync(file, '\n');
+  assert.throws(() => verifyEngineFeatureReplacements(fixture.cocos, closure, { loadRegistry: registry(mandatory) }),
+    error => error.code === 'CORE_PORT_ENGINE_FEATURE_REPLACEMENT_STALE');
+  assert.equal(verifyEngineFeatureReplacements(fixture.cocos, physicsClosureBrief().engineFeatureClosure).status, 'none');
 });
 
 test('init fails closed before manifest write when the active preview has not applied required features', async t => {

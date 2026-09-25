@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "generatedAt": "2026-09-25T18:38:11.659Z",
+    "generatedAt": "2026-09-25T18:48:54.298Z",
     "description": "Compact project manifest for AI Agents. Use this instead of scanning file trees.",
     "project": {
       "projectName": "cc_playable_framework",
@@ -44,22 +44,22 @@
     {
       "name": "Level_157",
       "path": "assets/screw/levels/Level_157.prefab",
-      "sizeKb": 446.3
+      "sizeKb": 292
     },
     {
       "name": "Level_201",
       "path": "assets/screw/levels/Level_201.prefab",
-      "sizeKb": 90
+      "sizeKb": 58.6
     },
     {
       "name": "Level_202",
       "path": "assets/screw/levels/Level_202.prefab",
-      "sizeKb": 326.5
+      "sizeKb": 214.7
     },
     {
       "name": "Level_27",
       "path": "assets/screw/levels/Level_27.prefab",
-      "sizeKb": 575.1
+      "sizeKb": 339.9
     },
     {
       "name": "BaseBox",
@@ -293,7 +293,7 @@
     },
     "materials": {
       "count": 42,
-      "totalKb": 36.5,
+      "totalKb": 36.8,
       "sample": [
         "assets/materials/UnitySpriteRendererColor.mtl",
         "assets/materials/UnitySpriteRendererColorOpaque.mtl",
@@ -330,7 +330,7 @@
     },
     "prefabsInAssets": {
       "count": 16,
-      "totalKb": 2382.9,
+      "totalKb": 1850.2,
       "sample": [
         "assets/resources/screw/static-assets.prefab",
         "assets/screw/levels/Level_132.prefab",
@@ -344,17 +344,17 @@
     "unityImported": {
       "exists": true,
       "root": "assets/unity_imported",
-      "count": 78,
-      "totalKb": 8901.6,
+      "count": 56,
+      "totalKb": 8275.1,
       "sample": [
-        "assets/unity_imported/ConvexColliders/Food_Tray/Cube_12.asset",
-        "assets/unity_imported/ConvexColliders/Food_Tray/Cube_15.asset",
-        "assets/unity_imported/ConvexColliders/Food_Tray/Cube_16.asset",
-        "assets/unity_imported/ConvexColliders/Food_Tray/Cube_17.asset",
-        "assets/unity_imported/ConvexColliders/Food_Tray/Cube_18.asset",
-        "assets/unity_imported/ConvexColliders/Lv_27_Hambuger/Cube_10.asset"
+        "assets/unity_imported/PackageCache/com.unity.render-pipelines.universal/Runtime/Materials/Lit.mtl",
+        "assets/unity_imported/PackageCache/com.unity.render-pipelines.universal/Runtime/Materials/Sprite-Unlit-Default.sprite.mtl",
+        "assets/unity_imported/_Game/Art/2D/new_icon.png",
+        "assets/unity_imported/_Game/Art/2D-01-10-2025/gameplay/Batch/btn_plus.png",
+        "assets/unity_imported/_Game/Art/2DNew/GamePlay/fx_redline (1).png",
+        "assets/unity_imported/_Game/Art/2DNew/GamePlay/img_hole (1).png"
       ],
-      "truncated": 72
+      "truncated": 50
     }
   },
   "configSummary": {

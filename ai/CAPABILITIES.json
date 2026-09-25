@@ -202,7 +202,7 @@
     },
     {
       "id": "unity-engine-feature-closure-first",
-      "rule": "Ngay sau Unity preflight và trước khi tạo/sửa gameplay code, phải consume `engineFeatureClosure` rồi hoàn tất engine feature gate trên active Cocos preview. Chỉ bật exact feature ID có evidence trong playable-core + adapter closure: AnimatorController => `animation` + `skeletal-animation` + `marionette`; Spine => `spine` + backend đúng version skeleton; Physics2D/Physics3D => parent/backend selector đúng hành vi và exclusive. Với Cocos 3.8.8 option parent có thể bị normalize khỏi includeModules: authoritative là parent cache + exact `_option` + selected child cache/include; preview alias `physics-2d-framework`/generic `spine` chỉ được chấp nhận khi exact selector khớp và preview mới hơn profile. Sáu optional 3D module `primitive`, `occlusion-query`, `geometry-renderer`, `debug-renderer`, `terrain`, `light-probe` mặc định giữ tắt, chỉ bật khi semantics active/reachable chứng minh cần; negative closure phải gỡ false-positive cũ khỏi cache/include và preview, không chỉ ngừng yêu cầu mới. Serialized particle mesh ở billboard mode, private debug helper không có call site và asset ngoài closure không phải evidence. Incremental index cache chứa `engineFeatureEvidence` phải fingerprint detector producer; direct preflight và core init cùng source/tool fingerprint phải cho cùng closure. Version/backend chưa resolve, stale detector cache hoặc restart receipt thất bại là blocker; không workaround bằng gameplay code. Profile/cache/include và active preview apply đều phải khớp trước implementation.",
+      "rule": "Ngay sau Unity preflight và trước khi tạo/sửa gameplay code, phải consume `engineFeatureClosure` rồi hoàn tất engine feature gate trên active Cocos preview. Chỉ bật exact feature ID có evidence trong playable-core + adapter closure: AnimatorController => `animation` + `skeletal-animation` + `marionette`; Spine => `spine` + backend đúng version skeleton; Physics2D/Physics3D => parent/backend selector đúng hành vi và exclusive. Với Cocos 3.8.8 option parent có thể bị normalize khỏi includeModules: authoritative là parent cache + exact `_option` + selected child cache/include; preview alias `physics-2d-framework`/generic `spine` chỉ được chấp nhận khi exact selector khớp và preview mới hơn profile. Sáu optional 3D module `primitive`, `occlusion-query`, `geometry-renderer`, `debug-renderer`, `terrain`, `light-probe` mặc định giữ tắt, chỉ bật khi semantics active/reachable chứng minh cần; negative closure phải gỡ false-positive cũ khỏi cache/include và preview, không chỉ ngừng yêu cầu mới. Serialized particle mesh ở billboard mode, Unity `Debug.DrawLine/DrawRay` (chỉ vẽ trong Editor), ghi `useOcclusionCulling = false` và asset ngoài closure không phải evidence. Module mà port tái tạo có chứng minh (ví dụ ray/hull picking + Unity overlap oracle thay physics backend) chỉ được thay qua `tools/engine-feature-replacements.json` Git-track với lý do + mandatory regression suite; init gỡ module đó khỏi preview và core verify fail khi file đổi hash hoặc suite thiếu. Incremental index cache chứa `engineFeatureEvidence` phải fingerprint detector producer; direct preflight và core init cùng source/tool fingerprint phải cho cùng closure. Version/backend chưa resolve, stale detector cache hoặc restart receipt thất bại là blocker; không workaround bằng gameplay code. Profile/cache/include và active preview apply đều phải khớp trước implementation.",
       "agentContract": {
         "before": [
           "create-gameplay-code",
@@ -1014,7 +1014,7 @@
           "Brief giữ toàn bộ high code/count trong obligationIndex dù phải trim detail/evidence; chỉ query bounded khi evidenceQueries yêu cầu.",
           "Mặc định `--profile playable-core`: chỉ route gameplay closure và adapter cần cho playable; main menu/shop/meta/online SDK được explicit defer/replace nhưng vẫn nằm trong full high audit. Dùng `--profile full-project` chỉ khi brief thực sự yêu cầu.",
           "`engineFeatureClosure` chỉ lấy evidence trong core + adapter closure. AnimatorController khóa `animation` + `skeletal-animation` + `marionette`; Spine và physics khóa parent + exact backend selector. Version Spine thiếu/mâu thuẫn/không hỗ trợ là hard blocker trước implementation.",
-          "Optional 3D feature chỉ được yêu cầu từ semantics reachable/active. Mesh đã serialize nhưng ParticleSystemRenderer không ở mesh mode, private debug helper không có call site và asset ngoài playable-core không được phép bật module.",
+          "Optional 3D feature chỉ được yêu cầu từ semantics reachable/active. Mesh đã serialize nhưng ParticleSystemRenderer không ở mesh mode, Unity `Debug.DrawLine/DrawRay` (chỉ vẽ trong Editor), `useOcclusionCulling = false` và asset ngoài playable-core không được phép bật module.",
           "Fidelity 80-90 trong brief là acceptance target, không phải kết quả scan. Chỉ port.core.acceptance có runtime/build + checkpoint evidence mới được phép kết luận.",
           "Chỉ intent project (mặc định) cấp mutation receipt. Intent scene/prefab/script/shader/feature/diagnostic là focused analysis-only và không thể dùng để mở gate ghi output.",
           "Scanner edit-time đặt playModeCapture=false; object chỉ sinh runtime vẫn là coverage gap cần xác minh runtime."
@@ -1033,6 +1033,7 @@
           "--provider <auto|static|unity-mcp>",
           "--bootstrap",
           "--dispositions <file>",
+          "--engine-feature-replacements <file>",
           "--cache-dir <dir>",
           "--no-cache",
           "--refresh-cache",
@@ -1051,6 +1052,7 @@
         "limits": [
           "Không tự tuyên bố đã port gameplay. Refuse trước manifest khi hard blocker/gameplay entry mơ hồ, feature selector chưa xác định hoặc active preview chưa apply đủ exact source closure.",
           "Engine feature gate chạy trước gameplay artifact: chỉ bật module có evidence; backend Spine/Physics2D là selector exclusive và mọi backend thay thế phải bị loại khỏi include/cache.",
+          "Module Unity closure yêu cầu nhưng port tái tạo không cần subsystem (ví dụ ray/hull picking + Unity overlap oracle thay physics backend) chỉ được khai báo qua `tools/engine-feature-replacements.json` Git-track: exact module (thay trọn cả selector family), lý do và mandatory regression suite. Init gỡ module replaced khỏi preview như disabled module và ghi hash file vào manifest; core verify fail khi file đổi hash hoặc suite thiếu/không mandatory. Replacement không bao giờ là drop im lặng.",
           "Core init dùng cùng incremental index contract với direct preflight. Cache record chứa engineFeatureEvidence phải fingerprint detector producer; `--no-cache`/`--refresh-cache` chỉ là controls chẩn đoán, không thay thế invalidation đúng.",
           "`--dry-run` dừng trước mkdir/write. Không overwrite manifest nếu thiếu `--force`; force dùng lock + compare-and-swap và giữ nguyên concurrent edit.",
           "Manifest schema v3 khóa exact gameplay entry output, 9 checkpoint/weight/mandatory, gate 80/90, evidence contract và portable regression gate; agent không thể tự hạ rubric.",
@@ -1070,6 +1072,7 @@
           "--provider <static|auto|unity-mcp>",
           "--bootstrap",
           "--dispositions <file>",
+          "--engine-feature-replacements <file>",
           "--cache-dir <dir>",
           "--no-cache",
           "--refresh-cache",
@@ -1742,7 +1745,7 @@
           "Spine phải chọn exact backend từ skeleton JSON version (`spine-3.8` hoặc `spine-4.2`); Physics2D phải chọn exact backend parent option. Selector ghi parent `_option`, bật parent cache + đúng một backend child trong cache/include và loại toàn bộ backend thay thế. Cocos 3.8.8 có thể normalize parent khỏi includeModules; lúc đó selected child + parent cache/_option là authoritative. Preview biểu diễn Physics2D parent bằng `physics-2d-framework` và Spine version bằng generic `spine`, nên chỉ chấp nhận alias khi selector exact và preview mới hơn profile.",
           "Profile write hoặc engine.json patch chưa chứng minh runtime đã đổi. Chỉ complete khi active preview import-map chứa feature/backend yêu cầu.",
           "Fallback không blind-insert tên module lạ; ID versioned chỉ chấp nhận dot giữa các segment alphanumeric hợp lệ, và mọi module/backend phải tồn tại trong cache của đúng Cocos profile.",
-          "Không suy optional 3D module bằng token scan: primitive cần primitive API hoặc ParticleSystemRenderer mesh mode đang active; debug-renderer cần call path reachable; evidence ngoài playable-core không được mở feature.",
+          "Không suy optional 3D module bằng token scan: primitive cần primitive API hoặc ParticleSystemRenderer mesh mode đang active; Unity `Debug.DrawLine/DrawRay` chỉ vẽ trong Editor nên không bao giờ là evidence cho debug-renderer; evidence ngoài playable-core không được mở feature.",
           "Unity source closure mang cả quyết định required và disabled. Ensure phải gỡ module optional đã bật bởi stale/false-positive khỏi cache + include, rồi chờ preview mới chứng minh feature không còn active; add-only repair không đạt complete.",
           "Windows restart gọi exact batch path qua environment/PowerShell call operator để tránh cmd /s quote rewriting. Exit status khác 0 phải có error receipt và không được dùng port cũ để báo complete.",
           "Tool restart Editor nhưng không build game."

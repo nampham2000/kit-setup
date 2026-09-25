@@ -204,17 +204,17 @@ function detectUnityEngineFeatureEvidence(input = {}) {
 
   if (/(?:^|\n)(?:OcclusionArea|OcclusionPortal):/m.test(text) ||
       // Camera.useOcclusionCulling is a member write; a bare field with the same name (for example a
-      // scroll-snap panel-culling option) is not engine occlusion culling.
-      /\.\s*useOcclusionCulling\s*=(?!=)/.test(runtimeText)) {
+      // scroll-snap panel-culling option) is not engine occlusion culling, and writing a literal false
+      // (UIParticle's bake camera) only turns it off.
+      /\.\s*useOcclusionCulling\s*=(?!=)(?!\s*false\b)/.test(runtimeText)) {
     addMarker(markers, 'occlusion-query', 'unity-occlusion-runtime');
   }
 
   if (/\b(?:GL\s*\.\s*Begin|Graphics\s*\.\s*(?:DrawMeshNow|DrawProceduralNow))\s*\(/.test(runtimeText)) {
     addMarker(markers, 'geometry-renderer', 'unity-immediate-geometry-rendering');
   }
-  if (/\bDebug\s*\.\s*(?:DrawLine|DrawRay)\s*\(/.test(runtimeText)) {
-    addMarker(markers, 'debug-renderer', 'unity-runtime-debug-draw');
-  }
+  // UnityEngine.Debug.DrawLine/DrawRay only draw in the Editor (Scene view, or Game view with gizmos)
+  // and do nothing in a player build, so even a reachable call is never player-visible behavior.
   if (/(?:^|\n)(?:Terrain|TerrainCollider):/m.test(text) ||
       /\b(?:TerrainData|TerrainCollider)\b/.test(runtimeText)) {
     addMarker(markers, 'terrain', 'unity-terrain-runtime');

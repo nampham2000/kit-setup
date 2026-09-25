@@ -11,6 +11,7 @@ const { digest: digestPortReport } = require('./report-digest.cjs');
 const {
   DEFAULT_CONFIG: DEFAULT_REGRESSION_REGISTRY,
   initRegistry,
+  loadRegistry,
   mergeRegistryRequiredRisks,
 } = require('./port-regression-gate.cjs');
 const { runUnityPortPreflight, assertUnityPortPreflight } = require('./unity-intel/preflight.cjs');
@@ -33,6 +34,10 @@ const DEFAULT_WIRING = '.ai/port/static-scaffold.wiring.json';
 const DEFAULT_STATIC_SCAFFOLD_RECEIPT = '.ai/port/static-scaffold.receipt.json';
 const DEFAULT_RESUME_PACKET = '.ai/port/resume-packet.json';
 const STATIC_SCAFFOLD_RECEIPT_KIND = 'cc-playable-static-scaffold-receipt';
+const DEFAULT_ENGINE_FEATURE_REPLACEMENTS = 'tools/engine-feature-replacements.json';
+const ENGINE_FEATURE_REPLACEMENTS_KIND = 'cc-playable-engine-feature-replacements';
+const MAX_REPLACEMENTS_BYTES = 32 * 1024;
+const REGRESSION_SUITE_ID = /^[a-z0-9][a-z0-9._-]{1,79}$/;
 const MAX_MANIFEST_BYTES = 64 * 1024;
 const MAX_EVIDENCE_BYTES = 256 * 1024;
 const MAX_WIRING_BYTES = 2 * 1024 * 1024;
@@ -86,6 +91,9 @@ Options:
   --target-scene <file>  Relative Cocos .scene output. Default: assets/<UnitySceneName>.scene.
   --provider <mode>      auto | static | unity-mcp. Default: auto.
   --dispositions <file>  Hash-bound source-high disposition JSON used by the live preflight.
+  --engine-feature-replacements <file>
+                         Git-tracked modules the port reproduces without the engine subsystem.
+                         Default: ${DEFAULT_ENGINE_FEATURE_REPLACEMENTS} when present.
   --cache-dir <dir>      Relocate the incremental Unity index cache only.
   --no-cache             Re-scan Unity records without reading/writing the incremental index.
   --refresh-cache        Ignore the current index cache and replace it with fresh records.
@@ -136,7 +144,7 @@ function parseArgs(argv) {
     if (argument === '--refresh-cache') { options.refreshCache = true; continue; }
     const equal = /^--([a-z-]+)=(.*)$/.exec(argument);
     const name = equal ? equal[1] : argument.startsWith('--') ? argument.slice(2) : null;
-    if (!['unity-project', 'cocos-project', 'manifest', 'wiring', 'scaffold-receipt', 'entry-scene', 'packet', 'target-scene', 'provider', 'dispositions', 'cache-dir', 'preview-url'].includes(name)) {
+    if (!['unity-project', 'cocos-project', 'manifest', 'wiring', 'scaffold-receipt', 'entry-scene', 'packet', 'target-scene', 'provider', 'dispositions', 'engine-feature-replacements', 'cache-dir', 'preview-url'].includes(name)) {
       throw corePortError('CORE_PORT_OPTION_INVALID', `Option khong ho tro: ${argument}`);
     }
     const value = equal ? equal[2] : argv[++index];
@@ -497,6 +505,117 @@ async function enforceEngineFeatureClosure(cocosRoot, closure, options = {}, dep
   };
 }
 
+/**
+ * Git-tracked engine feature replacements: a module the Unity closure requires that the port
+ * reproduces without the engine subsystem (for example analytic ray/hull picking plus Unity
+ * overlap oracles instead of a physics backend). Every replaced module is removed from the preview
+ * like any disabled module, and core verify requires its mandatory regression suites to exist, so a
+ * replacement is never a silent drop. Returns null when the default file is absent.
+ */
+function readEngineFeatureReplacements(cocosRoot, value) {
+  const relative = String(value || DEFAULT_ENGINE_FEATURE_REPLACEMENTS).replace(/\\/g, '/');
+  const file = resolveContained(cocosRoot, relative);
+  if (!fs.existsSync(file)) {
+    if (value) throw corePortError('CORE_PORT_ENGINE_FEATURE_REPLACEMENTS_INVALID', `Khong tim thay ${relative}.`);
+    return null;
+  }
+  const payload = readJsonBounded(file, MAX_REPLACEMENTS_BYTES, 'CORE_PORT_ENGINE_FEATURE_REPLACEMENTS_INVALID');
+  const invalid = message => corePortError('CORE_PORT_ENGINE_FEATURE_REPLACEMENTS_INVALID', `${relative}: ${message}`);
+  if (!payload || payload.schemaVersion !== 1 || payload.kind !== ENGINE_FEATURE_REPLACEMENTS_KIND ||
+      !Array.isArray(payload.replacements) || payload.replacements.length < 1 || payload.replacements.length > 8) {
+    throw invalid(`can ${ENGINE_FEATURE_REPLACEMENTS_KIND} schema v1 voi 1-8 replacements.`);
+  }
+  const seen = new Set();
+  const replacements = payload.replacements.map((entry, index) => {
+    const modules = entry && entry.modules;
+    const suites = entry && entry.regressionSuites;
+    if (!Array.isArray(modules) || modules.length < 1 || modules.length > 4 ||
+        modules.some(item => typeof item !== 'string' || item.length > 96 || !ENGINE_FEATURE_ID.test(item) || seen.has(item)) ||
+        new Set(modules).size !== modules.length) {
+      throw invalid(`replacements[${index}].modules can 1-4 engine feature id unique.`);
+    }
+    modules.forEach(item => seen.add(item));
+    if (typeof entry.reason !== 'string' || entry.reason.trim().length < 20 || entry.reason.length > 600) {
+      throw invalid(`replacements[${index}].reason can 20-600 ky tu giai thich thay the bang gi.`);
+    }
+    if (!Array.isArray(suites) || suites.length < 1 || suites.length > 8 || new Set(suites).size !== suites.length ||
+        suites.some(item => typeof item !== 'string' || !REGRESSION_SUITE_ID.test(item))) {
+      throw invalid(`replacements[${index}].regressionSuites can 1-8 suite id unique.`);
+    }
+    return { modules: [...modules], reason: entry.reason.trim(), regressionSuites: [...suites] };
+  });
+  return { path: relativeSlash(cocosRoot, file), sha256: hashFile(file), replacements };
+}
+
+function applyEngineFeatureReplacements(closure, replacementFile) {
+  if (!replacementFile) return closure;
+  const required = new Set(closure.requiredModules || []);
+  const selectors = { ...(closure.selectors || {}) };
+  const replaced = new Set(replacementFile.replacements.flatMap(entry => entry.modules));
+  for (const moduleName of replaced) {
+    if (!required.has(moduleName)) {
+      throw corePortError('CORE_PORT_ENGINE_FEATURE_REPLACEMENT_STALE',
+        `${replacementFile.path}: ${moduleName} khong nam trong Unity engine feature closure hien tai; xoa replacement nay.`);
+    }
+  }
+  // A selector family is replaced as a whole: the selected backend and its parent module together.
+  const families = [['physicsBackend', null], ['physics2dBackend', 'physics-2d'], ['spineBackend', 'spine']];
+  for (const [key, parent] of families) {
+    const members = [selectors[key], parent].filter(item => item && required.has(item));
+    const hit = members.filter(item => replaced.has(item));
+    if (hit.length && hit.length !== members.length) {
+      throw corePortError('CORE_PORT_ENGINE_FEATURE_REPLACEMENTS_INVALID',
+        `${replacementFile.path}: ${key} phai thay ca ${members.join(' + ')}.`);
+    }
+    if (hit.length) selectors[key] = null;
+  }
+  const requiredModules = (closure.requiredModules || []).filter(item => !replaced.has(item));
+  const disabledModules = [...new Set([...(closure.disabledModules || []), ...replaced])];
+  const evidence = closure.evidence || [];
+  return {
+    ...closure,
+    status: requiredModules.length || disabledModules.length ? 'required' : 'not-required',
+    requiredModules,
+    disabledModules,
+    selectors,
+    evidence: evidence.filter(item => item && !replaced.has(item.module)),
+    replaced: replacementFile.replacements.map(entry => ({
+      ...entry,
+      evidence: evidence.filter(item => item && entry.modules.includes(item.module)),
+    })),
+    replacementsFile: { path: replacementFile.path, sha256: replacementFile.sha256 },
+  };
+}
+
+/** Core verify: the replacement file is unchanged and every replacement suite is a mandatory suite. */
+function verifyEngineFeatureReplacements(cocosRoot, closure, dependencies = {}) {
+  const replaced = closure && closure.replaced || [];
+  if (!replaced.length) return { status: 'none', modules: [], suites: [] };
+  const file = resolveContained(cocosRoot, closure.replacementsFile.path);
+  if (!fs.existsSync(file) || hashFile(file) !== closure.replacementsFile.sha256) {
+    throw corePortError('CORE_PORT_ENGINE_FEATURE_REPLACEMENT_STALE',
+      `${closure.replacementsFile.path} da doi sau init; chay init --force de ap dung lai.`);
+  }
+  const registry = (dependencies.loadRegistry || loadRegistry)(cocosRoot, { config: DEFAULT_REGRESSION_REGISTRY });
+  const suites = new Map(registry.suites.map(suite => [suite.id, suite]));
+  const missing = [];
+  for (const entry of replaced) {
+    for (const id of entry.regressionSuites) {
+      const suite = suites.get(id);
+      if (!suite || suite.mandatory !== true) missing.push(id);
+    }
+  }
+  if (missing.length) {
+    throw corePortError('CORE_PORT_ENGINE_FEATURE_REPLACEMENT_UNPROVEN',
+      `Engine feature replacement can mandatory regression suite: ${[...new Set(missing)].join(', ')}.`);
+  }
+  return {
+    status: 'verified',
+    modules: replaced.flatMap(entry => entry.modules),
+    suites: [...new Set(replaced.flatMap(entry => entry.regressionSuites))],
+  };
+}
+
 async function initCorePort(options, dependencies = {}) {
   const unityRoot = validateUnityRoot(options.unityProject);
   const cocosRoot = validateCocosRoot(options.cocosProject);
@@ -526,12 +645,14 @@ async function initCorePort(options, dependencies = {}) {
     throw corePortError('CORE_PORT_ENTRY_REQUIRED', 'Khong chon duoc duy nhat gameplay entry scene; can bounded scene decision.');
   }
   progress({ stage: 'engine-features', status: 'start' });
-  const engineFeatures = await enforceEngineFeatureClosure(
-    cocosRoot,
-    brief.engineFeatureClosure || { status: 'not-required', requiredModules: [], disabledModules: [], selectors: {}, blockers: [] },
-    options,
-    dependencies,
+  const replacementFile = readEngineFeatureReplacements(cocosRoot, options.engineFeatureReplacements);
+  const closure = applyEngineFeatureReplacements(
+    brief.engineFeatureClosure || { status: 'not-required', requiredModules: [], disabledModules: [], selectors: {}, evidence: [], blockers: [] },
+    replacementFile,
   );
+  if (brief.engineFeatureClosure) brief.engineFeatureClosure = closure;
+  const engineFeatures = await enforceEngineFeatureClosure(cocosRoot, closure, options, dependencies);
+  if (closure.replaced) engineFeatures.replacedModules = closure.replaced.flatMap(entry => entry.modules);
   progress({ stage: 'engine-features', status: 'complete' });
   const file = manifestPath(cocosRoot, options.manifest);
   const existed = fs.existsSync(file);
@@ -970,6 +1091,23 @@ function validateEngineFeatureClosure(value) {
   if (disabledModules.some(moduleName => value.requiredModules.includes(moduleName))) {
     throw corePortError('CORE_PORT_MANIFEST_INVALID', 'Engine feature khong the vua required vua disabled.');
   }
+  if (value.replaced !== undefined || value.replacementsFile !== undefined) {
+    const file = value.replacementsFile;
+    if (!Array.isArray(value.replaced) || value.replaced.length < 1 || value.replaced.length > 8 ||
+        !file || typeof file.path !== 'string' || !/^[a-f0-9]{64}$/.test(String(file.sha256 || ''))) {
+      throw corePortError('CORE_PORT_MANIFEST_INVALID', 'Engine feature replacement khong hop le.');
+    }
+    validateLogicalPath(file.path, 'replacements');
+    for (const entry of value.replaced) {
+      if (!entry || !Array.isArray(entry.modules) || !entry.modules.length ||
+          entry.modules.some(item => !disabledModules.includes(item)) ||
+          !Array.isArray(entry.regressionSuites) || !entry.regressionSuites.length ||
+          entry.regressionSuites.some(item => typeof item !== 'string' || !REGRESSION_SUITE_ID.test(item)) ||
+          typeof entry.reason !== 'string' || !entry.reason || entry.reason.length > 600 || !Array.isArray(entry.evidence)) {
+        throw corePortError('CORE_PORT_MANIFEST_INVALID', 'Engine feature replacement record khong hop le.');
+      }
+    }
+  }
   if ((value.status === 'not-required') !== (value.requiredModules.length === 0 && disabledModules.length === 0)) {
     throw corePortError('CORE_PORT_MANIFEST_INVALID', 'Engine feature closure status khong khop requiredModules.');
   }
@@ -1290,6 +1428,7 @@ function verifyCorePort(options, dependencies = {}) {
       receipt.receipt.stateFingerprint !== manifest.source.stateFingerprint) {
     throw corePortError('CORE_PORT_MANIFEST_STALE', 'Manifest khong khop preflight receipt/source hien tai; chay init --force lai.');
   }
+  const engineFeatureReplacements = verifyEngineFeatureReplacements(cocosRoot, manifest.engineFeatures, dependencies);
   const fidelity = evaluateFidelity(manifest, unityRoot, cocosRoot);
   const previewOnly = options.previewOnly === true;
   const requiredScripts = previewOnly ? PREVIEW_REQUIRED_SCRIPTS : REQUIRED_SCRIPTS;
@@ -1333,6 +1472,7 @@ function verifyCorePort(options, dependencies = {}) {
       artifacts: Object.fromEntries(artifactKeys.map(key => [key, artifacts[key]])),
     },
     fidelity,
+    engineFeatureReplacements,
     evidenceContract: manifest.delivery.evidenceContract,
     claim: previewOnly
       ? previewAccepted
@@ -1409,6 +1549,11 @@ module.exports = {
   regressionRisksFromBrief,
   ensureRegressionRegistry,
   enforceEngineFeatureClosure,
+  DEFAULT_ENGINE_FEATURE_REPLACEMENTS,
+  ENGINE_FEATURE_REPLACEMENTS_KIND,
+  readEngineFeatureReplacements,
+  applyEngineFeatureReplacements,
+  verifyEngineFeatureReplacements,
   initCorePort,
   summarizeWiring,
   summarizePortReport,

@@ -78,7 +78,7 @@ ParticleSystemRenderer:
   assert.equal(closure([mesh], [mesh.assetPath]).disabledModules.includes('primitive'), false);
 });
 
-test('an uncalled private Debug.DrawLine helper is not runtime feature evidence', () => {
+test('Debug.DrawLine/DrawRay are Editor-only and never require the debug renderer', () => {
   const dead = record('Assets/Game/Input.cs', `
 public sealed class InputController {
   private void DrawPlusAtZ0() { Debug.DrawLine(Vector3.zero, Vector3.one); }
@@ -94,8 +94,9 @@ public sealed class LiveDebug {
 `);
   assert.equal(closure([dead], [dead.assetPath]).requiredModules.includes('debug-renderer'), false);
   assert.equal(closure([dead], [dead.assetPath]).disabledModules.includes('debug-renderer'), true);
-  assert.equal(closure([live], [live.assetPath]).requiredModules.includes('debug-renderer'), true);
-  assert.equal(closure([live], [live.assetPath]).disabledModules.includes('debug-renderer'), false);
+  // Reachable from Update, but Unity player builds draw nothing for it.
+  assert.equal(closure([live], [live.assetPath]).requiredModules.includes('debug-renderer'), false);
+  assert.equal(closure([live], [live.assetPath]).disabledModules.includes('debug-renderer'), true);
 });
 
 test('engine feature evidence outside the playable-core closure cannot enable a Cocos module', () => {
@@ -159,6 +160,26 @@ public sealed class CameraSetup : MonoBehaviour {
 }
 `);
   assert.equal(closure([camera], [camera.assetPath]).requiredModules.includes('occlusion-query'), true);
+
+  // Coffee.UIParticle bakes with a private camera and switches occlusion culling off.
+  const bake = record('Assets/Plugins/UIParticle/BakingCamera.cs', `
+public sealed class BakingCamera : MonoBehaviour {
+  private Camera _bakeCamera;
+  private void Awake() { _bakeCamera.useOcclusionCulling = false; _bakeCamera.enabled = false; }
+}
+`);
+  const off = closure([bake], [bake.assetPath]);
+  assert.equal(off.requiredModules.includes('occlusion-query'), false);
+  assert.equal(off.disabledModules.includes('occlusion-query'), true);
+
+  const toggled = record('Assets/Game/CameraToggle.cs', `
+public sealed class CameraToggle : MonoBehaviour {
+  public bool culling;
+  private void Start() { GetComponent<Camera>().useOcclusionCulling = culling; }
+}
+`);
+  assert.equal(closure([toggled], [toggled.assetPath]).requiredModules.includes('occlusion-query'), true,
+    'a non-literal value may enable it');
 });
 
 test('reachable Unity Physics2D collider/query selects the Box2D parent option and backend', () => {
