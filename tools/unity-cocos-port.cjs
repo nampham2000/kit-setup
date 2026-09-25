@@ -1373,7 +1373,7 @@ function withConsistentCocosEuler(transform) {
  * renderers they are matched by renderer node name via the Unity object map; otherwise the ModelImporter
  * external material remaps (by embedded material name) apply.
  */
-function matchModelMaterialOverrides({ groups = [], remaps = [], slots = [], objectMap = null, modelGuid = '' }) {
+function matchModelMaterialOverrides({ groups = [], remaps = [], slots = [], objectMap = null, modelGuid = '', resolveGuid = null }) {
   const rendererCount = new Set(slots.map((slot) => slot.rendererLocalId)).size;
   const groupsByNodeName = new Map();
   const orphaned = [];
@@ -1389,16 +1389,29 @@ function matchModelMaterialOverrides({ groups = [], remaps = [], slots = [], obj
   const explicitMaterialAssets = rendererCount > 1
     ? []
     : groups.flatMap((group) => group.materialAssets || []).filter(Boolean);
+  // Unity-MCP evidence of the materials Unity actually resolved for each model renderer (ModelImporter
+  // name search "Everywhere", remaps, embedded fallback), keyed by renderer node name.
+  const evidenceByNode = new Map();
+  for (const object of Object.values(objectMap?.[modelGuid]?.objects || {})) {
+    if (!/Renderer$/.test(String(object?.type || '')) || !Array.isArray(object.materials)) continue;
+    evidenceByNode.set(normalizeKey(object.name), object.materials);
+  }
   const slotAssets = new Map();
   slots.forEach((slot, index) => {
     const rendererGroup = rendererCount > 1 ? groupsByNodeName.get(normalizeKey(slot.rendererNodeName)) : null;
     const explicitMaterialAsset = rendererGroup
       ? rendererGroup.materialAssets?.[slot.slot] || null
       : explicitMaterialAssets[slot.slot] || (explicitMaterialAssets.length === 1 ? explicitMaterialAssets[0] : null);
+    const evidence = evidenceByNode.get(normalizeKey(slot.rendererNodeName))?.[slot.slot];
+    const evidenceAsset = !explicitMaterialAsset && evidence?.guid && typeof resolveGuid === 'function'
+      ? resolveGuid(evidence.guid)
+      : null;
     const remap = explicitMaterialAsset
       ? { materialAsset: explicitMaterialAsset }
-      : remaps.find((entry) => normalizeKey(entry.name) === normalizeKey(slot.materialName))
-      || (remaps.length === 1 && slots.length === 1 ? remaps[0] : null);
+      : evidenceAsset
+        ? { materialAsset: evidenceAsset }
+        : remaps.find((entry) => normalizeKey(entry.name) === normalizeKey(slot.materialName))
+        || (remaps.length === 1 && slots.length === 1 ? remaps[0] : null);
     if (remap?.materialAsset) slotAssets.set(index, remap.materialAsset);
   });
   return { slotAssets, orphaned, unmapped };
@@ -1417,6 +1430,7 @@ function buildNestedModelMaterialOverrides(gameObject, modelPrefab, options, uni
     slots,
     objectMap: options?.unityObjectMap || null,
     modelGuid: gameObject.syntheticModelAsset?.guid || '',
+    resolveGuid: (guid) => unityDb?.get(guid) || null,
   });
   for (const fileId of match.orphaned) {
     reporter.low('NESTED_MODEL_MATERIAL_OVERRIDE_ORPHANED', gameObject.syntheticModelAsset?.relativePath || '', gameObject.name,

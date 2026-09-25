@@ -158,3 +158,20 @@ test('multi-renderer model material overrides are matched per renderer through t
   const single = matchModelMaterialOverrides({ groups: groups.slice(0, 1), slots: slots.slice(0, 1) });
   assert.equal(single.slotAssets.get(0), pink);
 });
+
+test('Unity-resolved renderer materials from the object map replace embedded FBX materials', () => {
+  const { matchModelMaterialOverrides } = require('./unity-cocos-port.cjs');
+  const grey = { relativePath: 'Tank/TankGrey.mat' }; const color = { relativePath: 'Tank/TankColor.mat' };
+  const assets = { g1: grey, g2: color };
+  const slots = [
+    { rendererLocalId: 'r1', rendererNodeName: 'wheel1', slot: 0, materialName: 'TankGrey' },
+    { rendererLocalId: 'r2', rendererNodeName: 'UTV', slot: 0, materialName: 'TankColor' },
+  ];
+  const objectMap = { utv: { objects: {
+    '1': { type: 'MeshRenderer', name: 'wheel1', materials: [{ name: 'TankGrey', guid: 'g1' }] },
+    '2': { type: 'MeshRenderer', name: 'UTV', materials: [{ name: 'TankColor', guid: 'g2' }] },
+  } } };
+  const result = matchModelMaterialOverrides({ slots, objectMap, modelGuid: 'utv', resolveGuid: (g) => assets[g] || null });
+  assert.equal(result.slotAssets.get(0), grey);
+  assert.equal(result.slotAssets.get(1), color);
+});

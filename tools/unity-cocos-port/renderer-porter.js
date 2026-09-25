@@ -54,10 +54,24 @@ module.exports = function createRendererPorter(deps) {
     }).filter(Boolean);
   }
 
+  // Unity-MCP evidence (--unity-object-map): the materials Unity actually resolved for the model's single
+  // renderer (ModelImporter name search, remaps or embedded fallback).
+  function evidenceMaterialAssets(gameObject, options, unityDb) {
+    const model = options?.unityObjectMap?.[gameObject.syntheticModelAsset?.guid || ''];
+    if (!model) return [];
+    const renderers = Object.values(model.objects || {})
+      .filter((object) => /Renderer$/.test(String(object?.type || '')) && Array.isArray(object.materials));
+    if (renderers.length !== 1) return [];
+    return renderers[0].materials.map((material) => (material?.guid ? unityDb?.get(material.guid) || null : null));
+  }
+
   function resolveSyntheticMaterialOverrides(gameObject, resolvedModel, options, unityDb, cocosDb, reporter) {
     const explicitAssets = gameObject.syntheticModelMaterialOverrideGroups?.[0]?.materialAssets || [];
-    const externalAssets = explicitAssets.length ? [] : orderedExternalMaterialAssets(gameObject, resolvedModel);
-    const assets = explicitAssets.length ? explicitAssets : externalAssets;
+    const evidenceAssets = explicitAssets.length ? [] : evidenceMaterialAssets(gameObject, options, unityDb);
+    const externalAssets = explicitAssets.length || evidenceAssets.some(Boolean)
+      ? []
+      : orderedExternalMaterialAssets(gameObject, resolvedModel);
+    const assets = explicitAssets.length ? explicitAssets : evidenceAssets.some(Boolean) ? evidenceAssets.filter(Boolean) : externalAssets;
     if (!assets.length) return [];
     const uuids = resolveUnityMaterialUuids(assets, options, unityDb, cocosDb, reporter, gameObject.name);
     if (externalAssets.length && uuids.length) {
