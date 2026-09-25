@@ -57,6 +57,13 @@ const createMaterialPorter = require('./unity-cocos-port/material-porter');
 const createSpritePorter = require('./unity-cocos-port/sprite-porter');
 const createColliderPorter = require('./unity-cocos-port/collider-porter');
 const createRendererPorter = require('./unity-cocos-port/renderer-porter');
+const {
+  CARRIER_NAME_SUFFIX: FBX_MESH_CARRIER_NAME_SUFFIX,
+  deriveFbxMeshPivot,
+  fbxMeshCarrierTransform,
+  isFbxModelAsset,
+  unityMeshBoundsFromObjectMap,
+} = require('./unity-cocos-port/fbx-mesh-basis');
 const createParticlePorter = require('./unity-cocos-port/particle-porter');
 const createLightPorter = require('./unity-cocos-port/light-porter');
 const createAnimationPorter = require('./unity-cocos-port/animation-porter');
@@ -164,6 +171,7 @@ const {
   copyUnityAssetToCocos: copyUnityAssetToCocosImpl,
   handleMissingModel: handleMissingModelImpl,
   resolveLibraryAssetUuid,
+  fbxMeshOwnerNode: (...args) => fbxMeshOwnerNode(...args),
 });
 
 const {
@@ -183,6 +191,7 @@ const {
   getNestedList,
   unityRefGuid,
   unityRefFileId,
+  fbxMeshOwnerNode: (...args) => fbxMeshOwnerNode(...args),
 });
 
 const { emitParticleSystem: emitParticleSystemImpl } = createParticlePorter({
@@ -1544,6 +1553,46 @@ function rebaseNestedModelMountedChildTransform(transform) {
     localPosition: rotateVectorByQuaternion(source.localPosition, NESTED_MODEL_FORWARD_BASIS),
     localRotation: multiplyQuaternion(NESTED_MODEL_FORWARD_BASIS, rotation),
   });
+}
+
+function readCocosMeshBounds(meshUuid, options) {
+  if (!meshUuid || !options?.cocosRoot) return null;
+  const struct = readJsonIfExists(libraryJsonPathForUuid(options, meshUuid))?._struct;
+  return struct?.minPosition && struct?.maxPosition ? { min: struct.minPosition, max: struct.maxPosition } : null;
+}
+
+// A Cocos-imported FBX mesh attached straight to a Unity node (unpacked FBX part, collapsed single-mesh model
+// root) lives in a different local space than the Unity mesh (see unity-cocos-port/fbx-mesh-basis.js). The
+// component that consumes the mesh therefore goes on a child carrier node with the Ry(180) * T(-pivot) basis,
+// leaving the Unity node's own transform, colliders, scripts and children untouched.
+function fbxMeshOwnerNode({ builder, nodeId, gameObject, modelAsset, meshUuid, unityMeshFileId = '', meshNameHint = '', seed = '', reporter, options }) {
+  if (!builder || nodeId == null || !meshUuid || !isFbxModelAsset(modelAsset)) return nodeId;
+  const existing = builder.fbxMeshCarrier(nodeId, meshUuid);
+  if (existing != null) return existing;
+  const pivot = deriveFbxMeshPivot({
+    unityBounds: unityMeshBoundsFromObjectMap(options?.unityObjectMap, modelAsset.guid, { fileId: unityMeshFileId, meshName: meshNameHint }),
+    cocosBounds: readCocosMeshBounds(meshUuid, options),
+  });
+  const carrierId = builder.ensureFbxMeshCarrier(
+    nodeId,
+    meshUuid,
+    fbxMeshCarrierTransform(pivot.translation),
+    `node-${sanitizeFileId(gameObject?.name || 'mesh')}-fbx-mesh-${sanitizeFileId(String(seed || meshUuid))}`,
+  );
+  const t = pivot.translation;
+  const detail = `pivot=(${[t.x, t.y, t.z].map((n) => Number(n.toFixed(4))).join(', ')}) ${pivot.reason}`;
+  const where = modelAsset.relativePath || modelAsset.stem || '';
+  if (pivot.verified) {
+    reporter?.low('FBX_MESH_BASIS_APPLIED', where, gameObject?.name || '',
+      'Cocos FBX mesh mounted on a Ry(180) carrier with the Unity-evidenced pivot so it matches the Unity mesh space', detail);
+  } else if (pivot.reason.startsWith('extent-mismatch')) {
+    reporter?.medium('FBX_MESH_BASIS_UNVERIFIED', where, gameObject?.name || '',
+      'Unity and Cocos mesh extents disagree, so only the Ry(180) basis was applied; verify this mesh placement against Unity', detail);
+  } else {
+    reporter?.low('FBX_MESH_BASIS_ASSUMED', where, gameObject?.name || '',
+      'Cocos FBX mesh mounted on a Ry(180) carrier with a zero pivot; pass --unity-object-map with mesh bounds to verify baked pivots', detail);
+  }
+  return carrierId;
 }
 
 function unityColorToCocos(value, alphaOverride = null) {
@@ -4630,6 +4679,67 @@ function resolveNestedLabelSizing(props, sourceDoc) {
   };
 }
 
+// Flattened copies of one nested prefab must not share fileIds: Cocos keys PrefabInfo/CompPrefabInfo identity
+// and outer prefab override targets by fileId. The clone root takes the outer prefab's regular node id
+// (node-<name>-<stripped transform fileID>, the same id an outer prefab computes for that node) and the rest a
+// clone-scoped suffix. Plain PrefabInfos belong to the outer prefab root, not to the clone root.
+function rekeyFlattenedPrefabClone(builder, flattened, rootFileId, cloneKey) {
+  const prefabRootId = builder.objects[0]?.data?.__id__ ?? 1;
+  for (const id of flattened.idMap.values()) {
+    const obj = builder.objects[id];
+    if (!obj || typeof obj !== 'object') continue;
+    if (obj.__type__ === 'cc.PrefabInfo' && !obj.instance) {
+      obj.fileId = id === flattened.rootPrefabInfoId ? rootFileId : `${obj.fileId}@${cloneKey}`;
+      obj.root = cocosRef(prefabRootId);
+    } else if (obj.__type__ === 'cc.CompPrefabInfo' || obj.__type__ === 'cc.PrefabInstance') {
+      obj.fileId = `${obj.fileId}@${cloneKey}`;
+    }
+  }
+}
+
+// Outer prefabs may override the Transform of an object nested inside the linked source prefab (Tanks!:
+// LevelMoon rescales the RockyPath instances inside its PathMoon02 instances). Merge the override onto the
+// source's effective transform and target the node the source prefab emitted for it.
+function buildNestedChildTransformOverrides(sourceModel, sourceTransform, props, reporter, where) {
+  const keys = Object.keys(props || {});
+  const wantsPosition = keys.some((key) => key.startsWith('m_LocalPosition.') || key.startsWith('m_AnchoredPosition.'));
+  const wantsRotation = keys.some((key) => key.startsWith('m_LocalRotation.'));
+  const wantsScale = keys.some((key) => key.startsWith('m_LocalScale.'));
+  if (!wantsPosition && !wantsRotation && !wantsScale) return [];
+  const gameObject = sourceModel.gameObjects?.get(sourceTransform.gameObjectId);
+  const parentGameObject = sourceModel.gameObjects?.get(sourceModel.transforms?.get(sourceTransform.parentId)?.gameObjectId);
+  const unsupported = !gameObject
+    ? 'target GameObject is unknown'
+    : gameObject.nestedPrefab && !nestedPrefabNeedsParticleOverrideFlattening(gameObject.nestedPrefab)
+      ? 'target is the root of a linked nested prefab instance (needs a nested TargetInfo path)'
+      : parentGameObject?.syntheticModelAsset
+        ? 'target is mounted under a model instance (basis-rebased transform)'
+        : gameObjectHasWorldScaledParticleSystem(gameObject, sourceModel)
+          ? 'target carries a world-scaled ParticleSystem (parent-compensated scale)'
+          : sourceTransform.isRect && wantsPosition
+            ? 'RectTransform position needs the parent layout'
+            : '';
+  if (unsupported) {
+    reporter?.medium('NESTED_CHILD_TRANSFORM_OVERRIDE_UNMAPPED', where, gameObject?.name || String(sourceTransform.fileId),
+      `Outer prefab overrides a nested child Transform that was not ported: ${unsupported}`, keys.join(','));
+    return [];
+  }
+  const merged = transformFromPrefabOverrides(sourceTransform, props);
+  const localId = `node-${sanitizeFileId(gameObject.name)}-${sourceTransform.fileId}`;
+  const overrides = [];
+  if (wantsPosition) overrides.push({ localId, propertyPath: '_lpos', value: convertNodePosition(merged) });
+  if (wantsRotation) {
+    overrides.push(
+      { localId, propertyPath: '_lrot', value: convertRotation(merged.localRotation) },
+      { localId, propertyPath: '_euler', value: convertTransformEuler(merged) },
+    );
+  }
+  if (wantsScale) overrides.push({ localId, propertyPath: '_lscale', value: convertScale(merged.localScale) });
+  reporter?.low('NESTED_CHILD_TRANSFORM_OVERRIDE_WIRED', where, gameObject.name,
+    'Outer prefab Transform override of a nested child was merged onto the source transform', keys.join(','));
+  return overrides;
+}
+
 function buildNestedPrefabPropertyOverrides(gameObject, transform, sourceModel, scriptContext = null) {
   const nestedPrefab = gameObject?.nestedPrefab;
   const overrideInfo = nestedPrefab?.overrideInfo;
@@ -4662,6 +4772,12 @@ function buildNestedPrefabPropertyOverrides(gameObject, transform, sourceModel, 
   for (const [key, props] of overrideInfo.overridesByTarget.entries()) {
     if (!key.startsWith(`${sourceGuid}:`)) continue;
     const sourceFileId = key.slice(sourceGuid.length + 1);
+    const sourceTransform = sourceModel.transforms?.get(sourceFileId);
+    if (sourceTransform && sourceTransform !== rootTransform) {
+      overrides.push(...buildNestedChildTransformOverrides(
+        sourceModel, sourceTransform, props, scriptContext?.reporter, nestedPrefab.sourceAsset?.relativePath || '',
+      ));
+    }
     const sourceGameObject = sourceModel.gameObjects?.get(sourceFileId);
     if (sourceGameObject && hasPrefabOverrideKey(props, 'm_IsActive')) {
       overrides.push({
@@ -5124,6 +5240,7 @@ class CocosPrefabBuilder {
     this.prefabInfoIds = [];
     this.rootPrefabInfoId = 0;
     this.nestedPrefabInstanceRootIds = [];
+    this.fbxMeshCarriers = new Map();
     this.add({
       __type__: 'cc.Prefab',
       _name: name,
@@ -5183,6 +5300,25 @@ class CocosPrefabBuilder {
     this.nodePrefabInfoMap.set(id, prefabInfoId);
     if (parentId == null) this.rootPrefabInfoId = prefabInfoId;
     this.attachChild(parentId, id);
+    return id;
+  }
+
+  fbxMeshCarrier(nodeId, meshUuid) {
+    return this.fbxMeshCarriers.get(`${nodeId}|${meshUuid}`) ?? null;
+  }
+
+  // Child node holding a Cocos FBX mesh under the Unity->Cocos mesh-space basis (fbx-mesh-basis.js); shared by
+  // the renderer and a MeshCollider of the same mesh on that node. `carrier` is already in Cocos space.
+  ensureFbxMeshCarrier(nodeId, meshUuid, carrier, fileId) {
+    const key = `${nodeId}|${meshUuid}`;
+    if (this.fbxMeshCarriers.has(key)) return this.fbxMeshCarriers.get(key);
+    const parent = this.objects[nodeId];
+    const id = this.addNode(`${parent?._name || 'Mesh'}${FBX_MESH_CARRIER_NAME_SUFFIX}`, nodeId, null, parent?._layer ?? 1, true, fileId);
+    const node = this.objects[id];
+    node._lpos = vec3(carrier.position.x, carrier.position.y, carrier.position.z);
+    node._lrot = quat(carrier.rotation.x, carrier.rotation.y, carrier.rotation.z, carrier.rotation.w);
+    node._euler = vec3(carrier.euler.x, carrier.euler.y, carrier.euler.z);
+    this.fbxMeshCarriers.set(key, id);
     return id;
   }
 
@@ -6840,6 +6976,7 @@ function emitNodeRecursive(transform, parentNodeId, model, builder, layerResolve
     applyNestedScriptFieldOverrides(nestedBuilder, gameObject.nestedPrefab, { builder, reporter, unityDb, cocosDb });
     const flattened = builder.clonePrefabTree(nestedBuilder.objects, parentNodeId);
     if (flattened?.rootId != null) {
+      rekeyFlattenedPrefabClone(builder, flattened, `node-${sanitizeFileId(gameObject.name)}-${transform.fileId}`, String(transform.fileId));
       for (const [unityComponentId, nestedComponentId] of nestedBuilder.componentMap.entries()) {
         const componentId = flattened.idMap.get(nestedComponentId);
         if (Number.isInteger(componentId)) builder.componentMap.set(unityComponentId, componentId);
@@ -8201,6 +8338,7 @@ module.exports = {
   correctNestedModelForwardAxis,
   buildNestedPrefabPropertyOverrides,
   rebaseNestedModelMountedChildTransform,
+  fbxMeshOwnerNode,
   hasExplicitNestedModelForwardBasisRotation,
   cocosQuaternionToEuler,
   convertRotation,

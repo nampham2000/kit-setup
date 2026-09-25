@@ -17,6 +17,7 @@ module.exports = function createRendererPorter(deps) {
     getField,
     getNestedList,
     unityRefGuid,
+    fbxMeshOwnerNode = ({ nodeId }) => nodeId,
   } = deps;
 
   function normalizeMaterialName(value) {
@@ -98,7 +99,7 @@ module.exports = function createRendererPorter(deps) {
         gameObject, resolved, options, unityDb, cocosDb, reporter,
       );
       builder.addMeshRenderer(
-        nodeId,
+        fbxMeshOwnerNode({ builder, nodeId, gameObject, modelAsset, meshUuid: resolved.meshUuid, meshNameHint, seed: componentId, reporter, options }),
         componentId,
         resolved.meshUuid,
         overrideMaterialUuids.length ? overrideMaterialUuids : (resolved.materialUuids || (resolved.materialUuid ? [resolved.materialUuid] : [])),
@@ -115,7 +116,7 @@ module.exports = function createRendererPorter(deps) {
         gameObject, missing.resolved, options, unityDb, cocosDb, reporter,
       );
       builder.addMeshRenderer(
-        nodeId,
+        fbxMeshOwnerNode({ builder, nodeId, gameObject, modelAsset, meshUuid: missing.resolved.meshUuid, meshNameHint, seed: componentId, reporter, options }),
         componentId,
         missing.resolved.meshUuid,
         overrideMaterialUuids.length ? overrideMaterialUuids : (missing.resolved.materialUuids || (missing.resolved.materialUuid ? [missing.resolved.materialUuid] : [])),
@@ -247,7 +248,21 @@ module.exports = function createRendererPorter(deps) {
       recordPendingMeshRepair(options, options.out, componentFileId, meshAsset.stem, gameObject.name, meshAsset.relativePath);
     }
     if (!meshUuid && !meshPendingImport) reporter.high('MESH_UNRESOLVED', model.file, gameObject.name, 'MeshRenderer has no resolved Cocos mesh');
-    builder.addMeshRenderer(nodeId, componentId, meshUuid, materialUuids, componentFileId, {
+    const ownerNodeId = meshUuid && !builtinMeshUuid && meshAsset
+      ? fbxMeshOwnerNode({
+        builder,
+        nodeId,
+        gameObject,
+        modelAsset: meshAsset,
+        meshUuid,
+        unityMeshFileId: deps.unityRefFileId(meshRef),
+        meshNameHint: gameObject.name,
+        seed: componentId,
+        reporter,
+        options,
+      })
+      : nodeId;
+    builder.addMeshRenderer(ownerNodeId, componentId, meshUuid, materialUuids, componentFileId, {
       castShadows: Number(getField(doc, 'm_CastShadows', 1) || 0) !== 0,
       receiveShadows: Number(getField(doc, 'm_ReceiveShadows', 1) || 0) !== 0,
     });

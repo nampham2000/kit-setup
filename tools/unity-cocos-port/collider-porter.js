@@ -16,6 +16,7 @@ module.exports = function createColliderPorter(deps) {
     copyUnityAssetToCocos,
     handleMissingModel,
     resolveLibraryAssetUuid,
+    fbxMeshOwnerNode = ({ nodeId }) => nodeId,
   } = deps;
 
   function unityRefEquals(left, right) {
@@ -452,7 +453,34 @@ module.exports = function createColliderPorter(deps) {
       reporter.high('MESH_COLLIDER_UNRESOLVED', model.file, gameObject.name, 'Unity MeshCollider was ported without a resolved Cocos mesh');
     }
 
-    builder.addMeshCollider(nodeId, componentId, {
+    // A Cocos FBX mesh needs the same mesh-space carrier as its renderer. A dynamic body keeps the collider on
+    // its own node (Cocos only compounds colliders that share the RigidBody node), so the basis is reported.
+    const meshFilterId = gameObject.components.find((id) => model.componentDocs.get(id)?.classId === 33);
+    const colliderMeshRef = unityRefGuid(meshRef) ? meshRef : getField(model.componentDocs.get(meshFilterId) || {}, 'm_Mesh', null);
+    const colliderMeshAsset = meshUuid && unityDb?.get ? unityDb.get(unityRefGuid(colliderMeshRef)) : null;
+    const hasRigidbody = gameObject.components.some((id) => Number(model.componentDocs.get(id)?.classId) === 54);
+    let ownerNodeId = nodeId;
+    if (colliderMeshAsset && String(colliderMeshAsset.ext || '').toLowerCase() === '.fbx') {
+      if (hasRigidbody) {
+        reporter.medium('FBX_MESH_COLLIDER_BASIS_SKIPPED', model.file, gameObject.name,
+          'MeshCollider shares a node with a Rigidbody, so the FBX mesh-space basis could not be applied; the collision mesh is mirrored relative to Unity');
+      } else {
+        ownerNodeId = fbxMeshOwnerNode({
+          builder,
+          nodeId,
+          gameObject,
+          modelAsset: colliderMeshAsset,
+          meshUuid,
+          unityMeshFileId: colliderMeshRef?.fileID ?? '',
+          meshNameHint: gameObject.name,
+          seed: componentId,
+          reporter,
+          options,
+        });
+      }
+    }
+
+    builder.addMeshCollider(ownerNodeId, componentId, {
       enabled: Number(getField(doc, 'm_Enabled', 1) || 0) !== 0,
       isTrigger: Number(getField(doc, 'm_IsTrigger', 0) || 0) !== 0,
       convex: Number(getField(doc, 'm_Convex', 0) || 0) !== 0,
