@@ -11,185 +11,339 @@
       "id": "renderer-frame-and-pivot",
       "origin": "922d652,ec2e841",
       "applicability": "automatic",
-      "sharedPaths": ["tools/unity-cocos-port/particle-renderer-contract.js", "tools/unity-cocos-port/source-particle.effect", "tools/unity-cocos-port/particle-euler-rotation-binding.js", "tools/unity-cocos-port/runtime/UnityParticleEulerRotation.ts", "tools/unity-cocos-port/runtime/UnityParticleEulerRotationAdapter.ts", "tools/unity-cocos-port/particle-mesh-frame-binding.js", "tools/unity-cocos-port/runtime/UnityParticleMeshFrame.ts", "tools/unity-cocos-port/runtime/UnityParticleMeshFrameAdapter.ts"],
-      "testPaths": ["tools/unity-cocos-port/particle-renderer-contract.test.cjs", "tools/unity-cocos-port/particle-renderer-native.test.cjs", "tools/unity-cocos-port/particle-euler-rotation.test.cjs", "tools/unity-cocos-port/particle-pivot-alignment-native.test.cjs", "tools/unity-cocos-port/particle-mesh-frame-binding.test.cjs"],
+      "sharedPaths": [
+        "tools/unity-cocos-port/particle-renderer-contract.js",
+        "tools/unity-cocos-port/source-particle.effect",
+        "tools/unity-cocos-port/particle-euler-rotation-binding.js",
+        "tools/unity-cocos-port/runtime/UnityParticleEulerRotation.ts",
+        "tools/unity-cocos-port/runtime/UnityParticleEulerRotationAdapter.ts",
+        "tools/unity-cocos-port/particle-mesh-frame-binding.js",
+        "tools/unity-cocos-port/runtime/UnityParticleMeshFrame.ts",
+        "tools/unity-cocos-port/runtime/UnityParticleMeshFrameAdapter.ts"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/particle-renderer-contract.test.cjs",
+        "tools/unity-cocos-port/particle-renderer-native.test.cjs",
+        "tools/unity-cocos-port/particle-euler-rotation.test.cjs",
+        "tools/unity-cocos-port/particle-pivot-alignment-native.test.cjs",
+        "tools/unity-cocos-port/particle-mesh-frame-binding.test.cjs"
+      ],
       "acceptance": "Native BakeMesh alignment and pivot, rotated parent, two preview viewports. Rotation over lifetime: native rotation3D and baked vertices, start-of-step curve age, and a parent-axis Y spin (VerticalGlow) in preview. Mesh pivot in mesh-bounds units, Mesh World/Velocity alignment and View billboard pivot against native BakeMesh; arrow directions of a Velocity-aligned ring and a pivot-offset glow in preview."
     },
     {
       "id": "noise-medium-and-high-curl",
       "origin": "9d64faf,7d34575",
       "applicability": "automatic",
-      "sharedPaths": ["tools/unity-cocos-port/particle-noise-binding.js", "tools/unity-cocos-port/runtime/UnityNoiseKernel.ts", "tools/unity-cocos-port/runtime/UnityParticleNoise.ts"],
-      "testPaths": ["tools/unity-cocos-port/particle-noise-native.test.cjs", "tools/unity-cocos-port/particle-noise-high.test.cjs", "tools/unity-cocos-port/particle-noise-low.test.cjs", "tools/unity-cocos-port/particle-noise-rotation.test.cjs", "tools/unity-cocos-port/particle-noise-prefabs.test.cjs"],
+      "sharedPaths": [
+        "tools/unity-cocos-port/particle-noise-binding.js",
+        "tools/unity-cocos-port/runtime/UnityNoiseKernel.ts",
+        "tools/unity-cocos-port/runtime/UnityParticleNoise.ts"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/particle-noise-native.test.cjs",
+        "tools/unity-cocos-port/particle-noise-high.test.cjs",
+        "tools/unity-cocos-port/particle-noise-low.test.cjs",
+        "tools/unity-cocos-port/particle-noise-rotation.test.cjs",
+        "tools/unity-cocos-port/particle-noise-prefabs.test.cjs"
+      ],
       "acceptance": "Supported Low/Medium/High quality and velocity closure, native field holdouts and lattice, rotationAmount per axis, matched trajectories and spatial bands. Unsupported module combinations remain high."
     },
     {
       "id": "noise-generic-binding",
       "origin": "ad7110d",
       "applicability": "automatic",
-      "sharedPaths": ["tools/unity-cocos-port/particle-noise-binding.js", "tools/unity-cocos-port/runtime/UnityParticleNoiseAdapter.ts"],
-      "testPaths": ["tools/unity-cocos-port/particle-noise-binding.test.cjs"],
+      "sharedPaths": [
+        "tools/unity-cocos-port/particle-noise-binding.js",
+        "tools/unity-cocos-port/runtime/UnityParticleNoiseAdapter.ts"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/particle-noise-binding.test.cjs"
+      ],
       "acceptance": "Fresh project without AOE controller, AssetDB registered Component and runtime smoke test."
     },
     {
       "id": "mesh-uv-panner-and-flow",
       "origin": "fabbac8,483890b,08bf37c",
       "applicability": "conditional",
-      "sharedPaths": ["tools/unity-cocos-port/particle-mesh-uv.js"],
-      "testPaths": ["tools/unity-cocos-port/particle-mesh-uv.test.cjs"],
+      "sharedPaths": [
+        "tools/unity-cocos-port/particle-mesh-uv.js"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/particle-mesh-uv.test.cjs"
+      ],
       "acceptance": "Verify native/imported UV reflection and per-renderer material variants; compare source phases and tight visible ROI."
     },
     {
       "id": "orbital-local-motion",
       "origin": "055d995,d77127b",
       "applicability": "automatic",
-      "sharedPaths": ["tools/unity-cocos-port/particle-orbit-contract.js", "tools/unity-cocos-port/particle-orbit-binding.js", "tools/unity-cocos-port/runtime/UnityParticleOrbit.ts"],
-      "testPaths": ["tools/unity-cocos-port/particle-orbit-native.test.cjs", "tools/unity-cocos-port/particle-orbit-binding.test.cjs", "tools/unity-cocos-port/particle-limit-composition.test.cjs"],
+      "sharedPaths": [
+        "tools/unity-cocos-port/particle-orbit-contract.js",
+        "tools/unity-cocos-port/particle-orbit-binding.js",
+        "tools/unity-cocos-port/runtime/UnityParticleOrbit.ts"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/particle-orbit-native.test.cjs",
+        "tools/unity-cocos-port/particle-orbit-binding.test.cjs",
+        "tools/unity-cocos-port/particle-limit-composition.test.cjs"
+      ],
       "acceptance": "Source frame, native paths and repeated loop/viewport occupancy. With a source Limit Velocity: native composition cases and matched-birth trajectories of the ported emitter."
     },
     {
       "id": "orbital-world-motion",
       "origin": "599c2b0",
       "applicability": "automatic",
-      "sharedPaths": ["tools/unity-cocos-port/particle-orbit-contract.js", "tools/unity-cocos-port/runtime/UnityParticleOrbit.ts"],
-      "testPaths": ["tools/unity-cocos-port/particle-orbit-world.test.cjs"],
+      "sharedPaths": [
+        "tools/unity-cocos-port/particle-orbit-contract.js",
+        "tools/unity-cocos-port/runtime/UnityParticleOrbit.ts"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/particle-orbit-world.test.cjs"
+      ],
       "acceptance": "World simulation under rotated/scaled parent; matched births and trail growth."
     },
     {
       "id": "shape-rotation-forward-emission",
       "origin": "bb79628",
       "applicability": "automatic",
-      "sharedPaths": ["tools/unity-cocos-port/particle-shape-rotation.js"],
-      "testPaths": ["tools/unity-cocos-port/particle-shape-rotation.test.cjs"],
+      "sharedPaths": [
+        "tools/unity-cocos-port/particle-shape-rotation.js"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/particle-shape-rotation.test.cjs"
+      ],
       "acceptance": "Native burst positions and forward direction across two viewports."
     },
     {
       "id": "distortion-shader",
       "origin": "402a0c1",
       "applicability": "recipe",
-      "sharedPaths": ["tools/shader-compiler/unity-shader-compiler.cjs"],
-      "testPaths": ["tools/unity-cocos-port/porting-regressions.test.cjs"],
+      "sharedPaths": [
+        "tools/shader-compiler/unity-shader-compiler.cjs"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/porting-regressions.test.cjs"
+      ],
       "acceptance": "Source ShaderLab math, Unity and browser tight ROI. Vendor-specific shader remains source dependent."
     },
     {
       "id": "renderer-sort-key",
       "origin": "402a0c1",
       "applicability": "automatic",
-      "sharedPaths": ["tools/unity-cocos-port/particle-sorting-binding.js", "tools/unity-cocos-port/runtime/UnityParticleSorting.ts", "tools/unity-cocos-port/runtime/UnityParticleSortingAdapter.ts"],
-      "testPaths": ["tools/unity-cocos-port/particle-sorting-runtime.test.cjs", "tools/unity-cocos-port/particle-sorting-binding.test.cjs", "tools/shader-compiler/particle-sorting-native.test.cjs"],
+      "sharedPaths": [
+        "tools/unity-cocos-port/particle-sorting-binding.js",
+        "tools/unity-cocos-port/runtime/UnityParticleSorting.ts",
+        "tools/unity-cocos-port/runtime/UnityParticleSortingAdapter.ts"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/particle-sorting-runtime.test.cjs",
+        "tools/unity-cocos-port/particle-sorting-binding.test.cjs",
+        "tools/shader-compiler/particle-sorting-native.test.cjs"
+      ],
       "acceptance": "Native flip thresholds (Euclidean or view-axis distance of the particle AABB center plus fudge), layer/order/queue precedence and in-renderer sortMode; preview overlapping sub-renderers of one effect at two viewports."
     },
     {
       "id": "trail-only-renderer-visibility",
       "origin": "26d6485,79a5d8e",
       "applicability": "automatic",
-      "sharedPaths": ["tools/unity-cocos-port/runtime/UnityParticleRendererVisibility.ts", "tools/unity-cocos-port/particle-system-converter.js"],
-      "testPaths": ["tools/unity-cocos-port/particle-renderer-visibility.test.cjs"],
+      "sharedPaths": [
+        "tools/unity-cocos-port/runtime/UnityParticleRendererVisibility.ts",
+        "tools/unity-cocos-port/particle-system-converter.js"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/particle-renderer-visibility.test.cjs"
+      ],
       "acceptance": "RenderMode None retains enabled trails; visible pixels and no stray particles."
     },
     {
       "id": "trail-atlas-and-lifetime",
       "origin": "26d6485,cb739ad",
       "applicability": "automatic",
-      "sharedPaths": ["tools/unity-cocos-port/particle-system-converter.js", "tools/unity-cocos-port/particle-porter.js"],
-      "testPaths": ["tools/unity-cocos-port/particle-trail-lifetime.test.cjs"],
+      "sharedPaths": [
+        "tools/unity-cocos-port/particle-system-converter.js",
+        "tools/unity-cocos-port/particle-porter.js"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/particle-trail-lifetime.test.cjs"
+      ],
       "acceptance": "Native trail age/width/UV samples, two preview times and bounded visible pixels."
     },
     {
       "id": "srgb-mip-alpha-sampling",
       "origin": "79a5d8e",
       "applicability": "conditional",
-      "sharedPaths": ["tools/unity-cocos-port/runtime/UnitySrgbTexture.ts", "tools/unity-cocos-port/runtime/UnitySrgbTexture.md"],
-      "testPaths": ["tools/unity-cocos-port/porting-regressions.test.cjs"],
+      "sharedPaths": [
+        "tools/unity-cocos-port/runtime/UnitySrgbTexture.ts",
+        "tools/unity-cocos-port/runtime/UnitySrgbTexture.md"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/porting-regressions.test.cjs"
+      ],
       "acceptance": "Native sampler/mip and GPU texture readback before color compensation."
     },
     {
       "id": "hdr-glow-target",
       "origin": "d89537f",
       "applicability": "conditional",
-      "sharedPaths": ["tools/unity-cocos-port/runtime/UnityLinearTarget.ts", "tools/unity-cocos-port/runtime/UnityLinearTarget.md"],
-      "testPaths": ["tools/unity-cocos-port/porting-regressions.test.cjs"],
+      "sharedPaths": [
+        "tools/unity-cocos-port/runtime/UnityLinearTarget.ts",
+        "tools/unity-cocos-port/runtime/UnityLinearTarget.md"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/porting-regressions.test.cjs"
+      ],
       "acceptance": "Actual RGBA16F attachment and FLOAT readback, gradient edge ROI at source and portrait viewport."
     },
     {
       "id": "first-frame-particle-state",
       "origin": "853c00e",
       "applicability": "automatic",
-      "sharedPaths": ["tools/unity-cocos-port/particle-birth-state-binding.js", "tools/unity-cocos-port/runtime/UnityParticleBirthState.ts"],
-      "testPaths": ["tools/unity-cocos-port/particle-birth-state.test.cjs"],
+      "sharedPaths": [
+        "tools/unity-cocos-port/particle-birth-state-binding.js",
+        "tools/unity-cocos-port/runtime/UnityParticleBirthState.ts"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/particle-birth-state.test.cjs"
+      ],
       "acceptance": "First birth rotation/size/color, no giant mesh or flash before first simulation update."
     },
     {
       "id": "nested-birth-transform-cache",
       "origin": "931d659",
       "applicability": "conditional",
-      "sharedPaths": ["tools/unity-cocos-port/runtime/UnityParticleNestedEmission.ts", "tools/unity-cocos-port/runtime/UnityParticleBirthBurst.ts"],
-      "testPaths": ["tools/unity-cocos-port/particle-nested-emission.test.cjs", "tools/unity-cocos-port/particle-birth-burst.test.cjs"],
+      "sharedPaths": [
+        "tools/unity-cocos-port/runtime/UnityParticleNestedEmission.ts",
+        "tools/unity-cocos-port/runtime/UnityParticleBirthBurst.ts"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/particle-nested-emission.test.cjs",
+        "tools/unity-cocos-port/particle-birth-burst.test.cjs"
+      ],
       "acceptance": "Synchronous child/grandchild births preserve parent center, child inheritance, count and random draw order across repeated bursts."
     },
     {
       "id": "impact-capacity-from-source-chain",
       "origin": "7100119,8c34601",
       "applicability": "conditional",
-      "sharedPaths": ["tools/unity-cocos-port/particle-emission-budget.js"],
-      "testPaths": ["tools/unity-cocos-port/particle-emission-budget.test.cjs"],
+      "sharedPaths": [
+        "tools/unity-cocos-port/particle-emission-budget.js"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/particle-emission-budget.test.cjs"
+      ],
       "acceptance": "Source parent emission, child probability, overlap and runtime pool allocation/drop counters."
     },
     {
       "id": "particle-burst-catchup",
       "origin": "ec2e841",
       "applicability": "conditional",
-      "sharedPaths": ["tools/unity-cocos-port/runtime/UnityParticleBurstEmission.ts"],
-      "testPaths": ["tools/unity-cocos-port/particle-burst-emission.test.cjs"],
+      "sharedPaths": [
+        "tools/unity-cocos-port/runtime/UnityParticleBurstEmission.ts"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/particle-burst-emission.test.cjs"
+      ],
       "acceptance": "Capture authored burst repetitions and compare coarse-frame, boundary and loop replay before installing the shared catch-up function."
     },
     {
       "id": "death-terminal-position",
       "origin": "ec2e841,931d659",
       "applicability": "conditional",
-      "sharedPaths": ["tools/unity-cocos-port/runtime/UnityParticleDeathBurst.ts"],
-      "testPaths": ["tools/unity-cocos-port/particle-death-burst.test.cjs"],
+      "sharedPaths": [
+        "tools/unity-cocos-port/runtime/UnityParticleDeathBurst.ts"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/particle-death-burst.test.cjs"
+      ],
       "acceptance": "Capture last integration step, exact death count/position and sub-emitter ordering before installing the shared terminal-step burst."
     },
     {
       "id": "renderer-min-max-particle-size",
       "origin": "c9f113a",
       "applicability": "automatic",
-      "sharedPaths": ["tools/unity-cocos-port/particle-renderer-contract.js", "tools/unity-cocos-port/source-particle.effect", "tools/unity-cocos-port/legacy-preview-particle.effect", "tools/unity-cocos-port/material-porter.js"],
-      "testPaths": ["tools/unity-cocos-port/particle-size-clamp-native.test.cjs", "tools/unity-cocos-port/particle-size-clamp-material.test.cjs"],
+      "sharedPaths": [
+        "tools/unity-cocos-port/particle-renderer-contract.js",
+        "tools/unity-cocos-port/source-particle.effect",
+        "tools/unity-cocos-port/legacy-preview-particle.effect",
+        "tools/unity-cocos-port/material-porter.js"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/particle-size-clamp-native.test.cjs",
+        "tools/unity-cocos-port/particle-size-clamp-material.test.cjs"
+      ],
       "acceptance": "Native BakeMesh and URP render widths in landscape and portrait; portrait preview of a clamped effect with a tight ROI."
     },
     {
       "id": "axial-billboard-corner-size",
       "origin": "c9f113a",
       "applicability": "automatic",
-      "sharedPaths": ["tools/unity-cocos-port/source-particle.effect", "tools/unity-cocos-port/legacy-preview-particle.effect", "tools/unity-cocos-port/particle-renderer-contract.js"],
-      "testPaths": ["tools/unity-cocos-port/particle-axial-billboard-native.test.cjs"],
+      "sharedPaths": [
+        "tools/unity-cocos-port/source-particle.effect",
+        "tools/unity-cocos-port/legacy-preview-particle.effect",
+        "tools/unity-cocos-port/particle-renderer-contract.js"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/particle-axial-billboard-native.test.cjs"
+      ],
       "acceptance": "Native Horizontal/Vertical BakeMesh extents and the projected ground-ring bbox at two preview times."
     },
     {
       "id": "burst-spread-arc-distribution",
       "origin": "c9f113a",
       "applicability": "automatic",
-      "sharedPaths": ["tools/unity-cocos-port/particle-burst-spread-binding.js", "tools/unity-cocos-port/runtime/UnityParticleBurstEmission.ts", "tools/unity-cocos-port/runtime/UnityParticleBurstSpreadAdapter.ts"],
-      "testPaths": ["tools/unity-cocos-port/particle-burst-spread-binding.test.cjs"],
+      "sharedPaths": [
+        "tools/unity-cocos-port/particle-burst-spread-binding.js",
+        "tools/unity-cocos-port/runtime/UnityParticleBurstEmission.ts",
+        "tools/unity-cocos-port/runtime/UnityParticleBurstSpreadAdapter.ts"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/particle-burst-spread-binding.test.cjs"
+      ],
       "acceptance": "Unity burst positions for open/closed arcs with replay, and angular occupancy of a real burst in preview."
     },
     {
       "id": "limit-velocity-dampen",
       "origin": "c9f113a",
       "applicability": "automatic",
-      "sharedPaths": ["tools/unity-cocos-port/particle-limit-velocity-binding.js", "tools/unity-cocos-port/runtime/UnityParticleLimitVelocity.ts", "tools/unity-cocos-port/runtime/UnityParticleLimitVelocityAdapter.ts"],
-      "testPaths": ["tools/unity-cocos-port/particle-limit-velocity.test.cjs", "tools/unity-cocos-port/particle-limit-composition.test.cjs"],
+      "sharedPaths": [
+        "tools/unity-cocos-port/particle-limit-velocity-binding.js",
+        "tools/unity-cocos-port/runtime/UnityParticleLimitVelocity.ts",
+        "tools/unity-cocos-port/runtime/UnityParticleLimitVelocityAdapter.ts"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/particle-limit-velocity.test.cjs",
+        "tools/unity-cocos-port/particle-limit-composition.test.cjs"
+      ],
       "acceptance": "Native speed sequences at 60 and 30 fps (magnitude, zero limit, separate axes), native stored/animated/total velocity with linear, orbital, radial and Noise contributions, and radial spread of damped bursts in preview."
     },
     {
       "id": "prewarm-steady-state",
       "origin": "c9f113a",
       "applicability": "automatic",
-      "sharedPaths": ["tools/unity-cocos-port/particle-prewarm-binding.js", "tools/unity-cocos-port/runtime/UnityParticlePrewarm.ts", "tools/unity-cocos-port/runtime/UnityParticlePrewarmAdapter.ts"],
-      "testPaths": ["tools/unity-cocos-port/particle-prewarm.test.cjs"],
+      "sharedPaths": [
+        "tools/unity-cocos-port/particle-prewarm-binding.js",
+        "tools/unity-cocos-port/runtime/UnityParticlePrewarm.ts",
+        "tools/unity-cocos-port/runtime/UnityParticlePrewarmAdapter.ts"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/particle-prewarm.test.cjs"
+      ],
       "acceptance": "Native prewarmed particle ages at start and after the first frame for short and long cycles, and first-frame particle counts in preview."
+    },
+    {
+      "id": "fbx-model-mesh-basis",
+      "origin": "acfa222",
+      "applicability": "automatic",
+      "sharedPaths": [
+        "tools/unity-cocos-port/model-import-basis.js",
+        "tools/unity-cocos-port/model-mesh-basis-binding.js",
+        "tools/unity-cocos-port/runtime/UnityModelMeshBasis.ts"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port-model-basis.test.cjs",
+        "tools/unity-cocos-port-nested-model-axis.test.cjs"
+      ],
+      "acceptance": "Unity-imported vs Cocos-imported vertices of every FBX mesh in scope (fixtures/model-import-basis.json: cocos = (-x, y, z) / globalScale), exact sub-mesh per Unity mesh file ID, and upright Mesh-mode particles in preview against the Unity reference."
     }
   ]
 }
