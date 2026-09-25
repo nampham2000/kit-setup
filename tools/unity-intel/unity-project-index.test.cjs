@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
+const { spawnSync } = require('node:child_process');
 
 const {
   SNAPSHOT_SCHEMA_VERSION,
@@ -14,6 +15,44 @@ const {
 } = require('./index.cjs');
 const { createUnityFixture } = require('./test-fixture.cjs');
 const { selectGameplayEntry } = require('./core-gameplay-scope.cjs');
+
+const LEVEL_PREFAB = 'Assets/Game/Levels/Level_Big.prefab';
+const MISSING_GUID = '9'.repeat(32);
+
+// Mirrors a puzzle level prefab: thousands of nested prefab instances that all
+// repeat the same PPtrs (modification targets, parent and source prefab).
+function levelPrefabText(sourceGuid, instances) {
+  const parts = ['%YAML 1.1'];
+  for (let index = 0; index < instances; index += 1) {
+    const id = 1000000 + index;
+    parts.push(
+      `--- !u!1001 &${id}`,
+      'PrefabInstance:',
+      '  m_ObjectHideFlags: 0',
+      '  m_Modification:',
+      '    serializedVersion: 3',
+      `    m_TransformParent: {fileID: 400000, guid: ${MISSING_GUID}, type: 3}`,
+      '    m_Modifications:',
+      `    - target: {fileID: 1111, guid: ${sourceGuid}, type: 3}`,
+      '      propertyPath: m_LocalPosition.x',
+      `      value: ${index}`,
+      '      objectReference: {fileID: 0}',
+      `    - target: {fileID: 1111, guid: ${sourceGuid}, type: 3}`,
+      '      propertyPath: m_LocalPosition.y',
+      `      value: ${index}`,
+      '      objectReference: {fileID: 0}',
+      '    m_RemovedComponents: []',
+      `  m_SourcePrefab: {fileID: 100100000, guid: ${sourceGuid}, type: 3}`,
+    );
+  }
+  parts.push('');
+  return parts.join('\n');
+}
+
+function writeLevelPrefab(fixture, instances) {
+  fixture.write(LEVEL_PREFAB, levelPrefabText(fixture.GUIDS.childPrefab, instances));
+  fixture.write(`${LEVEL_PREFAB}.meta`, `fileFormatVersion: 2\nguid: ${'4'.repeat(32)}\n`);
+}
 
 test('explicit demo selection consumes the real scanner scene inventory outside Build Settings', t => {
   const fixture = createUnityFixture(t);
@@ -146,4 +185,87 @@ test('explicit project metadata cannot be combined with an external source tree'
     sourceRoot: outside,
     cache: false,
   }), /source must be inside/i);
+});
+
+test('repeated references in large level prefabs keep index evidence, edges and cache bounded', t => {
+  const fixture = createUnityFixture(t);
+  const instances = 2000;
+  writeLevelPrefab(fixture, instances);
+  const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'unity-intel-level-cache-'));
+  t.after(() => fs.rmSync(cacheDir, { recursive: true, force: true }));
+
+  const snapshot = buildUnityProjectSnapshot({ projectRoot: fixture.root, sourceRoot: fixture.assets, cacheDir });
+  const record = snapshot.assets.records.find(item => item.assetPath === LEVEL_PREFAB);
+  assert.ok(record);
+  // Scalar checks first: a regression must fail without diffing thousands of records.
+  assert.equal(record.referenceEvidence.length, 3, 'one grouped entry per GUID + field path');
+  assert.deepEqual(record.referenceEvidence.map(item => [item.fieldPath, item.occurrences]).sort(), [
+    ['PrefabInstance.m_Modification.m_TransformParent', instances],
+    ['PrefabInstance.m_Modification.target', instances * 2],
+    ['PrefabInstance.m_SourcePrefab', instances],
+  ]);
+  for (const reference of record.referenceEvidence) {
+    assert.ok(reference.evidenceLines.length <= 3);
+    assert.equal(reference.line, reference.evidenceLines[0]);
+    assert.equal(reference.objectId, '1000000');
+    assert.equal(reference.classId, 1001);
+  }
+
+  const edges = snapshot.dependencies.edges.filter(edge => edge.from === LEVEL_PREFAB);
+  assert.equal(edges.length, 2);
+  assert.equal(edges.every(edge => edge.to === 'Assets/Game/Prefabs/Child.prefab'), true);
+  assert.equal(edges.reduce((sum, edge) => sum + edge.occurrences, 0), instances * 3);
+  assert.equal(edges.every(edge => edge.evidenceLines.length > 0 && edge.evidenceLines.length <= 3), true);
+  const missing = snapshot.dependencies.unresolved.find(item => item.guid === MISSING_GUID);
+  assert.equal(missing.occurrences, instances);
+  assert.deepEqual(missing.fields, ['PrefabInstance.m_Modification.m_TransformParent']);
+
+  assert.equal(snapshot.cache.written, true);
+  assert.ok(fs.statSync(snapshot.cache.file).size < 128 * 1024, 'index cache grows with occurrence count');
+  const warm = buildUnityProjectSnapshot({ projectRoot: fixture.root, sourceRoot: fixture.assets, cacheDir });
+  assert.equal(warm.cache.mode, 'warm');
+  assert.equal(warm.dependencies.edgeCount, snapshot.dependencies.edgeCount);
+  assert.deepEqual(warm.dependencies.edges.filter(edge => edge.from === LEVEL_PREFAB), edges);
+});
+
+test('large level prefab index does not retain per-occurrence evidence in memory', () => {
+  // 8000 instances x 4 PPtrs = 32000 occurrences (~3 MB of YAML). Occurrence
+  // records retained roughly 300 heap bytes each; grouped evidence is O(1).
+  const script = `
+    const assert = require('node:assert/strict');
+    const fs = require('node:fs');
+    const { createUnityFixture } = require(${JSON.stringify(require.resolve('./test-fixture.cjs'))});
+    const { buildUnityProjectSnapshot } = require(${JSON.stringify(require.resolve('./project-index.cjs'))});
+    const MISSING_GUID = ${JSON.stringify(MISSING_GUID)};
+    const levelPrefabText = ${levelPrefabText.toString()};
+    const levelPath = ${JSON.stringify(LEVEL_PREFAB)};
+    const fixture = createUnityFixture(null);
+    try {
+      fixture.write(levelPath, levelPrefabText(fixture.GUIDS.childPrefab, 8000));
+      fixture.write(levelPath + '.meta', ${JSON.stringify(`fileFormatVersion: 2\nguid: ${'4'.repeat(32)}\n`)});
+      const options = { projectRoot: fixture.root, sourceRoot: fixture.assets, cache: false };
+      buildUnityProjectSnapshot(options);
+      global.gc();
+      const baseline = process.memoryUsage().heapUsed;
+      const snapshot = buildUnityProjectSnapshot(options);
+      // Clear V8's last-match subject, which is separate from retained records.
+      /reset/.test('reset');
+      global.gc();
+      const retained = process.memoryUsage().heapUsed - baseline;
+      const record = snapshot.assets.records.find(item => item.assetPath === levelPath);
+      let occurrences = 0;
+      for (const item of record.referenceEvidence) occurrences += item.occurrences || 1;
+      assert.equal(occurrences, 32000);
+      const perOccurrence = retained / occurrences;
+      assert.ok(perOccurrence < 24, 'retained heap bytes per reference occurrence: ' + perOccurrence.toFixed(1) +
+        ' (' + retained + ' bytes, ' + record.referenceEvidence.length + ' evidence entries)');
+    } finally {
+      fs.rmSync(fixture.root, { recursive: true, force: true });
+    }
+  `;
+  const child = spawnSync(process.execPath, ['--max-old-space-size=256', '--expose-gc', '-e', script], {
+    encoding: 'utf8',
+    timeout: 60000,
+  });
+  assert.equal(child.status, 0, child.stderr || child.error?.message);
 });

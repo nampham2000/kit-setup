@@ -10,7 +10,9 @@ const CACHE_SCHEMA_VERSION = 2;
 // contract and content-bound stamps for every textual/serialized asset plus
 // its .meta. Coarse-timestamp filesystems such as exFAT must not reuse stale
 // evidence after same-size content replacement.
-const INDEXER_VERSION = 5;
+// Version 6 stores referenceEvidence grouped per GUID + field path with
+// occurrence counts instead of one entry per occurrence.
+const INDEXER_VERSION = 6;
 
 const EXTRACTOR_FILES = [
   'schema.cjs',

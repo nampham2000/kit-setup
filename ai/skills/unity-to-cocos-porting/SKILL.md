@@ -151,10 +151,16 @@ test and acceptance gate to that registry. The AOE source project runs
 
 - Setup indexes Unity source before installing MCP. On large asset-library projects,
   a Node heap failure in this phase is a scanner failure, not a Unity connection
-  failure. Persisted regex captures (GUID, fileID, field path) must own their small
-  strings instead of retaining the full YAML backing buffer. Keep the GC regression
-  in `tools/unity-intel/guid-index.test.cjs`; avoid concurrent scans of the same
-  project while the first cache is being built.
+  failure. Persisted regex captures (GUID, fileID, field path, C# identifiers) must own
+  their small strings instead of retaining the full YAML/C# backing buffer. Index
+  records keep reference evidence grouped per GUID + field path (occurrence count and
+  at most three lines), never one entry per occurrence: level prefabs repeat the same
+  PPtr thousands of times, which made records, dependency edges and the index cache
+  grow with project bytes until the snapshot fingerprint ran out of heap. Keep the GC
+  regressions in `tools/unity-intel/guid-index.test.cjs`, `script-index.test.cjs` and
+  `unity-project-index.test.cjs`; memory tests use a capped child heap and scalar-first
+  assertions. Avoid concurrent scans of the same project while the first cache is
+  being built.
 
 - Use one npm forwarding separator: `npm run unity:intel:doctor -- --project <root>`.
   An extra standalone `--` is passed to the parser and fails before probing Unity;

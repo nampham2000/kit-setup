@@ -1,6 +1,8 @@
 'use strict';
 
 const GUID_RE = /guid:\s*([0-9a-f]{32})/gi;
+const GUID_PRESENT_RE = /guid:\s*[0-9a-f]{32}/i;
+const MAX_EVIDENCE_LINES = 3;
 const BUILTIN_GUIDS = new Set([
   '00000000000000000000000000000000',
   '0000000000000000d000000000000000',
@@ -40,12 +42,17 @@ function referenceKind(fieldPath, provider) {
   return 'asset';
 }
 
-function extractGuidReferences(text, options = {}) {
-  const provider = options.provider || 'asset';
+/**
+ * Walk Unity YAML once and report every accepted GUID reference. The visitor
+ * receives transient strings (they may share the source buffer); callers must
+ * detach whatever they persist. The field path is only materialized for lines
+ * that actually carry a reference.
+ */
+function walkGuidReferences(text, options, visit) {
   const allowBareGuid = options.allowBareGuid === true;
   const excluded = new Set((options.excludeGuids || []).filter(Boolean).map(value => String(value).toLowerCase()));
-  const references = [];
   const stack = [];
+  let objectIdCapture = null;
   let objectId = null;
   let classId = null;
   const lines = String(text || '').split(/\r?\n/);
@@ -56,22 +63,23 @@ function extractGuidReferences(text, options = {}) {
     const header = /^---\s+!u!(\d+)\s+&(-?\d+)/.exec(line);
     if (header) {
       classId = Number(header[1]);
-      objectId = detachedString(header[2]);
+      objectIdCapture = header[2];
+      objectId = undefined;
       stack.length = 0;
       continue;
     }
     const keyMatch = /^(\s*)(?:-\s+)?([^:#][^:]*):/.exec(line);
-    let fieldPath = stack.map(item => item.key).join('.');
     if (keyMatch) {
       const indent = keyMatch[1].replace(/\t/g, '  ').length;
       const key = keyMatch[2].trim().replace(/^['"]|['"]$/g, '');
       while (stack.length && stack[stack.length - 1].indent >= indent) stack.pop();
-      fieldPath = [...stack.map(item => item.key), key].filter(Boolean).join('.');
       stack.push({ indent, key });
     }
+    if (!GUID_PRESENT_RE.test(line)) continue;
+    let fieldPath = null;
     GUID_RE.lastIndex = 0;
     for (const match of line.matchAll(GUID_RE)) {
-      const guid = detachedString(match[1].toLowerCase());
+      const guid = match[1].toLowerCase();
       if (excluded.has(guid)) continue;
       let hasPointerEvidence = /\bfileID\s*:/i.test(line);
       // A split Unity PPtr is a mapping whose bare `guid` key sits directly
@@ -91,19 +99,70 @@ function extractGuidReferences(text, options = {}) {
         }
       }
       if (!allowBareGuid && !hasPointerEvidence) continue;
-      references.push({
-        guid,
-        kind: referenceKind(fieldPath, provider),
-        objectId,
-        classId,
-        fieldPath: fieldPath ? detachedString(fieldPath) : null,
-        line: lineNumber,
-        provider,
-        resolution: 'exact',
-      });
+      if (fieldPath === null) {
+        const keys = stack.map(item => item.key);
+        fieldPath = (keyMatch ? keys.filter(Boolean) : keys).join('.');
+      }
+      if (objectId === undefined) objectId = detachedString(objectIdCapture);
+      visit(guid, fieldPath, objectId, classId, lineNumber);
     }
   }
+}
+
+/** One entry per GUID occurrence (small inputs, diagnostics and tests). */
+function extractGuidReferences(text, options = {}) {
+  const provider = options.provider || 'asset';
+  const references = [];
+  walkGuidReferences(text, options, (guid, fieldPath, objectId, classId, line) => {
+    references.push({
+      guid: detachedString(guid),
+      kind: referenceKind(fieldPath, provider),
+      objectId,
+      classId,
+      fieldPath: fieldPath ? detachedString(fieldPath) : null,
+      line,
+      provider,
+      resolution: 'exact',
+    });
+  });
   return references;
+}
+
+/**
+ * Persisted index form: one entry per distinct GUID + field path in a file.
+ * Level prefabs repeat the same PPtr thousands of times (every screw instance
+ * references the same source prefab), so per-occurrence records grew with the
+ * byte size of the project. The first occurrence keeps its object/class/line
+ * as the representative sample; `occurrences` and up to three
+ * `evidenceLines` preserve the counts and line evidence that dependency edges
+ * report.
+ */
+function summarizeGuidReferences(text, options = {}) {
+  const provider = options.provider || 'asset';
+  const groups = new Map();
+  walkGuidReferences(text, options, (guid, fieldPath, objectId, classId, line) => {
+    const key = `${guid}\0${fieldPath}`;
+    const group = groups.get(key);
+    if (group) {
+      group.occurrences += 1;
+      if (group.evidenceLines.length < MAX_EVIDENCE_LINES &&
+          group.evidenceLines[group.evidenceLines.length - 1] !== line) group.evidenceLines.push(line);
+      return;
+    }
+    groups.set(key, {
+      guid: detachedString(guid),
+      kind: referenceKind(fieldPath, provider),
+      objectId,
+      classId,
+      fieldPath: fieldPath ? detachedString(fieldPath) : null,
+      line,
+      provider,
+      resolution: 'exact',
+      occurrences: 1,
+      evidenceLines: [line],
+    });
+  });
+  return [...groups.values()];
 }
 
 function isBuiltinGuid(guid) {
@@ -142,9 +201,12 @@ function buildGuidIndex(records) {
 
 module.exports = {
   BUILTIN_GUIDS,
+  MAX_EVIDENCE_LINES,
+  detachedString,
   extractGuidFromMeta,
   extractReferencedGuids,
   extractGuidReferences,
+  summarizeGuidReferences,
   isBuiltinGuid,
   buildGuidIndex,
 };

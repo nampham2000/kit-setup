@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
+const { spawnSync } = require('node:child_process');
 
 const {
   analyzeCSharpSource,
@@ -186,4 +187,34 @@ test('invalid asmdef and duplicate script GUIDs are deterministic diagnostics', 
     ['UNITY_ASMDEF_INVALID_JSON', 'UNITY_DUPLICATE_SCRIPT_GUID'],
   );
   assert.equal(index.scripts.find(script => script.assetPath.endsWith('/C.cs')).assembly, 'Broken');
+});
+
+test('persisted C# evidence owns its strings instead of retaining the source buffer', () => {
+  const script = `
+    const assert = require('node:assert/strict');
+    const api = require(${JSON.stringify(require.resolve('./script-index.cjs'))});
+    global.gc();
+    const baseline = process.memoryUsage().heapUsed;
+    function parse() {
+      const padding = ' '.repeat(4 * 1024 * 1024);
+      const source = 'public class GameplayLevelController : BoardControllerBase {' + padding +
+        ' private ScrewSlotCollection slots; void Awake() { Resources.Load("Levels/LevelCatalogData"); } }';
+      return api.analyzeCSharpSource(source);
+    }
+    const evidence = parse();
+    // Clear V8's last-match subject, which is separate from retained records.
+    /reset/.test('reset');
+    global.gc();
+    const retained = process.memoryUsage().heapUsed - baseline;
+    assert.ok(retained < 1.5 * 1024 * 1024, 'retained source bytes: ' + retained);
+    assert.deepEqual(evidence.declaredTypes, ['GameplayLevelController']);
+    assert.deepEqual(evidence.declaredTypeBases, { GameplayLevelController: ['BoardControllerBase'] });
+    assert.deepEqual(evidence.resourceLoadPaths, ['Levels/LevelCatalogData']);
+    assert.ok(evidence.identifierCandidates.includes('ScrewSlotCollection'));
+  `;
+  const child = spawnSync(process.execPath, ['--max-old-space-size=256', '--expose-gc', '-e', script], {
+    encoding: 'utf8',
+    timeout: 30000,
+  });
+  assert.equal(child.status, 0, child.stderr || child.error?.message);
 });

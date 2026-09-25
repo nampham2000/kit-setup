@@ -2,14 +2,17 @@
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
+const { spawnSync } = require('node:child_process');
 
 const { createUnityProjectSnapshot, validateUnityProjectSnapshot } = require('./schema.cjs');
 const {
   computeStaticProjectFingerprint,
   createUnityLiveSnapshotPatch,
   diagnosticKey,
+  sha256Hex,
+  stableStringify,
 } = require('./live-schema.cjs');
-const { mergeUnityProjectSnapshots } = require('./snapshot-merge.cjs');
+const { fingerprintHybridSnapshot, mergeUnityProjectSnapshots } = require('./snapshot-merge.cjs');
 
 function staticSnapshot() {
   return createUnityProjectSnapshot({
@@ -143,4 +146,87 @@ test('merge replaces static unresolved candidates only when the live patch names
     item.from === 'Assets/Main.unity' && item.to === 'Assets/Recovered.asset'), true);
   assert.equal(merged.dependencies.edges.some(item =>
     item.from === 'Assets/Recovered.asset' && item.to === 'Assets/RecoveredDependency.asset'), true);
+});
+
+// Pre-streaming reference: deep clone, drop volatile fields, hash the canonical JSON text.
+function legacyFingerprint(snapshot) {
+  const clone = (value, seen = new Map()) => {
+    if (value === null || typeof value !== 'object') return value;
+    if (seen.has(value)) return seen.get(value);
+    const copy = Array.isArray(value) ? [] : {};
+    seen.set(value, copy);
+    if (Array.isArray(value)) for (const item of value) copy.push(clone(item, seen));
+    else for (const [key, item] of Object.entries(value)) copy[key] = clone(item, seen);
+    return copy;
+  };
+  const copy = clone(snapshot);
+  for (const key of ['generatedAt', 'cache', 'metrics', 'fingerprint', 'scanId', 'state', 'stateFingerprint', 'projectFingerprint']) {
+    delete copy[key];
+  }
+  if (copy.project) { delete copy.project.root; delete copy.project.layout; }
+  if (copy.source) { delete copy.source.root; delete copy.source.assetsRoot; }
+  if (copy.live) {
+    delete copy.live.generatedAt;
+    delete copy.live.scanId;
+    if (copy.live.facts && copy.live.facts.metrics) delete copy.live.facts.metrics.durationMs;
+  }
+  if (Array.isArray(copy.providers)) {
+    copy.providers = copy.providers.map(provider => {
+      const stable = { ...provider };
+      delete stable.generatedAt;
+      delete stable.scanId;
+      return stable;
+    });
+  }
+  return sha256Hex(stableStringify(copy));
+}
+
+test('streamed snapshot fingerprint keeps the canonical digest without mutating the snapshot', () => {
+  const source = staticSnapshot();
+  source.cache = { enabled: true, mode: 'warm', hits: 1 };
+  source.metrics = { durationMs: 5 };
+  const patch = createUnityLiveSnapshotPatch({
+    generatedAt: '2026-08-24T01:00:00.000Z',
+    projectFingerprint: computeStaticProjectFingerprint(source),
+    scanId: 'fingerprint-scan',
+    project: { name: 'MergeGame', unityVersion: '6000.0.66f2' },
+    facts: { metrics: { durationMs: 42, objects: 3 }, componentTypes: [{ type: 'UnityEngine.Camera', count: 1 }] },
+  });
+  const merged = mergeUnityProjectSnapshots(source, patch);
+  assert.equal(merged.fingerprint, legacyFingerprint(merged));
+  assert.equal(fingerprintHybridSnapshot(merged), legacyFingerprint(merged));
+  assert.equal(fingerprintHybridSnapshot(source), legacyFingerprint(source));
+  assert.equal(merged.live.facts.metrics.durationMs, 42);
+  assert.equal(source.project.root, 'D:/Unity/MergeGame');
+  assert.equal(merged.providers.every(provider => provider.generatedAt), true);
+  const retimed = {
+    ...merged,
+    generatedAt: '2030-01-01T00:00:00.000Z',
+    live: { ...merged.live, facts: { ...merged.live.facts, metrics: { ...merged.live.facts.metrics, durationMs: 99 } } },
+  };
+  assert.equal(fingerprintHybridSnapshot(retimed), fingerprintHybridSnapshot(merged));
+});
+
+test('snapshot fingerprint streams records instead of copying the whole snapshot', () => {
+  // ~17 MB of heap-resident records: the streamed digest fits a 40 MB old space,
+  // while clone + canonical copy + JSON text needed more than 48 MB.
+  const script = `
+    const { fingerprintHybridSnapshot } = require(${JSON.stringify(require.resolve('./snapshot-merge.cjs'))});
+    const records = [];
+    for (let index = 0; index < 16000; index += 1) {
+      const id = String(index).padStart(8, '0');
+      records.push({
+        assetPath: 'Assets/Levels/Level_' + id + '.prefab', guid: id + 'a'.repeat(24), type: 'prefab', tags: ['runtime'],
+        referenceEvidence: [0, 1, 2].map(slot => ({
+          guid: id + String(slot).repeat(24), kind: 'prefab', objectId: String(1000000 + index), classId: 1001,
+          fieldPath: 'PrefabInstance.m_SourcePrefab', line: 10 + slot, provider: 'asset', resolution: 'exact',
+          occurrences: 3, evidenceLines: [10, 20, 30],
+        })),
+      });
+    }
+    const digest = fingerprintHybridSnapshot({ schemaVersion: 1, generatedAt: 'now', assets: { records }, dependencies: { edges: [] } });
+    if (!/^[0-9a-f]{64}$/.test(digest)) throw new Error('unexpected digest ' + digest);
+  `;
+  const child = spawnSync(process.execPath, ['--max-old-space-size=40', '-e', script], { encoding: 'utf8', timeout: 60000 });
+  assert.equal(child.status, 0, child.stderr ? child.stderr.slice(0, 2000) : child.error?.message);
 });

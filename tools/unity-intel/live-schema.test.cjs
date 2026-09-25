@@ -11,6 +11,9 @@ const {
   computeStaticProjectFingerprint,
   createUnityLiveSnapshotPatch,
   diagnosticKey,
+  sha256Hex,
+  stableHashHex,
+  stableStringify,
   validateUnityLiveSnapshotPatch,
 } = require('./live-schema.cjs');
 
@@ -183,4 +186,24 @@ test('compact partial fallback for a maximum UTF-8 candidate request stays withi
   ];
   assert.ok(dispositions.every(item => item.key.length <= 320));
   assert.ok(Buffer.byteLength(JSON.stringify(dispositions), 'utf8') <= MAX_CANDIDATE_DISPOSITIONS_BYTES);
+});
+
+test('streamed stable hash matches sha256 of the stable JSON text', () => {
+  const shared = { value: 1 };
+  const hole = [1, , 3]; // eslint-disable-line no-sparse-arrays
+  const samples = [
+    null, 0, -0, 1.5, NaN, Infinity, true, 'plain', 'é😀\ud800', undefined, [], {}, hole,
+    [1, undefined, () => 1, Symbol('item'), null, [2, [3]]],
+    {
+      b: 1, a: undefined, c: () => 1, d: Symbol('value'),
+      10: 'ten', 2: 'two', '01': 'lead', 4294967294: 'index', 4294967295: 'not-index', '-1': 'negative',
+    },
+    { date: new Date(0), map: new Map([[1, 2]]), bytes: Buffer.from('ab'), shared, again: shared, nested: { z: [shared] } },
+    // Flushes happen between whole JSON tokens, never inside multi-byte text.
+    { long: 'é'.repeat(70000), emoji: '😀'.repeat(40000), tail: ['x'.repeat(65535), '😀', 'y'.repeat(70000)] },
+  ];
+  for (const sample of samples) assert.equal(stableHashHex(sample), sha256Hex(stableStringify(sample)));
+  const cycle = { name: 'cycle' };
+  cycle.self = cycle;
+  assert.throws(() => stableHashHex(cycle), /circular/);
 });
