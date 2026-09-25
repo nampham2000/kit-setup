@@ -126,7 +126,8 @@ test and acceptance gate to that registry. The AOE source project runs
   material variants so shared materials do not acquire another emitter's pivot.
 - Import generated `unity-source-particle.effect` through AssetDB, then rerun
   the porter to bind its actual UUID. The shader preserves builtin shading;
-  custom shading and Euler rotation-over-lifetime still need their adapters.
+  custom shading still needs its adapter. The porter binds
+  `UnityParticleEulerRotationAdapter` for Mesh/Local-billboard rotation over lifetime.
   Import success alone does not establish runtime or visual parity.
 - Regression: `particle-renderer-contract.test.cjs`,
   `particle-renderer-native.test.cjs`, and `porting-regressions.test.cjs` under
@@ -735,6 +736,19 @@ custom layer and an orthographic depth-only camera with priority above the UI
 camera. Keep the background on a different layer and match the UI camera's
 position, ortho height, near plane, and far plane.
 
+Unity URP draws transparent renderers by sorting layer value, sortingOrder,
+material render queue, then back to front by camera distance plus
+`sortingFudge` (world units; a lower fudge draws later). Perspective distance is
+Euclidean to the renderer bounds center, orthographic distance runs along the
+view axis. For particles that center is the AABB of particle positions
+(stretched tails included) through the emitter matrix, not the pivot; sortMode
+only orders particles inside one renderer. Cocos compares `Model.priority`
+before the view-Z of the node pivot, and `cc.Sorting` does not reach particle
+models. The porter therefore binds `UnityParticleSortingAdapter` to every
+transparent particle renderer, including fudge 0, because priorities are only
+comparable when every model has one. Unity's procedural-mode bounds and ties
+remain unmatched; check overlapping sub-renderers of one effect in preview.
+
 ### Preserve planar backdrop topology during import
 
 Mesh Simplify must default to targetRatio=1, matching the importer reference.
@@ -769,6 +783,8 @@ a fixed rate per second and a capped sample of parents are not equivalent.
 ## Validate mesh particle axes and serialized size fields
 
 For Unity mesh particles in a Z-reflected port, axial start angles map to (-X, -Y, +Z). Keep the camera-facing billboard convention separate. Unity mesh rotation uses Euler Z then X then Y; the stock Cocos 3.8.8 particle shader combines axes differently. A custom particle shader must preserve the Unity order, verified with baked vertices from at least two asymmetric combined-angle cases. A corrected curve sign alone does not prove runtime orientation parity.
+
+Rotation over lifetime is Euler integration, not a body-frame spin: Unity adds the angular velocity, sampled at the start-of-step age with one random draw for X/Y/Z, to each `rotation3D` component and then applies Z-X-Y. A Y spin on a mesh started at X=270 therefore turns about the emitter's vertical axis. Cocos 3.8.8 right-multiplies Y-Z-X delta quaternions, so it only matches single-axis cases whose start rotation commutes (Z-only with X0 or Z0 zero, X-only with Z0 zero, Y-only with X0 and Z0 zero). The porter binds `UnityParticleEulerRotationAdapter` (`particle-euler-rotation-binding.js`) and reports `PARTICLE_EULER_ROTATION_ADAPTER_REQUIRED` until AssetDB imports it.
 
 Unity SizeModule stores the X curve in `curve`, including separate-axis mode; Y/Z use `y`/`z`. Never leave a template X curve because `x` is absent. Compare every axis against the serialized source and actual particle size.
 

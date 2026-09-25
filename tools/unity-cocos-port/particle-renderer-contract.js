@@ -20,8 +20,8 @@ function particleRendererContract(particle = {}, renderer = {}) {
     && ['VelocityModule', 'ForceModule', 'NoiseModule'].every(key => particle[key] && Number(particle[key].enabled) === 0);
   const stretchedPivot = mode === 1 && Number(pivot.y || 0) !== 0;
   const unsupported = [];
-  const sorting = { fudge: Number(renderer.m_SortingFudge || 0), order: Number(renderer.m_SortingOrder || 0), layer: Number(renderer.m_SortingLayerID || 0) };
-  if (sorting.fudge || sorting.order || sorting.layer) unsupported.push('source-renderer-sorting-requires-camera-adapter');
+  // Sorting is bound for every transparent renderer by particle-sorting-binding.
+  const sorting = { fudge: Number(renderer.m_SortingFudge || 0), order: Number(renderer.m_SortingOrder || 0), layer: Number(renderer.m_SortingLayerID || 0), sortMode: Number(renderer.m_SortMode || 0) };
   if ((Number(pivot.x || 0) !== 0 || Number(pivot.z || 0) !== 0) || (mode !== 1 && Number(pivot.y || 0) !== 0)) unsupported.push('pivot-axes');
   if (alignment !== 0 && alignment !== 2 && !straightBoxVelocity && mode !== 1) unsupported.push('alignment');
   if ((localBillboard || mesh) && Number(particle.RotationModule?.enabled) === 1) unsupported.push('euler-rotation-over-lifetime');

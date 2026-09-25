@@ -9,11 +9,11 @@
   "fixes": [
     {
       "id": "renderer-frame-and-pivot",
-      "origin": "922d652",
+      "origin": "922d652,ec2e841",
       "applicability": "automatic",
-      "sharedPaths": ["tools/unity-cocos-port/particle-renderer-contract.js", "tools/unity-cocos-port/source-particle.effect"],
-      "testPaths": ["tools/unity-cocos-port/particle-renderer-contract.test.cjs", "tools/unity-cocos-port/particle-renderer-native.test.cjs"],
-      "acceptance": "Native BakeMesh alignment and pivot, rotated parent, two preview viewports."
+      "sharedPaths": ["tools/unity-cocos-port/particle-renderer-contract.js", "tools/unity-cocos-port/source-particle.effect", "tools/unity-cocos-port/particle-euler-rotation-binding.js", "tools/unity-cocos-port/runtime/UnityParticleEulerRotation.ts", "tools/unity-cocos-port/runtime/UnityParticleEulerRotationAdapter.ts"],
+      "testPaths": ["tools/unity-cocos-port/particle-renderer-contract.test.cjs", "tools/unity-cocos-port/particle-renderer-native.test.cjs", "tools/unity-cocos-port/particle-euler-rotation.test.cjs"],
+      "acceptance": "Native BakeMesh alignment and pivot, rotated parent, two preview viewports. Rotation over lifetime: native rotation3D and baked vertices, start-of-step curve age, and a parent-axis Y spin (VerticalGlow) in preview."
     },
     {
       "id": "noise-medium-and-high-curl",
@@ -64,12 +64,20 @@
       "acceptance": "Native burst positions and forward direction across two viewports."
     },
     {
-      "id": "distortion-shader-and-sorting",
+      "id": "distortion-shader",
       "origin": "402a0c1",
       "applicability": "recipe",
-      "sharedPaths": ["tools/unity-cocos-port/runtime/UnityParticleSorting.ts", "tools/shader-compiler/unity-shader-compiler.cjs"],
+      "sharedPaths": ["tools/shader-compiler/unity-shader-compiler.cjs"],
       "testPaths": ["tools/unity-cocos-port/porting-regressions.test.cjs"],
-      "acceptance": "Source ShaderLab math, renderer queue/distance, Unity and browser tight ROI. Vendor-specific shader remains source dependent."
+      "acceptance": "Source ShaderLab math, Unity and browser tight ROI. Vendor-specific shader remains source dependent."
+    },
+    {
+      "id": "renderer-sort-key",
+      "origin": "402a0c1",
+      "applicability": "automatic",
+      "sharedPaths": ["tools/unity-cocos-port/particle-sorting-binding.js", "tools/unity-cocos-port/runtime/UnityParticleSorting.ts", "tools/unity-cocos-port/runtime/UnityParticleSortingAdapter.ts"],
+      "testPaths": ["tools/unity-cocos-port/particle-sorting-runtime.test.cjs", "tools/unity-cocos-port/particle-sorting-binding.test.cjs", "tools/shader-compiler/particle-sorting-native.test.cjs"],
+      "acceptance": "Native flip thresholds (Euclidean or view-axis distance of the particle AABB center plus fudge), layer/order/queue precedence and in-renderer sortMode; preview overlapping sub-renderers of one effect at two viewports."
     },
     {
       "id": "trail-only-renderer-visibility",

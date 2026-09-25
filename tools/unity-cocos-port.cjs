@@ -5905,12 +5905,14 @@ function buildCocosPrefabBuilder(model, outputFile, options, reporter, unityDb, 
   runtimeComponentPorter.attachParticleRateOverDistanceEmitters(model, builder, reporter);
   runtimeComponentPorter.attachParticleHierarchyTransformSync(builder, reporter);
   runtimeComponentPorter.attachParticleRendererVisibility(builder, reporter);
+  require('./unity-cocos-port/particle-sorting-binding').attachSortingRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-orbit-binding').attachOrbitRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-noise-binding').attachNoiseRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-birth-state-binding').attachBirthStateRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-burst-spread-binding').attachBurstSpreadRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-limit-velocity-binding').attachLimitVelocityRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-prewarm-binding').attachPrewarmRuntime(builder, reporter, options);
+  require('./unity-cocos-port/particle-euler-rotation-binding').attachEulerRotationRuntime(builder, reporter, options);
   if (builder.rootPrefabInfoId && builder.nestedPrefabInstanceRootIds.length) {
     const existing = Array.isArray(builder.objects[builder.rootPrefabInfoId].nestedPrefabInstanceRoots)
       ? builder.objects[builder.rootPrefabInfoId].nestedPrefabInstanceRoots.filter((entry) => Number.isInteger(entry?.__id__))
