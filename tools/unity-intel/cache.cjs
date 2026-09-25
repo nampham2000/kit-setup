@@ -24,6 +24,7 @@ const EXTRACTOR_FILES = [
   'engine-feature-closure.cjs',
   'script-index.cjs',
   '../lib/unity-serialized-file.cjs',
+  '../unity-cocos-port/animator-controller-shape.js',
 ];
 
 function extractorFingerprint(readFile = (file) => fs.readFileSync(file)) {

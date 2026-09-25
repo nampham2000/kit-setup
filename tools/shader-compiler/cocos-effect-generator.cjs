@@ -974,6 +974,14 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
 
     // Strip struct local var declaration like "Varyings o;" or "v2f o;" or "Vertex_Stage_Output output;"
     vBody = vBody.replace(/\b(?:Varyings|v2f|appdata|Attributes|\w+_Output|\w+_Input)\s+\w+\s*;?/g, '');
+    // The output struct can have any name (`V Vert(A i) { V o; ... }`). Its
+    // fields become varyings below, so a surviving `V o;` names a type GLSL
+    // never declares and the importer rejects the whole effect.
+    if (vertFunc.returnType && (programIR.structs || []).some(s => s.name === vertFunc.returnType)) {
+      const type = escapeRegExp(vertFunc.returnType);
+      vBody = vBody.replace(new RegExp(`\\bZERO_INITIALIZE\\s*\\(\\s*${type}\\s*,\\s*\\w+\\s*\\)\\s*;?`, 'g'), '');
+      vBody = vBody.replace(new RegExp(`\\b${type}\\s+[A-Za-z_]\\w*\\s*(?:=\\s*\\(\\s*${type}\\s*\\)\\s*0(?:\\.0*)?\\s*)?;`, 'g'), '');
+    }
 
     // Replace param references with attributes
     if (vertFunc.params.length > 0) {

@@ -128,3 +128,50 @@ test('Cocos script index records Color-typed fields for Unity colour coercion', 
   assert.ok(script.colorFields.has('tint'));
   assert.equal(script.colorFields.has('health'), false);
 });
+
+test('multi-renderer model material overrides are matched per renderer through the Unity object map', () => {
+  const { matchModelMaterialOverrides } = require('./unity-cocos-port.cjs');
+  const pink = { relativePath: 'Pink.mat' }; const drums = { relativePath: 'OilDrums.mat' };
+  const slots = [
+    { rendererLocalId: 'r-flag', rendererNodeName: 'Flag', slot: 0, materialName: 'Lit' },
+    { rendererLocalId: 'r-pole', rendererNodeName: 'FlagPole', slot: 0, materialName: 'Lit' },
+  ];
+  const groups = [
+    { sourceFileId: '-4002239815115787907', materialAssets: [pink] },
+    { sourceFileId: '-3248155602949259588', materialAssets: [drums] },
+    { sourceFileId: '2502432061147645856', materialAssets: [pink] },
+  ];
+  const objectMap = { fbxguid: { objects: {
+    '-4002239815115787907': { type: 'MeshRenderer', name: 'Flag', path: 'Flag' },
+    '-3248155602949259588': { type: 'MeshRenderer', name: 'FlagPole', path: 'FlagPole' },
+  } } };
+  const mapped = matchModelMaterialOverrides({ groups, slots, objectMap, modelGuid: 'fbxguid' });
+  assert.equal(mapped.slotAssets.get(0), pink);
+  assert.equal(mapped.slotAssets.get(1), drums);
+  assert.deepEqual(mapped.orphaned, ['2502432061147645856']);
+  assert.deepEqual(mapped.unmapped, []);
+  // Without evidence a single override must not be broadcast to every renderer.
+  const blind = matchModelMaterialOverrides({ groups: groups.slice(0, 1), slots });
+  assert.equal(blind.slotAssets.size, 0);
+  assert.deepEqual(blind.unmapped, ['-4002239815115787907']);
+  // A single-renderer model keeps the historical behaviour.
+  const single = matchModelMaterialOverrides({ groups: groups.slice(0, 1), slots: slots.slice(0, 1) });
+  assert.equal(single.slotAssets.get(0), pink);
+});
+
+test('Unity-resolved renderer materials from the object map replace embedded FBX materials', () => {
+  const { matchModelMaterialOverrides } = require('./unity-cocos-port.cjs');
+  const grey = { relativePath: 'Tank/TankGrey.mat' }; const color = { relativePath: 'Tank/TankColor.mat' };
+  const assets = { g1: grey, g2: color };
+  const slots = [
+    { rendererLocalId: 'r1', rendererNodeName: 'wheel1', slot: 0, materialName: 'TankGrey' },
+    { rendererLocalId: 'r2', rendererNodeName: 'UTV', slot: 0, materialName: 'TankColor' },
+  ];
+  const objectMap = { utv: { objects: {
+    '1': { type: 'MeshRenderer', name: 'wheel1', materials: [{ name: 'TankGrey', guid: 'g1' }] },
+    '2': { type: 'MeshRenderer', name: 'UTV', materials: [{ name: 'TankColor', guid: 'g2' }] },
+  } } };
+  const result = matchModelMaterialOverrides({ slots, objectMap, modelGuid: 'utv', resolveGuid: (g) => assets[g] || null });
+  assert.equal(result.slotAssets.get(0), grey);
+  assert.equal(result.slotAssets.get(1), color);
+});

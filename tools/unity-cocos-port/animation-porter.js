@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { isSimpleAnimatorControllerText } = require('./animator-controller-shape');
 const {
   stableUuid,
   ensureDir,
@@ -1310,6 +1311,23 @@ module.exports = function createAnimationPorter(deps) {
     // holding these very clips. Mounting another cc.Animation on its root would
     // build a second set of AnimationStates over the same rig.
     const isLinkedModelInstanceRoot = builder.nestedPrefabInstanceByNode?.has?.(nodeId) === true;
+    const simple = controllerAsset?.path && isSimpleAnimatorControllerText(fs.readFileSync(controllerAsset.path, 'utf8'));
+    if (simple && !isLinkedModelInstanceRoot) {
+      // One default state, no transitions/parameters: cc.Animation plays it
+      // exactly and needs neither an AnimationGraph nor the marionette module.
+      const clipInfo = animationContext?.defaultClipInfo;
+      if (clipInfo?.uuid && typeof builder.addAnimation === 'function') {
+        const componentIndex = builder.addAnimation(nodeId, [clipInfo], clipInfo, `cmp-animation-${componentId}`);
+        const component = Number.isInteger(componentIndex) ? builder.objects[componentIndex] : null;
+        if (component) component.playOnLoad = true;
+        reporter.low('ANIMATOR_SIMPLE_AS_ANIMATION', controllerAsset.relativePath, gameObject?.name || '',
+          'Single-clip AnimatorController ported as cc.Animation (playOnLoad) without AnimationController/marionette');
+      } else {
+        reporter.low('ANIMATOR_EMPTY_CONTROLLER_SKIPPED', controllerAsset.relativePath, gameObject?.name || '',
+          'AnimatorController has no playable clip; Unity animates nothing, so no Cocos component was emitted');
+      }
+      return;
+    }
     if (
       animationContext?.clipInfos?.length
       && !isLinkedModelInstanceRoot

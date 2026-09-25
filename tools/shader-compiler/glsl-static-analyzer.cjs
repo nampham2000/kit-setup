@@ -240,6 +240,57 @@ function checkDuplicateFunctionLocals(code, program, diags) {
   }
 }
 
+// Structs declared by Cocos Creator 3.8.8 engine chunks (chunks/**/*.chunk).
+// A local of one of these types is legal even though the struct is not in
+// the effect text itself.
+const ENGINE_CHUNK_STRUCTS = new Set([
+  'CCLight', 'Cluster', 'LightGrid', 'LightingIntermediateData', 'LightingMiscData',
+  'LightingResult', 'LightingResultPerLayer', 'SpriteFragmentData', 'SpriteVertexData',
+  'StandardSurface', 'StandardVertInput', 'SurfacesMaterialData', 'SurfacesMaterialDataPerLayer',
+  'SurfacesStandardVertexIntermediate', 'ToonSurface',
+]);
+const GLSL_VALUE_TYPE = /^(?:void|bool|int|uint|float|double|[biud]?vec[234]|d?mat[234](?:x[234])?|[iu]?sampler\w+)$/;
+// HLSL spellings are only legal when a compat #define maps them; leave those
+// to the residual-symbol checks instead of guessing about included macros.
+const HLSL_VALUE_ALIAS = /^(?:half|float|int|uint|bool|fixed|min16float|min10float|min16int)[1-4]?(?:x[1-4])?$/;
+const STATEMENT_KEYWORD = new Set(['return', 'else', 'case', 'default', 'break', 'continue', 'discard',
+  'const', 'highp', 'mediump', 'lowp', 'precision', 'in', 'out', 'inout', 'flat', 'smooth', 'uniform']);
+
+/**
+ * A local declared with a type GLSL never saw (`V o;` left behind after a
+ * Unity output struct was flattened into varyings) is EFX2406 in the Cocos
+ * importer, but no other rule looks at declaration types.
+ */
+function checkUndeclaredLocalTypes(code, program, diags, extraDeclared) {
+  const userTypes = new Set([...code.matchAll(/\bstruct\s+([A-Za-z_]\w*)/g)].map(m => m[1]));
+  const macros = new Set([...code.matchAll(/#\s*define\s+([A-Za-z_]\w*)/g)].map(m => m[1]));
+  const known = t => GLSL_VALUE_TYPE.test(t) || HLSL_VALUE_ALIAS.test(t) || userTypes.has(t)
+    || ENGINE_CHUNK_STRUCTS.has(t) || macros.has(t) || STATEMENT_KEYWORD.has(t) || extraDeclared?.has(t);
+  const fnRe = /\b[A-Za-z_]\w*\s+([A-Za-z_]\w*)\s*\(([^)]*)\)\s*\{/g;
+  const reported = new Set();
+  let fn;
+  while ((fn = fnRe.exec(code)) !== null) {
+    const open = fn.index + fn[0].lastIndexOf('{');
+    const close = matchingBrace(code, open);
+    if (close < 0) continue;
+    const body = code.slice(open + 1, close);
+    const declRe = /(^|[;{}])\s*([A-Za-z_]\w*)\s+([A-Za-z_]\w*)\s*(?:\[[^\]]*\]\s*)?(?==|;|,)/g;
+    let m;
+    while ((m = declRe.exec(body)) !== null) {
+      const type = m[2];
+      if (known(type) || reported.has(type)) continue;
+      if (/^\s*#/.test(body.slice(body.lastIndexOf('\n', m.index + m[1].length) + 1))) continue;
+      reported.add(type);
+      diags.push({
+        severity: 'high', code: 'GLSL_UNDECLARED_TYPE', program,
+        line: lineAt(code, open + 1 + m.index + m[1].length),
+        message: `'${type} ${m[3]}' in ${fn[1]}() uses a type that is neither a GLSL type nor a declared struct; the Cocos importer rejects the effect (EFX2406). A Unity struct was probably flattened into varyings without removing its local.`,
+      });
+    }
+    fnRe.lastIndex = close + 1;
+  }
+}
+
 /** A varying that first receives itself is still undefined for every vertex. */
 function checkUninitializedOutputSelfAssignments(code, program, diags) {
   const outputs = new Set(
@@ -627,6 +678,7 @@ function analyzeEffect(effectText) {
     ]) pooled.add(n);
   }
 
+  const fileStructs = [...stripComments(effectText).matchAll(/\bstruct\s+([A-Za-z_]\w*)/g)].map(m => m[1]);
   for (const p of programs) {
     const code = stripComments(p.code);
     const linkedDeclarations = collectLocalIncludeDeclarations(p, programsByName);
@@ -634,6 +686,7 @@ function analyzeEffect(effectText) {
     checkBalance(code, p.name, diags);
     checkCallArity(code, p.name, diags);
     checkDuplicateFunctionLocals(code, p.name, diags);
+    checkUndeclaredLocalTypes(code, p.name, diags, new Set([...linkedDeclarations, ...fileStructs]));
     checkUninitializedOutputSelfAssignments(code, p.name, diags);
     checkVectorAssignmentDimensions(code, p.name, diags);
     checkResidualsAndScope(code, p.name, diags, linkedDeclarations);

@@ -15,7 +15,7 @@ const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'hidden-suspect-port-regressi
 test.after(() => {
   assert.ok(path.resolve(temp).startsWith(path.resolve(os.tmpdir()) + path.sep));
   assert.ok(path.basename(temp).startsWith('hidden-suspect-port-regressions-'));
-  fs.rmSync(temp, { recursive: true });
+  if (!process.env.KEEP_PORT_REGRESSION_TEMP) fs.rmSync(temp, { recursive: true });
 });
 const reports = () => {
   const entries = [];
@@ -371,4 +371,82 @@ test('particle conversion of a mesh-shader material does not overwrite the mesh 
   assert.match(lit.file, /TankGrey\.particle\.mtl$/);
   assert.match(smoke.file, /Smoke\.mtl$/);
   assert.doesNotMatch(smoke.file, /\.particle\.mtl$/);
+});
+
+test('a scene keeps every root and links root-level prefab instances to the mapped port output',()=>{
+  const {portPrefab,parseArgs}=require('../unity-cocos-port.cjs');
+  const root=path.join(temp,'scene-roots'),unity=path.join(root,'Unity/Assets'),cocos=path.join(root,'Cocos');
+  fs.mkdirSync(path.join(unity,'Effects'),{recursive:true});fs.mkdirSync(path.join(cocos,'assets/ported/Effects'),{recursive:true});
+  const guid='abcdefabcdefabcdefabcdefabcdef12';
+  fs.writeFileSync(path.join(unity,'Effects/Glow.prefab'),`%YAML 1.1
+--- !u!1 &1
+GameObject:
+  m_Name: Glow
+  m_IsActive: 1
+  m_Component:
+  - component: {fileID: 2}
+--- !u!4 &2
+Transform:
+  m_GameObject: {fileID: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalScale: {x: 2, y: 2, z: 2}
+  m_Children: []
+  m_Father: {fileID: 0}
+`);
+  fs.writeFileSync(path.join(unity,'Effects/Glow.prefab.meta'),`fileFormatVersion: 2\nguid: ${guid}\n`);
+  const mapped=path.join(cocos,'assets/ported/Effects/Glow.prefab');
+  fs.writeFileSync(mapped,'[]\n');
+  fs.writeFileSync(mapped+'.meta',JSON.stringify({ver:'1.1.50',importer:'prefab',imported:true,uuid:'11111111-2222-3333-4444-555555555555',files:['.json'],subMetas:{},userData:{syncNodeName:'Glow'}}));
+  const scene=path.join(unity,'Demo.unity');
+  fs.writeFileSync(scene,`%YAML 1.1
+--- !u!1 &10
+GameObject:
+  m_Name: Floor
+  m_IsActive: 1
+  m_Component:
+  - component: {fileID: 11}
+--- !u!4 &11
+Transform:
+  m_GameObject: {fileID: 10}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_RootOrder: 1
+--- !u!1001 &20
+PrefabInstance:
+  m_Modification:
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: 2, guid: ${guid}, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 3
+      objectReference: {fileID: 0}
+    - target: {fileID: 2, guid: ${guid}, type: 3}
+      propertyPath: m_RootOrder
+      value: 0
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: ${guid}, type: 3}
+`);
+  const out=path.join(cocos,'assets/ported/scenes/Demo.prefab');
+  portPrefab(parseArgs(['port','--src',scene,'--out',out,'--unity-root',unity,'--cocos-root',cocos,'--overwrite','--no-cache','--recursive',
+    '--nested-prefab-map',`Effects=assets/ported/Effects`,'--report',path.join(root,'report.csv')]));
+  const objects=JSON.parse(fs.readFileSync(out));
+  const top=objects[1];
+  assert.equal(top._name,'Demo','scene roots are wrapped under one prefab root');
+  const children=top._children.map(ref=>objects[ref.__id__]);
+  const instanceOf=node=>objects[objects[node._prefab.__id__].instance?.__id__];
+  const override=(node,key)=>instanceOf(node)?.propertyOverrides.map(ref=>objects[ref.__id__]).find(o=>o.propertyPath[0]===key)?.value;
+  const name=node=>node._name ?? override(node,'_name');
+  assert.deepEqual(children.map(name),['Glow','Floor'],'roots keep Unity root order');
+  const glow=children[0];
+  assert.ok(instanceOf(glow),'root-level instance is linked as a nested prefab');
+  assert.equal(objects[glow._prefab.__id__].asset.__uuid__,'11111111-2222-3333-4444-555555555555');
+  assert.equal(override(glow,'_lpos').x,3,'instance override is merged');
+  assert.equal(override(glow,'_lscale').x,2,'unmodified fields come from the source prefab');
+  assert.equal(fs.readFileSync(mapped,'utf8'),'[]\n','mapped prefab is linked, not regenerated');
+  assert.ok(!fs.existsSync(path.join(cocos,'assets/ported/scenes/Glow.prefab')),'no duplicate beside the scene output');
 });
