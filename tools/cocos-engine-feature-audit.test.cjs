@@ -144,6 +144,15 @@ test('Graphics and MeshCollider are audited against both profile and applied pre
   assert.equal(audit.physicsDecision.backend, 'physics-cannon');
 });
 
+test('Sorting2D usage (serialized or named cc import) requires the sorting-2d module', () => {
+  const serialized = evidenceFor('[{"__type__":"cc.Sorting2D","_sortingLayer":0}]');
+  assert.ok(inferRequiredModules(serialized).includes('sorting-2d'));
+  const evidence = createEvidence({ sourceEngine: 'unity-physx' });
+  scanTextEvidence("import { Sorting2D, UIRenderer } from 'cc';\n", 'assets/script/Sort.ts', evidence);
+  assert.ok(inferRequiredModules(evidence).includes('sorting-2d'));
+  assert.ok(!inferRequiredModules(evidenceFor('[{"__type__":"cc.Sprite"}]')).includes('sorting-2d'));
+});
+
 test('stale preview import map is reported as pending Editor apply', (t) => {
   const root = makeProject('[{"__type__":"cc.Graphics"},{"__type__":"cc.MeshCollider"}]', {
     backend: 'physics-cannon', graphics: true, appliedFeatures: ['base', 'physics-builtin'],
