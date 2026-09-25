@@ -7,6 +7,13 @@ import { superHtmlPlayable } from '../../sdk/platform/SuperHtmlPlayable';
 
 const { ccclass } = _decorator;
 
+/**
+ * Browser user-activation events that may unlock audio. Cocos UI nodes consume touches before the global
+ * input dispatcher, so a first gesture on an on-screen control (virtual stick, fire button) never reached the
+ * input TOUCH_START/MOUSE_DOWN listeners, and keyboard-only players never touch at all.
+ */
+const DOM_GESTURE_EVENTS = ['pointerdown', 'touchstart', 'mousedown', 'keydown'];
+
 /** Scene-facing facade. All playback is owned by the persistent SoundManager. */
 @ccclass('PlayableAudioController')
 export class PlayableAudioController extends Component {
@@ -28,6 +35,8 @@ export class PlayableAudioController extends Component {
   private _unsubscribe: (() => void) | null = null;
   private _onMuteChangedCallbacks: Array<(isMuted: boolean) => void> = [];
   public ready: Promise<void> = Promise.resolve();
+  private readonly _domUnlock = (): void => this.unlockAudio();
+  private _domTarget: EventTarget | null = null;
 
   public static get instance(): PlayableAudioController | null { return this._instance; }
   public get isMuted(): boolean { return this._isMuted; }
@@ -47,6 +56,11 @@ export class PlayableAudioController extends Component {
     this._isMuted = !superHtmlPlayable.is_audio();
     input.on(Input.EventType.TOUCH_START, this.unlockAudio, this);
     input.on(Input.EventType.MOUSE_DOWN, this.unlockAudio, this);
+    const domTarget = (globalThis as { window?: EventTarget }).window;
+    if (domTarget && typeof domTarget.addEventListener === 'function') {
+      for (const type of DOM_GESTURE_EVENTS) domTarget.addEventListener(type, this._domUnlock, { capture: true, passive: true });
+      this._domTarget = domTarget;
+    }
     game.on(Game.EVENT_HIDE, this.onHide, this);
     game.on(Game.EVENT_SHOW, this.onShow, this);
     this.ready = PlayableConfigManager.instance.ensureLoaded('playable-config').then(() => {
@@ -151,6 +165,8 @@ export class PlayableAudioController extends Component {
     this._unsubscribe?.();
     input.off(Input.EventType.TOUCH_START, this.unlockAudio, this);
     input.off(Input.EventType.MOUSE_DOWN, this.unlockAudio, this);
+    for (const type of DOM_GESTURE_EVENTS) this._domTarget?.removeEventListener(type, this._domUnlock, { capture: true });
+    this._domTarget = null;
     game.off(Game.EVENT_HIDE, this.onHide, this);
     game.off(Game.EVENT_SHOW, this.onShow, this);
     if (PlayableAudioController._instance !== this) return;

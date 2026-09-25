@@ -6901,6 +6901,21 @@ function emitNodeRecursive(transform, parentNodeId, model, builder, layerResolve
     preserveLocalPosition: canvasRenderMode === 2,
   });
   if (canvasRenderMode === 2) resolvedTransform.preserveWorldSpaceCanvasLocalZ = true;
+  if (!parentTransform && (canvasRenderMode === 0 || canvasRenderMode === 1)) {
+    // A screen-space Canvas root's RectTransform is driven at runtime by the Canvas/CanvasScaler: prefabs store
+    // scale 0 (Overlay) or a stale editor pose. Copied literally it collapses the whole UI to a point (Tanks!
+    // MobileControlCanvas: invisible, untouchable stick and fire button). The Cocos host Canvas owns the
+    // screen fit, so the root keeps an identity transform.
+    resolvedTransform = {
+      ...resolvedTransform,
+      localPosition: { x: 0, y: 0, z: 0 },
+      localRotation: { x: 0, y: 0, z: 0, w: 1 },
+      localScale: { x: 1, y: 1, z: 1 },
+      euler: { x: 0, y: 0, z: 0 },
+    };
+    reporter.low('SCREEN_SPACE_CANVAS_ROOT_NORMALIZED', model.file, gameObject.name,
+      'Screen-space Canvas root transform is runtime-driven in Unity; emitted as identity for the Cocos host Canvas');
+  }
   if (emissionContext?.rebaseNestedModelMountedChild) {
     resolvedTransform = rebaseNestedModelMountedChildTransform(resolvedTransform);
     reporter.low(
