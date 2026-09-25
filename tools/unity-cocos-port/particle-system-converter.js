@@ -3,6 +3,7 @@ const { particleRendererContract } = require('./particle-renderer-contract');
 const { particleNoiseContract } = require('./particle-noise-contract');
 const { particleOrbitContract } = require('./particle-orbit-contract');
 const { particleLimitVelocityContract } = require('./particle-limit-velocity-binding');
+const { particleCollisionContract } = require('./particle-collision-binding');
 
 const { particleShapeRotation } = require('./particle-shape-rotation');
 
@@ -1387,6 +1388,7 @@ function applyUnityParticleDataToCocos(builder, particleId, data = {}, rendererD
   Object.defineProperty(particle, 'unityOrbitContract', { value: particleOrbitContract(data), configurable: true });
   Object.defineProperty(particle, 'unityNoiseContract', { value: particleNoiseContract(data), configurable: true });
   Object.defineProperty(particle, 'unityLimitVelocityContract', { value: particleLimitVelocityContract(data), configurable: true });
+  Object.defineProperty(particle, 'unityCollisionContract', { value: particleCollisionContract(data), configurable: true });
 
   return { applied };
 }

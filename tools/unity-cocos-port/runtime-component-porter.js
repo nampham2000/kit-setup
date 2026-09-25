@@ -22,6 +22,7 @@ const LEGACY_SCRIPT_TARGET_DIR = path.join('assets', 'scripts');
 
 const SUB_EMITTER_TYPE = {
   birth: 0,
+  collision: 1,
   death: 2,
 };
 
@@ -535,6 +536,8 @@ function createRuntimeComponentPorter(deps) {
 
       for (const entry of unitySubEmitterEntries(doc)) {
         const type = Number(entry?.type || 0);
+        // Collision sub-emitters are bound by particle-collision-binding.js.
+        if (type === SUB_EMITTER_TYPE.collision) continue;
         if (type !== SUB_EMITTER_TYPE.birth && type !== SUB_EMITTER_TYPE.death) {
           reporter.low(
             'PARTICLE_SUB_EMITTER_TYPE_UNSUPPORTED',

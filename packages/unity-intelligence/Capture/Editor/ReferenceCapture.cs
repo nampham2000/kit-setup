@@ -40,7 +40,17 @@ namespace CcPlayable.UnityIntelligence.Capture
         }
 
         [Serializable]
-        internal sealed class FrameRecord { public int frame; public float time; public string file = ""; public int activeParticles; public bool shaderCompiling; }
+        internal sealed class FrameRecord { public int frame; public float time; public string file = ""; public int activeParticles; public bool shaderCompiling; public List<SystemRecord> systems = new List<SystemRecord>(); }
+
+        /// <summary>
+        /// Per-system particle oracle: live count plus a histogram of particle depth along
+        /// the capture camera's forward axis (bins split at DepthBins), so a port can tell
+        /// where particles are, not only how many exist.
+        /// </summary>
+        [Serializable]
+        internal sealed class SystemRecord { public string path = ""; public int count; public int[] depth = Array.Empty<int>(); public int[] inView = Array.Empty<int>(); }
+
+        internal static readonly float[] DepthBins = { 0.3f, 1f, 2f, 4f, 8f, 16f };
 
         [Serializable]
         internal sealed class Manifest
@@ -110,10 +120,46 @@ namespace CcPlayable.UnityIntelligence.Capture
             colorSpace = QualitySettings.activeColorSpace.ToString(),
         };
 
-        internal static void Record(Manifest manifest, int frame, float time, string file, int particles, string camera, bool shaderCompiling)
+        internal static void Record(Manifest manifest, int frame, float time, string file, List<SystemRecord> systems, string camera, bool shaderCompiling)
         {
             manifest.camera = camera;
-            manifest.frames.Add(new FrameRecord { frame = frame, time = time, file = file, activeParticles = particles, shaderCompiling = shaderCompiling });
+            var particles = 0;
+            foreach (var system in systems) particles += system.count;
+            manifest.frames.Add(new FrameRecord { frame = frame, time = time, file = file, activeParticles = particles, shaderCompiling = shaderCompiling, systems = systems });
+        }
+
+        static string HierarchyPath(Transform t) => t.parent == null ? t.name : HierarchyPath(t.parent) + "/" + t.name;
+
+        internal static List<SystemRecord> ParticleSystems(Camera camera)
+        {
+            var records = new List<SystemRecord>();
+            var buffer = Array.Empty<ParticleSystem.Particle>();
+            var eye = camera.transform.position;
+            var forward = camera.transform.forward;
+            foreach (var system in UnityEngine.Object.FindObjectsByType<ParticleSystem>(FindObjectsSortMode.None))
+            {
+                var record = new SystemRecord { path = HierarchyPath(system.transform), count = system.particleCount, depth = new int[DepthBins.Length + 1], inView = new int[DepthBins.Length + 1] };
+                if (buffer.Length < system.particleCount) buffer = new ParticleSystem.Particle[system.particleCount];
+                var n = system.GetParticles(buffer);
+                var main = system.main;
+                var toWorld = main.simulationSpace == ParticleSystemSimulationSpace.World ? Matrix4x4.identity
+                    : main.simulationSpace == ParticleSystemSimulationSpace.Custom && main.customSimulationSpace != null ? main.customSimulationSpace.localToWorldMatrix
+                    : system.transform.localToWorldMatrix;
+                for (var i = 0; i < n; i++)
+                {
+                    var world = toWorld.MultiplyPoint3x4(buffer[i].position);
+                    var d = Vector3.Dot(world - eye, forward);
+                    var bin = 0;
+                    while (bin < DepthBins.Length && d >= DepthBins[bin]) bin++;
+                    record.depth[bin]++;
+                    // Particle centre inside the capture viewport, in front of the near plane.
+                    var v = camera.WorldToViewportPoint(world);
+                    if (v.z >= camera.nearClipPlane && v.x >= 0f && v.x <= 1f && v.y >= 0f && v.y <= 1f) record.inView[bin]++;
+                }
+                records.Add(record);
+            }
+            records.Sort((a, b) => string.CompareOrdinal(a.path, b.path));
+            return records;
         }
 
         internal static void Fail(Request request, Manifest manifest, string error)
@@ -192,9 +238,7 @@ namespace CcPlayable.UnityIntelligence.Capture
                 var file = $"frame-{captured:D5}.png";
                 var shaderCompiling = ShaderUtil.anythingCompiling;
                 Capture(Path.Combine(request.outputDir, file));
-                var particles = 0;
-                foreach (var system in FindObjectsByType<ParticleSystem>(FindObjectsSortMode.None)) particles += system.particleCount;
-                ReferenceCapture.Record(manifest, captured, Time.time, file, particles, captureCamera.name, shaderCompiling);
+                ReferenceCapture.Record(manifest, captured, Time.time, file, ReferenceCapture.ParticleSystems(captureCamera), captureCamera.name, shaderCompiling);
                 if (request.skyboxFaceSize > 0 && !skyboxDone) { skyboxDone = true; CaptureSkyboxPanorama(); }
             }
             catch (Exception exception)
