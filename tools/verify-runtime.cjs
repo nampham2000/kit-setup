@@ -790,9 +790,15 @@ async function runOne(target, options) {
       if (shot && shot.data) {
         const dir = path.resolve(PROJECT_ROOT, options.screenshotDir);
         fs.mkdirSync(dir, { recursive: true });
-        const stem = isUrl
+        let stem = isUrl
           ? (String(target).replace(/^https?:\/\//i, '').replace(/[^\w.-]+/g, '_').replace(/_+$/, '') || 'preview')
           : path.basename(htmlFile, path.extname(htmlFile));
+        // Long preview URLs (QA query parameters) pushed the path past Windows MAX_PATH, where Chrome still
+        // wrote the PNG but sharp/libvips could not reopen it for screenshot/reference metrics.
+        if (stem.length > 64) {
+          const digest = require('node:crypto').createHash('sha1').update(stem).digest('hex').slice(0, 10);
+          stem = `${stem.slice(0, 48).replace(/_+$/, '')}_${digest}`;
+        }
         const out = path.join(dir, `${stem}.png`);
         const buffer = Buffer.from(shot.data, 'base64');
         fs.writeFileSync(out, buffer);
