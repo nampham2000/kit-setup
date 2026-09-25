@@ -4,6 +4,22 @@ const IGNORED_UNITY_COMPONENT_CLASS_IDS = new Set([4, 224, 33]);
 const PARTICLE_SYSTEM_RENDERER_CLASS_ID = 199;
 
 /**
+ * Unity physics classes (bodies, colliders, joints, effectors) skipped by `--skip-physics`: the
+ * playable replaces physics with its own logic, so no collider mesh is exported or imported.
+ */
+const PHYSICS_UNITY_CLASS_IDS = new Map([
+  [50, 'Rigidbody2D'], [54, 'Rigidbody'], [58, 'CircleCollider2D'], [59, 'HingeJoint'], [60, 'PolygonCollider2D'],
+  [61, 'BoxCollider2D'], [64, 'MeshCollider'], [65, 'BoxCollider'], [66, 'CompositeCollider2D'], [68, 'EdgeCollider2D'],
+  [70, 'CapsuleCollider2D'], [75, 'ConstantForce'], [135, 'SphereCollider'], [136, 'CapsuleCollider'], [138, 'FixedJoint'],
+  [143, 'CharacterController'], [144, 'CharacterJoint'], [145, 'SpringJoint'], [146, 'WheelCollider'],
+  [153, 'ConfigurableJoint'], [154, 'TerrainCollider'], [231, 'SpringJoint2D'], [232, 'DistanceJoint2D'],
+  [233, 'HingeJoint2D'], [234, 'SliderJoint2D'], [235, 'WheelJoint2D'], [247, 'ConstantForce2D'],
+  [249, 'AreaEffector2D'], [250, 'PointEffector2D'], [251, 'PlatformEffector2D'], [252, 'SurfaceEffector2D'],
+  [253, 'BuoyancyEffector2D'], [254, 'RelativeJoint2D'], [255, 'FixedJoint2D'], [256, 'FrictionJoint2D'],
+  [257, 'TargetJoint2D'],
+]);
+
+/**
  * Component của Unity KHÔNG mang hành vi cần port sang Cocos.
  * Bỏ chúng không làm mất gì, nên báo `low` thay vì `high` — nếu không thì
  * chúng nhấn chìm những component thật sự bị mất trong cùng một report.
@@ -62,6 +78,16 @@ function createComponentDispatcher(handlers) {
   function emitUnityComponent(ctx) {
     const classId = Number(ctx.doc?.classId || 0);
     if (IGNORED_UNITY_COMPONENT_CLASS_IDS.has(classId)) return;
+
+    if (ctx.options?.skipPhysics && PHYSICS_UNITY_CLASS_IDS.has(classId)) {
+      ctx.reporter.low(
+        'PHYSICS_COMPONENT_SKIPPED',
+        ctx.model.file,
+        ctx.gameObject.name,
+        `Unity ${PHYSICS_UNITY_CLASS_IDS.get(classId)} (class ${classId}) skipped by --skip-physics; the playable must reproduce its behavior without a physics engine`,
+      );
+      return;
+    }
 
     if (classId === 198) {
       handlers.emitParticleSystem(

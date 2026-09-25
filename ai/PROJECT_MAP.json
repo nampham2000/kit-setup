@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "generatedAt": "2026-09-25T15:30:44.236Z",
+    "generatedAt": "2026-09-25T18:38:11.659Z",
     "description": "Compact project manifest for AI Agents. Use this instead of scanning file trees.",
     "project": {
       "projectName": "cc_playable_framework",
@@ -32,24 +32,95 @@
   ],
   "prefabs": [
     {
+      "name": "static-assets",
+      "path": "assets/resources/screw/static-assets.prefab",
+      "sizeKb": 9.9
+    },
+    {
+      "name": "Level_132",
+      "path": "assets/screw/levels/Level_132.prefab",
+      "sizeKb": 320.2
+    },
+    {
+      "name": "Level_157",
+      "path": "assets/screw/levels/Level_157.prefab",
+      "sizeKb": 446.3
+    },
+    {
       "name": "Level_201",
       "path": "assets/screw/levels/Level_201.prefab",
-      "sizeKb": 76
+      "sizeKb": 90
     },
     {
       "name": "Level_202",
       "path": "assets/screw/levels/Level_202.prefab",
-      "sizeKb": 272.3
+      "sizeKb": 326.5
+    },
+    {
+      "name": "Level_27",
+      "path": "assets/screw/levels/Level_27.prefab",
+      "sizeKb": 575.1
+    },
+    {
+      "name": "BaseBox",
+      "path": "assets/screw/prefabs/BaseBox.prefab",
+      "sizeKb": 207.5
+    },
+    {
+      "name": "BaseTray",
+      "path": "assets/screw/prefabs/BaseTray.prefab",
+      "sizeKb": 67.3
+    },
+    {
+      "name": "Booster3D",
+      "path": "assets/screw/prefabs/Booster3D.prefab",
+      "sizeKb": 13.5
+    },
+    {
+      "name": "Box",
+      "path": "assets/screw/prefabs/Box.prefab",
+      "sizeKb": 12.2
+    },
+    {
+      "name": "keyUnlockBox",
+      "path": "assets/screw/prefabs/keyUnlockBox.prefab",
+      "sizeKb": 6.7
+    },
+    {
+      "name": "par_hammer",
+      "path": "assets/screw/prefabs/par_hammer.prefab",
+      "sizeKb": 91.1
+    },
+    {
+      "name": "screw",
+      "path": "assets/screw/prefabs/screw.prefab",
+      "sizeKb": 3.6
+    },
+    {
+      "name": "smoke",
+      "path": "assets/screw/prefabs/smoke.prefab",
+      "sizeKb": 33.3
+    },
+    {
+      "name": "SOF_Box",
+      "path": "assets/screw/prefabs/SOF_Box.prefab",
+      "sizeKb": 85.8
+    },
+    {
+      "name": "Unlock",
+      "path": "assets/screw/prefabs/Unlock.prefab",
+      "sizeKb": 93.9
     }
   ],
   "scripts": {
-    "count": 51,
+    "count": 56,
     "byDir": [
       {
         "dir": "assets/script/screw/core",
         "names": [
           "OrderedCounter",
           "ScrewColorPlanner",
+          "ScrewConvexHull",
           "ScrewEase",
           "ScrewModel",
           "ScrewRandom",
@@ -81,6 +152,8 @@
           "ScrewFlightAnimator",
           "ScrewHud",
           "ScrewLevelView",
+          "ScrewLightRig",
+          "ScrewRenderers",
           "ScrewTimeline",
           "ScrewWorld"
         ]
@@ -164,6 +237,8 @@
       {
         "dir": "assets/script",
         "names": [
+          "UnityParticleBirthState",
+          "UnityParticleBirthStateAdapter",
           "UnityParticleHierarchyTransformSync",
           "UnityParticleRateOverDistanceEmitter",
           "UnityParticleRendererVisibility",
@@ -188,83 +263,98 @@
       ],
       "truncated": 8
     },
-    "modelCount": 3,
+    "modelCount": 9,
     "models": {
-      "count": 3,
-      "totalKb": 497.5,
+      "count": 9,
+      "totalKb": 2536.7,
       "sample": [
+        "assets/unity_imported/_Game/Art/3D/NewBox/key.fbx",
         "assets/unity_imported/_Game/Art/level_model_new_control/screw.fbx",
-        "assets/unity_imported/_Game/SOF_Lvl/Model 3D/NewModel/FBX/Candy_new (fixed pivot).fbx",
-        "assets/unity_imported/_Game/SOF_Lvl/Model 3D/NewModel/FBX/Level_P_62.fbx"
+        "assets/unity_imported/_Game/MCPE/Phong/pack_tray_lid.fbx",
+        "assets/unity_imported/_Game/MCPE/Phong/Test/pack_tray_lid_new (1).fbx",
+        "assets/unity_imported/_Game/SOF_Lvl/Designer/Prefab_Main_Tree/FBX level New/Level_P_26.fbx",
+        "assets/unity_imported/_Game/SOF_Lvl/Model 3D/NewModel/FBX/Candy_new (fixed pivot).fbx"
       ],
-      "truncated": 0
+      "truncated": 3
     },
-    "shaderCount": 3,
+    "shaderCount": 7,
     "shaders": {
-      "count": 3,
-      "totalKb": 24.3,
+      "count": 7,
+      "totalKb": 71.6,
       "sample": [
         "assets/effects/MatCap_TextureMult_Bumped.effect",
+        "assets/effects/ScrewCelLit.effect",
+        "assets/effects/TMP_SDF.effect",
+        "assets/effects/unity-source-particle.effect",
         "assets/effects/UnitySpriteRendererColor.effect",
         "assets/effects/URPLit.effect"
       ],
-      "truncated": 0
+      "truncated": 1
     },
     "materials": {
-      "count": 6,
-      "totalKb": 4.7,
+      "count": 42,
+      "totalKb": 36.5,
       "sample": [
         "assets/materials/UnitySpriteRendererColor.mtl",
         "assets/materials/UnitySpriteRendererColorOpaque.mtl",
         "assets/materials/UnitySpriteRendererGlow.mtl",
-        "assets/unity_imported/_Game/Art/level_model_new_control/mtl_screw_new.mtl",
-        "assets/unity_imported/_Game/SOF_Lvl/Model 3D/Phong ( New_Model )/Shader/Pearl.mtl",
-        "assets/unity_imported/_Game/SOF_Lvl/Model 3D/Phong ( New_Model )/Shader/Tex_All.mtl"
+        "assets/screw/materials/box/Box_Begie.mtl",
+        "assets/screw/materials/box/Box_Blue.mtl",
+        "assets/screw/materials/box/Box_Brown.mtl"
       ],
-      "truncated": 0
+      "truncated": 36
     },
     "textures": {
-      "count": 14,
-      "totalKb": 1673.8,
+      "count": 52,
+      "totalKb": 13980.6,
       "sample": [
-        "assets/screw/textures/fx_redline.png",
-        "assets/screw/textures/img_hole.png",
-        "assets/screw/ui/background3.png",
-        "assets/screw/ui/btn_center.png",
-        "assets/screw/ui/btn_color.png",
-        "assets/screw/ui/btn_increase_size.png"
+        "assets/screw/textures/colors/Box_Begie.png",
+        "assets/screw/textures/colors/Box_Blue.png",
+        "assets/screw/textures/colors/Box_Brown.png",
+        "assets/screw/textures/colors/Box_Green.png",
+        "assets/screw/textures/colors/Box_Orange.png",
+        "assets/screw/textures/colors/Box_Pink.png"
       ],
-      "truncated": 8
+      "truncated": 46
     },
     "animations": {
-      "count": 0,
-      "totalKb": 0,
-      "sample": [],
+      "count": 4,
+      "totalKb": 28.8,
+      "sample": [
+        "assets/animations/animationkeycontroller/key_keyAction.anim",
+        "assets/animations/animsecretbox/Close.anim",
+        "assets/animations/animsecretbox/Idle.anim",
+        "assets/animations/animsecretbox/Open.anim"
+      ],
       "truncated": 0
     },
     "prefabsInAssets": {
-      "count": 2,
-      "totalKb": 348.3,
+      "count": 16,
+      "totalKb": 2382.9,
       "sample": [
+        "assets/resources/screw/static-assets.prefab",
+        "assets/screw/levels/Level_132.prefab",
+        "assets/screw/levels/Level_157.prefab",
         "assets/screw/levels/Level_201.prefab",
-        "assets/screw/levels/Level_202.prefab"
+        "assets/screw/levels/Level_202.prefab",
+        "assets/screw/levels/Level_27.prefab"
       ],
-      "truncated": 0
+      "truncated": 10
     },
     "unityImported": {
       "exists": true,
       "root": "assets/unity_imported",
-      "count": 8,
-      "totalKb": 568.9,
+      "count": 78,
+      "totalKb": 8901.6,
       "sample": [
-        "assets/unity_imported/_Game/Art/level_model_new_control/mtl_screw_new.mtl",
-        "assets/unity_imported/_Game/Art/level_model_new_control/screw.fbx",
-        "assets/unity_imported/_Game/shape.pmtl",
-        "assets/unity_imported/_Game/SOF_Lvl/Model 3D/NewModel/FBX/Candy_new (fixed pivot).fbx",
-        "assets/unity_imported/_Game/SOF_Lvl/Model 3D/NewModel/FBX/Level_P_62.fbx",
-        "assets/unity_imported/_Game/SOF_Lvl/Model 3D/Phong ( New_Model )/Shader/Pearl.mtl"
+        "assets/unity_imported/ConvexColliders/Food_Tray/Cube_12.asset",
+        "assets/unity_imported/ConvexColliders/Food_Tray/Cube_15.asset",
+        "assets/unity_imported/ConvexColliders/Food_Tray/Cube_16.asset",
+        "assets/unity_imported/ConvexColliders/Food_Tray/Cube_17.asset",
+        "assets/unity_imported/ConvexColliders/Food_Tray/Cube_18.asset",
+        "assets/unity_imported/ConvexColliders/Lv_27_Hambuger/Cube_10.asset"
       ],
-      "truncated": 2
+      "truncated": 72
     }
   },
   "configSummary": {

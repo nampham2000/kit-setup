@@ -236,6 +236,12 @@ module.exports = function createAssetImportPorter(deps) {
         return { pendingImport: true, detail: toPosix(path.relative(options.cocosRoot, prepared.dest)), resolved: null };
       }
     }
+    if (meshAsset?.ext === '.asset') {
+      // Never copy the raw Unity YAML mesh into Cocos: no importer reads it, and the stuck
+      // importer state fails the port's import check. The FBX export above reported why it failed.
+      reporter.add(severity === 'low' ? 'low' : 'high', 'MODEL_UNRESOLVED', meshAsset.relativePath, '', 'Unity Mesh .asset was not exported to FBX, so no Cocos mesh exists for it');
+      return { pendingImport: false, detail: '', resolved: null };
+    }
 
     let copiedDest = '';
     if (options.copyAssets || autoCopy) {

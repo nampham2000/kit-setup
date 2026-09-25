@@ -83,6 +83,7 @@ function optionsFingerprint(options) {
     recursive: !!options.recursive,
     copyAssets: !!options.copyAssets,
     convertFbxFallback: !!options.convertFbxFallback,
+    skipPhysics: !!options.skipPhysics,
     scriptMode: options.scriptMode || '',
     stripPrivatePrefix: options.stripPrivatePrefix !== false,
     layerMap: options.layerMap || null,

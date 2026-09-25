@@ -326,6 +326,8 @@ Options:
   --no-engine-feature-restart Cho phép sửa Profile/engine.json nhưng để trạng thái pending, không restart Editor.
   --physics-backend <name>  Override có kiểm tra: physics-builtin | physics-cannon | physics-ammo | physics-physx.
   --force-physics-backend   Chấp nhận override dù tool phát hiện mất hành vi (được ghi rõ trong report).
+  --skip-physics            Không emit Rigidbody/Collider/Joint/CharacterController (report low PHYSICS_COMPONENT_SKIPPED)
+                            khi playable tự thay physics bằng logic riêng; collider mesh không bị export/import.
   --jobs <n>                Chạy song song n tiến trình con cho batch prefab.
   --quiet                   Chỉ in tổng kết (ít token hơn cho AI agent).
   --strip-private-prefix    Map Unity serialized _field to Cocos field when wiring custom scripts. Default.
@@ -468,6 +470,7 @@ function parseArgs(argv) {
     engineFeatureRestart: true,
     physicsBackend: '',
     forcePhysicsBackend: false,
+    skipPhysics: false,
   };
 
   const optionStartIndex = command === 'help' && argv[0] && String(argv[0]).startsWith('-') ? 0 : 1;
@@ -549,6 +552,10 @@ function parseArgs(argv) {
     }
     if (arg === '--no-engine-feature-restart') {
       options.engineFeatureRestart = false;
+      continue;
+    }
+    if (arg === '--skip-physics') {
+      options.skipPhysics = true;
       continue;
     }
     if (arg === '--physics-backend') {
@@ -646,6 +653,9 @@ function parseArgs(argv) {
   }
   if (options.physicsBackend && !['physics-builtin', 'physics-cannon', 'physics-ammo', 'physics-physx'].includes(options.physicsBackend)) {
     fail('--physics-backend must be physics-builtin, physics-cannon, physics-ammo, or physics-physx');
+  }
+  if (options.skipPhysics && (options.physicsBackend || options.forcePhysicsBackend)) {
+    fail('--skip-physics conflicts with --physics-backend/--force-physics-backend');
   }
 
   if (options.src) options.src = path.resolve(options.src);
