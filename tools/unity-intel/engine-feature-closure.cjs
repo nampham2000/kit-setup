@@ -80,6 +80,18 @@ const UNITY_PHYSICS_2D_FACTS = Object.freeze([
   ['Physics2DSimulation', /\bRigidbody2D\b|\bAddForce\s*\(/],
 ]);
 
+/**
+ * Physics body dimension referenced by a C# script body. `\bRigidbody\b` never matches `Rigidbody2D` (the digit is a
+ * word character), and `ForceMode.` / `ForceMode2D` are the dimension-specific enums passed to AddForce.
+ */
+function csharpPhysicsDimension(runtimeText) {
+  const source = String(runtimeText || '');
+  return {
+    has3d: /\b(?:Rigidbody|ConstantForce|ArticulationBody)\b|\bForceMode\s*\./.test(source),
+    has2d: /\b(?:Rigidbody2D|ForceMode2D|ConstantForce2D)\b/.test(source),
+  };
+}
+
 function normalizeLogicalPath(value) {
   const normalized = String(value || '').replace(/\\/g, '/').replace(/^\.\//, '');
   return /^(?:Assets|Packages)\//.test(normalized) ? normalized : null;
@@ -263,10 +275,16 @@ function detectUnityEngineFeatureEvidence(input = {}) {
     addMarker(markers, 'graphics', 'unity-runtime-vector-geometry');
   }
 
+  // AddForce/MovePosition/MoveRotation exist on both Rigidbody and Rigidbody2D. In C# the receiver type decides the
+  // physics dimension: a script that only references Rigidbody2D/ForceMode2D drives 2D bodies and must not force the
+  // Cocos 3d + 3D physics backend (Lost Crypt CharacterController2D), and vice versa for 3D-only scripts.
+  const dimension = extension === '.cs' ? csharpPhysicsDimension(runtimeText) : null;
   for (const [fact, pattern] of UNITY_PHYSICS_FACTS) {
+    if (dimension && fact === 'PhysicsSimulation' && dimension.has2d && !dimension.has3d) continue;
     if (pattern.test(extension === '.cs' ? runtimeText : text)) addMarker(markers, 'physics-3d', `unity-${fact}`, { fact });
   }
   for (const [fact, pattern] of UNITY_PHYSICS_2D_FACTS) {
+    if (dimension && fact === 'Physics2DSimulation' && dimension.has3d && !dimension.has2d) continue;
     if (pattern.test(extension === '.cs' ? runtimeText : text)) addMarker(markers, 'physics-2d', `unity-${fact}`, { fact });
   }
 

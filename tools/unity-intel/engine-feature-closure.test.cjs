@@ -119,6 +119,41 @@ BoxCollider:
   assert.deepEqual(result.requiredModules, ['3d', 'physics-builtin']);
 });
 
+test('Rigidbody2D AddForce/MovePosition scripts stay 2D and never force the Cocos 3D physics backend', () => {
+  // Lost Crypt CharacterController2D: impulse jump + kinematic tail body, both Rigidbody2D.
+  const controller = record('Assets/Scripts/CharacterController2D.cs', `
+public class CharacterController2D : MonoBehaviour {
+  [SerializeField] Rigidbody2D tailRigidbody = null;
+  private Rigidbody2D controllerRigidbody;
+  void FixedUpdate() {
+    controllerRigidbody.AddForce(new Vector2(0, 5f), ForceMode2D.Impulse);
+    tailRigidbody.MovePosition(Vector2.zero);
+  }
+}
+`);
+  const result = closure([controller], [controller.assetPath]);
+  assert.equal(result.selectors.physicsBackend, null);
+  assert.equal(result.selectors.physics2dBackend, 'physics-2d-box2d');
+  assert.deepEqual(result.requiredModules, ['physics-2d', 'physics-2d-box2d']);
+
+  // A 3D script with the same calls still selects a 3D simulation backend and no 2D module.
+  const tank = record('Assets/Scripts/TankMovement.cs', `
+public class TankMovement : MonoBehaviour {
+  private Rigidbody body;
+  void FixedUpdate() { body.MovePosition(body.position); body.AddForce(Vector3.up, ForceMode.Impulse); }
+}
+`);
+  const tankResult = closure([tank], [tank.assetPath]);
+  assert.equal(tankResult.selectors.physicsBackend, 'physics-cannon');
+  assert.equal(tankResult.selectors.physics2dBackend, null);
+
+  // Receiver type unknown in the file (declared elsewhere): keep the conservative 3D reading.
+  const unknown = record('Assets/Scripts/Pusher.cs', `
+public class Pusher : MonoBehaviour { public Body target; void FixedUpdate() { target.body.AddForce(Vector3.up); } }
+`);
+  assert.equal(closure([unknown], [unknown.assetPath]).selectors.physicsBackend, 'physics-cannon');
+});
+
 test('reachable Unity Physics2D collider/query selects the Box2D parent option and backend', () => {
   const collider = record('Assets/Game/Tile.prefab', `--- !u!61 &1
 BoxCollider2D:
