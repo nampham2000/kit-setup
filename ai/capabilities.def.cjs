@@ -118,6 +118,26 @@ const CAPABILITIES = [
     expect: ['--project', '--json', 'Read-only'],
   },
   {
+    id: 'unity.intel.script',
+    group: 'onboarding',
+    title: 'Chạy C# capture/oracle qua Unity-MCP của shared kit (script-execute)',
+    npm: 'npm run unity:script -- --project <UnityProjectRoot> --script <file.cs>',
+    cmd: `node ${TOOLS}/unity-intel/unity-mcp-script.cjs`,
+    args: ['--project <UnityProjectRoot>', '--script <file.cs>'],
+    optional: ['--out <file>', '--set KEY=VALUE', '--class <name>', '--method <name>', '--timeout-ms <n>'],
+    when: 'Khi cần live Unity evidence (oracle particle/material, catalog scene, ảnh tham chiếu) sau khi unity:intel:setup đã báo canUseLiveMcp=true.',
+    outputs: ['stdout: kết quả trả về của Script.Main(); file do script tự ghi qua placeholder OUTPUT_FILE (= --out)'],
+    limits: [
+      'Chỉ dùng endpoint loopback + token mà unity:intel:setup cấu hình cho project; không bao giờ fallback sang MCP Unity bên thứ ba (vd com.unity.ai.assistant).',
+      'Script chạy trong Editor với quyền đầy đủ: capture phải read-only với asset/scene của người dùng, mở scene additive và đóng lại, không lưu scene đang dirty.',
+      'Kết quả tool thành công chưa chứng minh dữ liệu đúng; mở file output và đối chiếu nguồn trước khi dùng làm oracle.',
+    ],
+    status: 'ok',
+    probe: 'help',
+    probeCmd: `node ${TOOLS}/unity-intel/unity-mcp-script.cjs`,
+    expect: ['--project', '--script', '--out'],
+  },
+  {
     id: 'unity.intel.doctor',
     group: 'onboarding',
     title: 'Kiểm tra Unity Editor, project lock và Unity-MCP endpoint',
@@ -129,6 +149,7 @@ const CAPABILITIES = [
     outputs: ['stdout JSON compact: declared Unity version, exact Editor readiness, lock state, loopback config và authenticated playable-port-scan tool probe'],
     limits: [
       '`canAttach` chỉ nói có thể attach Unity Editor đang mở; chỉ `canUseLiveMcp=true` chứng minh tool `playable-port-scan` đã trả payload đúng deadline.',
+      '`sharedKitMcp.installed=false` nghĩa là manifest thiếu Unity-MCP của shared kit (kể cả khi project có MCP bên thứ ba trong `thirdPartyMcp`); làm theo `remediation` = `unity:intel:setup` trước khi port.',
       '`liveMcp.activeBuildTarget` và `editorState` là trạng thái Editor từ live probe; null nghĩa là scanner cũ hoặc chưa có evidence, không phải Android/idle. Build target đúng và compile/import đã xong chưa chứng minh gameplay chạy được; phải vào Play Mode và kiểm Game View/Console.',
       'Ping/config có thể thành công trong khi Unity main-thread tool treo; trường hợp này trả `UNITY_MCP_TOOL_UNRESPONSIVE`, không được tuyên bố live MCP ready.',
     ],
@@ -187,7 +208,8 @@ const CAPABILITIES = [
     when: 'BƯỚC DUY NHẤT đầu tiên trước khi agent đọc Unity source hoặc chạy tool có ghi output. Mặc định chọn gameplay scene/closure, loại menu-shop-online khỏi implementation route, giữ full high audit và cấp receipt theo source state.',
     outputs: ['stdout JSON <=12 KiB: decision, coreGameplay entry/closure/exclusions/80-90 acceptance, engineFeatureClosure, core features, full obligationIndex, coreObligationIndex, routes và receiptId'],
     limits: [
-      'Mặc định không ghi Unity/Cocos project; receipt atomic <=4 KiB nằm trong user-local cache. Chỉ --bootstrap mới cài/reload Unity package.',
+      'Không ghi Cocos project; receipt atomic <=4 KiB nằm trong user-local cache. Khi Packages/manifest.json thiếu Unity-MCP của shared kit (com.ccplayable.unity-intelligence + com.ivanmurzak.unity.mcp), provider auto|unity-mcp tự bootstrap cài trước khi scan; --no-bootstrap hoặc --provider static giữ Unity project nguyên trạng. Khi đã khai báo thì chỉ --bootstrap mới cài/reload lại package.',
+      'MCP Unity bên thứ ba (vd com.unity.ai.assistant) không thay thế scanner playable-port-scan hay script-execute của shared kit; không dùng nó làm live evidence và không dừng port vì approval của nó.',
       '`--cache-dir` chỉ đổi incremental scan index; mutation receipt luôn nằm trong fixed user-local store để mọi port gate cùng đọc được.',
       'Hard source-integrity high chặn implement; DOTween/coroutine/animator/shader high trở thành nghĩa vụ implement/verify và không gây deadlock.',
       'Receipt hết hạn hoặc tự stale khi C#/prefab/shader/meta/manifest/project settings hay extractor thay đổi.',
@@ -1806,7 +1828,7 @@ const CORE_RULES = [
   },
   {
     id: 'port-blocker-triage',
-    rule: 'Trước khi dừng port vì MCP, chạy doctor để phân biệt package chưa cài, connection, compile/import và tool scan timeout; MCP window/ping không chứng minh scan thành công. Dùng setup khi thiếu package trong phạm vi port đã được giao. Không suy Unity không chạy từ MCP timeout; tiếp tục phần static được preflight cho phép, giữ source-integrity blocker và live visual acceptance riêng. Scene hòa điểm dùng --entry-scene đã index. Cocos feature đã bật phải kiểm applied preview; không build để chữa thử Marionette. User yêu cầu preview-only thì build acceptance nằm ngoài phạm vi, không tạo receipt giả hoặc claim packaged readiness. Sau fix phải sync và commit cả source tool/skill/instructions lẫn bản sinh ở consumer, push shared kit trước submodule pointer.',
+    rule: 'Trước khi dừng port vì MCP, chạy doctor để phân biệt package chưa cài, connection, compile/import và tool scan timeout; MCP window/ping không chứng minh scan thành công. Ưu tiên Unity-MCP của shared kit: khi thiếu package trong phạm vi port đã được giao thì cài bằng setup (preflight/core init tự bootstrap), không thay bằng MCP Unity bên thứ ba. Không suy Unity không chạy từ MCP timeout; tiếp tục phần static được preflight cho phép, giữ source-integrity blocker và live visual acceptance riêng. Scene hòa điểm dùng --entry-scene đã index. Cocos feature đã bật phải kiểm applied preview; không build để chữa thử Marionette. User yêu cầu preview-only thì build acceptance nằm ngoài phạm vi, không tạo receipt giả hoặc claim packaged readiness. Sau fix phải sync và commit cả source tool/skill/instructions lẫn bản sinh ở consumer, push shared kit trước submodule pointer.',
   },
   { id: 'shared-audio-intent-porting', rule: "Khi port Unity gameplay sound, dùng SoundManager.playSound(id) qua AudioSystem trong shared kit; không tạo AudioSource/playOneShot hoặc dùng legacy playSFX/playLoopingSFX trong gameplay mới. Policy ở audio.system của playable-config qua PlayableConfigManager; preload bằng PlayableAudioController.ready trước input, unlock trong gesture thật. Commit tools/audio-port-map.json v1 với entries gồm id, sourceEvidence[{path,sha256,callback}], runtimeConsumer, regression, policyDisposition preserved/adapted và reason khi adapted. Trace callback phase/count, clip/volume/loop, owner stop/pause/fade và priority Unity (0 cao nhất) trước mapping; cooldown/concurrency/voice stealing mẫu không được tự coi là Unity semantics. Giữ gameplay state/callback dù sound bị reject; kiểm riêng requested/played/rejected/stolen, exact owner handle, hai vòng lifecycle và gesture thật. Pitch/spatial/mixer/virtual voice chưa hỗ trợ phải report evidence gap, không giả parity. ai:lint và ai:verify chặn đường bypass trong core port hoặc project có audio map/managed call. Xem packages/playable-core/audio/README.md và examples/audio-system/use-cases.md trong shared kit." },
   { id: 'particle-renderer-frame-pivot-parity', rule: 'Khi particle bị xoay sai hoặc vòng tròn bị đất che một nửa, đọc renderer alignment, parent transform, rotation và pivot trước khi đổi Render Mode. Unity Local billboard dùng frame emitter và Euler clockwise (+X,+Y,-Z qua Z reflection), khác mesh (-X,-Y,+Z); Cocos billboard mặc định dùng camera axes dù alignSpace đã set. Dùng shared particle-renderer-contract cùng source-particle effect; chỉ lower Velocity mesh sang world rotation khi fixed +Z box, constant positive speed, zero gravity và không velocity/force/noise được chứng minh. Stretched pivot Y dịch theo velocity bằng 2*currentWidth*pivotY, không dùng lengthScale. Giữ material variant theo renderer và user override; import effect bằng AssetDB rồi bind UUID thực. Custom shader, pivot axes chưa đo, general velocity frame và Euler-over-lifetime cần adapter riêng và report high. Khóa native BakeMesh geometry, parent rotation, đúng burst time và preview ở hai viewport; không suy 95% từ static test.' },

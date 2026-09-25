@@ -221,10 +221,13 @@ const {
   translateUnitySerializedValue: translateUnitySerializedValueImpl,
   emitMonoBehaviour: emitMonoBehaviourImpl,
 } = createScriptPorter({
+  // Hoisted: nested prefab queueing is defined further down this module.
+  generatedPrefabUuid: (asset, options, unityDb, reporter) => (options.recursive
+    ? queueNestedPrefabAsset(options, asset, unityDb, reporter).prefabUuid
+    : readJsonIfExists(`${nestedPrefabOutputPath(options, asset)}.meta`)?.uuid) || '',
   hasField,
   getField,
   getTopLevelSerializedFields,
-  queueNestedPrefabAsset: (...args) => queueNestedPrefabAsset(...args),
   unityRefGuid,
   unityRefFileId,
   resolveUnitySpriteFrame: resolveUnitySpriteFrameImpl,
@@ -308,6 +311,9 @@ Options:
   --quiet                   Chỉ in tổng kết (ít token hơn cho AI agent).
   --strip-private-prefix    Map Unity serialized _field to Cocos field when wiring custom scripts. Default.
   --no-strip-private-prefix Preserve leading underscore in custom script fields.
+  --nested-prefab-map <UnityDir>=<CocosDir>
+                            Link nested prefabs under UnityDir to the mirrored prefabs a
+                            directory-mode port already wrote under CocosDir (repeatable).
   --layer-map <json>        JSON object overriding Unity layer index to Cocos layer name/value.
 
 Examples:
@@ -600,6 +606,10 @@ function parseArgs(argv) {
       options.layerMap = JSON.parse(readValue(arg));
       continue;
     }
+    if (arg === '--nested-prefab-map') {
+      (options.nestedPrefabMap = options.nestedPrefabMap || []).push(readValue(arg));
+      continue;
+    }
     if (arg.startsWith('--layer-map=')) {
       options.layerMap = JSON.parse(arg.slice('--layer-map='.length));
       continue;
@@ -642,8 +652,32 @@ function parseArgs(argv) {
     }
     options.unityObjectMap = parsed.models;
   }
+  options.nestedPrefabMap = (options.nestedPrefabMap || []).map((entry) => {
+    const index = entry.lastIndexOf('=');
+    if (index <= 0) fail(`--nested-prefab-map needs <UnityDir>=<CocosDir>: ${entry}`);
+    const unityDir = path.resolve(options.unityRoot || '', entry.slice(0, index));
+    const cocosDir = path.resolve(options.cocosRoot, entry.slice(index + 1));
+    if (!isPathInside(cocosDir, path.join(options.cocosRoot, 'assets'))) fail(`--nested-prefab-map target must be under assets/: ${entry}`);
+    return { unityDir, cocosDir };
+  });
 
   return options;
+}
+
+function isPathInside(child, parent) {
+  const relative = path.relative(path.resolve(parent), path.resolve(child));
+  return !!relative && !relative.startsWith('..') && !path.isAbsolute(relative);
+}
+
+// A prefab that an earlier directory-mode port already produced (mirrored
+// from its Unity folder) is linked, not regenerated beside the new output.
+function mappedNestedPrefabOutputPath(options, sourceAsset) {
+  for (const { unityDir, cocosDir } of options.nestedPrefabMap || []) {
+    if (!isPathInside(sourceAsset.path, unityDir)) continue;
+    const relative = path.relative(unityDir, sourceAsset.path).replace(/.prefab$/i, '.prefab');
+    return path.join(cocosDir, relative);
+  }
+  return '';
 }
 
 function inferUnityRoot(src) {
@@ -3729,6 +3763,65 @@ function collapseStrippedTransformsToInstanceRoot(context) {
   }
 }
 
+// A scene (or prefab) only serializes a stripped Transform for a nested
+// PrefabInstance when something references it. Scene roots are ordered by
+// m_RootOrder overrides, so a root-level instance of a .prefab usually has no
+// stripped Transform at all and would otherwise vanish from the port. Give it
+// one that points at the source prefab root so the regular stripped-transform
+// path merges its overrides and links the generated Cocos prefab.
+function synthesizeRootPrefabInstanceTransforms(context) {
+  const { file, byId, transforms, prefabInstanceInfos, unityDb, reporter, options, recursionDepth } = context;
+  if (!options.recursive) return;
+  const claimed = new Set();
+  for (const doc of byId.values()) {
+    if (!doc?.stripped) continue;
+    const instanceId = unityRefFileId(getField(doc, 'm_PrefabInstance'));
+    if (instanceId) claimed.add(instanceId);
+  }
+  for (const [instanceId, instanceInfo] of prefabInstanceInfos.entries()) {
+    if (instanceInfo.parentTransformId || claimed.has(instanceId)) continue;
+    const sourceGuid = unityRefGuid(instanceInfo.sourcePrefab);
+    const sourceAsset = unityDb.get(sourceGuid);
+    if (sourceAsset?.ext !== '.prefab') continue;
+    const nested = queueNestedPrefabAsset(options, sourceAsset, unityDb, reporter, recursionDepth + 1);
+    const sourceRoot = nested?.model?.roots?.[0];
+    if (!sourceRoot) {
+      reporter.medium('ROOT_PREFAB_INSTANCE_UNRESOLVED', file, sourceAsset.relativePath, 'Root-level prefab instance source has no root transform; instance skipped', `instance ${instanceId}`);
+      continue;
+    }
+    const transformId = `${instanceId}:root-transform`;
+    const classId = sourceRoot.isRect ? 224 : 4;
+    byId.set(transformId, {
+      classId,
+      fileId: transformId,
+      stripped: true,
+      className: UNITY_CLASS[classId] || `UnityClass${classId}`,
+      typeName: classId === 224 ? 'RectTransform' : 'Transform',
+      lines: [
+        `  m_CorrespondingSourceObject: {fileID: ${sourceRoot.fileId}, guid: ${sourceGuid}, type: 3}`,
+        `  m_PrefabInstance: {fileID: ${instanceId}}`,
+      ],
+    });
+    transforms.set(transformId, {
+      fileId: transformId,
+      gameObjectId: 0,
+      parentId: 0,
+      children: [],
+      isRect: !!sourceRoot.isRect,
+      localPosition: { x: 0, y: 0, z: 0 },
+      anchoredPosition: null,
+      localRotation: { x: 0, y: 0, z: 0, w: 1 },
+      localScale: { x: 1, y: 1, z: 1 },
+      euler: { x: 0, y: 0, z: 0 },
+      sizeDelta: { x: 100, y: 100 },
+      anchorMin: { x: 0.5, y: 0.5 },
+      anchorMax: { x: 0.5, y: 0.5 },
+      anchor: { x: 0.5, y: 0.5 },
+    });
+    reporter.low('ROOT_PREFAB_INSTANCE_SYNTHESIZED', file, sourceAsset.relativePath, 'Synthesized the stripped root Transform of a root-level prefab instance', `instance ${instanceId}`);
+  }
+}
+
 function materializeStrippedTransforms(context) {
   const {
     file,
@@ -3773,6 +3866,16 @@ function materializeStrippedTransforms(context) {
     referencedTransformIds,
     childReferencedTransformIds,
     reporter,
+  });
+  synthesizeRootPrefabInstanceTransforms({
+    file,
+    byId,
+    transforms,
+    prefabInstanceInfos,
+    unityDb,
+    reporter,
+    options,
+    recursionDepth,
   });
 
   for (const transform of [...transforms.values()]) {
@@ -5921,14 +6024,57 @@ class CocosPrefabBuilder {
   }
 }
 
+// Unity 2022.2+ lists scene roots in a SceneRoots object; older files keep
+// m_RootOrder on each root Transform or as a PrefabInstance override.
+function unityRootOrder(transform, model) {
+  if (!model.rootOrderIndex) {
+    const index = new Map();
+    const sceneRoots = (model.docs || []).find((doc) => Number(doc.classId) === 1660057539);
+    if (sceneRoots) {
+      getNestedList(sceneRoots, 'm_Roots').map(unityRefFileId).filter(Boolean)
+        .forEach((fileId, order) => index.set(String(fileId), order));
+    }
+    model.rootOrderIndex = index;
+  }
+  const fileId = String(transform.fileId);
+  if (model.rootOrderIndex.has(fileId)) return model.rootOrderIndex.get(fileId);
+  const doc = model.byId?.get(fileId);
+  const direct = doc && !doc.stripped ? Number(getField(doc, 'm_RootOrder', NaN)) : NaN;
+  if (Number.isFinite(direct)) return direct;
+  const instanceId = fileId.includes(':') ? fileId.split(':')[0] : unityRefFileId(getField(doc || { lines: [] }, 'm_PrefabInstance'));
+  const instanceDoc = instanceId ? model.byId?.get(String(instanceId)) : null;
+  if (instanceDoc) {
+    for (const props of parsePrefabInstanceInfo(instanceDoc).overridesByTarget.values()) {
+      const order = Number(props.m_RootOrder);
+      if (Number.isFinite(order)) return order;
+    }
+  }
+  return Number.MAX_SAFE_INTEGER;
+}
+
 function buildCocosPrefabBuilder(model, outputFile, options, reporter, unityDb, cocosDb) {
-  const rootName = model.roots[0]
+  // A Unity scene has several roots, but a Cocos prefab has exactly one; wrap
+  // them in an identity node named after the output so the graph stays valid.
+  const wrapRoots = model.roots.length > 1 || /\.unity$/i.test(String(model.file || ''));
+  const rootName = !wrapRoots && model.roots[0]
     ? model.gameObjects.get(model.roots[0].gameObjectId)?.name || path.basename(outputFile, '.prefab')
     : path.basename(outputFile, '.prefab');
   const builder = new CocosPrefabBuilder(rootName, cocosDb, reporter, options);
   const layerResolver = buildLayerResolver(options, cocosDb, reporter);
 
-  for (const root of model.roots) emitNodeRecursive(root, null, model, builder, layerResolver, reporter, options, unityDb, cocosDb);
+  const rootParentId = wrapRoots
+    ? builder.addNode(rootName, null, {
+      localPosition: { x: 0, y: 0, z: 0 },
+      localRotation: { x: 0, y: 0, z: 0, w: 1 },
+      localScale: { x: 1, y: 1, z: 1 },
+      euler: { x: 0, y: 0, z: 0 },
+    }, layerResolver(0, rootName), true, `node-${sanitizeFileId(rootName)}-scene-root`)
+    : null;
+  if (wrapRoots) {
+    reporter.low('SCENE_ROOTS_WRAPPED', model.file, rootName, `${model.roots.length} Unity root objects were parented under one Cocos prefab root`);
+  }
+  const orderedRoots = wrapRoots ? [...model.roots].sort((a, b) => unityRootOrder(a, model) - unityRootOrder(b, model)) : model.roots;
+  for (const root of orderedRoots) emitNodeRecursive(root, rootParentId, model, builder, layerResolver, reporter, options, unityDb, cocosDb);
   emitComponents(model, builder, reporter, options, unityDb, cocosDb);
   require('./unity-cocos-port/ui-layout-porter').finalizeUnityLayouts(builder);
   runtimeComponentPorter.attachParticleSubEmitterFollowers(model, builder, reporter);
@@ -6218,6 +6364,8 @@ function queueNestedPrefabAsset(options, sourceAsset, unityDb, reporter, recursi
 }
 
 function nestedPrefabOutputPath(options, sourceAsset) {
+  const mapped = mappedNestedPrefabOutputPath(options, sourceAsset);
+  if (mapped) return mapped;
   const fileName = `${path.basename(sourceAsset.path, path.extname(sourceAsset.path))}.prefab`;
   return path.join(path.dirname(options.out), fileName);
 }
@@ -6237,6 +6385,10 @@ function writeQueuedNestedPrefabAssets(options, reporter, unityDb, cocosDb) {
 
     const outputFile = entry.outputFile || nestedPrefabOutputPath(options, sourceAsset);
     if (path.resolve(outputFile) === path.resolve(options.out)) continue;
+    if (mappedNestedPrefabOutputPath(options, sourceAsset) && fs.existsSync(outputFile)) {
+      reporter.low('NESTED_PREFAB_MAPPED_REUSED', sourceAsset.relativePath, toPosix(path.relative(options.cocosRoot, outputFile)), 'Nested prefab linked to the previously ported mapped output');
+      continue;
+    }
     if (fs.existsSync(outputFile) && !options.overwrite && !options.dryRun) {
       reporter.medium('NESTED_PREFAB_OUTPUT_EXISTS', sourceAsset.path, outputFile, 'Nested Cocos prefab already exists; use --overwrite to replace it');
       continue;

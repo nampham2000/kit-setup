@@ -23,6 +23,14 @@ const {
   unityLinearColorToCocos,
   cocosUuid,
 } = require('./core-utils');
+const {
+  LEGACY_PREVIEW_EFFECT_PATH,
+  LEGACY_PREVIEW_EFFECT_TEMPLATE,
+  legacyPreviewShader,
+  legacyPreviewMaterialData,
+  unityProjectIsLinear,
+  unityTextureIsSrgb,
+} = require('./legacy-preview-material');
 
 const UNITY_BUILTIN_SHADER_GUID = '0000000000000000f000000000000000';
 const COCOS_PARTICLE_TECHNIQUE_ADD = 0;
@@ -496,6 +504,59 @@ module.exports = function createMaterialPorter(deps) {
     }
   }
 
+  function ensureLegacyPreviewEffect(options, reporter) {
+    return ensureTemplateEffect(options, reporter, {
+      effectPath: LEGACY_PREVIEW_EFFECT_PATH,
+      template: LEGACY_PREVIEW_EFFECT_TEMPLATE,
+      cacheKey: '_legacyPreviewEffectUuid',
+      reportCode: 'LEGACY_PREVIEW_EFFECT_PREPARED',
+      message: 'Prepared the Cocos port of the LegacyPreviewCompatibility URP shims',
+    });
+  }
+
+  function writeLegacyPreviewMaterial(materialAsset, materialDoc, shader, usage, dest, options, unityDb, reporter, extra = {}) {
+    const colors = parseUnitySerializedScalarMap(materialDoc, 'm_Colors');
+    const texEnvs = parseUnityTextureEnvMap(materialDoc);
+    const mainTexEnv = texEnvs._MainTex || null;
+    const textureAsset = extra.spriteTextureAsset
+      || (unityRefGuid(mainTexEnv?.m_Texture) ? unityDb.get(unityRefGuid(mainTexEnv.m_Texture)) : null);
+    const textureUuid = textureAsset
+      ? resolveUnityTextureUuid(textureAsset, options, reporter, usage === 'particle' ? { particleTexture: true } : {})
+      : '';
+    const name = String(getField(materialDoc, 'm_Name', materialAsset.stem) || materialAsset.stem);
+    const materialData = legacyPreviewMaterialData({
+      shader,
+      usage,
+      colors,
+      mainTexEnv: extra.spriteTextureAsset ? null : mainTexEnv,
+      textureUuid,
+      textureSrgb: unityTextureIsSrgb(textureAsset),
+      linear: unityProjectIsLinear(options.unityRoot),
+      applyActiveColorSpace: extra.applyActiveColorSpace !== false,
+      sourceRendererPivot: extra.sourceRendererPivot || null,
+      name,
+      effectUuid: ensureLegacyPreviewEffect(options, reporter),
+    });
+    reporter.low('LEGACY_PREVIEW_SHADER_PORTED', materialAsset.relativePath, name,
+      `LegacyPreview ${shader.pass} pass mapped to the Cocos legacy-preview effect (${usage})`);
+    if (textureAsset && !textureUuid) {
+      reporter.medium('LEGACY_PREVIEW_TEXTURE_PENDING', materialAsset.relativePath, name,
+        'Main texture is not imported by Cocos yet; rerun the port after AssetDB import to bind it');
+    }
+    // Whether output stays linear depends on the project's frame setup
+    // (a linear render target presents it), so keep a project's choice.
+    const previous = readJsonIfExists(dest);
+    if (previous?._defines?.[0]?.UNITY_LINEAR_OUTPUT === true) materialData._defines[0].UNITY_LINEAR_OUTPUT = true;
+    if (options.dryRun) return { file: fs.existsSync(dest) ? dest : '', textureUuid };
+    ensureDir(path.dirname(dest));
+    ensureDirectoryMetas(path.dirname(dest), path.join(options.cocosRoot, 'assets'));
+    const serialized = `${JSON.stringify(materialData, null, 2)}\n`;
+    if (!fs.existsSync(dest) || fs.readFileSync(dest, 'utf8') !== serialized) fs.writeFileSync(dest, serialized, 'utf8');
+    const meta = ensureMaterialAssetMeta(dest, options);
+    syncImportedMaterialLibraryCache(materialData, meta, options);
+    return { file: dest, textureUuid };
+  }
+
   function convertUnityMaterialToCocos(materialAsset, options, unityDb, reporter) {
     if (!materialAsset?.path || !fs.existsSync(materialAsset.path)) return '';
 
@@ -515,6 +576,11 @@ module.exports = function createMaterialPorter(deps) {
     if (shaderGuid && shaderGuid !== UNITY_BUILTIN_SHADER_GUID) {
       shaderAsset = unityDb?.get(shaderGuid);
       shaderName = readUnityShaderName(shaderAsset) || shaderAsset?.relativePath || shaderGuid;
+    }
+    const legacyShader = legacyPreviewShader(shaderName);
+    if (legacyShader) {
+      return writeLegacyPreviewMaterial(materialAsset, materialDoc, legacyShader, 'mesh',
+        convertedDest.replace(/\.mtl$/i, '.mesh.mtl'), options, unityDb, reporter)?.file || '';
     }
     const invisibleShadowReceiver = /Invisible Shadow Receiver/i.test(shaderName);
     const tcp2HybridShader2 = TCP2_HYBRID_SHADER_2_GUIDS.has(shaderGuid)
@@ -800,6 +866,16 @@ module.exports = function createMaterialPorter(deps) {
     if (!convertedDest) return null;
     const sourceAdapter = materialUsage === 'particle' && rendererContract?.requiresMaterialAdapter;
     if (sourceAdapter) convertedDest = convertedDest.replace(/\.mtl$/i, `.renderer-${rendererContract.mode}-${rendererContract.sourceRendererPivot.join('_')}.mtl`);
+    const legacyShader = materialUsage === 'particle' ? legacyPreviewShader(particleShaderName) : null;
+    if (legacyShader) {
+      const applyActiveColorSpace = rendererContract?.applyActiveColorSpace !== false;
+      const dest = applyActiveColorSpace ? convertedDest : convertedDest.replace(/\.mtl$/i, '.gamma-vertex.mtl');
+      return writeLegacyPreviewMaterial(materialAsset, materialDoc, legacyShader, 'particle', dest, options, unityDb, reporter, {
+        spriteTextureAsset,
+        applyActiveColorSpace,
+        sourceRendererPivot: rendererContract?.sourceRendererPivot || null,
+      });
+    }
     const tcp2ParticleMaterial = TCP2_HYBRID_SHADER_2_GUIDS.has(particleShaderGuid)
       || /(?:Toony Colors Pro 2|TCP2).*Hybrid Shader 2/i.test(particleShaderName);
     const tcp2ParticleEffectUuid = tcp2ParticleMaterial

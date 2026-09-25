@@ -31,6 +31,9 @@ function particleRendererContract(particle = {}, renderer = {}) {
     eulerSigns: mesh ? [-1, -1, 1] : localBillboard ? [1, 1, -1] : [-1, 1, -1],
     requiresMaterialAdapter: localBillboard || stretchedPivot || mesh,
     sourceRendererPivot: [Number(pivot.x || 0), Number(pivot.y || 0), Number(pivot.z || 0), localBillboard ? 2 : 0],
+    // Unity linearizes particle vertex colors in a Linear project unless the
+    // renderer opts out; the default for new renderers is on.
+    applyActiveColorSpace: renderer.m_ApplyActiveColorSpace === undefined ? true : Number(renderer.m_ApplyActiveColorSpace) !== 0,
     unsupported,
   };
 }

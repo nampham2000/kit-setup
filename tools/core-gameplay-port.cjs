@@ -14,6 +14,7 @@ const {
   mergeRegistryRequiredRisks,
 } = require('./port-regression-gate.cjs');
 const { runUnityPortPreflight, assertUnityPortPreflight } = require('./unity-intel/preflight.cjs');
+const { sharedUnityMcpInstallState, shouldAutoBootstrap } = require('./unity-intel/shared-mcp-install-state.cjs');
 const { FIDELITY_CHECKPOINTS } = require('./unity-intel/core-gameplay-scope.cjs');
 const {
   PHYSICS_BACKENDS,
@@ -90,6 +91,8 @@ Options:
   --no-cache             Re-scan Unity records without reading/writing the incremental index.
   --refresh-cache        Ignore the current index cache and replace it with fresh records.
   --bootstrap            Allow Unity-MCP package setup/reload during init.
+  --no-bootstrap         Do not install the shared-kit Unity-MCP when the manifest lacks it
+                         (init installs it by default; scaffold stays static-first).
   --force                Replace an existing manifest during init.
   --dry-run              Init without creating a directory or file.
   --write                Persist the refreshed packet when running resume.
@@ -127,6 +130,7 @@ function parseArgs(argv) {
     if (argument === '--help' || argument === '-h') { options.help = true; continue; }
     if (argument === '--json') { options.json = true; continue; }
     if (argument === '--bootstrap') { options.bootstrap = true; continue; }
+    if (argument === '--no-bootstrap') { options.noBootstrap = true; continue; }
     if (argument === '--force') { options.force = true; continue; }
     if (argument === '--dry-run') { options.dryRun = true; continue; }
     if (argument === '--write') { options.write = true; continue; }
@@ -503,10 +507,15 @@ async function initCorePort(options, dependencies = {}) {
   const runPreflight = dependencies.runPreflight || runUnityPortPreflight;
   const progress = dependencies.onProgress || (() => {});
   progress({ stage: 'preflight', status: 'start' });
+  const autoBootstrap = !options.dryRun && !dependencies.runPreflight && shouldAutoBootstrap(
+    { command: 'preflight', provider: options.provider || 'auto', bootstrap: options.bootstrap === true, noBootstrap: options.noBootstrap === true },
+    sharedUnityMcpInstallState(unityRoot),
+  );
+  if (autoBootstrap) progress({ stage: 'unity-mcp-install', status: 'start' });
   const result = await runPreflight({
     project: unityRoot,
     provider: options.provider || 'auto',
-    bootstrap: options.bootstrap === true,
+    bootstrap: options.bootstrap === true || autoBootstrap,
     sourceDispositions: options.dispositions,
     cache: options.cache !== false,
     indexCacheDir: options.cacheDir,

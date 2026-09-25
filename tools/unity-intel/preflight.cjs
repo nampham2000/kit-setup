@@ -53,6 +53,7 @@ const WORKFLOW_FILES = [
   'unity-bootstrap-footprint.cjs',
   'feature-sketch.cjs',
   'engine-feature-closure.cjs',
+  path.join('..', 'unity-cocos-port', 'animator-controller-shape.js'),
   'core-gameplay-scope.cjs',
   'compact-projection.cjs',
   path.join('..', 'lib', 'path-boundary.cjs'),
