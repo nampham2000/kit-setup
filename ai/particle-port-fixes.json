@@ -344,6 +344,34 @@
         "tools/unity-cocos-port-nested-model-axis.test.cjs"
       ],
       "acceptance": "Unity-imported vs Cocos-imported vertices of every FBX mesh in scope (fixtures/model-import-basis.json: cocos = (-x, y, z) / globalScale), exact sub-mesh per Unity mesh file ID, and upright Mesh-mode particles in preview against the Unity reference."
+    },
+    {
+      "id": "world-collision-sub-emitters",
+      "origin": "b07c2c0",
+      "applicability": "automatic",
+      "sharedPaths": [
+        "tools/unity-cocos-port/particle-collision-binding.js",
+        "tools/unity-cocos-port/runtime/UnityParticleCollision.ts",
+        "tools/unity-cocos-port/runtime/UnityParticleCollisionAdapter.ts"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/particle-collision-binding.test.cjs"
+      ],
+      "acceptance": "Per-frame particle counts of the colliding system and its Collision sub-emitters against Unity Play Mode (ReferenceCapture systems[]), with collisions landing on ported colliders in preview; Planes, 2D mode and collision messages stay high."
+    },
+    {
+      "id": "shape-radius-distribution",
+      "origin": "b07c2c0",
+      "applicability": "automatic",
+      "sharedPaths": [
+        "tools/unity-cocos-port/particle-shape-distribution-binding.js",
+        "tools/unity-cocos-port/runtime/UnityParticleShapeDistribution.ts",
+        "tools/unity-cocos-port/runtime/UnityParticleShapeDistributionAdapter.ts"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/particle-shape-distribution.test.cjs"
+      ],
+      "acceptance": "Birth radius quantiles within 0.02 of Unity for Circle, Cone Base/Volume, Sphere and Hemisphere with full and partial thickness (fixtures/shape-distribution-native.json), plus in-view camera-depth histogram of a wide emitter against Unity Play Mode."
     }
   ]
 }
