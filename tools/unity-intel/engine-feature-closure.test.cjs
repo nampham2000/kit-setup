@@ -133,3 +133,42 @@ public sealed class InputController {
   assert.equal(result.selectors.physics2dBackend, 'physics-2d-box2d');
   assert.deepEqual(result.requiredModules, ['physics-2d', 'physics-2d-box2d']);
 });
+
+test('a gameplay field named TerrainData is not Unity terrain evidence (Happy Harvest SaveSystem)', () => {
+  const save = record('Assets/Game/SaveSystem.cs', `
+public class SaveSystem {
+  [System.Serializable] public struct SceneData { public string SceneName; public TerrainDataSave TerrainData; }
+  public static void SaveSceneData() {
+    var data = new TerrainDataSave();
+    GameManager.Instance.Terrain.Save(ref data);
+    s_Lookup[name] = new SceneData() { SceneName = name, TerrainData = data };
+  }
+  public static void LoadSceneData() { GameManager.Instance.Terrain.Load(data.TerrainData); }
+}
+`);
+  const shadowed = record('Assets/Game/Shadowed.cs', `
+public class TerrainData { public int Size; }
+public class Farm { private TerrainData m_Data; void Update() { m_Data = new TerrainData(); } }
+`);
+  for (const source of [save, shadowed]) {
+    const result = closure([source], [source.assetPath]);
+    assert.equal(result.requiredModules.includes('terrain'), false, source.assetPath);
+    assert.equal(result.disabledModules.includes('terrain'), true, source.assetPath);
+  }
+});
+
+test('real UnityEngine terrain type usage still requires the Cocos terrain module', () => {
+  const cases = [
+    'public class A { void Update() { TerrainData data = GetComponent<Terrain>().terrainData; data.size = Vector3.one; } }',
+    'public class B { void Update() { var c = GetComponent<TerrainCollider>(); c.enabled = true; } }',
+    'public class C { void Update() { var d = new TerrainData(); } }',
+    'public class D { void Update() { var t = typeof(UnityEngine.TerrainData); } }',
+  ];
+  cases.forEach((text, index) => {
+    const source = record(`Assets/Game/Terrain${index}.cs`, text);
+    const result = closure([source], [source.assetPath]);
+    assert.equal(result.requiredModules.includes('terrain'), true, text);
+  });
+  const scene = record('Assets/Game/World.unity', '--- !u!218 &1\nTerrain:\n  m_TerrainData: {fileID: 1}\n');
+  assert.equal(closure([scene], [scene.assetPath]).requiredModules.includes('terrain'), true);
+});

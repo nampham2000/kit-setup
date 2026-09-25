@@ -167,6 +167,37 @@ function hasActiveBuiltinPrimitiveMesh(text) {
 }
 
 /**
+ * C# evidence for Unity's terrain types must be a *type* usage. A gameplay field
+ * or member that merely shares the name (`public TerrainDataSave TerrainData;`,
+ * `data.TerrainData`) is not terrain evidence, and a project type that declares
+ * its own `TerrainData` shadows UnityEngine.TerrainData inside that file.
+ */
+function referencesUnityTerrainType(runtimeText, declarationText) {
+  const source = String(runtimeText || '');
+  const declarations = maskCommentsAndStrings(declarationText == null ? source : declarationText);
+  const shadowed = new Set();
+  for (const match of declarations.matchAll(/\b(?:class|struct|interface|enum|record)\s+(TerrainData|TerrainCollider)\b/g)) {
+    shadowed.add(match[1]);
+  }
+  const names = ['TerrainData', 'TerrainCollider'].filter(name => !shadowed.has(name));
+  if (!names.length) return false;
+  const type = `(?:${names.join('|')})`;
+  const patterns = [
+    // Fully-qualified reference.
+    new RegExp(`\\bUnityEngine\\s*\\.\\s*${type}\\b`),
+    // Declaration: `TerrainData foo;`, `TerrainData[] foo =`, `TerrainCollider? c)`.
+    new RegExp(`(?<![.\\w])${type}(?:\\s*\\[\\s*\\]|\\s*\\?)?\\s+@?[A-Za-z_]\\w*\\s*(?:[;=,){]|=>)`),
+    // Construction, generic argument, typeof, pattern and cast usages.
+    new RegExp(`\\bnew\\s+${type}\\s*[({]`),
+    new RegExp(`<\\s*${type}\\s*(?:\\[\\s*\\])?\\s*>`),
+    new RegExp(`\\btypeof\\s*\\(\\s*${type}\\s*\\)`),
+    new RegExp(`\\b(?:is|as)\\s+${type}\\b`),
+    new RegExp(`\\(\\s*${type}\\s*\\)\\s*[A-Za-z_(]`),
+  ];
+  return patterns.some(pattern => pattern.test(source));
+}
+
+/**
  * Extract only bounded, decision-changing engine feature facts. Raw Unity text
  * never leaves the static index record, so the preflight projection stays
  * portable and cannot become a source dump.
@@ -220,7 +251,7 @@ function detectUnityEngineFeatureEvidence(input = {}) {
     addMarker(markers, 'debug-renderer', 'unity-runtime-debug-draw');
   }
   if (/(?:^|\n)(?:Terrain|TerrainCollider):/m.test(text) ||
-      /\b(?:TerrainData|TerrainCollider)\b/.test(runtimeText)) {
+      (extension === '.cs' ? referencesUnityTerrainType(runtimeText, text) : /\b(?:TerrainData|TerrainCollider)\b/.test(runtimeText))) {
     addMarker(markers, 'terrain', 'unity-terrain-runtime');
   }
   if (/(?:^|\n)(?:LightProbeGroup|LightProbeProxyVolume):/m.test(text) ||
