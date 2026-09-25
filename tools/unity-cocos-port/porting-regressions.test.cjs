@@ -340,3 +340,35 @@ Transform:
   const rootActive=objects.find(o=>o.__type__==='CCPropertyOverrideInfo'&&objects[o.targetInfo.__id__].localID.includes('node-avatar-2')&&o.propertyPath[0]==='_active');
   assert.equal(rootActive?.value,true,'a child active override must not disable its parent');
 });
+
+// Tanks! debris mesh particles reuse the URP/Lit TankGrey material of the tank wheels. The particle
+// approximation must land beside the mesh material instead of overwriting TankGrey.mtl.
+test('particle conversion of a mesh-shader material does not overwrite the mesh material path', () => {
+  const dir = path.join(temp, 'shared-mesh-material');
+  fs.mkdirSync(dir, { recursive: true });
+  const shader = path.join(dir, 'Lit.shader');
+  fs.writeFileSync(shader, 'Shader "Universal Render Pipeline/Lit"\n{\n}\n');
+  const litGuid = '933532a4fcc9baf4fa0491de14d08ed7';
+  const make = (name, shaderLine) => {
+    const file = path.join(dir, `${name}.mat`);
+    fs.writeFileSync(file, `%YAML 1.1\n--- !u!21 &2100000\nMaterial:\n  m_Name: ${name}\n  ${shaderLine}\n  m_TexEnvs: []\n`);
+    return file;
+  };
+  const litMat = make('TankGrey', `m_Shader: {fileID: 4800000, guid: ${litGuid}, type: 3}`);
+  const particleMat = make('Smoke', 'm_Shader: {fileID: 200, guid: 0000000000000000f000000000000000, type: 0}');
+  const porter = createMaterialPorter({
+    parseUnityScalar: yaml.parseScalar,
+    parseUnityYaml: file => [{ classId: 21, lines: fs.readFileSync(file, 'utf8').split(/\r?\n/) }],
+    getField: (doc, key, fallback) => { const line = doc.lines.find(l => l.trim().startsWith(key + ':')); return line ? yaml.parseScalar(line.slice(line.indexOf(':') + 1)) : fallback; },
+    getIndentedBlock: () => [],
+    unityRefGuid: r => r?.guid || '',
+    importedUnityAssetPath: asset => path.join(dir, 'assets', path.basename(asset.path)),
+    ensureDirectoryMetas: () => {}, ensureMaterialAssetMeta: () => null,
+  });
+  const unityDb = new Map([[litGuid, { path: shader, relativePath: 'Packages/urp/Lit.shader', ext: '.shader', guid: litGuid }]]);
+  const lit = porter.convertUnityParticleMaterialToCocos({ path: litMat, relativePath: 'TankGrey.mat', stem: 'TankGrey' }, { cocosRoot: dir }, unityDb, reports());
+  const smoke = porter.convertUnityParticleMaterialToCocos({ path: particleMat, relativePath: 'Smoke.mat', stem: 'Smoke' }, { cocosRoot: dir }, unityDb, reports());
+  assert.match(lit.file, /TankGrey\.particle\.mtl$/);
+  assert.match(smoke.file, /Smoke\.mtl$/);
+  assert.doesNotMatch(smoke.file, /\.particle\.mtl$/);
+});

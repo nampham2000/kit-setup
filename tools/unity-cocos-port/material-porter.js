@@ -239,6 +239,15 @@ module.exports = function createMaterialPorter(deps) {
     return importedPath ? importedPath.replace(/\.mat$/i, '.sprite.mtl') : '';
   }
 
+  // Unity built-in shaders (guid 0000000000000000f000000000000000) used by ParticleSystemRenderers are the
+  // legacy Particles/* family; project/package shaders are particle shaders when their name says so.
+  function isUnityParticleShader(shaderGuid, shaderName) {
+    if (!shaderGuid || shaderGuid === UNITY_BUILTIN_SHADER_GUID) return true;
+    return /particle/i.test(String(shaderName || ''))
+      || TCP2_HYBRID_SHADER_2_GUIDS.has(shaderGuid)
+      || /(?:Toony Colors Pro 2|TCP2).*Hybrid Shader 2/i.test(String(shaderName || ''));
+  }
+
   function legacyUnityParticleMaterialAssetPath(materialAsset, options) {
     const importedPath = importedUnityAssetPath(materialAsset, options);
     return importedPath ? importedPath.replace(/\.mat$/i, '.particle.mtl') : '';
@@ -770,13 +779,6 @@ module.exports = function createMaterialPorter(deps) {
       return null;
     }
 
-    let convertedDest = convertedUnityParticleMaterialAssetPath(materialAsset, options);
-    if (convertedDest && spriteTextureAsset) convertedDest = convertedDest.replace(/\.mtl$/i, `_sprite-${spriteTextureAsset.guid}.mtl`);
-    if (convertedDest && materialUsage === 'trail') convertedDest = convertedDest.replace(/\.mtl$/i, '.trail.mtl');
-    if (!convertedDest) return null;
-    const sourceAdapter = materialUsage === 'particle' && rendererContract?.requiresMaterialAdapter;
-    if (sourceAdapter) convertedDest = convertedDest.replace(/\.mtl$/i, `.renderer-${rendererContract.mode}-${rendererContract.sourceRendererPivot.join('_')}.mtl`);
-
     const particleShaderRef = getField(materialDoc, 'm_Shader', null);
     const particleShaderGuid = unityRefGuid(particleShaderRef);
     const particleShaderAsset = particleShaderGuid
@@ -785,6 +787,19 @@ module.exports = function createMaterialPorter(deps) {
     const particleShaderName = readUnityShaderName(particleShaderAsset)
       || particleShaderAsset?.relativePath
       || particleShaderGuid;
+    const particleOnlyShader = isUnityParticleShader(particleShaderGuid, particleShaderName);
+
+    // A particle-only material (particle shader) owns the plain .mtl path. A material whose shader is a
+    // mesh/surface shader (e.g. URP/Lit on Tanks! debris mesh particles) is also used by MeshRenderers,
+    // so its particle approximation must not overwrite the mesh material converted to the same .mtl.
+    let convertedDest = particleOnlyShader
+      ? convertedUnityParticleMaterialAssetPath(materialAsset, options)
+      : legacyUnityParticleMaterialAssetPath(materialAsset, options);
+    if (convertedDest && spriteTextureAsset) convertedDest = convertedDest.replace(/\.mtl$/i, `_sprite-${spriteTextureAsset.guid}.mtl`);
+    if (convertedDest && materialUsage === 'trail') convertedDest = convertedDest.replace(/\.mtl$/i, '.trail.mtl');
+    if (!convertedDest) return null;
+    const sourceAdapter = materialUsage === 'particle' && rendererContract?.requiresMaterialAdapter;
+    if (sourceAdapter) convertedDest = convertedDest.replace(/\.mtl$/i, `.renderer-${rendererContract.mode}-${rendererContract.sourceRendererPivot.join('_')}.mtl`);
     const tcp2ParticleMaterial = TCP2_HYBRID_SHADER_2_GUIDS.has(particleShaderGuid)
       || /(?:Toony Colors Pro 2|TCP2).*Hybrid Shader 2/i.test(particleShaderName);
     const tcp2ParticleEffectUuid = tcp2ParticleMaterial
@@ -942,7 +957,7 @@ module.exports = function createMaterialPorter(deps) {
     syncImportedMaterialLibraryCache(materialData, meta, options);
 
     const legacyDest = legacyUnityParticleMaterialAssetPath(materialAsset, options);
-    if (!sourceAdapter && !spriteTextureAsset && legacyDest && legacyDest !== convertedDest && fs.existsSync(legacyDest)) {
+    if (!sourceAdapter && !spriteTextureAsset && particleOnlyShader && legacyDest && legacyDest !== convertedDest && fs.existsSync(legacyDest)) {
       const legacyData = readJsonIfExists(legacyDest);
       if (legacyData?.__type__ === 'cc.Material' && legacyData?._effectAsset?.__uuid__ === BUILTIN_PARTICLE_EFFECT_UUID) {
         fs.unlinkSync(legacyDest);
