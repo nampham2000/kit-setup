@@ -1,0 +1,104 @@
+{
+ "description": "Unity 6000.3.1f1 and Cocos Creator 3.8.8 split the same FBX meshes (ARPG Effects) by material differently. trianglesByIndex: triangles per FBX material index; materialByIndex: the material object (name@id) behind each index (connection order); firstUseMaterials: distinct material objects in first-use polygon order. Cocos emits one primitive per used index, ascending (cocosPrimitiveTriangles); Unity one sub-mesh per distinct material object in first-use order (unitySubmeshTriangles, captured from the imported meshes).",
+ "meshes": [
+  {
+   "fbx": "Assets/ARPG Effects/Demo/Models/RPGFXChest.FBX",
+   "model": "Cylinder001",
+   "materialByIndex": [
+    "01 - Default@538510000",
+    "02 - Default@538512880"
+   ],
+   "trianglesByIndex": [
+    142,
+    1858
+   ],
+   "firstUseMaterials": [
+    "02 - Default@538512880",
+    "01 - Default@538510000"
+   ],
+   "unitySubmeshTriangles": [
+    1858,
+    142
+   ],
+   "cocosPrimitiveTriangles": [
+    142,
+    1858
+   ]
+  },
+  {
+   "fbx": "Assets/ARPG Effects/Demo/Models/RPGFXChest.FBX",
+   "model": "Object001",
+   "materialByIndex": [
+    "01 - Default@538510000",
+    "02 - Default@538512880"
+   ],
+   "trianglesByIndex": [
+    92,
+    756
+   ],
+   "firstUseMaterials": [
+    "02 - Default@538512880",
+    "01 - Default@538510000"
+   ],
+   "unitySubmeshTriangles": [
+    756,
+    92
+   ],
+   "cocosPrimitiveTriangles": [
+    92,
+    756
+   ]
+  },
+  {
+   "fbx": "Assets/ARPG Effects/Demo/Models/RPGFXCampfire.FBX",
+   "model": "RPGFXCampfire",
+   "materialByIndex": [
+    "Material #137@538361264",
+    "Material #137@538361264",
+    "Material #137@538361264",
+    "Material #137@538361264",
+    "Material #137@538361264",
+    "Material #138@538363184",
+    "Material #138@538363184",
+    "Material #138@538363184",
+    "Material #138@538363184",
+    "Material #138@538363184",
+    "Material #138@538363184"
+   ],
+   "trianglesByIndex": [
+    35,
+    35,
+    70,
+    12,
+    12,
+    448,
+    448,
+    448,
+    448,
+    448,
+    448
+   ],
+   "firstUseMaterials": [
+    "Material #137@538361264",
+    "Material #138@538363184"
+   ],
+   "unitySubmeshTriangles": [
+    164,
+    2688
+   ],
+   "cocosPrimitiveTriangles": [
+    35,
+    35,
+    70,
+    12,
+    12,
+    448,
+    448,
+    448,
+    448,
+    448,
+    448
+   ]
+  }
+ ]
+}

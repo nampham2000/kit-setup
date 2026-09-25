@@ -1,6 +1,8 @@
 'use strict';
 const { particleRendererContract } = require('./particle-renderer-contract');
 const { unityMaterialRenderQueue } = require('./particle-sorting-binding');
+const { unityModelMeshName } = require('./model-import-basis');
+const { requestModelMeshBasis } = require('./model-mesh-basis-binding');
 
 const {
   applyParticleRendererMesh,
@@ -70,7 +72,9 @@ module.exports = function createParticlePorter(deps = {}) {
     const meshAsset = unityRefGuid && unityDb?.get ? unityDb.get(unityRefGuid(meshRef)) : null;
     if (!meshAsset) return { meshUuid: '', pendingImport: false, meshAsset: null };
 
-    const meshNameHint = meshAsset.stem || gameObject?.name || '';
+    // A multi-mesh FBX is addressed by mesh file ID, not by the file stem.
+    const meshNameHint = unityModelMeshName(meshAsset, unityRefFileId ? unityRefFileId(meshRef) : meshRef.fileID)
+      || meshAsset.stem || gameObject?.name || '';
     const resolved = cocosDb?.resolveModelMeshByStem
       ? cocosDb.resolveModelMeshByStem(meshAsset.stem, meshNameHint, meshAsset.ext === '.asset' ? '.fbx' : meshAsset.ext)
       : null;
@@ -116,6 +120,7 @@ module.exports = function createParticlePorter(deps = {}) {
       const meshRef = firstRendererMeshRef(rendererDoc);
       const mesh = resolveParticleRendererMesh(meshRef, gameObject, componentId, reporter, options, unityDb, cocosDb);
       if (mesh.meshUuid && applyParticleRendererMesh(builder, particleId, mesh.meshUuid)) {
+        if (mesh.meshAsset) requestModelMeshBasis(builder, reporter, options, nodeId, particleId, mesh.meshAsset, gameObject?.name || '');
         reporter.low(
           'PARTICLE_MESH_RESOLVED',
           mesh.source || mesh.meshAsset?.relativePath || '',

@@ -52,6 +52,7 @@ module.exports = function createAnimationPorter(deps) {
     unityRefGuid,
     unityRefFileId,
     ensureDirectoryMetas,
+    getNestedList,
     resolveUnitySpriteFrame,
   } = deps;
 
@@ -136,9 +137,10 @@ module.exports = function createAnimationPorter(deps) {
     const entries = [];
     for (const entryLines of splitUnityListEntries(getIndentedBlock(doc, key))) {
       const pathValue = String(readUnityFieldFromLines(entryLines, 'path', ''));
+      const rotationOrder = Number(readUnityFieldFromLines(entryLines, 'm_RotationOrder', 4));
       const keyframes = parseUnityCurveKeyframes(entryLines)
         .filter((keyframe) => keyframe.value && typeof keyframe.value === 'object');
-      if (keyframes.length) entries.push({ path: pathValue, keyframes });
+      if (keyframes.length) entries.push({ path: pathValue, rotationOrder, keyframes });
     }
     return entries;
   }
@@ -223,13 +225,26 @@ module.exports = function createAnimationPorter(deps) {
     return { __type__: 'cc.animation.TrackPath', _paths: paths };
   }
 
+  // The porter reflects Unity transforms through Z (quaternion (-x, -y, z, w)).
+  // A reflection through the XY plane negates rotations about X and Y and keeps
+  // rotations about Z, so each Euler angle maps to (-x, -y, z).
   function convertUnityAnimationVectorValue(property, value) {
     const x = finiteNumber(value?.x);
     const y = finiteNumber(value?.y);
     const z = finiteNumber(value?.z);
     if (property === 'position') return { x, y, z: -z };
-    if (property === 'eulerAngles') return { x: -x, y, z };
+    if (property === 'eulerAngles') return { x: -x, y: -y, z };
     return { x, y, z };
+  }
+
+  // Unity m_EulerCurves use m_RotationOrder (4 = ZXY: R = Ry * Rx * Rz); a Cocos
+  // eulerAngles track goes through Quat.fromEuler (YZX: R = Ry * Rz * Rx). The two
+  // compose identically only while X stays 0 (R = Ry * Rz) or Y and Z stay 0.
+  function eulerTrackOrderCompatible(entry) {
+    const order = Number(entry.rotationOrder ?? 4);
+    const still = (axis) => entry.keyframes.every((keyframe) => ['value', 'inSlope', 'outSlope']
+      .every((key) => Math.abs(curveChannelNumber(keyframe[key], axis, 0)) < 1e-6));
+    return order === 4 && (still('x') || (still('y') && still('z')));
   }
 
   function mapUnityVectorKeyframes(property, keyframes) {
@@ -608,11 +623,21 @@ module.exports = function createAnimationPorter(deps) {
     const sample = Number(getField(doc, 'm_SampleRate', 60) || 60);
     const stopTime = Number(unityClipSettingsValue(doc, 'm_StopTime', 0) || 0);
     const loopTime = Number(unityClipSettingsValue(doc, 'm_LoopTime', 0) || 0);
+    // A legacy clip (Animation component) carries its own WrapMode:
+    // Once 1, Loop 2, PingPong 4, ClampForever 8 -> Cocos Normal 1, Loop 2, PingPong 22.
+    const legacyWrap = Number(getField(doc, 'm_Legacy', 0) || 0) ? Number(getField(doc, 'm_WrapMode', 0) || 0) : 0;
+    const wrapMode = legacyWrap === 4 ? 22 : (loopTime || legacyWrap === 2 ? 2 : 1);
     const tracks = [];
 
     for (const entry of parseUnityVectorCurveEntries(doc, 'm_PositionCurves')) tracks.push(cocosVectorTrack(entry.path, 'position', entry.keyframes));
     for (const entry of parseUnityVectorCurveEntries(doc, 'm_ScaleCurves')) tracks.push(cocosVectorTrack(entry.path, 'scale', entry.keyframes));
-    for (const entry of parseUnityVectorCurveEntries(doc, 'm_EulerCurves')) tracks.push(cocosVectorTrack(entry.path, 'eulerAngles', entry.keyframes));
+    for (const entry of parseUnityVectorCurveEntries(doc, 'm_EulerCurves')) {
+      if (!eulerTrackOrderCompatible(entry)) {
+        reporter.high('ANIMATION_EULER_ORDER_UNSUPPORTED', file, entry.path || '<root>',
+          `Unity Euler curve (rotation order ${entry.rotationOrder}) rotates about X together with Y/Z; a Cocos eulerAngles track (YZX) cannot reproduce it without baking a quaternion track`);
+      }
+      tracks.push(cocosVectorTrack(entry.path, 'eulerAngles', entry.keyframes));
+    }
 
     for (const lines of splitUnityListEntries(getIndentedBlock(doc, 'm_PPtrCurves'))) {
       const attribute = String(readUnityFieldFromLines(lines, 'attribute', ''));
@@ -712,7 +737,7 @@ module.exports = function createAnimationPorter(deps) {
       _native: '',
       sample,
       speed: 1,
-      wrapMode: loopTime ? 2 : 1,
+      wrapMode,
       enableTrsBlending: false,
       _duration: duration,
       _hash: 0,
@@ -1345,6 +1370,53 @@ module.exports = function createAnimationPorter(deps) {
     builder.addAnimationController(nodeId, componentId, graphUuid, `cmp-animation-controller-${componentId}`);
   }
 
+  // Unity legacy Animation (class 111): m_Animations lists the clips, m_Animation is
+  // the default one and m_PlayAutomatically plays it when the object is enabled.
+  // cc.Animation with the converted clips, default clip and playOnLoad does the same.
+  function emitLegacyAnimation(nodeId, componentId, doc, builder, reporter, options, unityDb, cocosDb, gameObject = null, model = null) {
+    const name = gameObject?.name || '';
+    const defaultGuid = unityRefGuid(getField(doc, 'm_Animation'));
+    const guids = [...new Set([defaultGuid, ...getNestedList(doc, 'm_Animations').map(unityRefGuid)].filter(Boolean))];
+    const animationContext = buildAnimationRectLayoutContext(model, gameObject, builder);
+    const clipInfos = [];
+    let defaultClipInfo = null;
+    for (const guid of guids) {
+      const clipAsset = unityDb.get(guid);
+      if (!clipAsset?.path || clipAsset.ext !== '.anim' || !fs.existsSync(clipAsset.path)) {
+        reporter.high('LEGACY_ANIMATION_CLIP_UNRESOLVED', model?.file || '', name,
+          `Legacy Animation clip ${guid} is not a readable .anim asset; its motion is lost`);
+        continue;
+      }
+      const outDir = animationOutputDirForController(options, clipAsset);
+      if (!options.dryRun) {
+        ensureDir(outDir);
+        ensureDirectoryMetas(outDir, path.join(options.cocosRoot, 'assets'));
+      }
+      const clipInfo = writeConvertedAnimationClip(clipAsset, outDir, options, reporter, animationContext);
+      if (!clipInfo?.uuid) continue;
+      clipInfos.push(clipInfo);
+      if (guid === defaultGuid) defaultClipInfo = clipInfo;
+    }
+    if (!clipInfos.length) {
+      if (guids.length) reporter.high('LEGACY_ANIMATION_UNPORTED', model?.file || '', name, 'Legacy Animation has no convertible clip; its motion is lost');
+      return null;
+    }
+    const wrap = Number(getField(doc, 'm_WrapMode', 0) || 0);
+    if (wrap) {
+      reporter.medium('LEGACY_ANIMATION_WRAP_OVERRIDE', model?.file || '', name,
+        `Animation.wrapMode ${wrap} overrides every clip's own WrapMode in Unity; cc.Animation keeps each clip's wrapMode`);
+    }
+    const id = builder.addAnimation(nodeId, clipInfos, defaultClipInfo || clipInfos[0], `cmp-legacy-animation-${componentId}`);
+    const component = Number.isInteger(id) ? builder.objects[id] : null;
+    if (component) {
+      component.playOnLoad = Number(getField(doc, 'm_PlayAutomatically', 1) || 0) !== 0;
+      component._enabled = Number(getField(doc, 'm_Enabled', 1) || 0) !== 0;
+    }
+    reporter.low('LEGACY_ANIMATION_PORTED', model?.file || '', name,
+      `Unity legacy Animation ported as cc.Animation with ${clipInfos.length} clip(s), playOnLoad=${component?.playOnLoad}`);
+    return id;
+  }
+
   return {
     parseUnityAnimationClip,
     ensureAnimationClipMeta,
@@ -1355,6 +1427,7 @@ module.exports = function createAnimationPorter(deps) {
     buildCocosAnimationGraph,
     convertAnimatorControllerAsset,
     emitAnimator,
+    emitLegacyAnimation,
   };
 };
 
