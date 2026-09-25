@@ -142,6 +142,54 @@
       "sharedPaths": ["tools/unity-cocos-port/runtime/UnityParticleDeathBurst.ts"],
       "testPaths": ["tools/unity-cocos-port/particle-death-burst.test.cjs"],
       "acceptance": "Capture last integration step, exact death count/position and sub-emitter ordering before installing the shared terminal-step burst."
+    },
+    {
+      "id": "unity-particle-material-semantics",
+      "origin": "b8e3eb0",
+      "applicability": "automatic",
+      "sharedPaths": ["tools/unity-cocos-port/unity-particle-material.js", "tools/unity-cocos-port/unity-particle.effect"],
+      "testPaths": ["tools/unity-cocos-port/unity-particle-material.test.cjs"],
+      "acceptance": "Unity oracle fragment samples within 2/255 and per-effect foreground colour inside the Unity seed range (vertex-colour colour space, premultiply, lit particles)."
+    },
+    {
+      "id": "edge-shape-flattened-box",
+      "origin": "dc04664",
+      "applicability": "automatic",
+      "sharedPaths": ["tools/unity-cocos-port/particle-system-converter.js", "tools/unity-cocos-port/particle-shape-rotation.js"],
+      "testPaths": ["tools/unity-cocos-port/particle-edge-shape.test.cjs", "tools/unity-cocos-port/particle-shape-rotation.test.cjs"],
+      "acceptance": "Per-particle Unity dump of a moving single-sided Edge emitter: spread along shape X within +/-radius and start velocity along shape +Y."
+    },
+    {
+      "id": "rate-over-distance-subframe",
+      "origin": "dc04664",
+      "applicability": "automatic",
+      "sharedPaths": ["tools/unity-cocos-port/runtime/UnityParticleRateOverDistanceEmitter.ts"],
+      "testPaths": ["tools/unity-cocos-port/porting-regressions.test.cjs"],
+      "acceptance": "Moving emitter at constant speed: particle count, ages (1/(rate*speed) steps) and path positions equal a Unity per-frame Simulate dump."
+    },
+    {
+      "id": "module-space-refresh",
+      "origin": "dc04664",
+      "applicability": "automatic",
+      "sharedPaths": ["tools/unity-cocos-port/runtime/UnityParticleModuleSpace.ts", "tools/unity-cocos-port/runtime-component-porter.js"],
+      "testPaths": ["tools/unity-cocos-port/runtime-component-porter.test.cjs"],
+      "acceptance": "Local-space velocity over lifetime inside a world-space system drifts along the rotated emitter axis in per-particle positions compared with Unity."
+    },
+    {
+      "id": "sub-emitter-birth-timeline",
+      "origin": "dc04664",
+      "applicability": "conditional",
+      "sharedPaths": ["tools/unity-cocos-port/runtime/UnityParticleSubEmitterFollower.ts", "tools/unity-cocos-port/runtime-component-porter.js"],
+      "testPaths": ["tools/unity-cocos-port/runtime-component-porter.test.cjs"],
+      "acceptance": "Per-system counts and sub-emitter particle centroid/spread match a Unity seeded capture; the FromTo(parent forward, velocity) alignment is only validated within 20 deg (porter flags larger offsets)."
+    },
+    {
+      "id": "procedural-bounds-depth-sort",
+      "origin": "b8e3eb0,dc04664",
+      "applicability": "automatic",
+      "sharedPaths": ["tools/unity-cocos-port/runtime/UnityParticleDepthSort.ts", "tools/unity-cocos-port/runtime-component-porter.js"],
+      "testPaths": ["tools/unity-cocos-port/runtime-component-porter.test.cjs"],
+      "acceptance": "Multi-system draw order matches Unity across seeds: held-frame core-box luminance inside the Unity seed range (procedural systems sort by analytic bounds)."
     }
   ]
 }
