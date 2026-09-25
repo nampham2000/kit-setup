@@ -6,7 +6,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const binarySerializedFile = require('./lib/unity-serialized-file.cjs');
 const { createPathBoundary, inspectContainedPath } = require('./lib/path-boundary.cjs');
-const { assertUnityPortPreflight } = require('./unity-intel/preflight.cjs');
+const { assertUnityPortPreflight, readReceipt } = require('./unity-intel/preflight.cjs');
 const {
   ensureCocosEngineFeatures,
   createMcpClient,
@@ -1493,15 +1493,93 @@ class UnityAssetDatabase {
 // (Assets + PackageCache) each time and dominated batch port time.
 const unityAssetDatabases = new Map();
 
+// A coordinator (runShardedBatch, or a project script porting many scenes)
+// validates the preflight receipt and scans the GUID index once, then hands
+// both to its direct children. Hashing the Unity project for the receipt and
+// walking every .meta file cost minutes per process on slow project drives.
+const PARENT_PREFLIGHT_ENV = 'CC_PLAYABLE_PORT_PARENT_PREFLIGHT';
+const PARENT_GUID_INDEX_ENV = 'CC_PLAYABLE_PORT_PARENT_GUID_INDEX';
+
+function inheritedParentContext(envName) {
+  const raw = process.env[envName];
+  if (!raw) return null;
+  try {
+    const context = JSON.parse(raw);
+    // Only a direct child of the process that did the work may reuse it.
+    return context && Number(context.parentPid) === process.ppid ? context : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function loadInheritedUnityAssetDatabase(key) {
+  const context = inheritedParentContext(PARENT_GUID_INDEX_ENV);
+  if (!context || path.resolve(String(context.unityRoot || '')) !== key) return null;
+  const index = readJsonIfExists(String(context.file || ''));
+  if (!index || path.resolve(String(index.unityRoot || '')) !== key || !Array.isArray(index.records)) return null;
+  const db = new UnityAssetDatabase(key, unityPackageAssetRoots(key));
+  for (const record of index.records) db.byGuid.set(record.guid, record);
+  return db;
+}
+
 function scannedUnityAssetDatabase(unityRoot) {
   const key = path.resolve(unityRoot);
   let db = unityAssetDatabases.get(key);
   if (!db) {
-    db = new UnityAssetDatabase(key, unityPackageAssetRoots(key));
-    db.scan();
+    db = loadInheritedUnityAssetDatabase(key);
+    if (!db) {
+      db = new UnityAssetDatabase(key, unityPackageAssetRoots(key));
+      db.scan();
+    }
     unityAssetDatabases.set(key, db);
   }
   return db;
+}
+
+/**
+ * Environment for child porter processes: the validated receipt identity and
+ * a GUID index file written once. Children still re-read and check the receipt
+ * file; they only skip recomputing the Unity project state.
+ */
+function prepareUnityPortChildEnv(options, preflight) {
+  const env = {};
+  if (preflight?.receipt && preflight.projectRoot) {
+    env[PARENT_PREFLIGHT_ENV] = JSON.stringify({
+      parentPid: process.pid,
+      projectRoot: preflight.projectRoot,
+      receiptId: preflight.receipt.receiptId,
+      integrity: preflight.receipt.integrity,
+      stateFingerprint: preflight.receipt.stateFingerprint,
+    });
+  }
+  if (options.unityRoot) {
+    const unityRoot = path.resolve(options.unityRoot);
+    const db = scannedUnityAssetDatabase(unityRoot);
+    const file = path.join(require('os').tmpdir(), `cc-playable-guid-index-${process.pid}.json`);
+    fs.writeFileSync(file, JSON.stringify({ unityRoot, records: [...db.byGuid.values()] }));
+    env[PARENT_GUID_INDEX_ENV] = JSON.stringify({ parentPid: process.pid, unityRoot, file });
+  }
+  return env;
+}
+
+function cleanupUnityPortChildEnv(env) {
+  try {
+    const file = JSON.parse(env?.[PARENT_GUID_INDEX_ENV] || '{}').file;
+    if (file) fs.rmSync(file, { force: true });
+  } catch (_) { /* best effort temp cleanup */ }
+}
+
+function inheritedPreflightStillValid(options) {
+  const context = inheritedParentContext(PARENT_PREFLIGHT_ENV);
+  if (!context) return false;
+  const projectRoot = path.resolve(String(context.projectRoot || ''));
+  if (options.unityRoot && path.resolve(options.unityRoot) !== projectRoot) return false;
+  let receipt;
+  try { receipt = readReceipt(projectRoot); } catch (_) { return false; }
+  return !!receipt && receipt.receiptId === context.receiptId && receipt.integrity === context.integrity
+    && receipt.stateFingerprint === context.stateFingerprint
+    && Date.parse(receipt.expiresAt) > Date.now()
+    && !!receipt.decision?.implementationAllowed;
 }
 
 class CocosAssetDatabase {
@@ -6403,11 +6481,13 @@ async function runShardedBatch(options, plan) {
   // spawnSync sẽ chạy TUẦN TỰ (nó block tới khi con xong) nên phải dùng spawn
   // bất đồng bộ rồi chờ tất cả. Vì hàm này đồng bộ, dùng Atomics.wait để nhường
   // CPU trong lúc chờ thay vì quay vòng đốt CPU.
+  const childEnv = prepareUnityPortChildEnv(options, options._preflight);
   const running = children.map((child) => {
     const proc = spawn(process.execPath, child.args, {
       cwd: options.cocosRoot,
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
+      env: { ...process.env, ...childEnv },
     });
     const state = { done: false, status: null, stdout: '', stderr: '' };
     proc.stdout.on('data', (d) => { state.stdout += d.toString(); });
@@ -6428,6 +6508,7 @@ async function runShardedBatch(options, plan) {
   const doneSignal = waitAll();
 
   await doneSignal;
+  cleanupUnityPortChildEnv(childEnv);
 
   const totals = { high: 0, medium: 0, low: 0 };
   let failedShards = 0;
@@ -7906,8 +7987,8 @@ async function main() {
     doctor(options);
     return;
   }
-  if (!options.dryRun) {
-    assertUnityPortPreflight(options.src || options.unityRoot, {
+  if (!options.dryRun && !inheritedPreflightStillValid(options)) {
+    options._preflight = assertUnityPortPreflight(options.src || options.unityRoot, {
       projectRoot: options.unityRoot || undefined,
       requireProject: true,
     });
@@ -7963,5 +8044,9 @@ module.exports = {
   convertRotation,
   parseArgs,
   parseUnityAnimationClipForOracle,
+  prepareUnityPortChildEnv,
+  cleanupUnityPortChildEnv,
+  inheritedPreflightStillValid,
+  scannedUnityAssetDatabase,
   main,
 };
