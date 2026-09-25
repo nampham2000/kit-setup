@@ -142,6 +142,46 @@
       "sharedPaths": ["tools/unity-cocos-port/runtime/UnityParticleDeathBurst.ts"],
       "testPaths": ["tools/unity-cocos-port/particle-death-burst.test.cjs"],
       "acceptance": "Capture last integration step, exact death count/position and sub-emitter ordering before installing the shared terminal-step burst."
+    },
+    {
+      "id": "renderer-min-max-particle-size",
+      "origin": "c9f113a",
+      "applicability": "automatic",
+      "sharedPaths": ["tools/unity-cocos-port/particle-renderer-contract.js", "tools/unity-cocos-port/source-particle.effect", "tools/unity-cocos-port/legacy-preview-particle.effect", "tools/unity-cocos-port/material-porter.js"],
+      "testPaths": ["tools/unity-cocos-port/particle-size-clamp-native.test.cjs", "tools/unity-cocos-port/particle-size-clamp-material.test.cjs"],
+      "acceptance": "Native BakeMesh and URP render widths in landscape and portrait; portrait preview of a clamped effect with a tight ROI."
+    },
+    {
+      "id": "axial-billboard-corner-size",
+      "origin": "c9f113a",
+      "applicability": "automatic",
+      "sharedPaths": ["tools/unity-cocos-port/source-particle.effect", "tools/unity-cocos-port/legacy-preview-particle.effect", "tools/unity-cocos-port/particle-renderer-contract.js"],
+      "testPaths": ["tools/unity-cocos-port/particle-axial-billboard-native.test.cjs"],
+      "acceptance": "Native Horizontal/Vertical BakeMesh extents and the projected ground-ring bbox at two preview times."
+    },
+    {
+      "id": "burst-spread-arc-distribution",
+      "origin": "c9f113a",
+      "applicability": "automatic",
+      "sharedPaths": ["tools/unity-cocos-port/particle-burst-spread-binding.js", "tools/unity-cocos-port/runtime/UnityParticleBurstEmission.ts", "tools/unity-cocos-port/runtime/UnityParticleBurstSpreadAdapter.ts"],
+      "testPaths": ["tools/unity-cocos-port/particle-burst-spread-binding.test.cjs"],
+      "acceptance": "Unity burst positions for open/closed arcs with replay, and angular occupancy of a real burst in preview."
+    },
+    {
+      "id": "limit-velocity-dampen",
+      "origin": "c9f113a",
+      "applicability": "automatic",
+      "sharedPaths": ["tools/unity-cocos-port/particle-limit-velocity-binding.js", "tools/unity-cocos-port/runtime/UnityParticleLimitVelocity.ts", "tools/unity-cocos-port/runtime/UnityParticleLimitVelocityAdapter.ts"],
+      "testPaths": ["tools/unity-cocos-port/particle-limit-velocity.test.cjs"],
+      "acceptance": "Native speed sequences at 60 and 30 fps (magnitude, zero limit, separate axes) and radial spread of damped bursts in preview."
+    },
+    {
+      "id": "prewarm-steady-state",
+      "origin": "c9f113a",
+      "applicability": "automatic",
+      "sharedPaths": ["tools/unity-cocos-port/particle-prewarm-binding.js", "tools/unity-cocos-port/runtime/UnityParticlePrewarm.ts", "tools/unity-cocos-port/runtime/UnityParticlePrewarmAdapter.ts"],
+      "testPaths": ["tools/unity-cocos-port/particle-prewarm.test.cjs"],
+      "acceptance": "Native prewarmed particle ages at start and after the first frame for short and long cycles, and first-frame particle counts in preview."
     }
   ]
 }
