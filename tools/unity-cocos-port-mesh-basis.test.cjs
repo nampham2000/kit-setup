@@ -85,3 +85,36 @@ test('the basis child is a 180-degree Y turn with identity position/scale under 
   assert.deepEqual(builder.objects[shape]._lpos, { __type__: 'cc.Vec3', x: 0.16, y: 0, z: 5 });
   assert.deepEqual(builder.objects[shape]._children.map(child => child.__id__), [screw, basis]);
 });
+
+test('the basis child carries the Unity ModelImporter scale factor baked into Unity mesh data', () => {
+  // pack_tray_lid_new (1).fbx: ModelImporter meshes.globalScale 2.5 (Unity box bounds x[-3.03, 3.03]).
+  const builder = new CocosPrefabBuilder('BaseBox', null, { low() {}, medium() {}, high() {} }, {});
+  const root = builder.addNode('BaseBox', null, { localPosition: { x: 0, y: 0, z: 0 } }, 1073741824, true, 'root');
+  const scaled = builder.objects[builder.addMeshBasisNode(root, 'box', 2.5)];
+  assert.deepEqual([scaled._lscale.x, scaled._lscale.y, scaled._lscale.z], [2.5, 2.5, 2.5]);
+  const unit = builder.objects[builder.addMeshBasisNode(root, 'lid')];
+  assert.deepEqual([unit._lscale.x, unit._lscale.y, unit._lscale.z], [1, 1, 1]);
+  const invalid = builder.objects[builder.addMeshBasisNode(root, 'bad', Number.NaN)];
+  assert.deepEqual([invalid._lscale.x, invalid._lscale.y, invalid._lscale.z], [1, 1, 1]);
+});
+
+test('the renderer porter passes the model import scale to the basis child', () => {
+  const calls = [];
+  const porter = createRendererPorter({
+    unityModelImportScale: asset => (asset.stem === 'pack_tray_lid_new (1)' ? 2.5 : 1),
+    resolveUnityMaterialUuids: () => [], resolveUnityMaterialUuid: () => '', resolveUnityBuiltinMeshUuid: () => '',
+    resolveBuiltinPrimitiveMeshUuid: () => '', importedUnityAssetPath: () => '', copyUnityAssetToCocos: () => '',
+    handleMissingModel: () => ({ pendingImport: false, resolved: null }), resolveLibraryAssetUuid: () => '',
+    recordPendingMeshRepair() {}, getField: (doc, key) => (key === 'm_Mesh' ? { fileID: '1', guid: 'fbx' } : null),
+    getNestedList: () => [], unityRefGuid: () => 'fbx', unityRefFileId: () => '1',
+  });
+  const builder = {
+    addMeshBasisNode(nodeId, fileId, scale) { calls.push(scale); return 5; },
+    addMeshRenderer() {},
+  };
+  const model = { file: 'BaseBox.prefab', componentDocs: new Map([['mf', { classId: 33 }]]) };
+  porter.emitMeshRenderer({ name: 'obj_tray_color', components: ['mf'] }, 1, 'r', {}, model, builder,
+    { low() {}, medium() {}, high() {} }, {}, { get: () => ({ ext: '.fbx', stem: 'pack_tray_lid_new (1)', relativePath: 'Box.fbx' }) },
+    { resolveModelMeshByStem: () => ({ meshUuid: 'box-mesh' }), resolveModelMaterialUuidsByStem: () => null });
+  assert.deepEqual(calls, [2.5]);
+});

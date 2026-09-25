@@ -76,6 +76,15 @@ module.exports = function createRendererPorter(deps) {
 
   function emitSyntheticModelRenderer(gameObject, nodeId, builder, reporter, options, unityDb, cocosDb) {
     const modelAsset = gameObject.syntheticModelAsset;
+    const importScale = typeof deps.unityModelImportScale === 'function' ? deps.unityModelImportScale(modelAsset) : 1;
+    if (importScale !== 1) {
+      reporter.medium(
+        'MODEL_IMPORT_SCALE_UNPORTED',
+        modelAsset?.relativePath || '',
+        gameObject.name,
+        `Unity ModelImporter scale factor ${importScale} is baked into Unity's mesh data but not into the Cocos import; verify this model's size`,
+      );
+    }
     const meshNameHint = gameObject.syntheticModelName || gameObject.name;
     const componentId = `synthetic-model-${modelAsset.guid || modelAsset.uuid || gameObject.fileId}`;
     const componentFileId = `cmp-model-${sanitizeFileId(gameObject.name)}`;
@@ -244,12 +253,14 @@ module.exports = function createRendererPorter(deps) {
       && MODEL_FILE_EXTENSIONS.has(String(meshAsset.ext || '').toLowerCase())
       && (meshUuid || meshPendingImport));
     if (modelFileMesh && typeof builder.addMeshBasisNode === 'function') {
-      rendererNodeId = builder.addMeshBasisNode(nodeId, componentFileId);
+      // Unity bakes ModelImporter.globalScale into the mesh data; the Cocos import does not.
+      const importScale = typeof deps.unityModelImportScale === 'function' ? deps.unityModelImportScale(meshAsset) : 1;
+      rendererNodeId = builder.addMeshBasisNode(nodeId, componentFileId, importScale);
       reporter.low(
         'MODEL_MESH_FORWARD_AXIS_CORRECTED',
         meshAsset.relativePath,
         gameObject.name,
-        'FBX mesh referenced by a MeshFilter was placed on a Unity-to-Cocos basis child (180 degrees about Y)',
+        `FBX mesh referenced by a MeshFilter was placed on a Unity-to-Cocos basis child (180 degrees about Y, import scale ${importScale})`,
       );
     }
     builder.addMeshRenderer(rendererNodeId, componentId, meshUuid, materialUuids, componentFileId, {

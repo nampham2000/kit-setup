@@ -168,10 +168,31 @@ const {
   resolveLibraryAssetUuid,
 });
 
+// Unity ModelImporter "Scale Factor" (meshes.globalScale) is baked into Unity's mesh data but not into
+// the Cocos FBX import (file-unit conversion is handled by both importers). Returns 1 when unknown.
+const unityModelImportScaleCache = new Map();
+function unityModelImportScale(modelAsset) {
+  const file = modelAsset?.path ? `${modelAsset.path}.meta` : '';
+  if (!file) return 1;
+  if (!unityModelImportScaleCache.has(file)) {
+    let scale = 1;
+    try {
+      const text = fs.readFileSync(file, 'utf8');
+      const meshes = /^\s{2}meshes:\s*$([\s\S]*?)^\s{2}\S/m.exec(text);
+      const match = /^\s+globalScale:\s*([-\d.eE]+)\s*$/m.exec(meshes ? meshes[1] : '');
+      const parsed = match ? Number(match[1]) : NaN;
+      if (Number.isFinite(parsed) && parsed > 0) scale = parsed;
+    } catch (_) { /* missing meta: keep the neutral scale */ }
+    unityModelImportScaleCache.set(file, scale);
+  }
+  return unityModelImportScaleCache.get(file);
+}
+
 const {
   emitSyntheticModelRenderer: emitSyntheticModelRendererImpl,
   emitMeshRenderer: emitMeshRendererImpl,
 } = createRendererPorter({
+  unityModelImportScale,
   resolveUnityMaterialUuids,
   resolveUnityMaterialUuid,
   resolveUnityBuiltinMeshUuid,
@@ -3884,6 +3905,27 @@ function describeNestedPrefabAsset(options, sourceAsset, unityDb, reporter, recu
   };
 }
 
+// Unity wraps long flow mappings in PrefabInstance modifications, e.g.
+//     - target: {fileID: 6808614170226160139, guid: 6d49d5e42220fa64bbf7326459e67788,
+//         type: 3}
+// (19-digit fileIDs make this the norm). Join such reference mappings back into one line before the
+// line-based parsers below match them; otherwise the whole override is silently dropped.
+const WRAPPED_REFERENCE_START = /^\s*(?:-\s+)?(?:(?:target|objectReference|addedObject)\s*:\s*)?\{[^}]*$/;
+function joinWrappedReferenceLines(lines) {
+  const joined = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    let line = String(lines[index] ?? '');
+    if (WRAPPED_REFERENCE_START.test(line)) {
+      while (!line.includes('}') && index + 1 < lines.length) {
+        index += 1;
+        line = `${line} ${String(lines[index] ?? '').trim()}`;
+      }
+    }
+    joined.push(line);
+  }
+  return joined;
+}
+
 function parsePrefabInstanceInfo(doc) {
   const info = {
     fileId: doc.fileId,
@@ -3896,7 +3938,7 @@ function parsePrefabInstanceInfo(doc) {
   };
 
   let current = null;
-  for (const line of doc.lines) {
+  for (const line of joinWrappedReferenceLines(doc.lines)) {
     const targetMatch = /^\s*-\s+target:\s*(\{.*\})\s*$/.exec(line);
     if (targetMatch) {
       const target = parseUnityScalar(targetMatch[1]);
@@ -3935,7 +3977,7 @@ function parsePrefabInstanceInfo(doc) {
 
 function parsePrefabInstanceAddedGameObjectIds(doc) {
   const result = [];
-  const lines = doc?.lines || [];
+  const lines = joinWrappedReferenceLines(doc?.lines || []);
   const start = lines.findIndex((line) => /^\s*m_AddedGameObjects:\s*$/.test(line));
   if (start < 0) return result;
   const fieldIndent = String(lines[start]).match(/^\s*/)?.[0]?.length || 0;
@@ -3954,7 +3996,7 @@ function parsePrefabInstanceAddedGameObjectIds(doc) {
 
 function parsePrefabInstanceReferenceList(doc, fieldName) {
   const result = [];
-  const lines = doc?.lines || [];
+  const lines = joinWrappedReferenceLines(doc?.lines || []);
   const start = lines.findIndex((line) => new RegExp(`^\\s*${fieldName}:\\s*$`).test(line));
   if (start < 0) return result;
   const fieldIndent = String(lines[start]).match(/^\s*/)?.[0]?.length || 0;
@@ -4842,12 +4884,14 @@ class CocosPrefabBuilder {
   // the same Unity-to-Cocos model basis as a nested model root: Unity mirrors the file's mesh data on
   // import while Cocos keeps it. The basis lives on a dedicated child that only hosts the renderer, so
   // the authored node transform seen by scripts and child nodes stays identical to Unity.
-  addMeshBasisNode(nodeId, fileId) {
+  // `importScale` is the Unity ModelImporter scale factor baked into Unity's mesh data.
+  addMeshBasisNode(nodeId, fileId, importScale = 1) {
     const parent = this.objects[nodeId];
+    const scale = Number.isFinite(importScale) && importScale > 0 ? importScale : 1;
     return this.addNode(
       MESH_BASIS_NODE_NAME,
       nodeId,
-      MESH_BASIS_TRANSFORM,
+      scale === 1 ? MESH_BASIS_TRANSFORM : { ...MESH_BASIS_TRANSFORM, localScale: { x: scale, y: scale, z: scale } },
       parent?._layer ?? 1073741824,
       true,
       `${fileId}-mesh-basis`,
@@ -6657,6 +6701,15 @@ function emitNodeRecursive(transform, parentNodeId, model, builder, layerResolve
         gameObject.name,
         'Linked model root received the Unity-to-Cocos FBX forward-axis basis; immediate mounted children are inversely rebased',
       );
+      const nestedImportScale = unityModelImportScale(gameObject.syntheticModelAsset);
+      if (nestedImportScale !== 1) {
+        reporter.medium(
+          'MODEL_IMPORT_SCALE_UNPORTED',
+          gameObject.syntheticModelAsset.relativePath,
+          gameObject.name,
+          `Unity ModelImporter scale factor ${nestedImportScale} is baked into Unity's mesh data but not into the linked Cocos model; verify this model's size`,
+        );
+      }
       for (const childId of transform.children) {
         const child = model.transforms.get(childId);
         if (!child) {
@@ -7830,6 +7883,8 @@ module.exports = {
   buildNestedPrefabPropertyOverrides,
   rebaseNestedModelMountedChildTransform,
   hasExplicitNestedModelForwardBasisRotation,
+  parsePrefabInstanceInfo,
+  parsePrefabInstanceReferenceList,
   cocosQuaternionToEuler,
   convertRotation,
   parseArgs,
