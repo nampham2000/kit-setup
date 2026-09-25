@@ -13,8 +13,15 @@ test('waits for browser shutdown and retries Windows locked files',async()=>{
   assert.equal(result.ok,true);assert.equal(attempts,3);assert.deepEqual(events.slice(0,2),['Browser.close','socket-close']);
 });
 test('reports persistent cleanup failure instead of swallowing it',async()=>{
-  const r=await closeRuntimeProfile({exitCode:0,signalCode:null},null,profile,{async lstat(){return{isSymbolicLink:()=>false}},async rm(){throw Object.assign(new Error('locked'),{code:'EPERM'})}},async()=>{});
-  assert.equal(r.ok,false);assert.equal(r.directory,profile.directory);
+  let reaps=0;
+  const r=await closeRuntimeProfile({exitCode:0,signalCode:null},null,profile,{async lstat(){return{isSymbolicLink:()=>false}},async rm(){throw Object.assign(new Error('locked'),{code:'EPERM'})}},async()=>{},()=>{reaps++;});
+  assert.equal(r.ok,false);assert.equal(r.directory,profile.directory);assert.equal(reaps,1);
+});
+test('stops only the processes of its own profile once the lock outlives the browser',async()=>{
+  let reapedDirectory=null,attempts=0;
+  const r=await closeRuntimeProfile({exitCode:0,signalCode:null},null,profile,{async lstat(){return{isSymbolicLink:()=>false}},
+    async rm(){attempts++;if(!reapedDirectory)throw Object.assign(new Error('locked'),{code:'EBUSY'})}},async()=>{},(directory)=>{reapedDirectory=directory;});
+  assert.equal(r.ok,true);assert.equal(r.reapedProcesses,true);assert.equal(reapedDirectory,profile.directory);assert.equal(attempts,4);
 });
 test('rejects paths outside owned root and redirected directories before deleting',async()=>{
   const io={async lstat(){return{isSymbolicLink:()=>true}},async rm(){throw new Error('must not run')}};
