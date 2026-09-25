@@ -25,6 +25,18 @@ test('URP Lit can replay a bounded Unity light rig and calibrated output respons
   assert.match(source, /finalColor\s*=\s*\(direct\s*\+\s*ambient\s*\+\s*emissionContribution\)\s*\*\s*unityOutputColorScale\.rgb/);
 });
 
+test('URP Lit source rig follows the material workflow like URP InitializeBRDFData', () => {
+  const source = fs.readFileSync(path.join(__dirname, 'urp-lit.effect'), 'utf8');
+  // Metallic workflow (default): _SpecColor is ignored; dielectric 0.04 lerps to albedo by metallic.
+  assert.match(source, /unityBrdfSpecular[\s\S]*#if USE_SPECULAR_WORKFLOW[\s\S]*return specularColor\.rgb;[\s\S]*#else[\s\S]*return mix\(vec3\(0\.04\), baseColor, pbrParams\.y\);/);
+  assert.match(source, /unityOneMinusReflectivity[\s\S]*#if USE_SPECULAR_WORKFLOW[\s\S]*1\.0 - max\(max\(specularColor\.r, specularColor\.g\), specularColor\.b\)[\s\S]*#else[\s\S]*0\.96 \* \(1\.0 - pbrParams\.y\)/);
+  const direct = source.slice(source.indexOf('vec3 unityDirectLight'), source.indexOf('vec3 unityTrilightAmbient'));
+  assert.match(direct, /baseColor \* unityOneMinusReflectivity\(\)/);
+  assert.match(direct, /specularTerm \* unityBrdfSpecular\(baseColor\)/);
+  assert.doesNotMatch(direct, /specularColor\.rgb/, 'a metallic material must not use its dormant _SpecColor');
+  assert.match(source, /ambient = unityTrilightAmbient\(normal\) \* baseColor\.rgb \* unityOneMinusReflectivity\(\);/);
+});
+
 test('URP Lit can preserve an HDR camera that has no Unity post-processing tone mapper', () => {
   const source = fs.readFileSync(path.join(__dirname, 'urp-lit.effect'), 'utf8');
   assert.match(source, /#if USE_UNITY_UNTONEMAPPED_OUTPUT[\s\S]*LinearToSRGB\(color\.rgb\)/);

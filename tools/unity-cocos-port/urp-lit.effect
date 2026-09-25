@@ -201,13 +201,31 @@ CCProgram urp-lit-fs %{
     return roughness2 / max((d * d) * max(0.1, loH * loH) * normalization, 0.000001);
   }
 
+  // URP InitializeBRDFData: the metallic workflow ignores _SpecColor and uses kDielectricSpec
+  // (0.04) lerped to albedo by metallic, with oneMinusReflectivity = 0.96 * (1 - metallic).
+  // Only _SPECULAR_SETUP (USE_SPECULAR_WORKFLOW) takes _SpecColor and its max channel.
+  vec3 unityBrdfSpecular (vec3 baseColor) {
+    #if USE_SPECULAR_WORKFLOW
+      return specularColor.rgb;
+    #else
+      return mix(vec3(0.04), baseColor, pbrParams.y);
+    #endif
+  }
+
+  float unityOneMinusReflectivity () {
+    #if USE_SPECULAR_WORKFLOW
+      return 1.0 - max(max(specularColor.r, specularColor.g), specularColor.b);
+    #else
+      return 0.96 * (1.0 - pbrParams.y);
+    #endif
+  }
+
   vec3 unityDirectLight (vec3 baseColor, vec3 normal, vec3 viewDirection,
     vec3 lightDirection, vec3 lightColor, float intensity) {
     float noL = max(dot(normal, lightDirection), 0.0);
-    float reflectivity = max(max(specularColor.r, specularColor.g), specularColor.b);
-    vec3 diffuse = baseColor * (1.0 - reflectivity);
+    vec3 diffuse = baseColor * unityOneMinusReflectivity();
     float specularTerm = unityDirectSpecular(normal, lightDirection, viewDirection, pbrParams.x);
-    vec3 brdf = diffuse + specularTerm * specularColor.rgb;
+    vec3 brdf = diffuse + specularTerm * unityBrdfSpecular(baseColor);
     return brdf * lightColor * intensity * noL;
   }
 
@@ -273,8 +291,7 @@ CCProgram urp-lit-fs %{
         normalize(unityLightDirection0.xyz), unityLightColor0.rgb, unityLightIntensities.x);
       direct += unityDirectLight(baseColor.rgb, normal, viewDirection,
         normalize(unityLightDirection1.xyz), unityLightColor1.rgb, unityLightIntensities.y);
-      float reflectivity = max(max(specularColor.r, specularColor.g), specularColor.b);
-      ambient = unityTrilightAmbient(normal) * baseColor.rgb * (1.0 - reflectivity);
+      ambient = unityTrilightAmbient(normal) * baseColor.rgb * unityOneMinusReflectivity();
     #else
       vec3 halfDirection = normalize(lightDirection + viewDirection);
       float noL = max(dot(normal, lightDirection), 0.0);
