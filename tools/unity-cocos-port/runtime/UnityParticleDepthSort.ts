@@ -1,5 +1,5 @@
-import { _decorator, Component, Director, director, ParticleSystem, Vec3 } from 'cc';
-const { ccclass } = _decorator;
+import { _decorator, CCFloat, Component, Director, director, ParticleSystem, Quat, Vec3 } from 'cc';
+const { ccclass, property } = _decorator;
 
 interface ParticleLike { position: Vec3; size: Vec3; }
 interface ProcessorLike { _particles?: { length: number; data: ParticleLike[]; } | null; getModel?: () => { priority: number; } | null; }
@@ -11,6 +11,8 @@ const _center = new Vec3();
 const _min = new Vec3();
 const _max = new Vec3();
 const _offset = new Vec3();
+const _gravity = new Vec3();
+const _inverse = new Quat();
 
 // Unity draws transparent renderers back to front by the sorting distance of each renderer's bounds centre
 // (view-space depth for orthographic cameras, distance for perspective ones); a ParticleSystemRenderer's bounds
@@ -18,8 +20,23 @@ const _offset = new Vec3();
 // the systems of an effect draw in material-hash order (Tanks! shell explosion: the premultiplied flash covered the
 // smoke Unity draws over it). Before every draw this helper sets each particle model's priority to the negative
 // sorting distance of its particle bounds centre, so all particle systems carrying it sort back to front like Unity.
+// A Unity procedural-mode system reports analytic bounds (every particle it can emit over its lifetime) instead of
+// its live particles; the porter serialises that envelope in local space (proceduralMins/Maxs + gravity drop) so
+// its sorting centre does not move with the random draws of one burst.
 @ccclass('UnityParticleDepthSort')
 export class UnityParticleDepthSort extends Component {
+    @property({ type: [ParticleSystem] })
+    public proceduralSystems: ParticleSystem[] = [];
+
+    @property({ type: [Vec3] })
+    public proceduralMins: Vec3[] = [];
+
+    @property({ type: [Vec3] })
+    public proceduralMaxs: Vec3[] = [];
+
+    @property({ type: [CCFloat] })
+    public proceduralGravityDrops: number[] = [];
+
     private _systems: ParticleSystem[] = [];
 
     onEnable(): void {
@@ -53,6 +70,20 @@ export class UnityParticleDepthSort extends Component {
     }
 
     private _boundsCenter(system: ParticleSystem, out: Vec3): void {
+        const procedural = this.proceduralSystems.indexOf(system);
+        if (procedural >= 0 && this.proceduralMins[procedural] && this.proceduralMaxs[procedural]) {
+            // Envelope united with itself dropped by gravity (world -Y, expressed in the system's local space).
+            Quat.invert(_inverse, system.node.worldRotation);
+            Vec3.transformQuat(_gravity, Vec3.set(_gravity, 0, -(this.proceduralGravityDrops[procedural] || 0), 0), _inverse);
+            const lo = this.proceduralMins[procedural];
+            const hi = this.proceduralMaxs[procedural];
+            _min.set(Math.min(lo.x, lo.x + _gravity.x), Math.min(lo.y, lo.y + _gravity.y), Math.min(lo.z, lo.z + _gravity.z));
+            _max.set(Math.max(hi.x, hi.x + _gravity.x), Math.max(hi.y, hi.y + _gravity.y), Math.max(hi.z, hi.z + _gravity.z));
+            Vec3.add(out, _min, _max);
+            Vec3.multiplyScalar(out, out, 0.5);
+            Vec3.transformMat4(out, out, system.node.worldMatrix);
+            return;
+        }
         const particles = (system as unknown as { processor?: ProcessorLike; }).processor?._particles;
         if (!particles || particles.length === 0) {
             system.node.getWorldPosition(out);

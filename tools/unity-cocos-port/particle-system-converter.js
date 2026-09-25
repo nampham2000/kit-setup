@@ -3,7 +3,7 @@ const { particleRendererContract } = require('./particle-renderer-contract');
 const { particleNoiseContract } = require('./particle-noise-contract');
 const { particleOrbitContract } = require('./particle-orbit-contract');
 
-const { particleShapeRotation } = require('./particle-shape-rotation');
+const { particleShapeRotation, particleShapeEdgeRotation } = require('./particle-shape-rotation');
 
 const DEG_TO_RAD = Math.PI / 180;
 const UNITY_CURVE_MODE_TO_COCOS = {
@@ -896,7 +896,7 @@ function getShapeMapping(unityType) {
     case 9: return { shapeType: 2, emitFrom: 2 }; // Cone volume shell
     case 10: return { shapeType: 1, emitFrom: 0 }; // Circle
     case 11: return { shapeType: 1, emitFrom: 1 }; // Circle edge
-    case 12: return { shapeType: 0, emitFrom: 1 }; // Single-sided edge approximation
+    case 12: return { shapeType: 0, emitFrom: 3 }; // Single-sided edge: flattened Box volume, see applyShapeModule
     case 6: // Mesh
     case 13: // Mesh renderer
     case 14: // Skinned mesh renderer
@@ -963,6 +963,12 @@ function applyShapeModule(builder, particle, data) {
   const rotation = vec3(data.m_Rotation || data.rotation, { x: 0, y: 0, z: 0 });
   module._rotation = vec3(particleShapeRotation(rotation), { x: 0, y: 0, z: 0 });
   module._scale = vec3(data.m_Scale || data.scale, module._scale || { x: 1, y: 1, z: 1 });
+  if (Number(data.type) === 12) {
+    // Unity's single-sided Edge is a 2 * radius line on shape X emitting toward shape +Y; a unit Box shell spread
+    // the Tanks! dust trails over a 1 m cube rising upward. Flatten the Box onto X and turn its -Z onto +Y.
+    module._rotation = vec3(particleShapeEdgeRotation(rotation), { x: 0, y: 0, z: 0 });
+    module._scale = vec3({ x: 2 * module.radius * num(module._scale.x, 1), y: 0, z: 0 });
+  }
   if (!enabled || shouldUsePointShapeFallback(data)) {
     setKnown(module, ['_shapeType'], 0);
     setKnown(module, ['shapeType'], 0);

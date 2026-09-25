@@ -53,6 +53,16 @@ const RUNTIME_SCRIPTS = {
     missingCode: 'PARTICLE_RATE_OVER_DISTANCE_EMITTER_TEMPLATE_MISSING',
     missingMessage: 'Unity particle Rate over Distance needs a runtime script adapter, but the template is missing',
   },
+  particlePrewarm: {
+    className: 'UnityParticlePrewarm',
+    missingCode: 'PARTICLE_PREWARM_TEMPLATE_MISSING',
+    missingMessage: 'Unity prewarm needs a fine-stepped prewarm adapter, but the template is missing',
+  },
+  particleModuleSpace: {
+    className: 'UnityParticleModuleSpace',
+    missingCode: 'PARTICLE_MODULE_SPACE_TEMPLATE_MISSING',
+    missingMessage: 'Local/world-space velocity, force and limit-velocity modules need a space adapter, but the template is missing',
+  },
   particleDepthSort: {
     className: 'UnityParticleDepthSort',
     missingCode: 'PARTICLE_DEPTH_SORT_TEMPLATE_MISSING',
@@ -285,8 +295,141 @@ function hasSubEmitterEntry(component, type, subEmitterParticleId) {
   ));
 }
 
-function makeSubEmitterEntry(script, type, entry, subEmitterParticleId, subEmitterNodeId) {
+// A Unity Birth sub-emitter instance runs the sub-emitter system's own emission timeline per parent particle:
+// rate over time, bursts, duration and looping come from the sub-emitter's main/emission modules.
+function unitySubEmitterTimeline(subEmitterDoc) {
+  const data = subEmitterDoc ? parseUnityParticleDoc(subEmitterDoc) : null;
+  const emission = data?.EmissionModule || {};
+  const rate = emission.rateOverTime || {};
+  const approximations = [];
+  if (Number(rate.minMaxState || 0) !== 0) approximations.push('rate over time curve uses its multiplier');
+  const bursts = (Array.isArray(emission.m_Bursts) ? emission.m_Bursts : []).map((burst) => {
+    const count = burst?.countCurve || {};
+    if (Number(count.minMaxState || 0) !== 0) approximations.push('burst count curve uses its multiplier');
+    if (Number(burst?.cycleCount ?? 1) !== 1) approximations.push('burst cycles beyond the first are ignored');
+    return { time: Number(burst?.time || 0), count: Number(count.scalar ?? 0) * Math.max(0, Math.min(1, Number(burst?.probability ?? 1))) };
+  });
+  return {
+    found: Boolean(data),
+    rate: Number(rate.scalar || 0),
+    duration: Number(data?.lengthInSec || 0),
+    looping: data ? Boolean(Number(data.looping ?? 1)) : true,
+    bursts,
+    approximations,
+  };
+}
+
+function quatMultiply(a, b) {
+  return {
+    x: a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
+    y: a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
+    z: a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w,
+    w: a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z,
+  };
+}
+
+function nodeWorldQuat(builder, nodeId) {
+  let rotation = { x: 0, y: 0, z: 0, w: 1 };
+  for (let id = nodeId, guard = 0; Number.isInteger(id) && guard < 256; guard++) {
+    const node = builder.objects[id];
+    if (!node || node.__type__ !== 'cc.Node') break;
+    const local = node._lrot || { x: 0, y: 0, z: 0, w: 1 };
+    rotation = quatMultiply({ x: Number(local.x || 0), y: Number(local.y || 0), z: Number(local.z || 0), w: Number(local.w ?? 1) }, rotation);
+    id = Number(node._parent?.__id__);
+  }
+  return rotation;
+}
+
+// Angle between two nodes' emitter forwards (-Z), in degrees.
+function emitterForwardAngle(builder, nodeA, nodeB) {
+  const forward = (q) => ({ x: -2 * (q.x * q.z + q.w * q.y), y: -2 * (q.y * q.z - q.w * q.x), z: -(1 - 2 * (q.x * q.x + q.y * q.y)) });
+  const a = forward(nodeWorldQuat(builder, nodeA));
+  const b = forward(nodeWorldQuat(builder, nodeB));
+  return Math.acos(Math.max(-1, Math.min(1, a.x * b.x + a.y * b.y + a.z * b.z))) * 180 / Math.PI;
+}
+
+// Unity turns a Birth instance by FromTo(parent system forward, parent velocity); the runtime reproduces that rule,
+// which was measured on sub-emitters whose forward stays close to their parent system's forward.
+const SUB_EMITTER_ALIGNMENT_VALIDATED_DEGREES = 20;
+
+// Unity sorts a renderer by its bounds centre. A procedural-mode ParticleSystem (Local space, not part of a
+// sub-emitter pair, no modules that make particle motion unpredictable) reports analytic bounds covering every
+// particle it can emit over its lifetime, so its centre does not move with the random draws of a given burst
+// (Tanks! shell flash: always emitter + half its travel, behind the rising smoke). Measured on Unity 6
+// (proceduralSimulationSupported + ParticleSystemRenderer.bounds): per axis the envelope is the shape extent plus the
+// start-direction extremes times max speed x max lifetime, united with itself dropped by gravity over the lifetime.
+const UNITY_GRAVITY = 9.81;
+const PROCEDURAL_BREAKING_MODULES = ['NoiseModule', 'CollisionModule', 'TriggerModule', 'ExternalForcesModule', 'ClampVelocityModule',
+  'InheritVelocityModule', 'TrailModule', 'LightsModule', 'VelocityModule', 'ForceModule', 'SubModule'];
+
+function curveMax(curve, fallback) {
+  const state = Number(curve?.minMaxState ?? 0);
+  if (state !== 0 && state !== 3) return null;
+  const scalar = Number(curve?.scalar ?? fallback);
+  return state === 3 ? Math.max(scalar, Number(curve?.minScalar ?? scalar)) : scalar;
+}
+
+function curveMin(curve, fallback) {
+  const state = Number(curve?.minMaxState ?? 0);
+  const scalar = Number(curve?.scalar ?? fallback);
+  return state === 3 ? Math.min(scalar, Number(curve?.minScalar ?? scalar)) : scalar;
+}
+
+function unityProceduralEnvelope(data) {
+  if (!data || Number(data.moveWithTransform ?? 0) !== 0) return null;
+  if (PROCEDURAL_BREAKING_MODULES.some((key) => Number(data[key]?.enabled || 0))) return null;
+  const emission = data.EmissionModule || {};
+  if (Number(emission.rateOverDistance?.scalar || 0) > 0) return null;
+  const initial = data.InitialModule || {};
+  const speed = curveMax(initial.startSpeed, 5);
+  const life = curveMax(initial.startLifetime, 5);
+  const gravity = curveMax(initial.gravityModifier, 0);
+  if (speed == null || life == null || gravity == null || curveMin(initial.startSpeed, 5) < 0) return null;
+  const shape = data.ShapeModule || {};
+  let pos = [[0, 0], [0, 0], [0, 0]];
+  let dir = [[0, 0], [0, 0], [1, 1]];
+  if (Number(shape.enabled || 0)) {
+    const zero = (v, d) => ['x', 'y', 'z'].every((k) => Math.abs(Number(v?.[k] ?? d) - d) < 1e-6);
+    if (!zero(shape.m_Position, 0) || !zero(shape.m_Rotation, 0) || !zero(shape.m_Scale, 1)) return null;
+    const r = Number(shape.radius?.value ?? shape.radius ?? 1);
+    const arc = Number(shape.arc?.value ?? 360);
+    const type = Number(shape.type);
+    const disk = [[-r, r], [-r, r], [0, 0]];
+    if (type === 4 || type === 7) { // cone base / cone shell: disk, directions within the cone angle
+      const a = Number(shape.angle || 0) * Math.PI / 180;
+      pos = disk; dir = [[-Math.sin(a), Math.sin(a)], [-Math.sin(a), Math.sin(a)], [Math.cos(a), 1]];
+    } else if (type === 0 || type === 1) { // sphere
+      pos = [[-r, r], [-r, r], [-r, r]]; dir = [[-1, 1], [-1, 1], [-1, 1]];
+    } else if (type === 2 || type === 3) { // hemisphere toward +Z
+      pos = [[-r, r], [-r, r], [0, r]]; dir = [[-1, 1], [-1, 1], [0, 1]];
+    } else if ((type === 10 || type === 11) && arc >= 360) { // circle in XY, radial directions
+      pos = disk; dir = [[-1, 1], [-1, 1], [0, 0]];
+    } else {
+      return null;
+    }
+  }
+  const travel = speed * life;
+  const min = pos.map(([lo], axis) => lo + Math.min(0, dir[axis][0] * travel));
+  const max = pos.map(([, hi], axis) => hi + Math.max(0, dir[axis][1] * travel));
+  return { min, max, gravityDrop: 0.5 * UNITY_GRAVITY * gravity * life * life };
+}
+
+function unitySubEmitterComponentIds(model) {
+  const ids = new Set();
+  for (const [componentId, doc] of model?.componentDocs?.entries?.() || []) {
+    const classId = Number(doc?.classId || 0);
+    if (classId !== 198 && classId !== 223) continue;
+    const entries = unitySubEmitterEntries(doc);
+    if (!entries.length) continue;
+    ids.add(String(componentId));
+    for (const entry of entries) ids.add(String(entry?.emitter?.fileID || ''));
+  }
+  return ids;
+}
+
+function makeSubEmitterEntry(script, type, entry, subEmitterParticleId, subEmitterNodeId, timeline) {
   const emitProbability = Math.max(0, Math.min(1, Number(entry?.emitProbability ?? 1)));
+  const birth = type === SUB_EMITTER_TYPE.birth;
   return {
     __type__: script.entryClassName,
     type,
@@ -294,11 +437,15 @@ function makeSubEmitterEntry(script, type, entry, subEmitterParticleId, subEmitt
     inherit: Number(entry?.properties || 0),
     emitProbability,
     subEmitterNode: cocosRef(subEmitterNodeId),
-    emitRatePerParticle: type === SUB_EMITTER_TYPE.birth ? 36 : 0,
+    emitRatePerParticle: birth ? timeline.rate : 0,
+    emitterDuration: birth ? timeline.duration : 0,
+    emitterLooping: birth ? timeline.looping : true,
+    burstTimes: birth ? timeline.bursts.map((burst) => burst.time) : [],
+    burstCounts: birth ? timeline.bursts.map((burst) => burst.count) : [],
     particlesPerSample: 1,
     maxSourceParticles: 32,
     deathBurstCount: 1,
-    playSubEmitterOnEnable: type === SUB_EMITTER_TYPE.birth,
+    playSubEmitterOnEnable: birth,
   };
 }
 
@@ -584,10 +731,26 @@ function createRuntimeComponentPorter(deps) {
         subEmitterParticle.playOnAwake = false;
         subEmitterParticle.loop = type === SUB_EMITTER_TYPE.birth;
         if (type === SUB_EMITTER_TYPE.death) subEmitterNode._active = false;
+        const timeline = unitySubEmitterTimeline(model.componentDocs.get(subEmitterFileId));
+        if (type === SUB_EMITTER_TYPE.birth && !timeline.found) {
+          reporter.high('PARTICLE_SUB_EMITTER_TIMELINE_MISSING', model.file, subEmitterNode._name || '',
+            'Unity Birth sub-emitter source document was not found; its per-parent emission rate cannot be ported');
+        }
+        const forwardAngle = emitterForwardAngle(builder, sourceNodeId, subEmitterNodeId);
+        if (type === SUB_EMITTER_TYPE.birth && forwardAngle > SUB_EMITTER_ALIGNMENT_VALIDATED_DEGREES) {
+          reporter.medium('PARTICLE_SUB_EMITTER_ALIGNMENT_UNVALIDATED', model.file, subEmitterNode._name || '',
+            `Sub-emitter forward is ${forwardAngle.toFixed(0)} deg from its parent system's; Unity's parent-velocity alignment is only validated within ${SUB_EMITTER_ALIGNMENT_VALIDATED_DEGREES} deg`);
+        }
+        if (type === SUB_EMITTER_TYPE.birth && timeline.approximations.length) {
+          reporter.medium('PARTICLE_SUB_EMITTER_TIMELINE_APPROXIMATED', model.file, subEmitterNode._name || '',
+            'Unity Birth sub-emitter timeline approximated: ' + [...new Set(timeline.approximations)].join('; '));
+        }
         setCocosCurveConstant(builder.objects, subEmitterParticle, 'rateOverTime', 0);
         setCocosCurveConstant(builder.objects, subEmitterParticle, 'rateOverDistance', 0);
+        // The follower replays the bursts per parent instance; the looping native system would fire them on its own clock.
+        if (type === SUB_EMITTER_TYPE.birth) subEmitterParticle.bursts = [];
 
-        followerComponent.entries.push(makeSubEmitterEntry(script, type, entry, subEmitterParticleId, subEmitterNodeId));
+        followerComponent.entries.push(makeSubEmitterEntry(script, type, entry, subEmitterParticleId, subEmitterNodeId, timeline));
 
         reporter.low(
           'PARTICLE_SUB_EMITTER_FOLLOWER',
@@ -654,7 +817,7 @@ function createRuntimeComponentPorter(deps) {
   // Unity sorts every transparent ParticleSystemRenderer back to front by its particle bounds; Cocos sorts by
   // priority then pass hash. Attach UnityParticleDepthSort to each particle-system root (a node with a ParticleSystem
   // and no ParticleSystem ancestor) so every ported system gets a distance-derived priority.
-  function attachParticleDepthSort(builder, reporter) {
+  function attachParticleDepthSort(builder, reporter, model = null) {
     const script = RUNTIME_SCRIPTS.particleDepthSort;
     const roots = [];
     const walk = (nodeId, underParticle) => {
@@ -665,6 +828,26 @@ function createRuntimeComponentPorter(deps) {
       for (const childRef of node._children || []) walk(Number(childRef?.__id__), underParticle || hasParticle);
     };
     walk(1, false);
+    // Unity procedural-mode systems sort by analytic bounds; everything else by its live particles.
+    const envelopes = new Map();
+    const subEmitterIds = unitySubEmitterComponentIds(model);
+    for (const [componentId, doc] of model?.componentDocs?.entries?.() || []) {
+      const classId = Number(doc?.classId || 0);
+      if ((classId !== 198 && classId !== 223) || subEmitterIds.has(String(componentId))) continue;
+      const particleId = builder.componentMap?.get(componentId) ?? builder.componentMap?.get(String(componentId));
+      const envelope = unityProceduralEnvelope(parseUnityParticleDoc(doc));
+      if (envelope && builder.objects[particleId]?.__type__ === 'cc.ParticleSystem') envelopes.set(particleId, envelope);
+    }
+    const subtreeSystems = (nodeId, out = []) => {
+      const node = builder.objects[nodeId];
+      if (!node || node.__type__ !== 'cc.Node') return out;
+      for (const ref of node._components || []) {
+        const id = Number(ref?.__id__);
+        if (envelopes.has(id)) out.push(id);
+      }
+      for (const childRef of node._children || []) subtreeSystems(Number(childRef?.__id__), out);
+      return out;
+    };
     if (!roots.length) return;
     const helperClassId = readRuntimeScriptClassId(script, builder.cocosDb);
     if (!helperClassId) {
@@ -674,10 +857,72 @@ function createRuntimeComponentPorter(deps) {
     }
     for (const nodeId of roots) {
       if (nodeHasComponentType(builder, nodeId, helperClassId)) continue;
-      builder.addComponent(nodeId, helperClassId, {}, null, `cmp-unity-particle-depth-sort-${nodeId}`);
+      // Unity local space -> Cocos local space mirrors Z.
+      const systems = subtreeSystems(nodeId);
+      const props = systems.length ? {
+        proceduralSystems: systems.map((id) => cocosRef(id)),
+        proceduralMins: systems.map((id) => { const e = envelopes.get(id); return vec3(e.min[0], e.min[1], -e.max[2]); }),
+        proceduralMaxs: systems.map((id) => { const e = envelopes.get(id); return vec3(e.max[0], e.max[1], -e.min[2]); }),
+        proceduralGravityDrops: systems.map((id) => envelopes.get(id).gravityDrop),
+      } : {};
+      builder.addComponent(nodeId, helperClassId, props, null, `cmp-unity-particle-depth-sort-${nodeId}`);
     }
     reporter.low('PARTICLE_DEPTH_SORT', '', builder.objects[1]?._name || '',
       `Attached ${script.className} to ${roots.length} particle root(s) for Unity back-to-front transparent sorting`);
+  }
+
+  // Unity prewarm simulates one full cycle; Cocos steps it at 1 s. Nodes with a prewarmed system get the
+  // fine-stepped UnityParticlePrewarm adapter (installed in onLoad, before the system plays).
+  function attachParticlePrewarm(builder, reporter) {
+    const script = RUNTIME_SCRIPTS.particlePrewarm;
+    const nodeIds = [];
+    for (const object of builder.objects) {
+      if (object?.__type__ !== 'cc.ParticleSystem' || object._prewarm !== true) continue;
+      const nodeId = Number(object.node?.__id__);
+      if (Number.isInteger(nodeId) && !nodeIds.includes(nodeId)) nodeIds.push(nodeId);
+    }
+    if (!nodeIds.length) return;
+    const helperClassId = readRuntimeScriptClassId(script, builder.cocosDb);
+    if (!helperClassId) {
+      reporter.medium('PARTICLE_PREWARM_SCRIPT_MISSING', '', builder.objects[1]?._name || '',
+        'Prewarmed particle systems need ' + toPosix(scriptTargetPath(script)) + ' but the script was not found in Cocos assets');
+      return;
+    }
+    for (const nodeId of nodeIds) {
+      if (!nodeHasComponentType(builder, nodeId, helperClassId)) builder.addComponent(nodeId, helperClassId, {}, null, 'cmp-unity-particle-prewarm-' + nodeId);
+    }
+    reporter.low('PARTICLE_PREWARM_ADAPTER', '', builder.objects[1]?._name || '',
+      'Attached ' + script.className + ' to ' + nodeIds.length + ' prewarmed particle system(s)');
+  }
+
+  // Cocos 3.8.8 never refreshes a module's space rotation (see runtime/UnityParticleModuleSpace.ts), so every system
+  // with an enabled Velocity/Force/Limit Velocity module in the other space gets the adapter.
+  function attachParticleModuleSpace(builder, reporter) {
+    const script = RUNTIME_SCRIPTS.particleModuleSpace;
+    const targets = [];
+    builder.objects.forEach((object, particleId) => {
+      if (object?.__type__ !== 'cc.ParticleSystem') return;
+      const space = Number(object._simulationSpace ?? 1);
+      const mismatched = ['_velocityOvertimeModule', '_forceOvertimeModule', '_limitVelocityOvertimeModule']
+        .map((key) => objectByRef(builder.objects, object[key]))
+        .some((module) => module && module._enable === true && Number(module.space ?? 1) !== space);
+      const nodeId = Number(object.node?.__id__);
+      if (mismatched && Number.isInteger(nodeId)) targets.push({ particleId, nodeId });
+    });
+    if (!targets.length) return;
+    const helperClassId = readRuntimeScriptClassId(script, builder.cocosDb);
+    if (!helperClassId) {
+      reporter.medium('PARTICLE_MODULE_SPACE_SCRIPT_MISSING', '', builder.objects[1]?._name || '',
+        'Particle modules simulated in the other space need ' + toPosix(scriptTargetPath(script)) + ' but the script was not found in Cocos assets');
+      return;
+    }
+    for (const { particleId, nodeId } of targets) {
+      if (!nodeHasComponentType(builder, nodeId, helperClassId)) {
+        builder.addComponent(nodeId, helperClassId, { particleSystem: cocosRef(particleId) }, null, 'cmp-unity-particle-module-space-' + particleId);
+      }
+    }
+    reporter.low('PARTICLE_MODULE_SPACE_ADAPTER', '', builder.objects[1]?._name || '',
+      'Attached ' + script.className + ' to ' + targets.length + ' particle system(s) with a velocity/force module in the other space');
   }
 
   function attachParticleRateOverDistanceEmitters(model, builder, reporter) {
@@ -785,6 +1030,10 @@ function createRuntimeComponentPorter(deps) {
     ensureParticleRateOverDistanceEmitterScript: (options, reporter) => ensureRuntimeScript(RUNTIME_SCRIPTS.particleRateOverDistanceEmitter, options, reporter),
     ensureSpriteRendererColorAdapterScript: (options, reporter) => ensureRuntimeScript(RUNTIME_SCRIPTS.spriteRendererColorAdapter, options, reporter),
     ensureParticleDepthSortScript: (options, reporter) => ensureRuntimeScript(RUNTIME_SCRIPTS.particleDepthSort, options, reporter),
+    ensureParticlePrewarmScript: (options, reporter) => ensureRuntimeScript(RUNTIME_SCRIPTS.particlePrewarm, options, reporter),
+    ensureParticleModuleSpaceScript: (options, reporter) => ensureRuntimeScript(RUNTIME_SCRIPTS.particleModuleSpace, options, reporter),
+    attachParticlePrewarm,
+    attachParticleModuleSpace,
     attachParticleDepthSort,
     ensureSpriteRendererColorAssets,
     attachParticleSubEmitterFollowers,
@@ -795,3 +1044,4 @@ function createRuntimeComponentPorter(deps) {
 }
 
 module.exports = createRuntimeComponentPorter;
+module.exports.unityProceduralEnvelope = unityProceduralEnvelope;

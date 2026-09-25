@@ -84,6 +84,7 @@ const {
   parseUnityParticleDoc,
   parseUnityRendererDoc,
 } = require('./unity-cocos-port/particle-system-converter');
+const { particleRendererContract } = require('./unity-cocos-port/particle-renderer-contract');
 
 const {
   importedUnityAssetPath: importedUnityAssetPathImpl,
@@ -5163,11 +5164,14 @@ function applyNestedParticlePrefabOverrides(builder, nestedPrefab, reporter, opt
     const materialOverride = Object.entries(rendererProps)
       .find(([propertyPath]) => /^m_Materials\.Array\.data\[0\]$/.test(propertyPath));
     if (materialOverride) {
+      // The effective renderer (source + overrides) decides the material variant, e.g. m_ApplyActiveColorSpace: 0
+      // keeps vertex colours unlinearized (Tanks! explosion renderers with a variant material override).
+      const rendererContract = particleRendererContract(particleData, rendererData);
       const materialAsset = unityDb.get(unityRefGuid(materialOverride[1]));
       const material = materialAsset
-        ? resolveUnityParticleMaterial(materialAsset, options, unityDb, reporter, gameObject.name)
+        ? resolveUnityParticleMaterial(materialAsset, options, unityDb, reporter, gameObject.name, null, 'particle', rendererContract)
         : String(unityRefGuid(materialOverride[1])).toLowerCase() === '0000000000000000f000000000000000'
-          ? resolveUnityBuiltinParticleMaterial(unityRefFileId(materialOverride[1]), options, reporter)
+          ? resolveUnityBuiltinParticleMaterial(unityRefFileId(materialOverride[1]), options, reporter, rendererContract)
           : null;
       if (material?.materialUuid) {
         applyParticleRendererMaterial(
@@ -6339,7 +6343,9 @@ function buildCocosPrefabBuilder(model, outputFile, options, reporter, unityDb, 
   runtimeComponentPorter.attachParticleRateOverDistanceEmitters(model, builder, reporter);
   runtimeComponentPorter.attachParticleHierarchyTransformSync(builder, reporter);
   runtimeComponentPorter.attachParticleRendererVisibility(builder, reporter);
-  runtimeComponentPorter.attachParticleDepthSort(builder, reporter);
+  runtimeComponentPorter.attachParticleDepthSort(builder, reporter, model);
+  runtimeComponentPorter.attachParticlePrewarm(builder, reporter);
+  runtimeComponentPorter.attachParticleModuleSpace(builder, reporter);
   require('./unity-cocos-port/particle-orbit-binding').attachOrbitRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-noise-binding').attachNoiseRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-birth-state-binding').attachBirthStateRuntime(builder, reporter, options);
@@ -6706,6 +6712,8 @@ function portPrefab(options, reporter) {
   runtimeComponentPorter.ensureParticleRendererVisibilityScript(options, reporter);
   runtimeComponentPorter.ensureParticleRateOverDistanceEmitterScript(options, reporter);
   runtimeComponentPorter.ensureParticleDepthSortScript(options, reporter);
+  runtimeComponentPorter.ensureParticlePrewarmScript(options, reporter);
+  runtimeComponentPorter.ensureParticleModuleSpaceScript(options, reporter);
   runtimeComponentPorter.ensureSpriteRendererColorAdapterScript(options, reporter);
   runtimeComponentPorter.ensureSpriteRendererColorAssets(options, reporter);
   const cocosDb = new CocosAssetDatabase(options.cocosRoot);

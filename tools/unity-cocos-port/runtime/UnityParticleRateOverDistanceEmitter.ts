@@ -4,9 +4,14 @@ const { ccclass, executionOrder, property } = _decorator;
 const PARTICLE_SPACE_WORLD = 0;
 const CURVE_MODE_CONSTANT = 0;
 const DISTANCE_EPSILON = 1e-6;
+// Emissions are owed in particles, not metres: a step that ends exactly on a 1/rate boundary emits that particle
+// once. A distance remainder (0.2 % 0.1 === 0.0999...) emitted it again at the start of the next step.
+const EMISSION_EPSILON = 1e-6;
 
 type ParticleLike = {
     position: Vec3;
+    velocity: Vec3;
+    remainingLifetime: number;
 };
 
 type ParticlePoolLike = {
@@ -14,6 +19,9 @@ type ParticlePoolLike = {
     length: number;
 };
 
+// Unity emission over distance: one particle each time the emitter has travelled 1/rate, placed at that point of
+// the step's path and aged by the part of the step since it passed there. Must run before the ParticleSystem
+// (executionOrder 99), which ages and moves every particle by the whole step right after this update.
 @ccclass('UnityParticleRateOverDistanceEmitter')
 @executionOrder(98)
 export class UnityParticleRateOverDistanceEmitter extends Component {
@@ -28,7 +36,7 @@ export class UnityParticleRateOverDistanceEmitter extends Component {
     private readonly _sampleWorldPosition = new Vec3();
     private readonly _positionOffset = new Vec3();
     private readonly _inverseWorldMatrix = new Mat4();
-    private _distanceRemainder = 0;
+    private _pendingEmission = 0;
     private _wasPlaying = false;
 
     protected onLoad(): void {
@@ -42,7 +50,7 @@ export class UnityParticleRateOverDistanceEmitter extends Component {
     }
 
     protected onDisable(): void {
-        this._distanceRemainder = 0;
+        this._pendingEmission = 0;
         this._wasPlaying = false;
     }
 
@@ -54,7 +62,7 @@ export class UnityParticleRateOverDistanceEmitter extends Component {
 
         if (!particleSystem.isPlaying) {
             this._lastWorldPosition.set(this._currentWorldPosition);
-            this._distanceRemainder = 0;
+            this._pendingEmission = 0;
             this._wasPlaying = false;
             return;
         }
@@ -72,30 +80,29 @@ export class UnityParticleRateOverDistanceEmitter extends Component {
             return;
         }
 
-        const spacing = 1 / rate;
-        const firstDistance = spacing - this._distanceRemainder;
-        for (let traveled = firstDistance; traveled <= distance + DISTANCE_EPSILON; traveled += spacing) {
-            Vec3.lerp(
-                this._sampleWorldPosition,
-                this._lastWorldPosition,
-                this._currentWorldPosition,
-                Math.min(1, traveled / distance),
-            );
-            this.emitAtWorldPosition(particleSystem, this._sampleWorldPosition, dt);
+        const travelled = distance * rate;
+        const owed = this._pendingEmission + travelled;
+        const count = Math.floor(owed + EMISSION_EPSILON);
+        const step = dt * particleSystem.simulationSpeed;
+        for (let i = 1; i <= count; i++) {
+            const fraction = Math.min(1, Math.max(0, (i - this._pendingEmission) / travelled));
+            Vec3.lerp(this._sampleWorldPosition, this._lastWorldPosition, this._currentWorldPosition, fraction);
+            this.emitAtWorldPosition(particleSystem, this._sampleWorldPosition, fraction * step);
         }
 
-        this._distanceRemainder = (this._distanceRemainder + distance) % spacing;
+        this._pendingEmission = Math.max(0, owed - count);
         this._lastWorldPosition.set(this._currentWorldPosition);
     }
 
     private emitAtWorldPosition(
         particleSystem: ParticleSystem,
         worldPosition: Readonly<Vec3>,
-        dt: number,
+        lead: number,
     ): void {
         const pool = (particleSystem.processor as any)?._particles as ParticlePoolLike | undefined;
         const previousLength = pool?.length || 0;
-        (particleSystem as any).emit(1, dt);
+        // dt 0: Unity lifetimes are exact; Cocos' emit(n, dt) stretches them by one frame.
+        (particleSystem as any).emit(1, 0);
         if (!pool || pool.length <= previousLength) return;
 
         const particle = pool.data[pool.length - 1];
@@ -107,6 +114,10 @@ export class UnityParticleRateOverDistanceEmitter extends Component {
             Vec3.transformMat4(this._positionOffset, worldPosition, this._inverseWorldMatrix);
         }
         particle.position.add(this._positionOffset);
+        // Start `lead` seconds ahead of the coming full-step update, so the particle ends this step at its
+        // sub-frame age (step - lead) and position, as Unity's emission leaves it.
+        particle.remainingLifetime += lead;
+        Vec3.scaleAndAdd(particle.position, particle.position, particle.velocity, -lead);
     }
 
     private disableNativeRateOverDistance(): void {
@@ -119,7 +130,7 @@ export class UnityParticleRateOverDistanceEmitter extends Component {
 
     private resetTracking(): void {
         this.node.getWorldPosition(this._lastWorldPosition);
-        this._distanceRemainder = 0;
+        this._pendingEmission = 0;
         this._wasPlaying = false;
     }
 }
