@@ -43,3 +43,17 @@ test('URP material port distinguishes regular colors from HDR emission', () => {
   assert.match(source, /materialKeywords\.has\('_EMISSION'\)/,
     'URP emission is owned by its active local keyword');
 });
+
+test('URP Lit light rig applies the source main-light shadow strength to light 0 only', () => {
+  const source = fs.readFileSync(path.join(__dirname, 'urp-lit.effect'), 'utf8');
+  assert.match(source, /float mainShadow = mix\(1\.0, shadowFactor\(normal\), clamp\(unityLightIntensities\.z, 0\.0, 1\.0\)\);/);
+  assert.match(source, /unityLightColor0\.rgb, unityLightIntensities\.x\) \* mainShadow;/);
+  assert.doesNotMatch(source, /unityLightColor1\.rgb, unityLightIntensities\.y\) \* mainShadow/);
+});
+
+test('URP Lit light rig derives metallic-workflow specular from albedo and _Metallic', () => {
+  const source = fs.readFileSync(path.join(__dirname, 'urp-lit.effect'), 'utf8');
+  assert.match(source, /#if USE_SPECULAR_WORKFLOW\s+return specularColor\.rgb;\s+#else\s+return mix\(vec3\(0\.04\), baseColor, pbrParams\.y\);/);
+  assert.match(source, /return mix\(0\.04, 1\.0, pbrParams\.y\);/);
+  assert.match(source, /ambient = unityTrilightAmbient\(normal\) \* baseColor\.rgb \* \(1\.0 - unityBrdfReflectivity\(\)\);/);
+});

@@ -201,13 +201,30 @@ CCProgram urp-lit-fs %{
     return roughness2 / max((d * d) * max(0.1, loH * loH) * normalization, 0.000001);
   }
 
+  // URP InitializeBRDFData: the metallic workflow (default, _WorkflowMode = 1) derives the specular
+  // colour and reflectivity from albedo and _Metallic; _SpecColor is only used by _SPECULAR_SETUP.
+  vec3 unityBrdfSpecular (vec3 baseColor) {
+    #if USE_SPECULAR_WORKFLOW
+      return specularColor.rgb;
+    #else
+      return mix(vec3(0.04), baseColor, pbrParams.y);
+    #endif
+  }
+
+  float unityBrdfReflectivity () {
+    #if USE_SPECULAR_WORKFLOW
+      return max(max(specularColor.r, specularColor.g), specularColor.b);
+    #else
+      return mix(0.04, 1.0, pbrParams.y);
+    #endif
+  }
+
   vec3 unityDirectLight (vec3 baseColor, vec3 normal, vec3 viewDirection,
     vec3 lightDirection, vec3 lightColor, float intensity) {
     float noL = max(dot(normal, lightDirection), 0.0);
-    float reflectivity = max(max(specularColor.r, specularColor.g), specularColor.b);
-    vec3 diffuse = baseColor * (1.0 - reflectivity);
+    vec3 diffuse = baseColor * (1.0 - unityBrdfReflectivity());
     float specularTerm = unityDirectSpecular(normal, lightDirection, viewDirection, pbrParams.x);
-    vec3 brdf = diffuse + specularTerm * specularColor.rgb;
+    vec3 brdf = diffuse + specularTerm * unityBrdfSpecular(baseColor);
     return brdf * lightColor * intensity * noL;
   }
 
@@ -269,12 +286,15 @@ CCProgram urp-lit-fs %{
       // Replay up to two source directional lights. A port must bind directions,
       // authored colors, and intensities from Unity rather than collapsing the
       // rig into Cocos' single global main-light uniform.
+      // Unity main light shadow: attenuation = lerp(1, shadowMap, shadowStrength). The strength of the
+      // source main light is bound in unityLightIntensities.z (0 keeps the rig unshadowed); the Cocos main
+      // directional light must mirror light 0's direction to own the shadow map.
+      float mainShadow = mix(1.0, shadowFactor(normal), clamp(unityLightIntensities.z, 0.0, 1.0));
       direct = unityDirectLight(baseColor.rgb, normal, viewDirection,
-        normalize(unityLightDirection0.xyz), unityLightColor0.rgb, unityLightIntensities.x);
+        normalize(unityLightDirection0.xyz), unityLightColor0.rgb, unityLightIntensities.x) * mainShadow;
       direct += unityDirectLight(baseColor.rgb, normal, viewDirection,
         normalize(unityLightDirection1.xyz), unityLightColor1.rgb, unityLightIntensities.y);
-      float reflectivity = max(max(specularColor.r, specularColor.g), specularColor.b);
-      ambient = unityTrilightAmbient(normal) * baseColor.rgb * (1.0 - reflectivity);
+      ambient = unityTrilightAmbient(normal) * baseColor.rgb * (1.0 - unityBrdfReflectivity());
     #else
       vec3 halfDirection = normalize(lightDirection + viewDirection);
       float noL = max(dot(normal, lightDirection), 0.0);
