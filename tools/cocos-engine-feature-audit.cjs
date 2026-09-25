@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const net = require('node:net');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
+const { readSharedPreviewIntrinsics, resolveCocosEngineRoot } = require('./cocos-engine-intrinsic-flags.cjs');
 
 const PHYSICS_BACKENDS = Object.freeze([
   'physics-builtin',
@@ -29,7 +30,11 @@ const BACKEND_LABELS = Object.freeze({
 // These Cocos 3.8.8 features intentionally have no cc-fu import-map entry.
 // Some toggle engine intrinsic flags, while others are profile-side hooks.
 // Their applied receipt is therefore the regenerated preview timestamp rather
-// than a non-existent cce:/internal/x/cc-fu/<feature> mapping.
+// than a non-existent cce:/internal/x/cc-fu/<feature> mapping. Intrinsic-flag
+// features (marionette, procedural-animation, spine-x, vendor-google) are first
+// checked against the install-wide engine preview import map, which other open
+// projects rewrite; the timestamp inference is only the fallback when that map
+// cannot be located.
 const IMPORT_MAP_SILENT_FEATURES = new Set([
   'occlusion-query',
   'debug-renderer',
@@ -518,12 +523,21 @@ function auditCocosEngineFeatures(projectRoot, options = {}) {
     profileMissing.push(`physics-2d:${physics2dBackend}`);
   }
   const applied = readAppliedPreviewFeatures(root);
+  const sharedEngine = options.sharedEngine || readSharedPreviewIntrinsics(resolveCocosEngineRoot(root, options));
+  const sharedKnows = moduleName => sharedEngine.available
+    && Object.prototype.hasOwnProperty.call(sharedEngine.features, moduleName);
+  const sharedMissing = [];
   const inferredProfileFeatures = [];
   const previewRegeneratedAfterProfile = Number.isFinite(applied.modifiedMs)
     && Number.isFinite(profile.modifiedMs)
     && applied.modifiedMs >= profile.modifiedMs;
   const appliedMissing = applied.available
     ? requiredModules.filter((moduleName) => {
+      if (sharedKnows(moduleName)) {
+        if (sharedEngine.features[moduleName] === true) return false;
+        sharedMissing.push(moduleName);
+        return true;
+      }
       if (appliedFeaturePresent(applied, moduleName, { spineBackend, physics2dBackend })) return false;
       const profileEnabled = profileFeatureEnabled(profile.config, include, moduleName);
       if (IMPORT_MAP_SILENT_FEATURES.has(moduleName) && profileEnabled && previewRegeneratedAfterProfile) {
@@ -536,6 +550,10 @@ function auditCocosEngineFeatures(projectRoot, options = {}) {
   const appliedUnexpected = applied.available
     ? disabledModules.filter(moduleName => applied.features.includes(moduleName) || !previewRegeneratedAfterProfile)
     : [...disabledModules];
+  // A disabled intrinsic feature that is active in the install-wide map was enabled by another
+  // open project. It cannot change a preview that never references the feature, so it is
+  // reported for review instead of failing this project's negative closure.
+  const sharedExtras = disabledModules.filter(moduleName => sharedKnows(moduleName) && sharedEngine.features[moduleName] === true);
   const profileComplete = profileMissing.length === 0 && profileUnexpected.length === 0;
   const complete = profileComplete && applied.available && appliedMissing.length === 0 && appliedUnexpected.length === 0;
   return {
@@ -570,6 +588,16 @@ function auditCocosEngineFeatures(projectRoot, options = {}) {
       missing: appliedMissing,
       unexpected: appliedUnexpected,
       complete: applied.available && appliedMissing.length === 0 && appliedUnexpected.length === 0,
+      sharedEngine: {
+        available: sharedEngine.available,
+        source: sharedEngine.source,
+        sha256: sharedEngine.sha256,
+        modifiedMs: sharedEngine.modifiedMs,
+        features: sharedEngine.features,
+        missing: sharedMissing,
+        extras: sharedExtras,
+        ...(sharedEngine.error ? { error: sharedEngine.error } : {}),
+      },
     },
     pendingEditorApply: profileComplete && !complete,
   };
@@ -953,6 +981,7 @@ async function ensureCocosEngineFeatures(projectRoot, options = {}) {
     fallbackUsed: false,
     pendingEditorApply: false,
     mcpAttempts: [],
+    sharedEngineReapply: null,
     restartReceipts: [],
     patchReceipt: null,
     initialAudit: audit,
@@ -1000,6 +1029,37 @@ async function ensureCocosEngineFeatures(projectRoot, options = {}) {
       physics2dBackend: resolvePhysics2dBackend(audit.requiredModules, options),
     }, options);
     audit = auditCocosEngineFeatures(root, options);
+  }
+
+  // Another open project rewrote the install-wide preview map (e.g. without MARIONETTE). The
+  // project's own editor re-emits it with an in-place engine rebuild; no restart is needed.
+  if (!audit.complete && audit.profile.complete && !options.dryRun
+    && audit.appliedPreview.sharedEngine?.missing?.length) {
+    let client;
+    const reapply = { missing: [...audit.appliedPreview.sharedEngine.missing], ok: false };
+    try {
+      client = await createMcpClient(root, options);
+      const raw = await client.call('engineFeature_ensure_features', {
+        modules: audit.requiredModules.filter((name) => !PHYSICS_BACKENDS.includes(name) &&
+          !SPINE_BACKENDS.includes(name) && !PHYSICS_2D_BACKENDS.includes(name)),
+        disabledModules: audit.disabledModules,
+        physicsBackend: audit.physicsDecision.backend || undefined,
+        spineBackend: resolveSpineBackend(audit.requiredModules, options) || undefined,
+        physics2dBackend: resolvePhysics2dBackend(audit.requiredModules, options) || undefined,
+        reload: true,
+        timeoutMs: options.timeoutMs || 240_000,
+      });
+      reapply.receipt = unwrapToolResult(raw);
+      reapply.ok = reapply.receipt?.success !== false;
+    } catch (error) {
+      reapply.code = error.code || 'ENGINE_FEATURE_MCP_ERROR';
+      reapply.error = error.message;
+    } finally {
+      if (client) await client.close();
+    }
+    audit = await waitForEngineApplication(root, options);
+    reapply.complete = audit.complete;
+    result.sharedEngineReapply = reapply;
   }
 
   if (!audit.complete && options.restart !== false && !options.dryRun) {

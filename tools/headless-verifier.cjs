@@ -228,7 +228,23 @@ function checkEngineFeatureCropping() {
       result.warnings.push('Preview import map is unavailable; Editor/runtime application is unverified.');
     } else if (!audit.appliedPreview.complete) {
       result.status = 'FAIL';
-      result.errors.push(`Active preview import map is stale/missing: ${audit.appliedPreview.missing.join(', ')}`);
+      const shared = audit.appliedPreview.sharedEngine || {};
+      const sharedMissing = shared.missing || [];
+      const projectMissing = audit.appliedPreview.missing.filter(name => !sharedMissing.includes(name));
+      if (projectMissing.length || audit.appliedPreview.unexpected.length) {
+        result.errors.push(`Active preview import map is stale/missing: ${[...projectMissing,
+          ...audit.appliedPreview.unexpected.map(name => `disabled ${name}`)].join(', ')}`);
+      }
+      if (sharedMissing.length) {
+        result.errors.push(`[ENGINE_SHARED_PREVIEW_MAP_STALE] The Cocos install-wide preview import map (${shared.source}) ` +
+          `stubs ${sharedMissing.join(', ')}; another project opened from the same Cocos install rewrote it. ` +
+          'Re-apply with `npm run engine:features -- ensure --project .` (in-place engine rebuild, no restart).');
+      }
+    }
+    const sharedExtras = audit.appliedPreview.sharedEngine?.extras || [];
+    if (sharedExtras.length) {
+      result.warnings.push(`Install-wide preview import map also enables disabled ${sharedExtras.join(', ')} ` +
+        '(written by another open project); unused by this project, so it cannot affect its preview.');
     }
     result.details = `Required: ${audit.requiredModules.join(', ') || 'none'}; physics decision: ${backend}; ` +
       `profile=${audit.profile.complete ? 'ready' : 'missing'}, preview=${audit.appliedPreview.complete ? 'ready' : 'pending'}.`;
