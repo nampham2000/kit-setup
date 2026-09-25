@@ -1,8 +1,9 @@
 import { ParticleSystem } from 'cc';
 
-// Cocos 3.8.8 Burst.update dispatches only one repeat per frame and can permanently
-// miss later repeats when a frame spans multiple intervals. Unity catches them up.
-export function installUnityParticleBurstEmission(system: ParticleSystem): void {
+// Unity BurstSpread (shape arc mode 3) spreads each emission evenly over the
+// arc. Cocos 3.8.8 keeps the mode value but falls through to Loop, so every
+// particle of one burst gets the same angle. Safe to install on its own.
+export function installUnityParticleBurstSpread(system: ParticleSystem): void {
     const shape = system.shapeModule as any;
     if (shape?.arcMode === 3 && !shape.unityBurstSpread) {
         shape.unityBurstSpread = true;
@@ -22,6 +23,12 @@ export function installUnityParticleBurstEmission(system: ParticleSystem): void 
             finally { count = 0; }
         };
     }
+}
+
+// Cocos 3.8.8 Burst.update dispatches only one repeat per frame and can permanently
+// miss later repeats when a frame spans multiple intervals. Unity catches them up.
+export function installUnityParticleBurstEmission(system: ParticleSystem): void {
+    installUnityParticleBurstSpread(system);
     for (const burst of system.bursts) {
         const b = burst as any;
         if (b.unityBurstCatchUp) continue;

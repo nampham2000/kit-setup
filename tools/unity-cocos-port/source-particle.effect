@@ -26,6 +26,7 @@ CCEffect %{
     r1: &r1 { cullMode: none }
     p1: &p1
       sourceRendererPivot: { value: [0,0,0,0] }
+      sourceRendererSize: { value: [0,0.5,0,0] }
       mainTexture:            { value: grey }
       mainTiling_Offset:      { value: [1, 1, 0, 0]  }
     p2: &p2
@@ -190,13 +191,22 @@ in vec3 a_texCoord;  // xy:vertex index,z:frame index
   in vec4 a_color1;     // mesh color
 #endif
 
-uniform SourceRenderer { vec4 sourceRendererPivot; };
+uniform SourceRenderer { vec4 sourceRendererPivot; vec4 sourceRendererSize; };
 vec4 sourceEuler(vec3 e) {
   vec3 s=sin(e*0.5),c=cos(e*0.5);
   return vec4(s.x*c.y*c.z+c.x*s.y*s.z,
               c.x*s.y*c.z-s.x*c.y*s.z,
               c.x*c.y*s.z-s.x*s.y*c.z,
               c.x*c.y*c.z+s.x*s.y*s.z);
+}
+// Unity ParticleSystemRenderer.minParticleSize/maxParticleSize (BakeMesh):
+// max(size.x, size.y) is clamped to x/y times the viewport WIDTH in world
+// units at the particle's view depth (clip w; 1 for orthographic cameras).
+// w=1 enables the clamp; the property default w=0 keeps older materials.
+float sourceSizeFactor(vec3 center, vec3 s) {
+  float width = 2.0 * (cc_matViewProj * vec4(center, 1.0)).w / abs(cc_matProj[0][0]);
+  float m = max(max(s.x, s.y), 1e-6);
+  return sourceRendererSize.w < 0.5 ? 1.0 : min(max(m, sourceRendererSize.x * width), sourceRendererSize.y * width) / m;
 }
 vec4 lpvs_main () {
   vec3 compScale = scale.xyz * a_texCoord1;
@@ -216,6 +226,12 @@ vec4 lpvs_main () {
     #if CC_RENDER_MODE == RENDER_MODE_STRETCHED_BILLBOARD
       velocity = cc_matWorld * velocity;
     #endif
+  #endif
+
+  #if CC_RENDER_MODE == RENDER_MODE_STRETCHED_BILLBOARD
+    compScale.x *= sourceSizeFactor(pos.xyz, compScale); // length stays unclamped
+  #elif CC_RENDER_MODE != RENDER_MODE_MESH
+    compScale.xy *= sourceSizeFactor(pos.xyz, compScale);
   #endif
 
   #pragma define INDENTIFY_NEG_QUAT 10.0
@@ -252,6 +268,11 @@ vec4 lpvs_main () {
 
   #if CC_RENDER_MODE != RENDER_MODE_MESH
     vec2 cornerOffset = vec2((a_texCoord.xy - 0.5));
+    #if CC_RENDER_MODE == RENDER_MODE_HORIZONTAL_BILLBOARD || CC_RENDER_MODE == RENDER_MODE_VERTICAL_BILLBOARD
+      // Unity bakes Horizontal/Vertical billboards with corners at size/2 on
+      // the diagonals: the quad side is size/sqrt(2), unlike View billboards.
+      compScale.xy *= 0.70710678;
+    #endif
 
     #if CC_RENDER_MODE == RENDER_MODE_BILLBOARD || CC_RENDER_MODE == RENDER_MODE_VERTICAL_BILLBOARD
       #if CC_RENDER_MODE == RENDER_MODE_BILLBOARD
@@ -267,9 +288,12 @@ vec4 lpvs_main () {
         computeVertPos(pos, cornerOffset, rot, compScale, cc_matViewInv);
       #endif
     #elif CC_RENDER_MODE == RENDER_MODE_STRETCHED_BILLBOARD
-      if (dot(velocity.xyz,velocity.xyz)>0.0)
+      // Unity bakes a zero-velocity stretched particle as a degenerate quad at
+      // its position; normalize(0) would emit NaN vertices instead.
+      if (dot(velocity.xyz,velocity.xyz)>0.0) {
         pos.xyz+=normalize(velocity.xyz)*(2.0*compScale.y*sourceRendererPivot.y);
-      computeVertPos(pos, cornerOffset, rot, compScale, cc_cameraPos.xyz, velocity, frameTile_velLenScale.z, frameTile_velLenScale.w, a_texCoord.x);
+        computeVertPos(pos, cornerOffset, rot, compScale, cc_cameraPos.xyz, velocity, frameTile_velLenScale.z, frameTile_velLenScale.w, a_texCoord.x);
+      }
     #elif RENDER_MODE_HORIZONTAL_BILLBOARD
       computeVertPos(pos, cornerOffset, rot, compScale);
     #endif

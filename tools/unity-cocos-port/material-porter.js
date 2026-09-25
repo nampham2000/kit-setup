@@ -525,6 +525,7 @@ module.exports = function createMaterialPorter(deps) {
       linear: unityProjectIsLinear(options.unityRoot),
       applyActiveColorSpace: extra.applyActiveColorSpace !== false,
       sourceRendererPivot: extra.sourceRendererPivot || null,
+      sourceRendererSize: extra.sourceRendererSize || null,
       name,
       effectUuid: ensureLegacyPreviewEffect(options, reporter),
     });
@@ -842,6 +843,11 @@ module.exports = function createMaterialPorter(deps) {
     if (!convertedDest) return null;
     const sourceAdapter = materialUsage === 'particle' && rendererContract?.requiresMaterialAdapter;
     if (sourceAdapter) convertedDest = convertedDest.replace(/\.mtl$/i, `.renderer-${rendererContract.mode}-${rendererContract.sourceRendererPivot.join('_')}.mtl`);
+    // Min/max particle size is renderer state. Unity's default clamp (0, 0.5)
+    // keeps the shared file name; any other clamp gets its own variant so two
+    // renderers sharing one Unity material cannot overwrite each other.
+    const sizeClamp = materialUsage === 'particle' ? rendererContract?.sourceRendererSize || null : null;
+    const sizeVariant = sizeClamp && (sizeClamp[0] !== 0 || sizeClamp[1] !== 0.5) ? `.size-${sizeClamp[0]}_${sizeClamp[1]}.mtl` : '.mtl';
 
     const particleShaderRef = getField(materialDoc, 'm_Shader', null);
     const particleShaderGuid = unityRefGuid(particleShaderRef);
@@ -854,11 +860,12 @@ module.exports = function createMaterialPorter(deps) {
     const legacyShader = materialUsage === 'particle' ? legacyPreviewShader(particleShaderName) : null;
     if (legacyShader) {
       const applyActiveColorSpace = rendererContract?.applyActiveColorSpace !== false;
-      const dest = applyActiveColorSpace ? convertedDest : convertedDest.replace(/\.mtl$/i, '.gamma-vertex.mtl');
+      const dest = (applyActiveColorSpace ? convertedDest : convertedDest.replace(/\.mtl$/i, '.gamma-vertex.mtl')).replace(/\.mtl$/i, sizeVariant);
       return writeLegacyPreviewMaterial(materialAsset, materialDoc, legacyShader, 'particle', dest, options, unityDb, reporter, {
         spriteTextureAsset,
         applyActiveColorSpace,
         sourceRendererPivot: rendererContract?.sourceRendererPivot || null,
+        sourceRendererSize: sizeClamp,
       });
     }
     const tcp2ParticleMaterial = TCP2_HYBRID_SHADER_2_GUIDS.has(particleShaderGuid)
@@ -983,9 +990,17 @@ module.exports = function createMaterialPorter(deps) {
         'Import assets/effects/unity-source-particle.effect through Cocos AssetDB, then rerun porter to bind the source renderer adapter.');
       const [x,y,z,w] = rendererContract.sourceRendererPivot;
       props.sourceRendererPivot = { __type__: 'cc.Vec4', x,y,z,w };
+      if (sizeClamp) {
+        const [minSize, maxSize, unused, enabled] = sizeClamp;
+        props.sourceRendererSize = { __type__: 'cc.Vec4', x: minSize, y: maxSize, z: unused, w: enabled };
+        convertedDest = convertedDest.replace(/\.mtl$/i, sizeVariant);
+      }
     } else if (sourceAdapter) {
       reporter.high('PARTICLE_RENDERER_CUSTOM_EFFECT_ADAPTER_REQUIRED', materialAsset.relativePath, '',
         'TCP2 particle effect needs the source renderer frame/pivot ABI; builtin source adapter cannot replace its shading.');
+    } else if (sizeClamp && rendererContract.mode !== 4 && !tcp2ParticleMaterial) {
+      reporter.medium('PARTICLE_SIZE_CLAMP_UNBOUND', materialAsset.relativePath, '',
+        `Builtin particle effect cannot apply Unity Min/Max Particle Size (${sizeClamp[0]}/${sizeClamp[1]} of viewport width); route through the source particle effect if particles can reach that size.`);
     }
     const materialData = {
       __type__: 'cc.Material',

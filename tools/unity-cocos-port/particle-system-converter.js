@@ -2,6 +2,7 @@
 const { particleRendererContract } = require('./particle-renderer-contract');
 const { particleNoiseContract } = require('./particle-noise-contract');
 const { particleOrbitContract } = require('./particle-orbit-contract');
+const { particleLimitVelocityContract } = require('./particle-limit-velocity-binding');
 
 const { particleShapeRotation } = require('./particle-shape-rotation');
 
@@ -1051,7 +1052,8 @@ function applyLimitVelocityModule(builder, particle, data) {
   if (!module || !data || typeof data !== 'object') return false;
   setKnown(module, ['_enable', 'enable'], bool(data.enabled, false));
   module.space = bool(data.inWorldSpace, false) ? 0 : 1;
-  module.separateAxes = bool(data.separateAxes, false);
+  // Unity serializes this module's flag as `separateAxis` (singular).
+  module.separateAxes = bool(data.separateAxis ?? data.separateAxes, false);
   module.dampen = num(data.dampen, module.dampen ?? 0);
   applyCurveRange(builder, refObject(builder.objects, module.limit), data.magnitude);
   applyCurveRange(builder, refObject(builder.objects, module.limitX), data.x);
@@ -1384,6 +1386,7 @@ function applyUnityParticleDataToCocos(builder, particleId, data = {}, rendererD
   Object.defineProperty(particle, 'unityRendererContract', { value: rendererContract, configurable: true });
   Object.defineProperty(particle, 'unityOrbitContract', { value: particleOrbitContract(data), configurable: true });
   Object.defineProperty(particle, 'unityNoiseContract', { value: particleNoiseContract(data), configurable: true });
+  Object.defineProperty(particle, 'unityLimitVelocityContract', { value: particleLimitVelocityContract(data), configurable: true });
 
   return { applied };
 }

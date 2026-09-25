@@ -1487,6 +1487,23 @@ class UnityAssetDatabase {
   }
 }
 
+// The GUID index only reads Unity .meta files, and the preflight receipt pins
+// the Unity source state for the whole run, so one scan per process serves
+// every prefab of a batch. Rescanning per prefab walked the entire project
+// (Assets + PackageCache) each time and dominated batch port time.
+const unityAssetDatabases = new Map();
+
+function scannedUnityAssetDatabase(unityRoot) {
+  const key = path.resolve(unityRoot);
+  let db = unityAssetDatabases.get(key);
+  if (!db) {
+    db = new UnityAssetDatabase(key, unityPackageAssetRoots(key));
+    db.scan();
+    unityAssetDatabases.set(key, db);
+  }
+  return db;
+}
+
 class CocosAssetDatabase {
   constructor(root) {
     this.root = path.resolve(root);
@@ -5813,6 +5830,9 @@ function buildCocosPrefabBuilder(model, outputFile, options, reporter, unityDb, 
   require('./unity-cocos-port/particle-orbit-binding').attachOrbitRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-noise-binding').attachNoiseRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-birth-state-binding').attachBirthStateRuntime(builder, reporter, options);
+  require('./unity-cocos-port/particle-burst-spread-binding').attachBurstSpreadRuntime(builder, reporter, options);
+  require('./unity-cocos-port/particle-limit-velocity-binding').attachLimitVelocityRuntime(builder, reporter, options);
+  require('./unity-cocos-port/particle-prewarm-binding').attachPrewarmRuntime(builder, reporter, options);
   if (builder.rootPrefabInfoId && builder.nestedPrefabInstanceRootIds.length) {
     const existing = Array.isArray(builder.objects[builder.rootPrefabInfoId].nestedPrefabInstanceRoots)
       ? builder.objects[builder.rootPrefabInfoId].nestedPrefabInstanceRoots.filter((entry) => Number.isInteger(entry?.__id__))
@@ -6169,8 +6189,7 @@ function portPrefab(options, reporter) {
   if (!reporter) reporter = new Reporter();
   if (!options._addedCocosCustomLayers) options._addedCocosCustomLayers = new Map();
 
-  const unityDb = new UnityAssetDatabase(options.unityRoot, unityPackageAssetRoots(options.unityRoot));
-  unityDb.scan();
+  const unityDb = scannedUnityAssetDatabase(options.unityRoot);
   runtimeComponentPorter.ensureParticleSubEmitterFollowerScript(options, reporter);
   runtimeComponentPorter.ensureParticleHierarchyTransformSyncScript(options, reporter);
   runtimeComponentPorter.ensureParticleRendererVisibilityScript(options, reporter);

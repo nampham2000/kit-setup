@@ -28,3 +28,11 @@ test('Pivot is per-renderer and unmeasured axes stay blocking',()=>{
   assert.deepEqual(contract({}, {m_RenderMode:1,m_Pivot:{x:0,y:1,z:0}}).sourceRendererPivot,[0,1,0,0]);
   assert.ok(contract({}, {m_RenderMode:0,m_Pivot:{x:0,y:0,z:.1}}).unsupported.includes('pivot-axes'));
 });
+test('Min/Max Particle Size keep Unity defaults and only the measured stretched maximum',()=>{
+  assert.deepEqual(contract({}, {m_RenderMode:0}).sourceRendererSize,[0,0.5,0,1]);
+  assert.deepEqual(contract({}, {m_RenderMode:0,m_MinParticleSize:'',m_MaxParticleSize:null}).sizeClamp,{min:0,max:0.5});
+  assert.deepEqual(contract({}, {m_RenderMode:2,m_MinParticleSize:0.1,m_MaxParticleSize:25}).sourceRendererSize,[0.1,25,0,1]);
+  assert.deepEqual(contract({}, {m_RenderMode:1,m_MaxParticleSize:0.5}).unsupported,[]);
+  assert.ok(contract({}, {m_RenderMode:1,m_MinParticleSize:0.2}).unsupported.includes('stretched-min-particle-size'));
+  assert.deepEqual(contract({}, {m_RenderMode:0,m_MinParticleSize:0.2}).unsupported,[]);
+});

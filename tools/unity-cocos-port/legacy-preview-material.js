@@ -61,10 +61,11 @@ function vec4(x, y, z, w) {
  * @param {boolean} input.linear      Unity project uses Linear color space
  * @param {boolean} input.applyActiveColorSpace ParticleSystemRenderer flag
  * @param {number[]|null} input.sourceRendererPivot particle renderer adapter state
+ * @param {number[]|null} input.sourceRendererSize particle renderer min/max size clamp
  */
 function legacyPreviewMaterialData(input) {
   const { shader, usage, colors = {}, mainTexEnv = null, textureUuid = '', textureSrgb = true,
-    linear = false, applyActiveColorSpace = true, sourceRendererPivot = null, name = '', effectUuid } = input;
+    linear = false, applyActiveColorSpace = true, sourceRendererPivot = null, sourceRendererSize = null, name = '', effectUuid } = input;
   const color = colors[shader.colorKey] || { r: 1, g: 1, b: 1, a: 1 };
   const scale = mainTexEnv?.m_Scale || { x: 1, y: 1 };
   const offset = mainTexEnv?.m_Offset || { x: 0, y: 0 };
@@ -80,6 +81,7 @@ function legacyPreviewMaterialData(input) {
   };
   if (textureUuid) props.mainTexture = { __uuid__: textureUuid, __expectedType__: 'cc.Texture2D' };
   if (usage === 'particle' && sourceRendererPivot) props.sourceRendererPivot = vec4(...sourceRendererPivot.map(Number));
+  if (usage === 'particle' && sourceRendererSize) props.sourceRendererSize = vec4(...sourceRendererSize.map(Number));
   return {
     __type__: 'cc.Material',
     _name: name,
