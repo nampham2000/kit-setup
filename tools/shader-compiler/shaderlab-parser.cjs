@@ -109,6 +109,23 @@ function cleanComments(source) {
 /**
  * Finds matching closing brace for an opening brace at `openIndex`
  */
+/** SubShader text with every `Pass { ... }` / `GrabPass { ... }` body removed. */
+function stripPassBlocks(ssContent) {
+  let out = '';
+  let cursor = 0;
+  const passRegex = /\b(?:Pass|GrabPass)\s*\{/gi;
+  let m;
+  while ((m = passRegex.exec(ssContent)) !== null) {
+    const open = m.index + m[0].length - 1;
+    const close = findClosingBrace(ssContent, open);
+    if (close <= open) break;
+    out += ssContent.slice(cursor, m.index);
+    cursor = close + 1;
+    passRegex.lastIndex = close + 1;
+  }
+  return out + ssContent.slice(cursor);
+}
+
 function findClosingBrace(str, openIndex) {
   let depth = 0;
   let inString = false;
@@ -637,8 +654,10 @@ function parseShaderLab(source, filename = '') {
     const lodMatch = /\bLOD\s+(\d+)/i.exec(ssContent);
     const lod = lodMatch ? parseInt(lodMatch[1], 10) : 100;
 
-    // SubShader default render state
-    const ssRenderState = parseRenderState(ssContent);
+    // SubShader default render state. Only commands outside Pass blocks are
+    // SubShader defaults; a later pass's `Blend`/`ZWrite Off`/`Cull Off` must
+    // not leak into an earlier opaque pass that declares none of them.
+    const ssRenderState = parseRenderState(stripPassBlocks(ssContent));
 
     // Parse Passes inside this SubShader
     const passes = [];

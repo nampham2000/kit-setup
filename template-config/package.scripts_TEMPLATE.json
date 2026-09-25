@@ -82,6 +82,7 @@
     "ai:port:core:verify": "node playable-shared-kit/tools/core-gameplay-port.cjs verify --json",
     "ai:port:report": "node playable-shared-kit/tools/report-digest.cjs --json",
     "ai:port:closure": "node playable-shared-kit/tools/port-closure.cjs --json",
+    "unity:script": "node playable-shared-kit/tools/unity-intel/unity-mcp-script.cjs",
     "unity:intel:doctor": "node playable-shared-kit/tools/unity-intel-cli.cjs doctor",
     "unity:intel:setup": "node playable-shared-kit/tools/unity-intel-cli.cjs setup",
     "unity:intel:scan": "node playable-shared-kit/tools/unity-intel-cli.cjs scan",
