@@ -77,9 +77,36 @@ function scopeSignature(root) {
   return `${count}:${Math.floor(newest)}`;
 }
 
+// Porter code is an input too: a converter, binding, runtime helper or effect
+// fix must re-port prefabs whose source did not change. Hash content, not
+// mtime, so a checkout on another machine keeps valid entries.
+let porterFingerprintValue = null;
+function porterFingerprint() {
+  if (porterFingerprintValue) return porterFingerprintValue;
+  const crypto = require('crypto');
+  const hash = crypto.createHash('sha256');
+  const files = [path.join(__dirname, '..', 'unity-cocos-port.cjs')];
+  const walk = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) { if (entry.name !== 'fixtures') walk(full); continue; }
+      if (/\.test\.c?js$/.test(entry.name)) continue;
+      if (/\.(c?js|ts|effect|chunk|json)$/.test(entry.name)) files.push(full);
+    }
+  };
+  walk(__dirname);
+  for (const file of files) {
+    hash.update(path.relative(__dirname, file).replace(/\\/g, '/'));
+    hash.update(fs.readFileSync(file));
+  }
+  porterFingerprintValue = hash.digest('hex').slice(0, 16);
+  return porterFingerprintValue;
+}
+
 /** Những option làm output khác đi — đổi chúng thì phải port lại. */
 function optionsFingerprint(options) {
   return JSON.stringify({
+    porter: porterFingerprint(),
     recursive: !!options.recursive,
     copyAssets: !!options.copyAssets,
     convertFbxFallback: !!options.convertFbxFallback,
