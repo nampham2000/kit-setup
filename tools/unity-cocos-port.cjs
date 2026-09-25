@@ -3735,20 +3735,26 @@ function collapseStrippedTransformsToInstanceRoot(context) {
 // A scene (or prefab) only serializes a stripped Transform for a nested
 // PrefabInstance when something references it. Scene roots are ordered by
 // m_RootOrder overrides, so a root-level instance of a .prefab usually has no
-// stripped Transform at all and would otherwise vanish from the port. Give it
-// one that points at the source prefab root so the regular stripped-transform
-// path merges its overrides and links the generated Cocos prefab.
+// stripped Transform at all and would otherwise vanish from the port. The same
+// holds for an instance parented under a Transform of another prefab instance
+// through m_TransformParent alone (the ARPGDemo12 shrines under the fountain
+// models). Give it one that points at the source prefab root so the regular
+// stripped-transform path merges its overrides and links the generated prefab.
 function synthesizeRootPrefabInstanceTransforms(context) {
-  const { file, byId, transforms, prefabInstanceInfos, unityDb, reporter, options, recursionDepth } = context;
+  const {
+    file, byId, transforms, prefabInstanceInfos, unityDb, reporter, options, recursionDepth,
+    referencedTransformIds, childReferencedTransformIds,
+  } = context;
   if (!options.recursive) return;
   const claimed = new Set();
   for (const doc of byId.values()) {
-    if (!doc?.stripped) continue;
+    if (!doc?.stripped || ![4, 224].includes(Number(doc.classId))) continue;
     const instanceId = unityRefFileId(getField(doc, 'm_PrefabInstance'));
     if (instanceId) claimed.add(instanceId);
   }
   for (const [instanceId, instanceInfo] of prefabInstanceInfos.entries()) {
-    if (instanceInfo.parentTransformId || claimed.has(instanceId)) continue;
+    const parentId = instanceInfo.parentTransformId || '';
+    if (claimed.has(instanceId) || (parentId && !transforms.has(parentId))) continue;
     const sourceGuid = unityRefGuid(instanceInfo.sourcePrefab);
     const sourceAsset = unityDb.get(sourceGuid);
     if (sourceAsset?.ext !== '.prefab') continue;
@@ -3787,7 +3793,14 @@ function synthesizeRootPrefabInstanceTransforms(context) {
       anchorMax: { x: 0.5, y: 0.5 },
       anchor: { x: 0.5, y: 0.5 },
     });
-    reporter.low('ROOT_PREFAB_INSTANCE_SYNTHESIZED', file, sourceAsset.relativePath, 'Synthesized the stripped root Transform of a root-level prefab instance', `instance ${instanceId}`);
+    if (parentId) {
+      // The stripped-transform pass only materializes referenced child roots.
+      referencedTransformIds?.add(transformId);
+      childReferencedTransformIds?.add(transformId);
+    }
+    reporter.low(parentId ? 'NESTED_PREFAB_INSTANCE_SYNTHESIZED' : 'ROOT_PREFAB_INSTANCE_SYNTHESIZED', file, sourceAsset.relativePath,
+      parentId ? 'Synthesized the stripped root Transform of a prefab instance parented through m_TransformParent only'
+        : 'Synthesized the stripped root Transform of a root-level prefab instance', `instance ${instanceId}`);
   }
 }
 
@@ -3845,6 +3858,8 @@ function materializeStrippedTransforms(context) {
     reporter,
     options,
     recursionDepth,
+    referencedTransformIds,
+    childReferencedTransformIds,
   });
 
   for (const transform of [...transforms.values()]) {

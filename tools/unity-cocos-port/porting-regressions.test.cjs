@@ -417,3 +417,80 @@ PrefabInstance:
   assert.equal(fs.readFileSync(mapped,'utf8'),'[]\n','mapped prefab is linked, not regenerated');
   assert.ok(!fs.existsSync(path.join(cocos,'assets/ported/scenes/Glow.prefab')),'no duplicate beside the scene output');
 });
+test('a prefab instance parented only through m_TransformParent is mounted under its parent instance',()=>{
+  const {portPrefab,parseArgs}=require('../unity-cocos-port.cjs');
+  const root=path.join(temp,'transform-parent'),unity=path.join(root,'Unity/Assets'),cocos=path.join(root,'Cocos');
+  fs.mkdirSync(path.join(unity,'Effects'),{recursive:true});fs.mkdirSync(path.join(cocos,'assets/ported/Effects'),{recursive:true});
+  const holderGuid='abcdefabcdefabcdefabcdefabcdef21',glowGuid='abcdefabcdefabcdefabcdefabcdef22';
+  const prefab=name=>`%YAML 1.1
+--- !u!1 &1
+GameObject:
+  m_Name: ${name}
+  m_IsActive: 1
+  m_Component:
+  - component: {fileID: 2}
+--- !u!4 &2
+Transform:
+  m_GameObject: {fileID: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_Children: []
+  m_Father: {fileID: 0}
+`;
+  const uuids={Holder:'11111111-2222-3333-4444-000000000021',Glow:'11111111-2222-3333-4444-000000000022'};
+  for(const [name,guid] of [['Holder',holderGuid],['Glow',glowGuid]]){
+    fs.writeFileSync(path.join(unity,`Effects/${name}.prefab`),prefab(name));
+    fs.writeFileSync(path.join(unity,`Effects/${name}.prefab.meta`),`fileFormatVersion: 2\nguid: ${guid}\n`);
+    const mapped=path.join(cocos,`assets/ported/Effects/${name}.prefab`);
+    fs.writeFileSync(mapped,'[]\n');
+    fs.writeFileSync(mapped+'.meta',JSON.stringify({ver:'1.1.50',importer:'prefab',imported:true,uuid:uuids[name],files:['.json'],subMetas:{},userData:{syncNodeName:name}}));
+  }
+  // ARPGDemo12 shape: the shrine instance names the fountain instance's stripped
+  // Transform as m_TransformParent and has no stripped Transform of its own.
+  const scene=path.join(unity,'Demo.unity');
+  fs.writeFileSync(scene,`%YAML 1.1
+--- !u!4 &30 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 2, guid: ${holderGuid}, type: 3}
+  m_PrefabInstance: {fileID: 40}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1001 &40
+PrefabInstance:
+  m_Modification:
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: 2, guid: ${holderGuid}, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 3
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: ${holderGuid}, type: 3}
+--- !u!1001 &50
+PrefabInstance:
+  m_Modification:
+    m_TransformParent: {fileID: 30}
+    m_Modifications:
+    - target: {fileID: 2, guid: ${glowGuid}, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0.5
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: ${glowGuid}, type: 3}
+`);
+  const out=path.join(cocos,'assets/ported/scenes/Demo.prefab');
+  portPrefab(parseArgs(['port','--src',scene,'--out',out,'--unity-root',unity,'--cocos-root',cocos,'--overwrite','--no-cache','--recursive',
+    '--nested-prefab-map',`Effects=assets/ported/Effects`,'--report',path.join(root,'report.csv')]));
+  const objects=JSON.parse(fs.readFileSync(out));
+  const instanceOf=node=>objects[objects[node._prefab?.__id__]?.instance?.__id__];
+  const override=(node,key)=>instanceOf(node)?.propertyOverrides.map(ref=>objects[ref.__id__]).find(o=>o.propertyPath[0]===key)?.value;
+  const nodes=objects.filter(o=>o.__type__==='cc.Node');
+  const holder=nodes.find(node=>override(node,'_name')==='Holder');
+  const glow=nodes.find(node=>override(node,'_name')==='Glow');
+  assert.ok(holder&&glow,'both instances are emitted');
+  assert.equal(objects[glow._parent.__id__],holder,'the child instance mounts under its m_TransformParent instance');
+  assert.equal(objects[glow._prefab.__id__].asset.__uuid__,uuids.Glow);
+  assert.equal(override(glow,'_lpos').y,0.5,'child instance overrides are merged');
+  const mounted=instanceOf(holder).mountedChildren.map(ref=>objects[ref.__id__]).flatMap(info=>info.nodes.map(ref=>objects[ref.__id__]));
+  assert.ok(mounted.includes(glow),'recorded as a mounted child of the parent instance');
+});
