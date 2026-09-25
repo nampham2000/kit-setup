@@ -102,6 +102,11 @@ test('a win-less demo can verify lifecycle through two measured gesture restarts
   assert.equal(validateRegistry(root,source,{configFile:file}).suites.length,1);
   entry.requiredEvalMetrics.resets.min=1; writeMatrix(root,matrix,[entry]);
   assert.throws(()=>validateRegistry(root,source,{configFile:file}),error=>error.code==='REGRESSION_WIN_RECEIPT_MISSING');
+  // Evals that return {ok, metrics:{...}} declare dotted paths; the contract reads them too.
+  entry.requiredEvalMetrics={'metrics.resets':{min:2,max:2},'metrics.rounds':{min:3,max:3}}; writeMatrix(root,matrix,[entry]);
+  assert.equal(validateRegistry(root,source,{configFile:file}).suites.length,1);
+  entry.requiredEvalMetrics['metrics.rounds'].min=2; writeMatrix(root,matrix,[entry]);
+  assert.throws(()=>validateRegistry(root,source,{configFile:file}),error=>error.code==='REGRESSION_WIN_RECEIPT_MISSING');
 });
 
 test('sprite animation oracle uses discrete frame and state evidence instead of transform extrema', t => {

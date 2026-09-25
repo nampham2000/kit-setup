@@ -244,13 +244,20 @@ function caseHasInputGesture(entry) {
     || (Array.isArray(entry.gesturesFromEvalBefore) && entry.gesturesFromEvalBefore.length > 0);
 }
 
+// Metric contracts are dotted paths into the eval payload (preview-checkpoints
+// readEvalMetric), so an eval returning {ok, metrics:{resets}} declares
+// "metrics.resets". Accept that nested form as well as the flat key.
+function metricBound(contract, metric) {
+  return contract?.[metric] ?? contract?.[`metrics.${metric}`];
+}
+
 function metricBoundAtLeast(contract, metric, bound) {
-  const value = Number(contract?.[metric]?.min);
+  const value = Number(metricBound(contract, metric)?.min);
   return Number.isFinite(value) && value >= bound;
 }
 
 function metricBoundAtMost(contract, metric, bound) {
-  const value = Number(contract?.[metric]?.max);
+  const value = Number(metricBound(contract, metric)?.max);
   return Number.isFinite(value) && value <= bound;
 }
 
