@@ -665,7 +665,9 @@ function assertPortableRegistry(projectRoot, registry, options = {}) {
   const tracked = new Set();
   for (let index = 0; index < gitFiles.length; index += 40) {
     const batch = gitFiles.slice(index, index + 40);
-    const result = run('git', ['-C', gitRoot, 'ls-files', '--cached', '--', ...batch], {
+    // Shared-kit runtime/tool files are watched through the submodule; its commit is
+    // pinned by the parent, so files tracked inside it are portable too.
+    const result = run('git', ['-C', gitRoot, 'ls-files', '--cached', '--recurse-submodules', '--', ...batch], {
       encoding: 'utf8', windowsHide: true, timeout: 15_000, maxBuffer: 256 * 1024, shell: false,
     });
     if (result.status !== 0 || result.error) {

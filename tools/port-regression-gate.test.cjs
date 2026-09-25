@@ -628,6 +628,32 @@ test('portability proof rejects a local-only oracle that another checkout would 
     error => error.code === 'REGRESSION_FILES_UNTRACKED' && error.details.files.some(file => file.endsWith('local-only.js')));
 });
 
+test('portability proof accepts watch files tracked inside a pinned submodule', t => {
+  const root = fixture(t);
+  const kit = fs.mkdtempSync(path.join(os.tmpdir(), 'regression-kit-'));
+  t.after(() => fs.rmSync(kit, { recursive: true, force: true }));
+  const git = (cwd, ...args) => assert.equal(spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'protocol.file.allow=always', ...args],
+    { cwd, encoding: 'utf8' }).status, 0, args.join(' '));
+  fs.writeFileSync(path.join(kit, 'Runtime.ts'), 'export {};\n');
+  git(kit, 'init'); git(kit, 'add', 'Runtime.ts'); git(kit, 'commit', '-m', 'kit');
+  const matrix = 'tools/qa/input-kit.json';
+  writeMatrix(root, matrix, [{ name: 'tap', gesture: '0.5,0.5,0.5,0.5,100,1', eval: 'true', requireEvalOk: true }]);
+  git(root, 'init');
+  git(root, 'submodule', 'add', kit, 'kit');
+  writeRegistry(root, registry([{
+    id: 'kit-input', risks: ['input-response'], matrix, watchFiles: ['assets/script/Game.ts', 'kit/Runtime.ts'],
+  }], ['input-response']));
+  git(root, 'add', 'package.json', 'assets/script/Game.ts', matrix, 'tools/port-regressions.json');
+  assert.equal(assertPortableRegistry(root, loadRegistry(root)).ok, true);
+  fs.writeFileSync(path.join(root, 'kit', 'Local.ts'), 'export {};\n');
+  writeRegistry(root, registry([{
+    id: 'kit-input', risks: ['input-response'], matrix, watchFiles: ['kit/Runtime.ts', 'kit/Local.ts'],
+  }], ['input-response']));
+  git(root, 'add', 'tools/port-regressions.json');
+  assert.throws(() => assertPortableRegistry(root, loadRegistry(root)),
+    error => error.code === 'REGRESSION_FILES_UNTRACKED' && error.details.files.includes('kit/Local.ts'));
+});
+
 test('native rendered animation requires complete sampled source and measured runtime parity',t=>{
  const root=fixture(t),matrix='tools/qa/rendered.json';
  const oracle={schemaVersion:1,kind:'unity-rendered-animation-oracle',completeness:'complete',captureFps:30,clipCount:1,clips:[{source:'Assets/Idle.anim',sha256:'a'.repeat(64),frameDigest:'b'.repeat(64),duration:1,loop:true,frameCount:31}]};
