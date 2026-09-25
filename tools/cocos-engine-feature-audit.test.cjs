@@ -131,6 +131,19 @@ test('Cannon override fails closed when Capsule/CCD behavior would be lost', () 
   );
 });
 
+test('a static capsule without bodies or queries does not force Bullet', () => {
+  // ARPG demo fountains: Unity's default CapsuleCollider on a Cylinder primitive, next to a MeshCollider floor.
+  const inert = decidePhysicsBackend(evidenceFor('[{"__type__":"cc.CapsuleCollider"},{"__type__":"cc.MeshCollider"}]'));
+  assert.equal(inert.backend, 'physics-cannon');
+  assert.ok(inert.reasons.includes('CAPSULE_COLLIDER_INERT_WITHOUT_BODY_OR_QUERY'), JSON.stringify(inert.reasons));
+  const alone = decidePhysicsBackend(evidenceFor('[{"__type__":"cc.CapsuleCollider"}]'));
+  assert.equal(alone.backend, 'physics-builtin');
+  const queried = decidePhysicsBackend(evidenceFor('[{"__type__":"cc.CapsuleCollider"}]\nPhysicsSystem.instance.raycast(ray);'));
+  assert.equal(queried.backend, 'physics-ammo', 'a raycast can hit the capsule');
+  const simulated = decidePhysicsBackend(evidenceFor('[{"__type__":"cc.RigidBody"},{"__type__":"cc.CapsuleCollider"}]'));
+  assert.equal(simulated.backend, 'physics-ammo');
+});
+
 test('Graphics and MeshCollider are audited against both profile and applied preview map', (t) => {
   const root = makeProject('[{"__type__":"cc.Graphics"},{"__type__":"cc.MeshCollider"}]', {
     backend: 'physics-cannon',

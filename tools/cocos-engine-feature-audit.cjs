@@ -274,7 +274,13 @@ function decidePhysicsBackend(evidence, options = {}) {
     .some((name) => hasFact(evidence, name));
   const builtinUnsupported = colliders.filter((name) => !BUILTIN_SUPPORTED_COLLIDERS.has(name));
   const cannonUnsupported = [];
-  if (hasFact(evidence, 'CapsuleCollider')) cannonUnsupported.push('CapsuleCollider');
+  // Cannon has no capsule shape. That only loses behaviour when a capsule can
+  // collide (a body is simulated) or be hit by a query; a static capsule on a
+  // decorative primitive (Unity's default Cylinder collider) is inert.
+  const capsuleCanMatter = hasRigidBody || hasCharacter
+    || hasFact(evidence, 'PhysicsRaycast') || hasFact(evidence, 'PhysicsSweep');
+  const inertCapsule = hasFact(evidence, 'CapsuleCollider') && !capsuleCanMatter;
+  if (hasFact(evidence, 'CapsuleCollider') && capsuleCanMatter) cannonUnsupported.push('CapsuleCollider');
   if (hasFact(evidence, 'PhysicsSweep')) cannonUnsupported.push('sweep query');
   if (hasCharacter) cannonUnsupported.push('character controller');
   if (hasFact(evidence, 'ConfigurableConstraint')) cannonUnsupported.push('configurable constraint');
@@ -285,6 +291,7 @@ function decidePhysicsBackend(evidence, options = {}) {
   const rejected = [];
   let backend;
   let complexity;
+  if (inertCapsule) reasons.push('CAPSULE_COLLIDER_INERT_WITHOUT_BODY_OR_QUERY');
   if (cannonUnsupported.length) {
     backend = 'physics-ammo';
     complexity = 'advanced-simulation';
