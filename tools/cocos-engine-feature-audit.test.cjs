@@ -361,6 +361,19 @@ test('canonical Windows launcher exits cleanly before interactive console self-t
   assert.ok(interactiveStop > cleanExit, 'interactive self-termination must be unreachable in automation mode');
 });
 
+test('automation restart never rewrites user-level MCP clients or opens VSCode', () => {
+  const launcher = fs.readFileSync(path.resolve(__dirname, '..', 'scripts', '1_open-project.bat'), 'utf8');
+  const guard = launcher.indexOf("$AutomationRestart = ($env:PLAYABLE_AUTOMATION_MODE -eq '1')");
+  assert.ok(guard >= 0, 'automation restart flag must be computed before MCP preparation');
+  const prepare = launcher.slice(guard, launcher.indexOf('$ResolvedProjectDir', guard));
+  assert.match(prepare, /if \(-not \$AutomationRestart\) \{ Sync-VSCodeMcpAutostart \}/);
+  assert.match(prepare, /if \(\$AutomationRestart\) \{[\s\S]*?\} else \{\s*Sync-McpClients\s*\}/);
+  assert.equal((prepare.match(/^\s*Sync-McpClients\s*$/gm) || []).length, 1, 'Sync-McpClients runs only in the interactive branch');
+  const vscode = launcher.slice(launcher.indexOf('$CodeCmd = $null'), launcher.indexOf('Start-Detached $CodeExe'));
+  assert.match(vscode, /if \(\$AutomationRestart\) \{[\s\S]*?\} else \{[\s\S]*?Get-Command code/);
+  assert.match(vscode, /if \(\$AutomationRestart\) \{[\s\S]*?\} elseif \(\$CodeCmd\) \{/);
+});
+
 test('direct fallback CAS refuses a concurrent engine.json edit', (t) => {
   const root = makeProject('[{"__type__":"cc.Graphics"}]');
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
