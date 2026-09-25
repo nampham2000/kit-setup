@@ -1,12 +1,12 @@
 {
   "_meta": {
-    "generatedAt": "2026-09-16T09:28:47.043Z",
+    "generatedAt": "2026-09-25T09:48:58.387Z",
     "description": "Compact project manifest for AI Agents. Use this instead of scanning file trees.",
     "project": {
-      "projectName": "cocos",
+      "projectName": "cc_playable_framework",
       "cocosVersion": "3.8.8",
-      "orientation": "landscape",
-      "designResolution": "1280x720",
+      "orientation": "portrait",
+      "designResolution": "720x1280",
       "configPath": "assets/resources/playable-config.json"
     }
   },
@@ -20,322 +20,20 @@
   },
   "scenes": [
     {
-      "name": "Toon projectiles 2",
-      "path": "assets/scene/Toon projectiles 2.scene",
-      "sizeKb": 1446.1
-    },
-    {
-      "name": "ToonProjectiles2Source",
-      "path": "assets/scene/ToonProjectiles2Source.scene",
-      "sizeKb": 1333.5
+      "name": "Gameplay",
+      "path": "assets/Gameplay.scene",
+      "sizeKb": 14.9
     }
   ],
-  "prefabs": [
-    {
-      "name": "Capsule",
-      "path": "assets/prefabs/Capsule.prefab",
-      "sizeKb": 2.8
-    },
-    {
-      "name": "Directional Light",
-      "path": "assets/prefabs/Directional Light.prefab",
-      "sizeKb": 2.7
-    },
-    {
-      "name": "Light Probe Group",
-      "path": "assets/prefabs/Light Probe Group.prefab",
-      "sizeKb": 27.7
-    },
-    {
-      "name": "Main Camera",
-      "path": "assets/prefabs/Main Camera.prefab",
-      "sizeKb": 3.7
-    },
-    {
-      "name": "Scene",
-      "path": "assets/prefabs/Scene.prefab",
-      "sizeKb": 9
-    },
-    {
-      "name": "Sphere",
-      "path": "assets/prefabs/Sphere.prefab",
-      "sizeKb": 10
-    },
-    {
-      "name": "Flash 1",
-      "path": "assets/toon-projectiles-2/prefabs/Flash 1.prefab",
-      "sizeKb": 85.2
-    },
-    {
-      "name": "Flash 10",
-      "path": "assets/toon-projectiles-2/prefabs/Flash 10.prefab",
-      "sizeKb": 96.6
-    },
-    {
-      "name": "Flash 11",
-      "path": "assets/toon-projectiles-2/prefabs/Flash 11.prefab",
-      "sizeKb": 98.3
-    },
-    {
-      "name": "Flash 12",
-      "path": "assets/toon-projectiles-2/prefabs/Flash 12.prefab",
-      "sizeKb": 127
-    },
-    {
-      "name": "Flash 13",
-      "path": "assets/toon-projectiles-2/prefabs/Flash 13.prefab",
-      "sizeKb": 70.2
-    },
-    {
-      "name": "Flash 14",
-      "path": "assets/toon-projectiles-2/prefabs/Flash 14.prefab",
-      "sizeKb": 120.7
-    },
-    {
-      "name": "Flash 15",
-      "path": "assets/toon-projectiles-2/prefabs/Flash 15.prefab",
-      "sizeKb": 73.9
-    },
-    {
-      "name": "Flash 2",
-      "path": "assets/toon-projectiles-2/prefabs/Flash 2.prefab",
-      "sizeKb": 48.2
-    },
-    {
-      "name": "Flash 3",
-      "path": "assets/toon-projectiles-2/prefabs/Flash 3.prefab",
-      "sizeKb": 104.3
-    },
-    {
-      "name": "Flash 4",
-      "path": "assets/toon-projectiles-2/prefabs/Flash 4.prefab",
-      "sizeKb": 73.6
-    },
-    {
-      "name": "Flash 5-Test",
-      "path": "assets/toon-projectiles-2/prefabs/Flash 5-Test.prefab",
-      "sizeKb": 74.2
-    },
-    {
-      "name": "Flash 5",
-      "path": "assets/toon-projectiles-2/prefabs/Flash 5.prefab",
-      "sizeKb": 74.1
-    },
-    {
-      "name": "Flash 6",
-      "path": "assets/toon-projectiles-2/prefabs/Flash 6.prefab",
-      "sizeKb": 48.1
-    },
-    {
-      "name": "Flash 7",
-      "path": "assets/toon-projectiles-2/prefabs/Flash 7.prefab",
-      "sizeKb": 55.1
-    },
-    {
-      "name": "Flash 8",
-      "path": "assets/toon-projectiles-2/prefabs/Flash 8.prefab",
-      "sizeKb": 98.7
-    },
-    {
-      "name": "Flash 9",
-      "path": "assets/toon-projectiles-2/prefabs/Flash 9.prefab",
-      "sizeKb": 47.9
-    },
-    {
-      "name": "Hit 1",
-      "path": "assets/toon-projectiles-2/prefabs/Hit 1.prefab",
-      "sizeKb": 169.8
-    },
-    {
-      "name": "Hit 10",
-      "path": "assets/toon-projectiles-2/prefabs/Hit 10.prefab",
-      "sizeKb": 149.7
-    },
-    {
-      "name": "Hit 11",
-      "path": "assets/toon-projectiles-2/prefabs/Hit 11.prefab",
-      "sizeKb": 175.6
-    },
-    {
-      "name": "Hit 12",
-      "path": "assets/toon-projectiles-2/prefabs/Hit 12.prefab",
-      "sizeKb": 197.8
-    },
-    {
-      "name": "Hit 13",
-      "path": "assets/toon-projectiles-2/prefabs/Hit 13.prefab",
-      "sizeKb": 125.6
-    },
-    {
-      "name": "Hit 14",
-      "path": "assets/toon-projectiles-2/prefabs/Hit 14.prefab",
-      "sizeKb": 172.5
-    },
-    {
-      "name": "Hit 15",
-      "path": "assets/toon-projectiles-2/prefabs/Hit 15.prefab",
-      "sizeKb": 140.9
-    },
-    {
-      "name": "Hit 2",
-      "path": "assets/toon-projectiles-2/prefabs/Hit 2.prefab",
-      "sizeKb": 121
-    },
-    {
-      "name": "Hit 3",
-      "path": "assets/toon-projectiles-2/prefabs/Hit 3.prefab",
-      "sizeKb": 126.4
-    },
-    {
-      "name": "Hit 4",
-      "path": "assets/toon-projectiles-2/prefabs/Hit 4.prefab",
-      "sizeKb": 124
-    },
-    {
-      "name": "Hit 5",
-      "path": "assets/toon-projectiles-2/prefabs/Hit 5.prefab",
-      "sizeKb": 118.8
-    },
-    {
-      "name": "Hit 6",
-      "path": "assets/toon-projectiles-2/prefabs/Hit 6.prefab",
-      "sizeKb": 161
-    },
-    {
-      "name": "Hit 7",
-      "path": "assets/toon-projectiles-2/prefabs/Hit 7.prefab",
-      "sizeKb": 184.2
-    },
-    {
-      "name": "Hit 8",
-      "path": "assets/toon-projectiles-2/prefabs/Hit 8.prefab",
-      "sizeKb": 122.2
-    },
-    {
-      "name": "Hit 9",
-      "path": "assets/toon-projectiles-2/prefabs/Hit 9.prefab",
-      "sizeKb": 154.9
-    },
-    {
-      "name": "Projectile 1",
-      "path": "assets/toon-projectiles-2/prefabs/Projectile 1.prefab",
-      "sizeKb": 28.9
-    },
-    {
-      "name": "Projectile 10",
-      "path": "assets/toon-projectiles-2/prefabs/Projectile 10.prefab",
-      "sizeKb": 51.9
-    },
-    {
-      "name": "Projectile 11",
-      "path": "assets/toon-projectiles-2/prefabs/Projectile 11.prefab",
-      "sizeKb": 53.1
-    },
-    {
-      "name": "Projectile 12",
-      "path": "assets/toon-projectiles-2/prefabs/Projectile 12.prefab",
-      "sizeKb": 153.5
-    },
-    {
-      "name": "Projectile 13",
-      "path": "assets/toon-projectiles-2/prefabs/Projectile 13.prefab",
-      "sizeKb": 51.3
-    },
-    {
-      "name": "Projectile 14",
-      "path": "assets/toon-projectiles-2/prefabs/Projectile 14.prefab",
-      "sizeKb": 51.7
-    },
-    {
-      "name": "Projectile 15",
-      "path": "assets/toon-projectiles-2/prefabs/Projectile 15.prefab",
-      "sizeKb": 27.1
-    },
-    {
-      "name": "Projectile 2",
-      "path": "assets/toon-projectiles-2/prefabs/Projectile 2.prefab",
-      "sizeKb": 68.5
-    },
-    {
-      "name": "Projectile 3",
-      "path": "assets/toon-projectiles-2/prefabs/Projectile 3.prefab",
-      "sizeKb": 83.5
-    },
-    {
-      "name": "Projectile 4",
-      "path": "assets/toon-projectiles-2/prefabs/Projectile 4.prefab",
-      "sizeKb": 52.7
-    },
-    {
-      "name": "Projectile 5",
-      "path": "assets/toon-projectiles-2/prefabs/Projectile 5.prefab",
-      "sizeKb": 53
-    },
-    {
-      "name": "Projectile 6",
-      "path": "assets/toon-projectiles-2/prefabs/Projectile 6.prefab",
-      "sizeKb": 50.3
-    },
-    {
-      "name": "Projectile 7",
-      "path": "assets/toon-projectiles-2/prefabs/Projectile 7.prefab",
-      "sizeKb": 82.3
-    },
-    {
-      "name": "Projectile 8",
-      "path": "assets/toon-projectiles-2/prefabs/Projectile 8.prefab",
-      "sizeKb": 52.5
-    },
-    {
-      "name": "Projectile 9",
-      "path": "assets/toon-projectiles-2/prefabs/Projectile 9.prefab",
-      "sizeKb": 29.9
-    }
-  ],
+  "prefabs": [],
   "scripts": {
-    "count": 35,
+    "count": 26,
     "byDir": [
       {
-        "dir": "assets/script",
+        "dir": "assets/script/shared/core/audio",
         "names": [
-          "AutoDestroyPS",
-          "DemoShooting",
-          "DemoShootingHUD",
-          "LightSetUp",
-          "ProjectileMover",
-          "UnityParticleCustomData",
-          "UnityParticleHierarchyTransformSync",
-          "UnityParticleRateOverDistanceEmitter",
-          "UnityParticleSubEmitterFollower",
-          "UnitySceneDepth",
-          "UnitySpriteRendererColorAdapter"
-        ]
-      },
-      {
-        "dir": "assets/script/shared/sdk/analytics",
-        "names": [
-          "GameTrackingService"
-        ]
-      },
-      {
-        "dir": "assets/script/shared/sdk",
-        "names": [
-          "index"
-        ]
-      },
-      {
-        "dir": "assets/script/shared/sdk/platform",
-        "names": [
-          "PlayableAdDownloadEvent",
-          "SuperHtmlPlayable"
-        ]
-      },
-      {
-        "dir": "assets/script/shared/core",
-        "names": [
-          "GameManager",
-          "SoundManager",
-          "index"
+          "AudioSystem",
+          "CocosAudioBackend"
         ]
       },
       {
@@ -361,6 +59,14 @@
         ]
       },
       {
+        "dir": "assets/script/shared/core",
+        "names": [
+          "GameManager",
+          "SoundManager",
+          "index"
+        ]
+      },
+      {
         "dir": "assets/script/shared/core/utils",
         "names": [
           "GameUtils"
@@ -379,6 +85,25 @@
         "names": [
           "index"
         ]
+      },
+      {
+        "dir": "assets/script/shared/sdk/analytics",
+        "names": [
+          "GameTrackingService"
+        ]
+      },
+      {
+        "dir": "assets/script/shared/sdk",
+        "names": [
+          "index"
+        ]
+      },
+      {
+        "dir": "assets/script/shared/sdk/platform",
+        "names": [
+          "PlayableAdDownloadEvent",
+          "SuperHtmlPlayable"
+        ]
       }
     ]
   },
@@ -390,99 +115,162 @@
       "sample": [],
       "truncated": 0
     },
-    "modelCount": 11,
+    "modelCount": 0,
     "models": {
-      "count": 11,
-      "totalKb": 191.6,
-      "sample": [
-        "assets/unity_imported/Hovl Studio/Toon Projectiles 2/Models/Path6.fbx",
-        "assets/unity_imported/Hovl Studio/Toon Projectiles 2/Models/QuadToCircle.fbx",
-        "assets/unity_imported/Hovl Studio/Toon Projectiles 2/Models/СylindricalСone.fbx",
-        "assets/unity_imported/Hovl Studio/Toon Projectiles 2/Models/WaterSphere.fbx",
-        "assets/unity_imported/Hovl Studio/Toon Projectiles 2/Models/Path2.fbx",
-        "assets/unity_imported/Hovl Studio/Toon Projectiles 2/Models/Star1.fbx"
-      ],
-      "truncated": 5
+      "count": 0,
+      "totalKb": 0,
+      "sample": [],
+      "truncated": 0
     },
-    "shaderCount": 9,
+    "shaderCount": 0,
     "shaders": {
-      "count": 9,
-      "totalKb": 146.3,
-      "sample": [
-        "assets/effects/UnitySpriteRendererColor.effect",
-        "assets/effects/toon-projectiles-2/effects/particle-Add_CenterGlow.effect",
-        "assets/effects/toon-projectiles-2/effects/particle-Blend_TwoSides.effect",
-        "assets/effects/toon-projectiles-2/effects/particle-Distortion.effect",
-        "assets/effects/toon-projectiles-2/effects/particle-DissolveNoise.effect",
-        "assets/effects/toon-projectiles-2/effects/particle-Blend_CenterGlow.effect"
-      ],
-      "truncated": 3
+      "count": 0,
+      "totalKb": 0,
+      "sample": [],
+      "truncated": 0
     },
     "materials": {
-      "count": 147,
-      "totalKb": 225.6,
-      "sample": [
-        "assets/effects/toon-projectiles-2/materials/Trail75bcg.mtl",
-        "assets/effects/toon-projectiles-2/materials/Lightning17bcg.mtl",
-        "assets/effects/toon-projectiles-2/materials/Point11bcg.mtl",
-        "assets/effects/toon-projectiles-2/materials/Lightning11cg.mtl",
-        "assets/effects/toon-projectiles-2/materials/Aura16bcg.mtl",
-        "assets/effects/toon-projectiles-2/materials/Quad3ts.mtl"
-      ],
-      "truncated": 141
+      "count": 0,
+      "totalKb": 0,
+      "sample": [],
+      "truncated": 0
     },
     "textures": {
-      "count": 86,
-      "totalKb": 34222.1,
-      "sample": [
-        "assets/lighting/toon-projectiles-2-demo-scene/Lightmap-0_comp_dir.png",
-        "assets/lighting/toon-projectiles-2-demo-scene/Lightmap-1_comp_dir.png",
-        "assets/lighting/toon-projectiles-2-demo-scene/Lightmap-2_comp_dir.png",
-        "assets/lighting/toon-projectiles-2-demo-scene/UnityAttenuation.png",
-        "assets/unity_imported/Hovl Studio/Toon Projectiles 2/Textures/Flash31.png",
-        "assets/unity_imported/Hovl Studio/Toon Projectiles 2/Textures/Point11.png"
-      ],
-      "truncated": 80
+      "count": 0,
+      "totalKb": 0,
+      "sample": [],
+      "truncated": 0
     },
     "animations": {
-      "count": 1,
-      "totalKb": 5.7,
-      "sample": [
-        "assets/animation/shake.anim"
-      ],
+      "count": 0,
+      "totalKb": 0,
+      "sample": [],
       "truncated": 0
     },
     "prefabsInAssets": {
-      "count": 52,
-      "totalKb": 4486.6,
-      "sample": [
-        "assets/prefabs/Capsule.prefab",
-        "assets/prefabs/Directional Light.prefab",
-        "assets/prefabs/Light Probe Group.prefab",
-        "assets/prefabs/Main Camera.prefab",
-        "assets/prefabs/Scene.prefab",
-        "assets/prefabs/Sphere.prefab"
-      ],
-      "truncated": 46
+      "count": 0,
+      "totalKb": 0,
+      "sample": [],
+      "truncated": 0
     },
     "unityImported": {
-      "exists": true,
+      "exists": false,
       "root": "assets/unity_imported",
-      "count": 164,
-      "totalKb": 34484.1,
-      "sample": [
-        "assets/unity_imported/Hovl Studio/Toon Projectiles 2/Textures/Flash31.png",
-        "assets/unity_imported/Hovl Studio/Toon Projectiles 2/Textures/Point11.png",
-        "assets/unity_imported/Hovl Studio/Toon Projectiles 2/Textures/Trail75.png",
-        "assets/unity_imported/Hovl Studio/Toon Projectiles 2/Textures/Flash30.png",
-        "assets/unity_imported/Hovl Studio/Toon Projectiles 2/Textures/Glow1.png",
-        "assets/unity_imported/Hovl Studio/Toon Projectiles 2/Textures/SS2.png"
-      ],
-      "truncated": 158
+      "count": 0,
+      "totalKb": 0,
+      "sample": [],
+      "truncated": 0
     }
   },
   "configSummary": {
-    "error": "Missing assets/resources/playable-config.json"
+    "fragmentCount": 0,
+    "ctaKeys": [
+      "googlePlayUrl",
+      "appStoreUrl",
+      "enableButtonPulse",
+      "autoRedirectDelay",
+      "pulseScaleMultiplier",
+      "pulseDuration"
+    ],
+    "audioKeys": [
+      "autoPlayBgm",
+      "bgmVolume",
+      "sfxVolume",
+      "bgmSoundPath",
+      "clickSoundPath",
+      "successSoundPath",
+      "winSoundPath",
+      "system"
+    ],
+    "gameplayKeys": [
+      "targetTaps",
+      "autoWinTimer",
+      "difficulty"
+    ],
+    "cameraKeys": [
+      "defaultMode",
+      "transitionDuration",
+      "fovPortrait",
+      "fovLandscape",
+      "presets"
+    ],
+    "customKeys": [],
+    "rawPreview": {
+      "cta": {
+        "googlePlayUrl": "https://play.google.com/store/apps/details?id=com.playable.ad",
+        "appStoreUrl": "https://apps.apple.com/app/id123456789",
+        "enableButtonPulse": true,
+        "autoRedirectDelay": 0,
+        "pulseScaleMultiplier": 1.08,
+        "pulseDuration": 0.6
+      },
+      "audio": {
+        "autoPlayBgm": false,
+        "bgmVolume": 0.6,
+        "sfxVolume": 1,
+        "bgmSoundPath": "",
+        "clickSoundPath": "",
+        "successSoundPath": "",
+        "winSoundPath": "",
+        "system": {
+          "maxSfxVoices": 8,
+          "sounds": {
+            "ui-click": {
+              "path": "",
+              "cooldownMs": 0,
+              "maxConcurrent": 2,
+              "priority": 100,
+              "volume": 1,
+              "loop": false,
+              "stealable": true
+            },
+            "success": {
+              "path": "",
+              "cooldownMs": 0,
+              "maxConcurrent": 3,
+              "priority": 80,
+              "volume": 1,
+              "loop": false,
+              "stealable": true
+            },
+            "win": {
+              "path": "",
+              "cooldownMs": 0,
+              "maxConcurrent": 1,
+              "priority": 100,
+              "volume": 1,
+              "loop": false,
+              "stealable": false
+            }
+          }
+        }
+      },
+      "gameplay": {
+        "targetTaps": 3,
+        "autoWinTimer": 0,
+        "difficulty": "normal"
+      },
+      "camera": {
+        "defaultMode": 0,
+        "transitionDuration": 0.5,
+        "fovPortrait": 55,
+        "fovLandscape": 45,
+        "presets": [
+          {
+            "position": {
+              "x": 0,
+              "y": 5.5,
+              "z": 7.5
+            },
+            "eulerRotation": {
+              "x": -32,
+              "y": 0,
+              "z": 0
+            }
+          }
+        ]
+      }
+    }
   },
   "knownIssues": [
     {
@@ -559,6 +347,8 @@
     "port.feedback.closure": "npm run ai:port:feedback:closure -- --project <UnityProjectRoot> --entry <AssetPath>",
     "mesh.path.audit": "node playable-shared-kit/tools/runtime-mesh-path-audit.cjs --config <audit.json>",
     "port.report": "npm run ai:port:report",
+    "port.particle-fix-audit": "node playable-shared-kit/tools/unity-cocos-port/particle-port-fix-audit.cjs --check",
+    "port.particle-runtime-stage": "node playable-shared-kit/tools/unity-cocos-port/particle-runtime-stage.cjs --cocos-root <path> --feature <birth|death|burst|all>",
     "port.prefab": "node playable-shared-kit/tools/unity-cocos-port.cjs port --src <unity_prefab_or_dir> --out <cocos_prefab_or_dir>",
     "font.convert": "node playable-shared-kit/tools/font-converter.cjs --src <font> --out <assets/.../font.ttf>",
     "font.subset": "npm run ai:font:subset -- --config tools/font-subsets.json --verify",
@@ -591,6 +381,11 @@
     "stats.resources": "npm run stats",
     "build.playable": "npm run build",
     "build.doctor": "npm run doctor",
+    "game-hub.create": "npm run hub:create",
+    "game-hub.verify": "npm run hub:verify",
+    "delivery.init": "npm run delivery:init",
+    "delivery.run": "npm run delivery",
+    "delivery.verify": "npm run delivery:verify",
     "deploy.preview": "npm run deploy",
     "ai.sync": "npm run ai:sync",
     "ai.contract": "npm run ai:contract:verify",

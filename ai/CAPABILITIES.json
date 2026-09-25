@@ -2058,7 +2058,7 @@
       },
       {
         "id": "texture.compress-policy",
-        "title": "Gán preset nén PlayableTransparent cho PNG/JPG/JPEG qua Cocos Asset DB",
+        "title": "Áp policy preset nén portable cho PNG/JPG/JPEG qua Cocos Asset DB",
         "run": "npm run ai:texture:compress",
         "command": "node playable-shared-kit/tools/texture-compression-policy.cjs --json",
         "optional": [
@@ -2071,13 +2071,14 @@
           "--verify",
           "--json"
         ],
-        "when": "Sau khi checkout/sync shared kit, sau batch import texture, và trước build cuối để bảo đảm mọi PNG/JPG/JPEG dùng preset PlayableTransparent.",
+        "when": "Sau khi checkout/sync shared kit, sau batch import texture, và trước build cuối để áp tools/texture-compression-policy.json hoặc fallback PlayableTransparent.",
         "outputs": [
           "stdout JSON; Cocos builder profile và image importer metadata được ghi qua Editor.Profile/Asset DB"
         ],
         "limits": [
           "Cocos Creator phải đang mở đúng project và Cocos MCP phải reachable; tool fail-closed nếu Asset DB chưa ready.",
           "Không sửa `.meta` bằng filesystem. Tool chỉ dùng `save-asset-meta`, đọc lại để verify presetId/useCompressTexture, và listener asset-add/asset-change áp dụng tự động cho import sau này.",
+          "Project có thể commit `tools/texture-compression-policy.json` với `default` và `overrides[].pathPrefix`; longest prefix thắng, nên UI và background có thể giữ preset khác nhau một cách portable.",
           "Nếu tìm thấy preset tên `PlayableTransparent` hoặc `Playable Transparent`, tool vẫn kiểm và chuẩn hóa Web target thành đúng một format WebP quality 50. Chỉ khi thiếu mới tạo fallback với stable preset ID.",
           "Chỉ áp dụng case-insensitive cho `.png`, `.jpg`, `.jpeg`; không tự áp dụng WebP/TGA/HDR để tránh đổi contract ngoài yêu cầu.",
           "`--verify` chạy dry-run và fail nếu còn texture cần sửa hoặc fallback preset chưa tồn tại."
