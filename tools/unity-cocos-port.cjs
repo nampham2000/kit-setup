@@ -4784,7 +4784,30 @@ function applyNestedParticlePrefabOverrides(builder, nestedPrefab, reporter, opt
     const rendererData = parseUnityRendererDoc(rendererDoc);
     applyUnitySerializedOverrides(particleData, particleProps);
     applyUnitySerializedOverrides(rendererData, rendererProps);
+    // The converter clears renderer._mesh (the mesh is resolved by the particle
+    // porter, not the converter). Re-applying the merged data for a colour or
+    // module override must not drop the mesh a Mesh-mode emitter already had.
+    const renderer = builder.objects[builder.objects[particleId]?.renderer?.__id__];
+    const resolvedMesh = renderer?._mesh || null;
     applyUnityParticleDataToCocos(builder, particleId, particleData, rendererData);
+    if (renderer && Number(rendererData?.m_RenderMode) === 4) {
+      const meshOverride = Object.entries(rendererProps).find(([propertyPath]) => /^m_Mesh\d?$/.test(propertyPath));
+      if (!meshOverride) {
+        renderer._mesh = resolvedMesh;
+      } else {
+        const builtin = resolveUnityBuiltinMeshUuid(meshOverride[1], gameObject.name);
+        const meshAsset = builtin ? null : unityDb.get(unityRefGuid(meshOverride[1]));
+        const resolved = meshAsset && cocosDb?.resolveModelMeshByStem
+          ? cocosDb.resolveModelMeshByStem(meshAsset.stem, meshAsset.stem, meshAsset.ext === '.asset' ? '.fbx' : meshAsset.ext)
+          : null;
+        const meshUuid = builtin || resolved?.meshUuid || '';
+        renderer._mesh = meshUuid ? cocosUuid(meshUuid, 'cc.Mesh') : resolvedMesh;
+        if (!meshUuid) {
+          reporter.medium('NESTED_PARTICLE_MESH_OVERRIDE_UNRESOLVED', nestedPrefab.sourceAsset?.relativePath || '', gameObject.name,
+            'Scene overrides the particle mesh but no Cocos mesh could be resolved; the source mesh is kept');
+        }
+      }
+    }
     if (particleProps.m_Enabled != null) {
       builder.objects[particleId]._enabled = Number(particleProps.m_Enabled) !== 0;
     }
@@ -5175,6 +5198,16 @@ class CocosPrefabBuilder {
   }
 
   addComponent(nodeId, type, body, unityComponentId, fileId) {
+    // Source-bound runtime adapters are idempotent per (node, type, source):
+    // a flattened nested particle prefab already carries the adapters bound
+    // when it was built, and the outer prefab's binding pass sees it again.
+    const sourceId = body?.source?.__id__;
+    if (Number.isInteger(sourceId)) {
+      const existing = (this.objects[nodeId]?._components || [])
+        .map((ref) => ref?.__id__)
+        .find((id) => this.objects[id]?.__type__ === type && this.objects[id]?.source?.__id__ === sourceId);
+      if (Number.isInteger(existing)) return existing;
+    }
     const mounted = this.nestedPrefabInstanceByNode.has(nodeId);
     const componentId = this.add({
       __type__: type,
@@ -8089,5 +8122,7 @@ module.exports = {
   scannedUnityAssetDatabase,
   parseUnityYamlText,
   parsePrefabInstanceInfo,
+  applyNestedParticlePrefabOverrides,
+  CocosPrefabBuilder,
   main,
 };
