@@ -388,11 +388,19 @@ if (Test-Path $TokenBackup) {
 
 if (Test-Path $CocosCreatorExe) {
     Write-Host "==> Preparing MCP..." -ForegroundColor Cyan
-    Sync-VSCodeMcpAutostart
+    # An automation restart (engine feature apply) only needs this exact project
+    # back up. Rewriting user-level MCP client configs or installing the VSCode
+    # helper would repoint other sessions' clients at this project's port.
+    $AutomationRestart = ($env:PLAYABLE_AUTOMATION_MODE -eq '1')
+    if (-not $AutomationRestart) { Sync-VSCodeMcpAutostart }
     Sync-CocosMcpExtension
     Ensure-CocosMcpSettings
     Warmup-WorkMemory
-    Sync-McpClients
+    if ($AutomationRestart) {
+        Write-Host "==> Skipping user-level MCP client sync (PLAYABLE_AUTOMATION_MODE=1)." -ForegroundColor DarkGray
+    } else {
+        Sync-McpClients
+    }
 
     $ResolvedProjectDir = [System.IO.Path]::GetFullPath($ProjectDir).TrimEnd('\')
     $AllCocosProcesses = @(Get-CimInstance Win32_Process -Filter "name = 'CocosCreator.exe'" -ErrorAction SilentlyContinue)
@@ -445,9 +453,16 @@ if (Test-Path $CocosCreatorExe) {
         Wait-McpBackend 'gimp-mcp' $GimpMcpPort 120 'Open GIMP > Tools > MCP > Start MCP Server.' | Out-Null
     }
 
-    Write-Host "==> Opening VSCode..." -ForegroundColor Cyan
-    $CodeCmd = Get-Command code -ErrorAction SilentlyContinue
-    if ($CodeCmd) {
+    $CodeCmd = $null
+    if ($AutomationRestart) {
+        Write-Host "==> Skipping VSCode (PLAYABLE_AUTOMATION_MODE=1)." -ForegroundColor DarkGray
+    } else {
+        Write-Host "==> Opening VSCode..." -ForegroundColor Cyan
+        $CodeCmd = Get-Command code -ErrorAction SilentlyContinue
+    }
+    if ($AutomationRestart) {
+        # An automation restart never opens an IDE window.
+    } elseif ($CodeCmd) {
         $CodeExe = Join-Path (Split-Path (Split-Path $CodeCmd.Source -Parent) -Parent) "Code.exe"
         if (Test-Path $CodeExe) {
             Start-Detached $CodeExe "`"$ProjectDir`""
