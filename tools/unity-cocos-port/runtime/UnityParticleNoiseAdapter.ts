@@ -14,7 +14,6 @@ export class UnityParticleNoiseAdapter extends Component {
 
     protected start(): void {
         if (!this.source || !this.sourceContract) throw new Error('Missing Unity Noise source contract');
-        if (this.source.limitVelocityOvertimeModule.enable) throw new Error('Unity Noise with velocity limit requires a validated integration adapter');
         const spec = JSON.parse(this.sourceContract) as UnityNoiseSpec;
         installUnityParticleNoise(this.source, spec);
     }

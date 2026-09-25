@@ -11,17 +11,17 @@
       "id": "renderer-frame-and-pivot",
       "origin": "922d652,ec2e841",
       "applicability": "automatic",
-      "sharedPaths": ["tools/unity-cocos-port/particle-renderer-contract.js", "tools/unity-cocos-port/source-particle.effect", "tools/unity-cocos-port/particle-euler-rotation-binding.js", "tools/unity-cocos-port/runtime/UnityParticleEulerRotation.ts", "tools/unity-cocos-port/runtime/UnityParticleEulerRotationAdapter.ts"],
-      "testPaths": ["tools/unity-cocos-port/particle-renderer-contract.test.cjs", "tools/unity-cocos-port/particle-renderer-native.test.cjs", "tools/unity-cocos-port/particle-euler-rotation.test.cjs"],
-      "acceptance": "Native BakeMesh alignment and pivot, rotated parent, two preview viewports. Rotation over lifetime: native rotation3D and baked vertices, start-of-step curve age, and a parent-axis Y spin (VerticalGlow) in preview."
+      "sharedPaths": ["tools/unity-cocos-port/particle-renderer-contract.js", "tools/unity-cocos-port/source-particle.effect", "tools/unity-cocos-port/particle-euler-rotation-binding.js", "tools/unity-cocos-port/runtime/UnityParticleEulerRotation.ts", "tools/unity-cocos-port/runtime/UnityParticleEulerRotationAdapter.ts", "tools/unity-cocos-port/particle-mesh-frame-binding.js", "tools/unity-cocos-port/runtime/UnityParticleMeshFrame.ts", "tools/unity-cocos-port/runtime/UnityParticleMeshFrameAdapter.ts"],
+      "testPaths": ["tools/unity-cocos-port/particle-renderer-contract.test.cjs", "tools/unity-cocos-port/particle-renderer-native.test.cjs", "tools/unity-cocos-port/particle-euler-rotation.test.cjs", "tools/unity-cocos-port/particle-pivot-alignment-native.test.cjs", "tools/unity-cocos-port/particle-mesh-frame-binding.test.cjs"],
+      "acceptance": "Native BakeMesh alignment and pivot, rotated parent, two preview viewports. Rotation over lifetime: native rotation3D and baked vertices, start-of-step curve age, and a parent-axis Y spin (VerticalGlow) in preview. Mesh pivot in mesh-bounds units, Mesh World/Velocity alignment and View billboard pivot against native BakeMesh; arrow directions of a Velocity-aligned ring and a pivot-offset glow in preview."
     },
     {
       "id": "noise-medium-and-high-curl",
       "origin": "9d64faf,7d34575",
       "applicability": "automatic",
       "sharedPaths": ["tools/unity-cocos-port/particle-noise-binding.js", "tools/unity-cocos-port/runtime/UnityNoiseKernel.ts", "tools/unity-cocos-port/runtime/UnityParticleNoise.ts"],
-      "testPaths": ["tools/unity-cocos-port/particle-noise-native.test.cjs", "tools/unity-cocos-port/particle-noise-high.test.cjs"],
-      "acceptance": "Supported quality/velocity closure, native field holdouts, matched trajectories and spatial bands. Unsupported module combinations remain high."
+      "testPaths": ["tools/unity-cocos-port/particle-noise-native.test.cjs", "tools/unity-cocos-port/particle-noise-high.test.cjs", "tools/unity-cocos-port/particle-noise-low.test.cjs", "tools/unity-cocos-port/particle-noise-rotation.test.cjs", "tools/unity-cocos-port/particle-noise-prefabs.test.cjs"],
+      "acceptance": "Supported Low/Medium/High quality and velocity closure, native field holdouts and lattice, rotationAmount per axis, matched trajectories and spatial bands. Unsupported module combinations remain high."
     },
     {
       "id": "noise-generic-binding",
@@ -44,8 +44,8 @@
       "origin": "055d995,d77127b",
       "applicability": "automatic",
       "sharedPaths": ["tools/unity-cocos-port/particle-orbit-contract.js", "tools/unity-cocos-port/particle-orbit-binding.js", "tools/unity-cocos-port/runtime/UnityParticleOrbit.ts"],
-      "testPaths": ["tools/unity-cocos-port/particle-orbit-native.test.cjs", "tools/unity-cocos-port/particle-orbit-binding.test.cjs"],
-      "acceptance": "Source frame, native paths and repeated loop/viewport occupancy."
+      "testPaths": ["tools/unity-cocos-port/particle-orbit-native.test.cjs", "tools/unity-cocos-port/particle-orbit-binding.test.cjs", "tools/unity-cocos-port/particle-limit-composition.test.cjs"],
+      "acceptance": "Source frame, native paths and repeated loop/viewport occupancy. With a source Limit Velocity: native composition cases and matched-birth trajectories of the ported emitter."
     },
     {
       "id": "orbital-world-motion",
@@ -180,8 +180,8 @@
       "origin": "c9f113a",
       "applicability": "automatic",
       "sharedPaths": ["tools/unity-cocos-port/particle-limit-velocity-binding.js", "tools/unity-cocos-port/runtime/UnityParticleLimitVelocity.ts", "tools/unity-cocos-port/runtime/UnityParticleLimitVelocityAdapter.ts"],
-      "testPaths": ["tools/unity-cocos-port/particle-limit-velocity.test.cjs"],
-      "acceptance": "Native speed sequences at 60 and 30 fps (magnitude, zero limit, separate axes) and radial spread of damped bursts in preview."
+      "testPaths": ["tools/unity-cocos-port/particle-limit-velocity.test.cjs", "tools/unity-cocos-port/particle-limit-composition.test.cjs"],
+      "acceptance": "Native speed sequences at 60 and 30 fps (magnitude, zero limit, separate axes), native stored/animated/total velocity with linear, orbital, radial and Noise contributions, and radial spread of damped bursts in preview."
     },
     {
       "id": "prewarm-steady-state",

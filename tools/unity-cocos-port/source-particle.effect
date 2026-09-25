@@ -27,6 +27,7 @@ CCEffect %{
     p1: &p1
       sourceRendererPivot: { value: [0,0,0,0] }
       sourceRendererSize: { value: [0,0.5,0,0] }
+      sourceRendererMesh: { value: [0,0,0,0] }
       mainTexture:            { value: grey }
       mainTiling_Offset:      { value: [1, 1, 0, 0]  }
     p2: &p2
@@ -191,7 +192,7 @@ in vec3 a_texCoord;  // xy:vertex index,z:frame index
   in vec4 a_color1;     // mesh color
 #endif
 
-uniform SourceRenderer { vec4 sourceRendererPivot; vec4 sourceRendererSize; };
+uniform SourceRenderer { vec4 sourceRendererPivot; vec4 sourceRendererSize; vec4 sourceRendererMesh; };
 vec4 sourceEuler(vec3 e) {
   vec3 s=sin(e*0.5),c=cos(e*0.5);
   return vec4(s.x*c.y*c.z+c.x*s.y*s.z,
@@ -282,7 +283,10 @@ vec4 lpvs_main () {
           rotateVecFromQuat(offset,nodeRotation);
           pos.xyz+=offset;
         } else {
-          computeVertPos(pos, cornerOffset, rot, compScale, cc_matViewInv);
+          // Unity View billboards (BakeMesh): pivot x/y move the quad by pivot*size in its
+          // rotated camera plane; pivot z moves it toward the camera by pivot.z*size.x.
+          computeVertPos(pos, cornerOffset + sourceRendererPivot.xy, rot, compScale, cc_matViewInv);
+          pos.xyz += normalize(cc_matViewInv[2].xyz) * (sourceRendererPivot.z * compScale.x);
         }
       #else
         computeVertPos(pos, cornerOffset, rot, compScale, cc_matViewInv);
@@ -302,13 +306,17 @@ vec4 lpvs_main () {
   #endif
   #if CC_RENDER_MODE == RENDER_MODE_MESH
     mat3 rotMat = quatToMat3(rot);
-    mat3 nodeMat = quatToMat3(nodeRotation);
+    // w=3: the particle rotation is already world space (Unity World alignment, or the
+    // Velocity frame from UnityParticleMeshFrameAdapter); skip the emitter rotation.
+    mat3 nodeMat = sourceRendererPivot.w == 3.0 ? mat3(1.0) : quatToMat3(nodeRotation);
     rotMat = nodeMat * rotMat;
     rot = mat3ToQuat(rotMat);
 
     mat4 xformNoScale = matrixFromRT(rot, pos.xyz);
     mat4 xform = matFromRTS(rot, pos.xyz, compScale);
-    pos = xform * vec4(a_texCoord3, 1);
+    // Unity mesh pivot is in mesh-bounds units; sourceRendererMesh.xyz holds the Cocos mesh
+    // bounds size (0 until UnityParticleMeshFrameAdapter binds it).
+    pos = xform * vec4(a_texCoord3 + sourceRendererPivot.xyz * sourceRendererMesh.xyz, 1);
     vec4 normal = xformNoScale * vec4(a_normal, 0);
     color = a_color * a_color1;
   #endif

@@ -20,7 +20,7 @@ function cocosModule(sample){
 function run(sample,unity){
   const module=cocosModule(sample);
   if(unity)installUnityParticleLimitVelocity({limitVelocityOvertimeModule:module});
-  const [x,y,z]=sample.startVelocity,p={velocity:{x,y,z},ultimateVelocity:{x:0,y:0,z:0}};
+  const [x,y,z]=sample.startVelocity,p={velocity:{x,y,z},ultimateVelocity:{x:0,y:0,z:0},animatedVelocity:{x:0,y:0,z:0}};
   return sample.velocity.map(()=>{
     Object.assign(p.ultimateVelocity,p.velocity);module.animate(p,sample.dt);
     assert.equal(module.dampen,sample.dampen,'the engine dampen is restored after each step');
@@ -39,21 +39,21 @@ test('Unity dampen is frame-rate independent; stock Cocos halves the Spikes spre
   assert.ok(stock<unity/2,`stock ${stock} vs Unity ${unity}`);
   assert.equal(unityDampenKeep(1,1/60),0);assert.equal(unityDampenKeep(0,1/60),1);
 });
-test('converter maps Unity separateAxis and keeps drag/composition for the binding',()=>{
+test('converter maps Unity separateAxis and keeps drag/speed modifier for the binding',()=>{
   const builder={objects:[{},{_limitVelocityOvertimeModule:{__id__:2}},{}]};
   applyUnityParticleDataToCocos(builder,1,{ClampVelocityModule:{enabled:1,separateAxis:1,dampen:0.15,drag:{minMaxState:0,scalar:0.5}},NoiseModule:{enabled:1}});
   assert.equal(builder.objects[2].separateAxes,true);
-  assert.deepEqual(builder.objects[1].unityLimitVelocityContract,{enabled:true,separateAxes:true,dampen:0.15,drag:{minMaxState:0,scalar:0.5},animatedVelocity:true});
+  assert.deepEqual(builder.objects[1].unityLimitVelocityContract,{enabled:true,separateAxes:true,dampen:0.15,drag:{minMaxState:0,scalar:0.5},animatedVelocity:true,speedModifier:{minMaxState:0,scalar:1}});
 });
-test('porter binds enabled limits, keeps drag/composition honest and waits for AssetDB',()=>{
+test('porter binds enabled limits, keeps drag honest and waits for AssetDB',()=>{
   for(const imported of [true,false])for(const enabled of [true,false]){
     const objects=[{__type__:'cc.Node',_name:'Spikes'},{__type__:'cc.ParticleSystem',node:{__id__:0}}],issues=[];
-    Object.defineProperty(objects[1],'unityLimitVelocityContract',{value:{enabled,separateAxes:false,dampen:0.15,drag:{minMaxState:0,scalar:enabled?0.5:0},animatedVelocity:true}});
+    Object.defineProperty(objects[1],'unityLimitVelocityContract',{value:{enabled,separateAxes:false,dampen:0.15,drag:{minMaxState:0,scalar:enabled?0.5:0},animatedVelocity:true,speedModifier:{minMaxState:0,scalar:1}}});
     const builder={objects,cocosDb:{findScriptClass:()=>imported?{classId:'registered'}:null},addComponent(node,type,props){objects.push({node,type,...props});}};
     attachLimitVelocityRuntime(builder,{high:code=>issues.push(code),medium:code=>issues.push(code),low(){}},{dryRun:true,cocosRoot:path.join(__dirname,'fixtures/no-project')});
     assert.equal(objects.length,enabled&&imported?3:2);
     if(!enabled)assert.deepEqual(issues,[]);
-    else assert.deepEqual(issues,imported?['PARTICLE_LIMIT_VELOCITY_ADAPTER_REQUIRED','PARTICLE_LIMIT_VELOCITY_COMPOSITION_UNMEASURED']:['PARTICLE_LIMIT_VELOCITY_ADAPTER_REQUIRED','PARTICLE_LIMIT_VELOCITY_ADAPTER_REQUIRED']);
+    else assert.deepEqual(issues,imported?['PARTICLE_LIMIT_VELOCITY_ADAPTER_REQUIRED']:['PARTICLE_LIMIT_VELOCITY_ADAPTER_REQUIRED','PARTICLE_LIMIT_VELOCITY_ADAPTER_REQUIRED']);
     if(objects[2])assert.deepEqual(objects[2].source,{__id__:1});
   }
 });

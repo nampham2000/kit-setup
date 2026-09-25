@@ -1,5 +1,6 @@
 import { Mat4, ParticleSystem, Vec3 } from 'cc';
 import { UnityNoiseCurve, sampleNoiseCurve } from './UnityNoiseKernel';
+import { installUnityParticleLimitVelocity } from './UnityParticleLimitVelocity';
 
 export interface UnityOrbitSpec {
     enabled: boolean; simulationSpace: number; inWorldSpace: boolean; limitEnabled: boolean;
@@ -24,9 +25,18 @@ export function orbitalDelta(out: Float64Array, x: number, y: number, z: number,
 export function installUnityParticleOrbit(system: ParticleSystem,spec: UnityOrbitSpec): void {
     const runtime=system as any;
     if(runtime.unityOrbit)return;
-    if((spec.simulationSpace!==0&&spec.simulationSpace!==1)||spec.inWorldSpace||spec.limitEnabled)throw new Error('Orbital custom-space/world-velocity/limit integration requires a measured adapter');
+    if((spec.simulationSpace!==0&&spec.simulationSpace!==1)||spec.inWorldSpace)throw new Error('Orbital custom-space/world-velocity integration requires a measured adapter');
     if(spec.simulationSpace===1&&spec.scalingMode!==0)throw new Error('World orbital nonhierarchical scaling requires a measured adapter');
     const curves=spec.velocity;
+    if(spec.limitEnabled){
+        // fixtures/velocity-limit-composition-native.json: Unity limits the stored
+        // plus orbital/radial velocity and stores only the non-animated part. Its
+        // speed modifier scales the displacement after the limit (Cocos: before).
+        const speed=curves.speedModifier;
+        if(speed&&(speed.minMaxState!==0||speed.scalar!==1))throw new Error('Orbital velocity limit with a speed modifier requires a measured adapter');
+        installUnityParticleLimitVelocity(system);
+        if(!(system.limitVelocityOvertimeModule as any)?.unityAnimatedComposition)throw new Error('Orbital velocity limit requires the Unity limit composition runtime');
+    }
     for(const key of ['orbitalOffsetX','orbitalOffsetY','orbitalOffsetZ']) {
         if(curves[key].minMaxState!==0||curves[key].scalar!==0)throw new Error('Orbital offsets require a measured adapter');
     }

@@ -32,6 +32,8 @@ export interface UnityNoiseSpec {
     strength: UnityNoiseCurve; strengthY: UnityNoiseCurve; strengthZ: UnityNoiseCurve;
     scrollSpeed: UnityNoiseCurve; positionAmount: UnityNoiseCurve; rotationAmount: UnityNoiseCurve; sizeAmount: UnityNoiseCurve;
     remapEnabled: boolean;
+    // Rotation noise: Unity start rotation mode and the renderer's Unity->Cocos Euler signs.
+    rotation3D?: boolean; rotationSigns?: number[];
 }
 
 export function sampleNoiseKeys(keys: UnityNoiseKey[] | undefined, time: number): number {
@@ -94,6 +96,15 @@ export class UnityNoiseKernel {
         out[1] = dy0+v*(dy1-dy0)+dv*((n01+u*(n11-n01))-(n00+u*(n10-n00)));
     }
 
+    // Low quality: 1D gradient noise whose lattice slope is +-2 by permutation parity;
+    // the field is its analytic derivative (fixtures/particle-noise-low-native.json).
+    slope(t: number): number {
+        const i = Math.floor(t), f = t - i;
+        const g0 = permutation[i & 255] & 1 ? -2 : 2, g1 = permutation[(i + 1) & 255] & 1 ? -2 : 2;
+        const u = f*f*f*(f*(f*6-15)+10), du = 30*f*f*(f-1)*(f-1);
+        return g0+u*(g1-g0)+du*(g1*(f-1)-g0*f);
+    }
+
     gradient3(out: Float64Array, x: number, y: number, z: number): void {
         const ix=Math.floor(x), iy=Math.floor(y), iz=Math.floor(z), a=x-ix, b=y-iy, c=z-iz;
         const u=a*a*a*(a*(a*6-15)+10), v=b*b*b*(b*(b*6-15)+10), w=c*c*c*(c*(c*6-15)+10);
@@ -117,7 +128,10 @@ export class UnityNoiseKernel {
         for (let octave = 0; octave < spec.octaves; octave++) {
             const a = (x+p[0])*frequency, b = (y+p[1])*frequency, c = (z+p[2])*frequency, s = scroll*frequency;
             const amount = frequency * weight;
-            if (spec.quality === 2) {
+            if (spec.quality === 0) {
+                // Low samples one coordinate per axis: X from Y, Y from Z, Z from X.
+                out[0] += this.slope(b+s)*amount; out[1] += this.slope(c+s)*amount; out[2] += this.slope(a+s)*amount;
+            } else if (spec.quality === 2) {
                 // High uses three 3D potentials, scrolling their third coordinate.
                 // Its first potential uses the unshifted X seed phase (Medium adds 100).
                 this.gradient3(g, c, b, (x+p[0]-100+scroll)*frequency); const ax=g[0], ay=g[1];

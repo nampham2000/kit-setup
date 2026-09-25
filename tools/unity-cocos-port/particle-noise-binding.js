@@ -2,17 +2,25 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { compressUuid } = require('./core-utils');
-const names = ['UnityNoiseKernel', 'UnityParticleNoise', 'UnityParticleNoiseAdapter'];
+const { LIMIT_VELOCITY_COMPOSITION } = require('./particle-limit-velocity-binding');
+const names = ['UnityNoiseKernel', 'UnityParticleLimitVelocity', 'UnityParticleNoise', 'UnityParticleNoiseAdapter'];
+
+function noiseRotates(spec) {
+  return spec.rotationAmount?.minMaxState !== 0 || spec.rotationAmount?.scalar !== 0;
+}
 
 function unsupportedNoiseReasons(spec, limitEnabled) {
   const reasons = [];
-  if (spec.quality !== 1 && spec.quality !== 2) reasons.push('quality-other-than-Medium-or-High');
+  // Low (1D), Medium (2D) and High (3D) kernels are native-validated.
+  if (![0, 1, 2].includes(spec.quality)) reasons.push('quality-unknown');
   if (spec.remapEnabled) reasons.push('remap');
-  if (limitEnabled) reasons.push('velocity-limit-integration');
-  for (const name of ['rotationAmount', 'sizeAmount']) {
-    if (spec[name]?.minMaxState !== 0 || spec[name]?.scalar !== 0) reasons.push(name);
-  }
-  for (const name of ['strength', 'strengthY', 'strengthZ', 'scrollSpeed', 'positionAmount']) {
+  // Unity limits stored + Noise velocity and stores only the non-animated part; bind
+  // only with the shared limit runtime that implements that measured composition.
+  if (limitEnabled && LIMIT_VELOCITY_COMPOSITION !== 'animated-velocity-before-limit') reasons.push('velocity-limit-integration');
+  if (spec.sizeAmount?.minMaxState !== 0 || spec.sizeAmount?.scalar !== 0) reasons.push('sizeAmount');
+  const curves = ['strength', 'strengthY', 'strengthZ', 'scrollSpeed', 'positionAmount'];
+  if (noiseRotates(spec)) curves.push('rotationAmount');
+  for (const name of curves) {
     const curve = spec[name];
     if (!curve || ![0, 1].includes(curve.minMaxState)) reasons.push(`${name}-random-or-missing`);
     if (curve?.maxCurve?.m_Curve?.some(key => key.weightedMode)) reasons.push(`${name}-weighted`);
@@ -43,15 +51,21 @@ function attachNoiseRuntime(builder, reporter, options) {
     const spec = p.unityNoiseContract;
     const limit = builder.objects[p._limitVelocityOvertimeModule?.__id__];
     const reasons = unsupportedNoiseReasons(spec, !!(limit?._enable ?? limit?.enable));
+    const renderer = p.unityRendererContract, rotation = builder.objects[p._rotationOvertimeModule?.__id__];
+    if (noiseRotates(spec) && !renderer?.eulerSigns) reasons.push('rotationAmount-renderer-signs');
+    // Rotation noise feeds the Unity Euler accumulator: packed by the Euler adapter for
+    // Mesh/Local billboards, or read directly when rotation over lifetime is off.
+    if (noiseRotates(spec) && !!(rotation?._enable ?? rotation?.enable) && !(renderer?.localBillboard || renderer?.mode === 4)) reasons.push('rotationAmount-with-builtin-rotation-over-lifetime');
     if (reasons.length || !classId) {
       reporter.high('PARTICLE_NOISE_ADAPTER_REQUIRED', options.src || '', builder.objects[p.node.__id__]?._name || '',
         `Native Noise not accepted: ${reasons.length ? reasons.join(', ') : 'AssetDB must import assets/script/UnityParticleNoiseAdapter.ts; refresh and rerun porter'}`);
       continue;
     }
-    builder.addComponent(p.node.__id__, classId, {source:{__id__:id},sourceContract:JSON.stringify(spec)}, null, `cmp-unity-noise-${id}`);
+    const contract = noiseRotates(spec) ? { ...spec, rotationSigns: renderer.eulerSigns } : spec;
+    builder.addComponent(p.node.__id__, classId, {source:{__id__:id},sourceContract:JSON.stringify(contract)}, null, `cmp-unity-noise-${id}`);
     reporter.low('PARTICLE_NOISE_ADAPTER_BOUND', options.src || '', builder.objects[p.node.__id__]?._name || '',
-      'Native Medium/High curl adapter attached with source curves; live visual acceptance still required.');
+      'Native Low/Medium/High Noise adapter attached with source curves; live visual acceptance still required.');
   }
 }
 
-module.exports = { unsupportedNoiseReasons, stageNoiseRuntime, attachNoiseRuntime };
+module.exports = { noiseRotates, unsupportedNoiseReasons, stageNoiseRuntime, attachNoiseRuntime };

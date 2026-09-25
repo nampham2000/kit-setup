@@ -26,7 +26,9 @@ test('Velocity world-frame shortcut requires every source proof', () => {
 });
 test('Pivot is per-renderer and unmeasured axes stay blocking',()=>{
   assert.deepEqual(contract({}, {m_RenderMode:1,m_Pivot:{x:0,y:1,z:0}}).sourceRendererPivot,[0,1,0,0]);
-  assert.ok(contract({}, {m_RenderMode:0,m_Pivot:{x:0,y:0,z:.1}}).unsupported.includes('pivot-axes'));
+  assert.ok(contract({}, {m_RenderMode:0,m_RenderAlignment:2,m_Pivot:{x:0,y:0,z:.1}}).unsupported.includes('pivot-axes'));
+  assert.deepEqual(contract({}, {m_RenderMode:0,m_Pivot:{x:.15,y:0,z:.1}}).sourceRendererPivot,[.15,0,.1,0]);
+  assert.deepEqual(contract({}, {m_RenderMode:4,m_RenderAlignment:1}).sourceRendererPivot,[0,0,0,3]);
 });
 test('Min/Max Particle Size keep Unity defaults and only the measured stretched maximum',()=>{
   assert.deepEqual(contract({}, {m_RenderMode:0}).sourceRendererSize,[0,0.5,0,1]);

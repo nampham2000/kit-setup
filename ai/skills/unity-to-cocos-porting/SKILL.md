@@ -36,6 +36,14 @@ test and acceptance gate to that registry. The AOE source project runs
   `particle-orbit-contract.js` and its adapter. Combine with the High/Medium
   curl Noise kernel only for explicitly supported source combinations. Lock
   matched-birth trajectories and left/center/right occupancy in two viewports.
+- Unity Limit Velocity acts on stored velocity plus the step's animated velocity
+  (Velocity over Lifetime linear/orbital/radial and Noise, sampled at the
+  start-of-step position); the limited total moves the particle, but only
+  `limited - animated` is stored. Cocos 3.8.8 stores the whole limited total, so
+  an orbit, radial pull or noise field is re-added every frame. The shared
+  `UnityParticleLimitVelocity` runtime restores the Unity rule
+  (`particle-limit-composition.test.cjs`). Unity applies the speed modifier to
+  the displacement after the limit; with a limit it remains a blocking gap.
 - For synchronous birth callbacks, Cocos 3.8.8 keeps world matrix/rotation in
   module-scoped temporaries across the outer emission loop. A child emit can
   overwrite them and shift later parent births. Use
@@ -72,9 +80,9 @@ test and acceptance gate to that registry. The AOE source project runs
   shared kernel, installer and `UnityParticleNoiseAdapter` under `assets/script`
   and attaches the source contract after AssetDB imports the component. Refresh
   AssetDB and rerun if the script is not yet registered; never invent its meta.
-  Supported Medium emitters without velocity limiting need no AOE controller.
-  Velocity limiting still needs the separately validated integration adapter;
-  unsupported combinations report `PARTICLE_NOISE_ADAPTER_REQUIRED` high.
+  Supported Low/Medium/High emitters need no AOE controller; a source Limit
+  Velocity binds through the measured composition in `UnityParticleLimitVelocity`.
+  Unsupported combinations report `PARTICLE_NOISE_ADAPTER_REQUIRED` high.
   Run `particle-noise-binding.test.cjs` and `particle-noise-native.test.cjs`:
   project-specific capture tools are evidence producers, not runtime dependencies.
 - Never flatten Unity Noise curves into scalar Cocos Noise fields and report
@@ -82,9 +90,14 @@ test and acceptance gate to that registry. The AOE source project runs
   Unity uses a coherent curl field and includes it in velocity limiting.
 - Preserve the full `particle-noise-contract.js` output in source-bound config.
   `runtime/UnityNoiseKernel.ts` and `runtime/UnityParticleNoise.ts` implement the
-  native-validated Medium (2D) kernel, seeded phase, Hermite strength curves,
-  frequency derivative gain, normalized octaves, damping and scroll. High/Low,
-  remap, random curves and rotation/size amount remain explicit obligations.
+  native-validated Low (1D), Medium (2D) and High (3D) kernels, seeded phase,
+  Hermite strength curves, frequency derivative gain, normalized octaves, damping
+  and scroll. Low is three 1D gradient-noise slopes (X from Y, Y from Z, Z from X,
+  lattice slope +-2 by permutation parity). Rotation amount adds
+  0.5 * field * strength * amount degrees per second to each rotation3D axis (Z only
+  for 2D rotation), independent of position amount; the adapter writes it into the
+  Euler accumulator with the renderer's Z-reflection signs. Remap, random curves and
+  size amount remain explicit obligations.
 - Install Noise after velocity animation and before limit. After limiting,
   subtract the complete animated contribution from stored base velocity;
   otherwise Noise accumulates again in the following frame. Keep Z reflection
@@ -117,13 +130,22 @@ test and acceptance gate to that registry. The AOE source project runs
   mapping (+X,+Y,-Z) from mesh mapping (-X,-Y,+Z), with Z-X-Y composition.
   Cocos World alignment supplies emitter world rotation including its parent;
   Cocos Local supplies only the node local rotation.
-- A mesh Velocity alignment may reuse emitter world rotation only when the
-  contract proves a fixed +Z box direction, positive constant speed, zero
-  gravity and no velocity/force/noise modules. Other velocity frames remain a
-  blocking adapter obligation. Missing fields are not proof of zero.
+- Mesh Velocity alignment is LookRotation(total world velocity, world up)
+  followed by rotation3D (zero velocity keeps rotation3D).
+  `UnityParticleMeshFrameAdapter` writes it per particle and the source effect
+  skips the emitter rotation (`sourceRendererPivot.w = 3`), as it does for Mesh
+  World alignment. The fixed +Z box shortcut that reuses the emitter world
+  rotation equals the look rotation only while the emitter has no roll; it still
+  needs every source proof. Missing fields are not proof of zero.
 - Unity stretched pivot Y displaces the quad along velocity by twice current
   particle width times pivot Y, not by stretched length. Keep renderer-specific
   material variants so shared materials do not acquire another emitter's pivot.
+- A View billboard pivot moves the quad by pivot*size in its rotated camera
+  plane and by pivot.z*size.x toward the camera. A Mesh pivot is in mesh-bounds
+  units (Unity negates Z) and applies before size and rotation; the adapter binds
+  the Cocos mesh bounds to `sourceRendererMesh`. Local/axial billboard and
+  stretched X/Z pivots stay blocking, and Unity applies a non-uniform emitter scale
+  to meshes after the particle rotation, unlike Cocos.
 - Import generated `unity-source-particle.effect` through AssetDB, then rerun
   the porter to bind its actual UUID. The shader preserves builtin shading;
   custom shading still needs its adapter. The porter binds

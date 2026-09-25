@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "generatedAt": "2026-09-25T09:19:49.289Z",
+    "generatedAt": "2026-09-25T13:25:12.494Z",
     "description": "Compact project manifest for AI Agents. Use this instead of scanning file trees.",
     "project": {
       "projectName": "cc_playable_framework",
@@ -23,6 +23,21 @@
       "name": "AoeDemo",
       "path": "assets/AoeDemo.scene",
       "sizeKb": 15.9
+    },
+    {
+      "name": "ARPGDemo01",
+      "path": "assets/arpg/ARPGDemo01.scene",
+      "sizeKb": 5.7
+    },
+    {
+      "name": "ARPGDemo04",
+      "path": "assets/arpg/ARPGDemo04.scene",
+      "sizeKb": 5.7
+    },
+    {
+      "name": "ARPGDemo08",
+      "path": "assets/arpg/ARPGDemo08.scene",
+      "sizeKb": 5.7
     },
     {
       "name": "Gameplay",
@@ -205,10 +220,835 @@
       "name": "Yellow Flash",
       "path": "assets/prefabs/aoe-rpg/Yellow Flash.prefab",
       "sizeKb": 109.8
+    },
+    {
+      "name": "CharacterCircleBlue",
+      "path": "assets/prefabs/arpg/Combat/CharacterCircle/CharacterCircleBlue.prefab",
+      "sizeKb": 25.3
+    },
+    {
+      "name": "CharacterCircleGreen",
+      "path": "assets/prefabs/arpg/Combat/CharacterCircle/CharacterCircleGreen.prefab",
+      "sizeKb": 25.3
+    },
+    {
+      "name": "CharacterCirclePurple",
+      "path": "assets/prefabs/arpg/Combat/CharacterCircle/CharacterCirclePurple.prefab",
+      "sizeKb": 25.3
+    },
+    {
+      "name": "CharacterCircleRed",
+      "path": "assets/prefabs/arpg/Combat/CharacterCircle/CharacterCircleRed.prefab",
+      "sizeKb": 25.3
+    },
+    {
+      "name": "CharacterCircleWhite",
+      "path": "assets/prefabs/arpg/Combat/CharacterCircle/CharacterCircleWhite.prefab",
+      "sizeKb": 25.3
+    },
+    {
+      "name": "CharacterCircleYellow",
+      "path": "assets/prefabs/arpg/Combat/CharacterCircle/CharacterCircleYellow.prefab",
+      "sizeKb": 25.3
+    },
+    {
+      "name": "Shield",
+      "path": "assets/prefabs/arpg/Combat/Shield/Shield.prefab",
+      "sizeKb": 25.2
+    },
+    {
+      "name": "ShieldHit",
+      "path": "assets/prefabs/arpg/Combat/Shield/ShieldHit.prefab",
+      "sizeKb": 23.2
+    },
+    {
+      "name": "Canvas",
+      "path": "assets/prefabs/arpg/Demo/Canvas.prefab",
+      "sizeKb": 94.7
+    },
+    {
+      "name": "BluePortal",
+      "path": "assets/prefabs/arpg/Demo/Portals/BluePortal.prefab",
+      "sizeKb": 1.9
+    },
+    {
+      "name": "GreenPortal",
+      "path": "assets/prefabs/arpg/Demo/Portals/GreenPortal.prefab",
+      "sizeKb": 1.9
+    },
+    {
+      "name": "PortalBlueClose",
+      "path": "assets/prefabs/arpg/Demo/Portals/PortalBlueClose.prefab",
+      "sizeKb": 75.2
+    },
+    {
+      "name": "PortalBlueIdle",
+      "path": "assets/prefabs/arpg/Demo/Portals/PortalBlueIdle.prefab",
+      "sizeKb": 53.1
+    },
+    {
+      "name": "PortalBlueOpen",
+      "path": "assets/prefabs/arpg/Demo/Portals/PortalBlueOpen.prefab",
+      "sizeKb": 71.2
+    },
+    {
+      "name": "PortalGreenClose",
+      "path": "assets/prefabs/arpg/Demo/Portals/PortalGreenClose.prefab",
+      "sizeKb": 74.3
+    },
+    {
+      "name": "PortalGreenIdle",
+      "path": "assets/prefabs/arpg/Demo/Portals/PortalGreenIdle.prefab",
+      "sizeKb": 53.4
+    },
+    {
+      "name": "PortalGreenOpen",
+      "path": "assets/prefabs/arpg/Demo/Portals/PortalGreenOpen.prefab",
+      "sizeKb": 71.7
+    },
+    {
+      "name": "PortalPurpleClose",
+      "path": "assets/prefabs/arpg/Demo/Portals/PortalPurpleClose.prefab",
+      "sizeKb": 74.3
+    },
+    {
+      "name": "PortalPurpleIdle",
+      "path": "assets/prefabs/arpg/Demo/Portals/PortalPurpleIdle.prefab",
+      "sizeKb": 52.7
+    },
+    {
+      "name": "PortalPurpleOpen",
+      "path": "assets/prefabs/arpg/Demo/Portals/PortalPurpleOpen.prefab",
+      "sizeKb": 71.2
+    },
+    {
+      "name": "PortalRedClose",
+      "path": "assets/prefabs/arpg/Demo/Portals/PortalRedClose.prefab",
+      "sizeKb": 74.3
+    },
+    {
+      "name": "PortalRedIdle",
+      "path": "assets/prefabs/arpg/Demo/Portals/PortalRedIdle.prefab",
+      "sizeKb": 52.7
+    },
+    {
+      "name": "PortalRedOpen",
+      "path": "assets/prefabs/arpg/Demo/Portals/PortalRedOpen.prefab",
+      "sizeKb": 71.2
+    },
+    {
+      "name": "PortalYellowClose",
+      "path": "assets/prefabs/arpg/Demo/Portals/PortalYellowClose.prefab",
+      "sizeKb": 74.3
+    },
+    {
+      "name": "PortalYellowIdle",
+      "path": "assets/prefabs/arpg/Demo/Portals/PortalYellowIdle.prefab",
+      "sizeKb": 52.7
+    },
+    {
+      "name": "PortalYellowOpen",
+      "path": "assets/prefabs/arpg/Demo/Portals/PortalYellowOpen.prefab",
+      "sizeKb": 71.2
+    },
+    {
+      "name": "PurplePortal",
+      "path": "assets/prefabs/arpg/Demo/Portals/PurplePortal.prefab",
+      "sizeKb": 1.9
+    },
+    {
+      "name": "RedPortal",
+      "path": "assets/prefabs/arpg/Demo/Portals/RedPortal.prefab",
+      "sizeKb": 1.9
+    },
+    {
+      "name": "YellowPortal",
+      "path": "assets/prefabs/arpg/Demo/Portals/YellowPortal.prefab",
+      "sizeKb": 1.9
+    },
+    {
+      "name": "DoorwayGlowEntrance",
+      "path": "assets/prefabs/arpg/Environment/Doorways/DoorwayGlowEntrance.prefab",
+      "sizeKb": 49
+    },
+    {
+      "name": "DoorwayGlowExit",
+      "path": "assets/prefabs/arpg/Environment/Doorways/DoorwayGlowExit.prefab",
+      "sizeKb": 48.3
+    },
+    {
+      "name": "FireNatural",
+      "path": "assets/prefabs/arpg/Environment/Fire/Fire/FireNatural.prefab",
+      "sizeKb": 86.3
+    },
+    {
+      "name": "MagicFireBlue",
+      "path": "assets/prefabs/arpg/Environment/Fire/Fire/MagicFireBlue.prefab",
+      "sizeKb": 86.5
+    },
+    {
+      "name": "MagicFireGreen",
+      "path": "assets/prefabs/arpg/Environment/Fire/Fire/MagicFireGreen.prefab",
+      "sizeKb": 86.5
+    },
+    {
+      "name": "MagicFirePurple",
+      "path": "assets/prefabs/arpg/Environment/Fire/Fire/MagicFirePurple.prefab",
+      "sizeKb": 86.5
+    },
+    {
+      "name": "MagicFireRed",
+      "path": "assets/prefabs/arpg/Environment/Fire/Fire/MagicFireRed.prefab",
+      "sizeKb": 86.5
+    },
+    {
+      "name": "MagicTorchBlue",
+      "path": "assets/prefabs/arpg/Environment/Fire/Torch/MagicTorchBlue.prefab",
+      "sizeKb": 83.4
+    },
+    {
+      "name": "MagicTorchGreen",
+      "path": "assets/prefabs/arpg/Environment/Fire/Torch/MagicTorchGreen.prefab",
+      "sizeKb": 83.4
+    },
+    {
+      "name": "MagicTorchPurple",
+      "path": "assets/prefabs/arpg/Environment/Fire/Torch/MagicTorchPurple.prefab",
+      "sizeKb": 83.4
+    },
+    {
+      "name": "MagicTorchRed",
+      "path": "assets/prefabs/arpg/Environment/Fire/Torch/MagicTorchRed.prefab",
+      "sizeKb": 83.4
+    },
+    {
+      "name": "TorchFireNatural",
+      "path": "assets/prefabs/arpg/Environment/Fire/Torch/TorchFireNatural.prefab",
+      "sizeKb": 83.4
+    },
+    {
+      "name": "BlowingLeaves",
+      "path": "assets/prefabs/arpg/Environment/Weather/BlowingLeaves.prefab",
+      "sizeKb": 26.7
+    },
+    {
+      "name": "DrippingWater",
+      "path": "assets/prefabs/arpg/Environment/Weather/DrippingWater.prefab",
+      "sizeKb": 72
+    },
+    {
+      "name": "GroundFog",
+      "path": "assets/prefabs/arpg/Environment/Weather/GroundFog.prefab",
+      "sizeKb": 21.9
+    },
+    {
+      "name": "Rain",
+      "path": "assets/prefabs/arpg/Environment/Weather/Rain.prefab",
+      "sizeKb": 69.9
+    },
+    {
+      "name": "ClickMoveArrows",
+      "path": "assets/prefabs/arpg/Interactive/Actions/ClickMoveArrows.prefab",
+      "sizeKb": 49.1
+    },
+    {
+      "name": "ClickMoveCircle",
+      "path": "assets/prefabs/arpg/Interactive/Actions/ClickMoveCircle.prefab",
+      "sizeKb": 23.3
+    },
+    {
+      "name": "IdentifyChannel",
+      "path": "assets/prefabs/arpg/Interactive/Actions/IdentifyChannel.prefab",
+      "sizeKb": 74
+    },
+    {
+      "name": "IdentifyFinish",
+      "path": "assets/prefabs/arpg/Interactive/Actions/IdentifyFinish.prefab",
+      "sizeKb": 72.3
+    },
+    {
+      "name": "ItemPickup",
+      "path": "assets/prefabs/arpg/Interactive/Actions/ItemPickup.prefab",
+      "sizeKb": 50.7
+    },
+    {
+      "name": "ItemPickup2",
+      "path": "assets/prefabs/arpg/Interactive/Actions/ItemPickup2.prefab",
+      "sizeKb": 47.3
+    },
+    {
+      "name": "LevelUp",
+      "path": "assets/prefabs/arpg/Interactive/Actions/LevelUp.prefab",
+      "sizeKb": 101.1
+    },
+    {
+      "name": "TeleportChannel",
+      "path": "assets/prefabs/arpg/Interactive/Actions/TeleportChannel.prefab",
+      "sizeKb": 74
+    },
+    {
+      "name": "TeleportFinish",
+      "path": "assets/prefabs/arpg/Interactive/Actions/TeleportFinish.prefab",
+      "sizeKb": 72.1
+    },
+    {
+      "name": "IconExclamation",
+      "path": "assets/prefabs/arpg/Interactive/Icons/2D Beveled/IconExclamation.prefab",
+      "sizeKb": 72.6
+    },
+    {
+      "name": "IconQuestion",
+      "path": "assets/prefabs/arpg/Interactive/Icons/2D Beveled/IconQuestion.prefab",
+      "sizeKb": 72.6
+    },
+    {
+      "name": "IconReward",
+      "path": "assets/prefabs/arpg/Interactive/Icons/2D Beveled/IconReward.prefab",
+      "sizeKb": 72.6
+    },
+    {
+      "name": "IconWhiteExclamation",
+      "path": "assets/prefabs/arpg/Interactive/Icons/2D White/IconWhiteExclamation.prefab",
+      "sizeKb": 72.7
+    },
+    {
+      "name": "IconWhiteQuestion",
+      "path": "assets/prefabs/arpg/Interactive/Icons/2D White/IconWhiteQuestion.prefab",
+      "sizeKb": 72.6
+    },
+    {
+      "name": "IconWhiteReward",
+      "path": "assets/prefabs/arpg/Interactive/Icons/2D White/IconWhiteReward.prefab",
+      "sizeKb": 72.6
+    },
+    {
+      "name": "IconWhiteSpeech",
+      "path": "assets/prefabs/arpg/Interactive/Icons/2D White/IconWhiteSpeech.prefab",
+      "sizeKb": 72.6
+    },
+    {
+      "name": "IconExclamation3D",
+      "path": "assets/prefabs/arpg/Interactive/Icons/3D Round/IconExclamation3D.prefab",
+      "sizeKb": 70.1
+    },
+    {
+      "name": "IconQuestion3D",
+      "path": "assets/prefabs/arpg/Interactive/Icons/3D Round/IconQuestion3D.prefab",
+      "sizeKb": 70.1
+    },
+    {
+      "name": "IconStar3D",
+      "path": "assets/prefabs/arpg/Interactive/Icons/3D Round/IconStar3D.prefab",
+      "sizeKb": 71.3
+    },
+    {
+      "name": "VerticalIconExclamationMark3D",
+      "path": "assets/prefabs/arpg/Interactive/Icons/3D Vertical/VerticalIconExclamationMark3D.prefab",
+      "sizeKb": 75.9
+    },
+    {
+      "name": "VerticalIconQuestionMark3D",
+      "path": "assets/prefabs/arpg/Interactive/Icons/3D Vertical/VerticalIconQuestionMark3D.prefab",
+      "sizeKb": 76
+    },
+    {
+      "name": "VerticalIconStar3D",
+      "path": "assets/prefabs/arpg/Interactive/Icons/3D Vertical/VerticalIconStar3D.prefab",
+      "sizeKb": 77.1
+    },
+    {
+      "name": "PortalBlueClose",
+      "path": "assets/prefabs/arpg/Interactive/Portals/Blue/PortalBlueClose.prefab",
+      "sizeKb": 76.9
+    },
+    {
+      "name": "PortalBlueIdle",
+      "path": "assets/prefabs/arpg/Interactive/Portals/Blue/PortalBlueIdle.prefab",
+      "sizeKb": 54.8
+    },
+    {
+      "name": "PortalBlueOpen",
+      "path": "assets/prefabs/arpg/Interactive/Portals/Blue/PortalBlueOpen.prefab",
+      "sizeKb": 72.9
+    },
+    {
+      "name": "PortalGreenClose",
+      "path": "assets/prefabs/arpg/Interactive/Portals/Green/PortalGreenClose.prefab",
+      "sizeKb": 76
+    },
+    {
+      "name": "PortalGreenIdle",
+      "path": "assets/prefabs/arpg/Interactive/Portals/Green/PortalGreenIdle.prefab",
+      "sizeKb": 55
+    },
+    {
+      "name": "PortalGreenOpen",
+      "path": "assets/prefabs/arpg/Interactive/Portals/Green/PortalGreenOpen.prefab",
+      "sizeKb": 73.4
+    },
+    {
+      "name": "PortalPurpleClose",
+      "path": "assets/prefabs/arpg/Interactive/Portals/Purple/PortalPurpleClose.prefab",
+      "sizeKb": 76
+    },
+    {
+      "name": "PortalPurpleIdle",
+      "path": "assets/prefabs/arpg/Interactive/Portals/Purple/PortalPurpleIdle.prefab",
+      "sizeKb": 54.4
+    },
+    {
+      "name": "PortalPurpleOpen",
+      "path": "assets/prefabs/arpg/Interactive/Portals/Purple/PortalPurpleOpen.prefab",
+      "sizeKb": 72.9
+    },
+    {
+      "name": "PortalRedClose",
+      "path": "assets/prefabs/arpg/Interactive/Portals/Red/PortalRedClose.prefab",
+      "sizeKb": 76
+    },
+    {
+      "name": "PortalRedIdle",
+      "path": "assets/prefabs/arpg/Interactive/Portals/Red/PortalRedIdle.prefab",
+      "sizeKb": 54.4
+    },
+    {
+      "name": "PortalRedOpen",
+      "path": "assets/prefabs/arpg/Interactive/Portals/Red/PortalRedOpen.prefab",
+      "sizeKb": 72.9
+    },
+    {
+      "name": "PortalYellowClose",
+      "path": "assets/prefabs/arpg/Interactive/Portals/Yellow/PortalYellowClose.prefab",
+      "sizeKb": 76
+    },
+    {
+      "name": "PortalYellowIdle",
+      "path": "assets/prefabs/arpg/Interactive/Portals/Yellow/PortalYellowIdle.prefab",
+      "sizeKb": 54.4
+    },
+    {
+      "name": "PortalYellowOpen",
+      "path": "assets/prefabs/arpg/Interactive/Portals/Yellow/PortalYellowOpen.prefab",
+      "sizeKb": 72.9
+    },
+    {
+      "name": "GoldShrine",
+      "path": "assets/prefabs/arpg/Interactive/Shrines/GoldShrine.prefab",
+      "sizeKb": 58.5
+    },
+    {
+      "name": "HealthShrine",
+      "path": "assets/prefabs/arpg/Interactive/Shrines/HealthShrine.prefab",
+      "sizeKb": 58.5
+    },
+    {
+      "name": "ManaShrine",
+      "path": "assets/prefabs/arpg/Interactive/Shrines/ManaShrine.prefab",
+      "sizeKb": 58.5
+    },
+    {
+      "name": "WaterShrine",
+      "path": "assets/prefabs/arpg/Interactive/Shrines/WaterShrine.prefab",
+      "sizeKb": 58.5
+    },
+    {
+      "name": "QuestZoneBlue",
+      "path": "assets/prefabs/arpg/Interactive/Zones/Zone 1/QuestZoneBlue.prefab",
+      "sizeKb": 92.7
+    },
+    {
+      "name": "QuestZoneGreen",
+      "path": "assets/prefabs/arpg/Interactive/Zones/Zone 1/QuestZoneGreen.prefab",
+      "sizeKb": 92.7
+    },
+    {
+      "name": "QuestZonePurple",
+      "path": "assets/prefabs/arpg/Interactive/Zones/Zone 1/QuestZonePurple.prefab",
+      "sizeKb": 92.8
+    },
+    {
+      "name": "QuestZoneRed",
+      "path": "assets/prefabs/arpg/Interactive/Zones/Zone 1/QuestZoneRed.prefab",
+      "sizeKb": 92.7
+    },
+    {
+      "name": "QuestZoneWhite",
+      "path": "assets/prefabs/arpg/Interactive/Zones/Zone 1/QuestZoneWhite.prefab",
+      "sizeKb": 92.8
+    },
+    {
+      "name": "QuestZoneYellow",
+      "path": "assets/prefabs/arpg/Interactive/Zones/Zone 1/QuestZoneYellow.prefab",
+      "sizeKb": 92.8
+    },
+    {
+      "name": "QuestZone2Blue",
+      "path": "assets/prefabs/arpg/Interactive/Zones/Zone 2/QuestZone2Blue.prefab",
+      "sizeKb": 73.8
+    },
+    {
+      "name": "QuestZone2Green",
+      "path": "assets/prefabs/arpg/Interactive/Zones/Zone 2/QuestZone2Green.prefab",
+      "sizeKb": 73.8
+    },
+    {
+      "name": "QuestZone2Purple",
+      "path": "assets/prefabs/arpg/Interactive/Zones/Zone 2/QuestZone2Purple.prefab",
+      "sizeKb": 73.8
+    },
+    {
+      "name": "QuestZone2Red",
+      "path": "assets/prefabs/arpg/Interactive/Zones/Zone 2/QuestZone2Red.prefab",
+      "sizeKb": 73.8
+    },
+    {
+      "name": "QuestZone2White",
+      "path": "assets/prefabs/arpg/Interactive/Zones/Zone 2/QuestZone2White.prefab",
+      "sizeKb": 73.8
+    },
+    {
+      "name": "QuestZone2Yellow",
+      "path": "assets/prefabs/arpg/Interactive/Zones/Zone 2/QuestZone2Yellow.prefab",
+      "sizeKb": 73.8
+    },
+    {
+      "name": "ChestLv1Glow",
+      "path": "assets/prefabs/arpg/Loot/Chests/ChestLv1Glow.prefab",
+      "sizeKb": 74.1
+    },
+    {
+      "name": "ChestLv1Open",
+      "path": "assets/prefabs/arpg/Loot/Chests/ChestLv1Open.prefab",
+      "sizeKb": 114.6
+    },
+    {
+      "name": "ChestLv2Glow",
+      "path": "assets/prefabs/arpg/Loot/Chests/ChestLv2Glow.prefab",
+      "sizeKb": 50.3
+    },
+    {
+      "name": "ChestLv2Open",
+      "path": "assets/prefabs/arpg/Loot/Chests/ChestLv2Open.prefab",
+      "sizeKb": 114.6
+    },
+    {
+      "name": "ChestLv3Glow",
+      "path": "assets/prefabs/arpg/Loot/Chests/ChestLv3Glow.prefab",
+      "sizeKb": 49.6
+    },
+    {
+      "name": "ChestLv3Open",
+      "path": "assets/prefabs/arpg/Loot/Chests/ChestLv3Open.prefab",
+      "sizeKb": 123.5
+    },
+    {
+      "name": "ChestLv4Glow",
+      "path": "assets/prefabs/arpg/Loot/Chests/ChestLv4Glow.prefab",
+      "sizeKb": 49.6
+    },
+    {
+      "name": "ChestLv4Open",
+      "path": "assets/prefabs/arpg/Loot/Chests/ChestLv4Open.prefab",
+      "sizeKb": 123.5
+    },
+    {
+      "name": "ItemGemBlue",
+      "path": "assets/prefabs/arpg/Loot/Gems/ItemGemBlue.prefab",
+      "sizeKb": 49.6
+    },
+    {
+      "name": "ItemGemGreen",
+      "path": "assets/prefabs/arpg/Loot/Gems/ItemGemGreen.prefab",
+      "sizeKb": 49.6
+    },
+    {
+      "name": "ItemGemOrange",
+      "path": "assets/prefabs/arpg/Loot/Gems/ItemGemOrange.prefab",
+      "sizeKb": 49.6
+    },
+    {
+      "name": "ItemGemPurple",
+      "path": "assets/prefabs/arpg/Loot/Gems/ItemGemPurple.prefab",
+      "sizeKb": 49.6
+    },
+    {
+      "name": "ItemGemRed",
+      "path": "assets/prefabs/arpg/Loot/Gems/ItemGemRed.prefab",
+      "sizeKb": 49.6
+    },
+    {
+      "name": "ItemGemWhite",
+      "path": "assets/prefabs/arpg/Loot/Gems/ItemGemWhite.prefab",
+      "sizeKb": 49.6
+    },
+    {
+      "name": "GoldBig",
+      "path": "assets/prefabs/arpg/Loot/Gold/GoldBig.prefab",
+      "sizeKb": 48.6
+    },
+    {
+      "name": "GoldSmall",
+      "path": "assets/prefabs/arpg/Loot/Gold/GoldSmall.prefab",
+      "sizeKb": 48.6
+    },
+    {
+      "name": "CircleItemBlue",
+      "path": "assets/prefabs/arpg/Loot/Items/Circle Item/CircleItemBlue.prefab",
+      "sizeKb": 73.3
+    },
+    {
+      "name": "CircleItemGold",
+      "path": "assets/prefabs/arpg/Loot/Items/Circle Item/CircleItemGold.prefab",
+      "sizeKb": 73.3
+    },
+    {
+      "name": "CircleItemGreen",
+      "path": "assets/prefabs/arpg/Loot/Items/Circle Item/CircleItemGreen.prefab",
+      "sizeKb": 73.3
+    },
+    {
+      "name": "CircleItemPurple",
+      "path": "assets/prefabs/arpg/Loot/Items/Circle Item/CircleItemPurple.prefab",
+      "sizeKb": 73.3
+    },
+    {
+      "name": "CircleItemRed",
+      "path": "assets/prefabs/arpg/Loot/Items/Circle Item/CircleItemRed.prefab",
+      "sizeKb": 73.3
+    },
+    {
+      "name": "CircleItemWhite",
+      "path": "assets/prefabs/arpg/Loot/Items/Circle Item/CircleItemWhite.prefab",
+      "sizeKb": 73.3
+    },
+    {
+      "name": "CircleItemYellow",
+      "path": "assets/prefabs/arpg/Loot/Items/Circle Item/CircleItemYellow.prefab",
+      "sizeKb": 73.3
+    },
+    {
+      "name": "ItemEpicGreen",
+      "path": "assets/prefabs/arpg/Loot/Items/Epic Item/ItemEpicGreen.prefab",
+      "sizeKb": 124.6
+    },
+    {
+      "name": "ItemEpicModular",
+      "path": "assets/prefabs/arpg/Loot/Items/Epic Item/ItemEpicModular.prefab",
+      "sizeKb": 124.6
+    },
+    {
+      "name": "ItemEpicOrange",
+      "path": "assets/prefabs/arpg/Loot/Items/Epic Item/ItemEpicOrange.prefab",
+      "sizeKb": 124.6
+    },
+    {
+      "name": "ItemEpicPurple",
+      "path": "assets/prefabs/arpg/Loot/Items/Epic Item/ItemEpicPurple.prefab",
+      "sizeKb": 124.6
+    },
+    {
+      "name": "ItemEpicRed",
+      "path": "assets/prefabs/arpg/Loot/Items/Epic Item/ItemEpicRed.prefab",
+      "sizeKb": 124.6
+    },
+    {
+      "name": "ItemBlueEssence",
+      "path": "assets/prefabs/arpg/Loot/Items/Essence Item/ItemBlueEssence.prefab",
+      "sizeKb": 72.1
+    },
+    {
+      "name": "ItemDarkEssence",
+      "path": "assets/prefabs/arpg/Loot/Items/Essence Item/ItemDarkEssence.prefab",
+      "sizeKb": 72.1
+    },
+    {
+      "name": "ItemGreenEssence",
+      "path": "assets/prefabs/arpg/Loot/Items/Essence Item/ItemGreenEssence.prefab",
+      "sizeKb": 72.1
+    },
+    {
+      "name": "ItemOrangeEssence",
+      "path": "assets/prefabs/arpg/Loot/Items/Essence Item/ItemOrangeEssence.prefab",
+      "sizeKb": 72.1
+    },
+    {
+      "name": "ItemPurpleEssence",
+      "path": "assets/prefabs/arpg/Loot/Items/Essence Item/ItemPurpleEssence.prefab",
+      "sizeKb": 72.1
+    },
+    {
+      "name": "ItemRedEssence",
+      "path": "assets/prefabs/arpg/Loot/Items/Essence Item/ItemRedEssence.prefab",
+      "sizeKb": 72.1
+    },
+    {
+      "name": "ItemWhiteEssence",
+      "path": "assets/prefabs/arpg/Loot/Items/Essence Item/ItemWhiteEssence.prefab",
+      "sizeKb": 72.1
+    },
+    {
+      "name": "ItemYellowEssence",
+      "path": "assets/prefabs/arpg/Loot/Items/Essence Item/ItemYellowEssence.prefab",
+      "sizeKb": 72.1
+    },
+    {
+      "name": "ItemGlowBlue",
+      "path": "assets/prefabs/arpg/Loot/Items/Glow Item/ItemGlowBlue.prefab",
+      "sizeKb": 50.6
+    },
+    {
+      "name": "ItemGlowNormal",
+      "path": "assets/prefabs/arpg/Loot/Items/Glow Item/ItemGlowNormal.prefab",
+      "sizeKb": 50.6
+    },
+    {
+      "name": "ItemGlowOrange",
+      "path": "assets/prefabs/arpg/Loot/Items/Glow Item/ItemGlowOrange.prefab",
+      "sizeKb": 50.6
+    },
+    {
+      "name": "ItemGlowYellow",
+      "path": "assets/prefabs/arpg/Loot/Items/Glow Item/ItemGlowYellow.prefab",
+      "sizeKb": 50.6
+    },
+    {
+      "name": "ItemRune01",
+      "path": "assets/prefabs/arpg/Loot/Items/Runes/ItemRune01.prefab",
+      "sizeKb": 52.4
+    },
+    {
+      "name": "ItemRune02",
+      "path": "assets/prefabs/arpg/Loot/Items/Runes/ItemRune02.prefab",
+      "sizeKb": 72.6
+    },
+    {
+      "name": "ItemRune03",
+      "path": "assets/prefabs/arpg/Loot/Items/Runes/ItemRune03.prefab",
+      "sizeKb": 72.8
+    },
+    {
+      "name": "ItemRune04",
+      "path": "assets/prefabs/arpg/Loot/Items/Runes/ItemRune04.prefab",
+      "sizeKb": 72.8
+    },
+    {
+      "name": "BlueOrbConsume",
+      "path": "assets/prefabs/arpg/Loot/Orb Consume/BlueOrbConsume.prefab",
+      "sizeKb": 50.2
+    },
+    {
+      "name": "DarkOrbConsume",
+      "path": "assets/prefabs/arpg/Loot/Orb Consume/DarkOrbConsume.prefab",
+      "sizeKb": 50.2
+    },
+    {
+      "name": "GoldOrbConsume",
+      "path": "assets/prefabs/arpg/Loot/Orb Consume/GoldOrbConsume.prefab",
+      "sizeKb": 50.2
+    },
+    {
+      "name": "GreenOrbConsume",
+      "path": "assets/prefabs/arpg/Loot/Orb Consume/GreenOrbConsume.prefab",
+      "sizeKb": 50.2
+    },
+    {
+      "name": "HealthOrbConsume",
+      "path": "assets/prefabs/arpg/Loot/Orb Consume/HealthOrbConsume.prefab",
+      "sizeKb": 50.2
+    },
+    {
+      "name": "PurpleOrbConsume",
+      "path": "assets/prefabs/arpg/Loot/Orb Consume/PurpleOrbConsume.prefab",
+      "sizeKb": 50.2
+    },
+    {
+      "name": "WaterOrbConsume",
+      "path": "assets/prefabs/arpg/Loot/Orb Consume/WaterOrbConsume.prefab",
+      "sizeKb": 47.6
+    },
+    {
+      "name": "WhiteOrbConsume",
+      "path": "assets/prefabs/arpg/Loot/Orb Consume/WhiteOrbConsume.prefab",
+      "sizeKb": 50.2
+    },
+    {
+      "name": "BlueOrb",
+      "path": "assets/prefabs/arpg/Loot/Orbs/BlueOrb.prefab",
+      "sizeKb": 97.3
+    },
+    {
+      "name": "DarkOrb",
+      "path": "assets/prefabs/arpg/Loot/Orbs/DarkOrb.prefab",
+      "sizeKb": 97.3
+    },
+    {
+      "name": "GoldOrb",
+      "path": "assets/prefabs/arpg/Loot/Orbs/GoldOrb.prefab",
+      "sizeKb": 123.3
+    },
+    {
+      "name": "GreenOrb",
+      "path": "assets/prefabs/arpg/Loot/Orbs/GreenOrb.prefab",
+      "sizeKb": 97.3
+    },
+    {
+      "name": "HealthOrb",
+      "path": "assets/prefabs/arpg/Loot/Orbs/HealthOrb.prefab",
+      "sizeKb": 95.5
+    },
+    {
+      "name": "PurpleOrb",
+      "path": "assets/prefabs/arpg/Loot/Orbs/PurpleOrb.prefab",
+      "sizeKb": 97.3
+    },
+    {
+      "name": "WaterOrb",
+      "path": "assets/prefabs/arpg/Loot/Orbs/WaterOrb.prefab",
+      "sizeKb": 124.7
+    },
+    {
+      "name": "WhiteOrb",
+      "path": "assets/prefabs/arpg/Loot/Orbs/WhiteOrb.prefab",
+      "sizeKb": 97.3
+    },
+    {
+      "name": "ARPGDemo01",
+      "path": "assets/prefabs/arpg/scenes/ARPGDemo01.prefab",
+      "sizeKb": 433
+    },
+    {
+      "name": "ARPGDemo02",
+      "path": "assets/prefabs/arpg/scenes/ARPGDemo02.prefab",
+      "sizeKb": 22.4
+    },
+    {
+      "name": "ARPGDemo03",
+      "path": "assets/prefabs/arpg/scenes/ARPGDemo03.prefab",
+      "sizeKb": 84.5
+    },
+    {
+      "name": "ARPGDemo04",
+      "path": "assets/prefabs/arpg/scenes/ARPGDemo04.prefab",
+      "sizeKb": 15.6
+    },
+    {
+      "name": "ARPGDemo08",
+      "path": "assets/prefabs/arpg/scenes/ARPGDemo08.prefab",
+      "sizeKb": 29.6
+    },
+    {
+      "name": "ARPGDemo09",
+      "path": "assets/prefabs/arpg/scenes/ARPGDemo09.prefab",
+      "sizeKb": 63.2
+    },
+    {
+      "name": "ARPGDemo10",
+      "path": "assets/prefabs/arpg/scenes/ARPGDemo10.prefab",
+      "sizeKb": 657.3
     }
   ],
   "scripts": {
-    "count": 63,
+    "count": 78,
     "byDir": [
       {
         "dir": "assets/script",
@@ -231,14 +1071,24 @@
           "UnityNoiseKernel",
           "UnityParticleBirthState",
           "UnityParticleBirthStateAdapter",
+          "UnityParticleBurstEmission",
+          "UnityParticleBurstSpreadAdapter",
+          "UnityParticleEulerRotation",
+          "UnityParticleEulerRotationAdapter",
           "UnityParticleHierarchyTransformSync",
+          "UnityParticleLimitVelocity",
+          "UnityParticleLimitVelocityAdapter",
           "UnityParticleNestedEmission",
           "UnityParticleNoise",
           "UnityParticleNoiseAdapter",
           "UnityParticleOrbit",
+          "UnityParticleOrbitAdapter",
+          "UnityParticlePrewarm",
+          "UnityParticlePrewarmAdapter",
           "UnityParticleRateOverDistanceEmitter",
           "UnityParticleRendererVisibility",
           "UnityParticleSorting",
+          "UnityParticleSortingAdapter",
           "UnityParticleSubEmitterFollower",
           "UnitySpriteRendererColorAdapter",
           "UnitySrgbTexture"
@@ -254,7 +1104,12 @@
           "ARPGFXPortalScript",
           "ARPGFXRotation",
           "ARPGSceneSelect",
-          "ArpgLightAccess"
+          "ArpgClock",
+          "ArpgLightAccess",
+          "ArpgLinearFrame",
+          "ArpgSceneRuntime",
+          "ArpgUnityCanvas",
+          "ArpgUnityMesh"
         ]
       },
       {
@@ -350,37 +1205,37 @@
       ],
       "truncated": 6
     },
-    "modelCount": 20,
+    "modelCount": 26,
     "models": {
-      "count": 20,
-      "totalKb": 522.7,
+      "count": 26,
+      "totalKb": 723.7,
       "sample": [
+        "assets/unity_imported/Assets/ARPG Effects/Demo/Models/RPGFXChest.FBX",
+        "assets/unity_imported/Assets/ARPG Effects/Models/RPGFXClickCurve.FBX",
         "assets/unity_imported/Assets/ARPG Effects/Models/RPGFXCurvedCylinder2.FBX",
-        "assets/unity_imported/Assets/Hovl Studio/AAA Projectiles Vol 1/Models/BeamMesh.fbx",
-        "assets/unity_imported/Assets/Hovl Studio/AAA Projectiles Vol 1/Models/Conus.fbx",
-        "assets/unity_imported/Assets/Hovl Studio/AAA Projectiles Vol 1/Models/CylinderFromCenter2.fbx",
-        "assets/unity_imported/Assets/Hovl Studio/AAA Projectiles Vol 1/Models/CylinderFromGround.fbx",
-        "assets/unity_imported/Assets/Hovl Studio/AAA Projectiles Vol 1/Models/EGACrystalPiese.fbx"
+        "assets/unity_imported/Assets/ARPG Effects/Models/RPGFXIconExclamation.FBX",
+        "assets/unity_imported/Assets/ARPG Effects/Models/RPGFXIconQuestion.FBX",
+        "assets/unity_imported/Assets/ARPG Effects/Models/RPGFXIconStar.FBX"
       ],
-      "truncated": 14
+      "truncated": 20
     },
-    "shaderCount": 7,
+    "shaderCount": 8,
     "shaders": {
-      "count": 7,
-      "totalKb": 61.2,
+      "count": 8,
+      "totalKb": 65.4,
       "sample": [
         "assets/effects/aoe-floor.effect",
         "assets/effects/aoe-particle-trail.effect",
         "assets/effects/aoe-particle.effect",
         "assets/effects/aoe-present.effect",
-        "assets/effects/unity-legacy-preview-particle.effect",
-        "assets/effects/unity-source-particle.effect"
+        "assets/effects/arpg-skybox.effect",
+        "assets/effects/unity-legacy-preview-particle.effect"
       ],
-      "truncated": 1
+      "truncated": 2
     },
     "materials": {
-      "count": 182,
-      "totalKb": 742.4,
+      "count": 311,
+      "totalKb": 877.2,
       "sample": [
         "assets/materials/aoe-default-particle.mtl",
         "assets/materials/aoe-floor.mtl",
@@ -389,30 +1244,33 @@
         "assets/materials/aoe-local-10-4755324015660310.mtl",
         "assets/materials/aoe-local-13-4601147430084982.mtl"
       ],
-      "truncated": 176
+      "truncated": 305
     },
     "textures": {
-      "count": 140,
-      "totalKb": 62013.2,
+      "count": 199,
+      "totalKb": 115597.8,
       "sample": [
         "assets/aoe/Default-Particle.png",
-        "assets/unity_imported/Assets/ARPG Effects/Demo/Textures/brick_ambient.png",
-        "assets/unity_imported/Assets/ARPG Effects/Demo/Textures/brick_base.png",
-        "assets/unity_imported/Assets/ARPG Effects/Demo/Textures/brick_normal.png",
-        "assets/unity_imported/Assets/ARPG Effects/Demo/Textures/gui_button2.png",
-        "assets/unity_imported/Assets/ARPG Effects/Textures/basicglow.png"
+        "assets/arpg/sky/ARPGDemo01.png",
+        "assets/arpg/sky/ARPGDemo04.png",
+        "assets/arpg/sky/ARPGDemo08.png",
+        "assets/unity_imported/Assets/ARPG Effects/Demo/Textures/brickwall.png",
+        "assets/unity_imported/Assets/ARPG Effects/Demo/Textures/brick_ambient.png"
       ],
-      "truncated": 134
+      "truncated": 193
     },
     "animations": {
-      "count": 0,
-      "totalKb": 0,
-      "sample": [],
+      "count": 2,
+      "totalKb": 0.4,
+      "sample": [
+        "assets/animations/lightfadein/LightFadeIn.anim",
+        "assets/animations/lightfadeout/LightFadeOut.anim"
+      ],
       "truncated": 0
     },
     "prefabsInAssets": {
-      "count": 35,
-      "totalKb": 9050.5,
+      "count": 200,
+      "totalKb": 21065.5,
       "sample": [
         "assets/prefabs/aoe/Energy explosion.prefab",
         "assets/prefabs/aoe/Flower slash.prefab",
@@ -421,22 +1279,22 @@
         "assets/prefabs/aoe/Knife hit.prefab",
         "assets/prefabs/aoe/Knives.prefab"
       ],
-      "truncated": 29
+      "truncated": 194
     },
     "unityImported": {
       "exists": true,
       "root": "assets/unity_imported",
-      "count": 290,
-      "totalKb": 63069,
+      "count": 479,
+      "totalKb": 115821.2,
       "sample": [
-        "assets/unity_imported/Assets/ARPG Effects/Demo/Textures/brick_ambient.png",
-        "assets/unity_imported/Assets/ARPG Effects/Demo/Textures/brick_base.png",
-        "assets/unity_imported/Assets/ARPG Effects/Demo/Textures/brick_normal.png",
-        "assets/unity_imported/Assets/ARPG Effects/Demo/Textures/gui_button2.png",
-        "assets/unity_imported/Assets/ARPG Effects/Materials/Misc/beamglow.renderer-4-0_0_0_0.mtl",
-        "assets/unity_imported/Assets/ARPG Effects/Materials/Misc/sparkle_atlas.mtl"
+        "assets/unity_imported/Assets/ARPG Effects/Demo/Materials/ChestFrame02.mesh.mtl",
+        "assets/unity_imported/Assets/ARPG Effects/Demo/Materials/ChestInner02.mesh.mtl",
+        "assets/unity_imported/Assets/ARPG Effects/Demo/Materials/Floor.mesh.mtl",
+        "assets/unity_imported/Assets/ARPG Effects/Demo/Materials/GoldCoins.mesh.mtl",
+        "assets/unity_imported/Assets/ARPG Effects/Demo/Materials/Metal.mesh.mtl",
+        "assets/unity_imported/Assets/ARPG Effects/Demo/Materials/Stairs.mesh.mtl"
       ],
-      "truncated": 284
+      "truncated": 473
     }
   },
   "configSummary": {
