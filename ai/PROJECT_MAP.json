@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "generatedAt": "2026-09-25T09:48:58.387Z",
+    "generatedAt": "2026-09-25T15:30:44.236Z",
     "description": "Compact project manifest for AI Agents. Use this instead of scanning file trees.",
     "project": {
       "projectName": "cc_playable_framework",
@@ -23,12 +23,68 @@
       "name": "Gameplay",
       "path": "assets/Gameplay.scene",
       "sizeKb": 14.9
+    },
+    {
+      "name": "ScrewOutFactory",
+      "path": "assets/screw/ScrewOutFactory.scene",
+      "sizeKb": 5.3
     }
   ],
-  "prefabs": [],
+  "prefabs": [
+    {
+      "name": "Level_201",
+      "path": "assets/screw/levels/Level_201.prefab",
+      "sizeKb": 76
+    },
+    {
+      "name": "Level_202",
+      "path": "assets/screw/levels/Level_202.prefab",
+      "sizeKb": 272.3
+    }
+  ],
   "scripts": {
-    "count": 26,
+    "count": 51,
     "byDir": [
+      {
+        "dir": "assets/script/screw/core",
+        "names": [
+          "OrderedCounter",
+          "ScrewColorPlanner",
+          "ScrewEase",
+          "ScrewModel",
+          "ScrewRandom",
+          "ScrewRopeGeometry",
+          "ScrewTypes",
+          "ScrewUnitySpace"
+        ]
+      },
+      {
+        "dir": "assets/script/screw/input",
+        "names": [
+          "ScrewPicker",
+          "ScrewRotationController"
+        ]
+      },
+      {
+        "dir": "assets/script/screw",
+        "names": [
+          "ScrewAssetStore",
+          "ScrewAudioBus",
+          "ScrewConfig",
+          "ScrewGameApp"
+        ]
+      },
+      {
+        "dir": "assets/script/screw/view",
+        "names": [
+          "ScrewBoxView",
+          "ScrewFlightAnimator",
+          "ScrewHud",
+          "ScrewLevelView",
+          "ScrewTimeline",
+          "ScrewWorld"
+        ]
+      },
       {
         "dir": "assets/script/shared/core/audio",
         "names": [
@@ -104,42 +160,81 @@
           "PlayableAdDownloadEvent",
           "SuperHtmlPlayable"
         ]
+      },
+      {
+        "dir": "assets/script",
+        "names": [
+          "UnityParticleHierarchyTransformSync",
+          "UnityParticleRateOverDistanceEmitter",
+          "UnityParticleRendererVisibility",
+          "UnityParticleSubEmitterFollower",
+          "UnitySpriteRendererColorAdapter"
+        ]
       }
     ]
   },
   "assetsSummary": {
-    "audioCount": 0,
+    "audioCount": 14,
     "audio": {
-      "count": 0,
-      "totalKb": 0,
-      "sample": [],
-      "truncated": 0
+      "count": 14,
+      "totalKb": 3080.3,
+      "sample": [
+        "assets/resources/screw/audio/Background.mp3",
+        "assets/resources/screw/audio/Button.mp3",
+        "assets/resources/screw/audio/Cartoon_Crazy_Fireworks.mp3",
+        "assets/resources/screw/audio/Clearbox.mp3",
+        "assets/resources/screw/audio/Closebox.mp3",
+        "assets/resources/screw/audio/Fly.mp3"
+      ],
+      "truncated": 8
     },
-    "modelCount": 0,
+    "modelCount": 3,
     "models": {
-      "count": 0,
-      "totalKb": 0,
-      "sample": [],
+      "count": 3,
+      "totalKb": 497.5,
+      "sample": [
+        "assets/unity_imported/_Game/Art/level_model_new_control/screw.fbx",
+        "assets/unity_imported/_Game/SOF_Lvl/Model 3D/NewModel/FBX/Candy_new (fixed pivot).fbx",
+        "assets/unity_imported/_Game/SOF_Lvl/Model 3D/NewModel/FBX/Level_P_62.fbx"
+      ],
       "truncated": 0
     },
-    "shaderCount": 0,
+    "shaderCount": 3,
     "shaders": {
-      "count": 0,
-      "totalKb": 0,
-      "sample": [],
+      "count": 3,
+      "totalKb": 24.3,
+      "sample": [
+        "assets/effects/MatCap_TextureMult_Bumped.effect",
+        "assets/effects/UnitySpriteRendererColor.effect",
+        "assets/effects/URPLit.effect"
+      ],
       "truncated": 0
     },
     "materials": {
-      "count": 0,
-      "totalKb": 0,
-      "sample": [],
+      "count": 6,
+      "totalKb": 4.7,
+      "sample": [
+        "assets/materials/UnitySpriteRendererColor.mtl",
+        "assets/materials/UnitySpriteRendererColorOpaque.mtl",
+        "assets/materials/UnitySpriteRendererGlow.mtl",
+        "assets/unity_imported/_Game/Art/level_model_new_control/mtl_screw_new.mtl",
+        "assets/unity_imported/_Game/SOF_Lvl/Model 3D/Phong ( New_Model )/Shader/Pearl.mtl",
+        "assets/unity_imported/_Game/SOF_Lvl/Model 3D/Phong ( New_Model )/Shader/Tex_All.mtl"
+      ],
       "truncated": 0
     },
     "textures": {
-      "count": 0,
-      "totalKb": 0,
-      "sample": [],
-      "truncated": 0
+      "count": 14,
+      "totalKb": 1673.8,
+      "sample": [
+        "assets/screw/textures/fx_redline.png",
+        "assets/screw/textures/img_hole.png",
+        "assets/screw/ui/background3.png",
+        "assets/screw/ui/btn_center.png",
+        "assets/screw/ui/btn_color.png",
+        "assets/screw/ui/btn_increase_size.png"
+      ],
+      "truncated": 8
     },
     "animations": {
       "count": 0,
@@ -148,22 +243,32 @@
       "truncated": 0
     },
     "prefabsInAssets": {
-      "count": 0,
-      "totalKb": 0,
-      "sample": [],
+      "count": 2,
+      "totalKb": 348.3,
+      "sample": [
+        "assets/screw/levels/Level_201.prefab",
+        "assets/screw/levels/Level_202.prefab"
+      ],
       "truncated": 0
     },
     "unityImported": {
-      "exists": false,
+      "exists": true,
       "root": "assets/unity_imported",
-      "count": 0,
-      "totalKb": 0,
-      "sample": [],
-      "truncated": 0
+      "count": 8,
+      "totalKb": 568.9,
+      "sample": [
+        "assets/unity_imported/_Game/Art/level_model_new_control/mtl_screw_new.mtl",
+        "assets/unity_imported/_Game/Art/level_model_new_control/screw.fbx",
+        "assets/unity_imported/_Game/shape.pmtl",
+        "assets/unity_imported/_Game/SOF_Lvl/Model 3D/NewModel/FBX/Candy_new (fixed pivot).fbx",
+        "assets/unity_imported/_Game/SOF_Lvl/Model 3D/NewModel/FBX/Level_P_62.fbx",
+        "assets/unity_imported/_Game/SOF_Lvl/Model 3D/Phong ( New_Model )/Shader/Pearl.mtl"
+      ],
+      "truncated": 2
     }
   },
   "configSummary": {
-    "fragmentCount": 0,
+    "fragmentCount": 1,
     "ctaKeys": [
       "googlePlayUrl",
       "appStoreUrl",
@@ -194,7 +299,9 @@
       "fovLandscape",
       "presets"
     ],
-    "customKeys": [],
+    "customKeys": [
+      "screwOut"
+    ],
     "rawPreview": {
       "cta": {
         "googlePlayUrl": "https://play.google.com/store/apps/details?id=com.playable.ad",
@@ -205,15 +312,15 @@
         "pulseDuration": 0.6
       },
       "audio": {
-        "autoPlayBgm": false,
-        "bgmVolume": 0.6,
+        "autoPlayBgm": true,
+        "bgmVolume": 0.202,
         "sfxVolume": 1,
-        "bgmSoundPath": "",
+        "bgmSoundPath": "screw/audio/Background",
         "clickSoundPath": "",
         "successSoundPath": "",
         "winSoundPath": "",
         "system": {
-          "maxSfxVoices": 8,
+          "maxSfxVoices": 16,
           "sounds": {
             "ui-click": {
               "path": "",
@@ -241,6 +348,123 @@
               "volume": 1,
               "loop": false,
               "stealable": false
+            },
+            "ScrewClick": {
+              "path": "screw/audio/Screw_open",
+              "cooldownMs": 0,
+              "maxConcurrent": 1,
+              "priority": 100,
+              "volume": 1,
+              "loop": false,
+              "stealable": true
+            },
+            "ScrewUp": {
+              "path": "screw/audio/Screw_open_fail",
+              "cooldownMs": 0,
+              "maxConcurrent": 1,
+              "priority": 100,
+              "volume": 1,
+              "loop": false,
+              "stealable": true
+            },
+            "ScrewDown": {
+              "path": "screw/audio/Screw_close",
+              "cooldownMs": 0,
+              "maxConcurrent": 1,
+              "priority": 100,
+              "volume": 0.4,
+              "loop": false,
+              "stealable": true
+            },
+            "Merge": {
+              "path": "screw/audio/Closebox",
+              "cooldownMs": 0,
+              "maxConcurrent": 1,
+              "priority": 100,
+              "volume": 1,
+              "loop": false,
+              "stealable": true
+            },
+            "ClearBox": {
+              "path": "screw/audio/Clearbox",
+              "cooldownMs": 0,
+              "maxConcurrent": 1,
+              "priority": 100,
+              "volume": 1,
+              "loop": false,
+              "stealable": true
+            },
+            "StartLevel": {
+              "path": "screw/audio/Start_level",
+              "cooldownMs": 0,
+              "maxConcurrent": 1,
+              "priority": 100,
+              "volume": 1,
+              "loop": false,
+              "stealable": true
+            },
+            "Fly": {
+              "path": "screw/audio/Fly",
+              "cooldownMs": 0,
+              "maxConcurrent": 1,
+              "priority": 100,
+              "volume": 1,
+              "loop": false,
+              "stealable": true
+            },
+            "LevelStart_ScrewDown": {
+              "path": "screw/audio/Screw_no_box",
+              "cooldownMs": 0,
+              "maxConcurrent": 1,
+              "priority": 100,
+              "volume": 1,
+              "loop": false,
+              "stealable": true
+            },
+            "Win": {
+              "path": "screw/audio/Win_game",
+              "cooldownMs": 0,
+              "maxConcurrent": 1,
+              "priority": 100,
+              "volume": 1,
+              "loop": false,
+              "stealable": true
+            },
+            "WIN_WITH_TRUMPET": {
+              "path": "screw/audio/Win_new",
+              "cooldownMs": 0,
+              "maxConcurrent": 1,
+              "priority": 100,
+              "volume": 1,
+              "loop": false,
+              "stealable": true
+            },
+            "WIN_WITH_FIREWORK": {
+              "path": "screw/audio/Cartoon_Crazy_Fireworks",
+              "cooldownMs": 0,
+              "maxConcurrent": 1,
+              "priority": 100,
+              "volume": 0.2,
+              "loop": false,
+              "stealable": true
+            },
+            "Lose": {
+              "path": "screw/audio/Lose_game",
+              "cooldownMs": 0,
+              "maxConcurrent": 1,
+              "priority": 100,
+              "volume": 1,
+              "loop": false,
+              "stealable": true
+            },
+            "Click": {
+              "path": "screw/audio/Button",
+              "cooldownMs": 0,
+              "maxConcurrent": 1,
+              "priority": 100,
+              "volume": 1,
+              "loop": false,
+              "stealable": true
             }
           }
         }

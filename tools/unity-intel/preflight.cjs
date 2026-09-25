@@ -32,6 +32,10 @@ const SOURCE_DISPOSITION_SCHEMA_VERSION = 1;
 const SOURCE_DISPOSITION_KIND = 'unity-port-source-dispositions';
 const SOURCE_DISPOSITION_MAX_BYTES = 64 * 1024;
 const SOURCE_DISPOSITION_MAX_ENTRIES = 128;
+// A reviewed entry may group GUIDs that share the exact owner set, field and proof (for example a
+// stale serialized level table). The key budget matches the live scanner's unresolved-GUID budget.
+const SOURCE_DISPOSITION_MAX_GROUP_KEYS = 256;
+const SOURCE_DISPOSITION_MAX_KEYS = 512;
 const WORKFLOW_FILES = [
   'preflight.cjs',
   'project-state.cjs',
@@ -246,6 +250,18 @@ function validateDispositionHash(projectRoot, record, label) {
   return { path: logicalPath, sha256: expected };
 }
 
+function dispositionEntryKeys(entry) {
+  if (!entry || typeof entry !== 'object') return null;
+  const hasKey = entry.key !== undefined;
+  const hasKeys = entry.keys !== undefined;
+  if (hasKey === hasKeys) return null;
+  const values = hasKey ? [entry.key] : entry.keys;
+  if (!Array.isArray(values) || !values.length || values.length > SOURCE_DISPOSITION_MAX_GROUP_KEYS) return null;
+  const keys = values.map(value => (typeof value === 'string' ? value.toLowerCase() : ''));
+  if (keys.some(key => !/^[0-9a-f]{32}$/.test(key)) || new Set(keys).size !== keys.length) return null;
+  return keys;
+}
+
 function loadSourceDispositions(projectRoot, snapshot, coreScope, input = {}, stateFingerprint) {
   if (!input.sourceDispositions) {
     return { acceptedKeys: new Set(), projection: null, receiptBinding: null };
@@ -279,45 +295,53 @@ function loadSourceDispositions(projectRoot, snapshot, coreScope, input = {}, st
     .map(item => [String(item.guid || '').toLowerCase(), item]));
   const acceptedKeys = new Set();
   for (const entry of manifest.entries) {
-    const key = String(entry && entry.key || '').toLowerCase();
-    if (!entry || entry.code !== 'UNITY_REACHABLE_GUID_UNRESOLVED' || !/^[0-9a-f]{32}$/.test(key) ||
+    const keys = dispositionEntryKeys(entry);
+    if (!keys || entry.code !== 'UNITY_REACHABLE_GUID_UNRESOLVED' ||
         entry.disposition !== 'accept-stale-reference' ||
         !['unreachable-from-target-runtime', 'replaced-in-playable'].includes(entry.basis) ||
         typeof entry.reason !== 'string' || entry.reason.trim().length < 20 || entry.reason.length > 600 ||
         !Array.isArray(entry.owners) || !entry.owners.length || entry.owners.length > 8 ||
         !Array.isArray(entry.proof) || !entry.proof.length || entry.proof.length > 8 ||
-        acceptedKeys.has(key)) {
+        keys.some(key => acceptedKeys.has(key)) ||
+        acceptedKeys.size + keys.length > SOURCE_DISPOSITION_MAX_KEYS) {
       throw preflightError('UNITY_SOURCE_DISPOSITION_INVALID', 'Source disposition entry không hợp lệ hoặc bị trùng GUID.');
     }
-    const item = unresolved.get(key);
-    if (!item || item.confirmation !== 'unity-editor-missing') {
-      throw preflightError('UNITY_SOURCE_DISPOSITION_NOT_LIVE_CONFIRMED', `GUID ${key} không còn là Unity Editor-confirmed missing reference.`);
-    }
-    if (unresolvedCoreRoute(item, coreScope) === 'deferred') {
-      throw preflightError('UNITY_SOURCE_DISPOSITION_REDUNDANT', `GUID ${key} đã được playable-core route ra ngoài scope; không cần stale-reference waiver.`);
-    }
-    const expectedSources = unresolvedSourcePaths(item);
+    const label = keys.length === 1 ? keys[0] : `${keys[0]} (+${keys.length - 1})`;
     const ownerSources = [];
     for (const owner of entry.owners) {
-      const validated = validateDispositionHash(projectRoot, owner, `Owner của ${key}`);
-      if (typeof owner.field !== 'string' || !owner.field || !(item.fields || []).includes(owner.field)) {
-        throw preflightError('UNITY_SOURCE_DISPOSITION_OWNER_MISMATCH', `Owner field của ${key} không khớp live evidence.`);
+      const validated = validateDispositionHash(projectRoot, owner, `Owner của ${label}`);
+      if (typeof owner.field !== 'string' || !owner.field) {
+        throw preflightError('UNITY_SOURCE_DISPOSITION_OWNER_MISMATCH', `Owner field của ${label} không khớp live evidence.`);
       }
       if (!ownerSources.includes(validated.path)) ownerSources.push(validated.path);
     }
     ownerSources.sort();
-    if (stableStringify(ownerSources) !== stableStringify(expectedSources)) {
-      throw preflightError('UNITY_SOURCE_DISPOSITION_OWNER_MISMATCH', `Owner paths của ${key} không khớp đầy đủ live evidence.`);
-    }
     for (const proof of entry.proof) {
-      validateDispositionHash(projectRoot, proof, `Proof của ${key}`);
+      validateDispositionHash(projectRoot, proof, `Proof của ${label}`);
       if (typeof proof.note !== 'string' || proof.note.trim().length < 12 || proof.note.length > 500) {
-        throw preflightError('UNITY_SOURCE_DISPOSITION_INVALID', `Proof note của ${key} phải mô tả evidence đã review.`);
+        throw preflightError('UNITY_SOURCE_DISPOSITION_INVALID', `Proof note của ${label} phải mô tả evidence đã review.`);
       }
     }
-    acceptedKeys.add(key);
+    // Every grouped GUID must independently match the live evidence for the shared owners/field.
+    for (const key of keys) {
+      const item = unresolved.get(key);
+      if (!item || item.confirmation !== 'unity-editor-missing') {
+        throw preflightError('UNITY_SOURCE_DISPOSITION_NOT_LIVE_CONFIRMED', `GUID ${key} không còn là Unity Editor-confirmed missing reference.`);
+      }
+      if (unresolvedCoreRoute(item, coreScope) === 'deferred') {
+        throw preflightError('UNITY_SOURCE_DISPOSITION_REDUNDANT', `GUID ${key} đã được playable-core route ra ngoài scope; không cần stale-reference waiver.`);
+      }
+      if (entry.owners.some(owner => !(item.fields || []).includes(owner.field))) {
+        throw preflightError('UNITY_SOURCE_DISPOSITION_OWNER_MISMATCH', `Owner field của ${key} không khớp live evidence.`);
+      }
+      if (stableStringify(ownerSources) !== stableStringify(unresolvedSourcePaths(item))) {
+        throw preflightError('UNITY_SOURCE_DISPOSITION_OWNER_MISMATCH', `Owner paths của ${key} không khớp đầy đủ live evidence.`);
+      }
+    }
+    for (const key of keys) acceptedKeys.add(key);
   }
   const digest = sha256File(file);
+  const sortedKeys = [...acceptedKeys].sort();
   return {
     acceptedKeys,
     projection: {
@@ -326,7 +350,8 @@ function loadSourceDispositions(projectRoot, snapshot, coreScope, input = {}, st
       digest,
       stateFingerprint,
       acceptedCount: acceptedKeys.size,
-      acceptedKeys: [...acceptedKeys].sort(),
+      // The GUID list lives in the hash-bound disposition file; the brief keeps a bounded digest.
+      acceptedKeysDigest: sha256(sortedKeys.join('\n')),
     },
     receiptBinding: { file, digest },
   };

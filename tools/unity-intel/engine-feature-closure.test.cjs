@@ -119,6 +119,48 @@ BoxCollider:
   assert.deepEqual(result.requiredModules, ['3d', 'physics-builtin']);
 });
 
+test('a 3D Rigidbody impulse is not Physics2D evidence, while 2D-typed force still is', () => {
+  const shape = record('Assets/Game/Shape.cs', `
+public sealed class Shape : MonoBehaviour {
+  private Rigidbody rb;
+  public void Release(Vector3 dir) { rb.AddForce(dir * 4f, ForceMode.Impulse); }
+}
+`);
+  const released = closure([shape], [shape.assetPath]);
+  assert.equal(released.selectors.physics2dBackend, null);
+  assert.equal(released.requiredModules.includes('physics-2d'), false);
+  assert.equal(released.selectors.physicsBackend !== null, true);
+
+  const kick = record('Assets/Game/Kick2D.cs', `
+public sealed class Kick2D : MonoBehaviour {
+  private Rigidbody2D body;
+  public void Kick(Vector2 dir) { body.AddForce(dir, ForceMode2D.Impulse); }
+}
+`);
+  assert.equal(closure([kick], [kick.assetPath]).selectors.physics2dBackend, 'physics-2d-box2d');
+});
+
+test('a bare useOcclusionCulling field is not Camera occlusion culling evidence', () => {
+  const scrollSnap = record('Assets/Meta/SimpleScrollSnap.cs', `
+public sealed class SimpleScrollSnap : MonoBehaviour {
+  [SerializeField] private bool useOcclusionCulling = false;
+  public bool UseOcclusionCulling { get => useOcclusionCulling; set => useOcclusionCulling = value; }
+  private void OnValidate() { useInfiniteScrolling = useOcclusionCulling = false; }
+  private void Update() { if (useOcclusionCulling == true) { } }
+}
+`);
+  const bare = closure([scrollSnap], [scrollSnap.assetPath]);
+  assert.equal(bare.requiredModules.includes('occlusion-query'), false);
+  assert.equal(bare.disabledModules.includes('occlusion-query'), true);
+
+  const camera = record('Assets/Game/CameraSetup.cs', `
+public sealed class CameraSetup : MonoBehaviour {
+  private void Start() { GetComponent<Camera>().useOcclusionCulling = true; }
+}
+`);
+  assert.equal(closure([camera], [camera.assetPath]).requiredModules.includes('occlusion-query'), true);
+});
+
 test('reachable Unity Physics2D collider/query selects the Box2D parent option and backend', () => {
   const collider = record('Assets/Game/Tile.prefab', `--- !u!61 &1
 BoxCollider2D:
