@@ -20,6 +20,7 @@ CCEffect %{
       unityAmbientEquator: { value: [0.114, 0.125, 0.133, 1], linear: true, editor: { type: color } }
       unityAmbientGround: { value: [0.58431375, 0.58431375, 0.58431375, 1], linear: true, editor: { type: color } }
       unityAmbientParams: { value: [1, 0, 0, 0] }
+      unityShadowFade: { value: [0, 0, 0, 0] }
       unityOutputColorScale: { value: [1, 1, 1, 0] }
       peekSideColor: { value: [0.08, 0.1, 0.14, 0.48], linear: true, editor: { type: color } }
       peekFresnelPower: { value: 1.35, target: peekParams.x }
@@ -97,6 +98,7 @@ CCProgram urp-lit-shared %{
     vec4 unityAmbientEquator;
     vec4 unityAmbientGround;
     vec4 unityAmbientParams;
+    vec4 unityShadowFade;
     vec4 unityOutputColorScale;
     vec4 peekSideColor;
     vec4 peekParams;
@@ -290,6 +292,12 @@ CCProgram urp-lit-fs %{
       // source main light is bound in unityLightIntensities.z (0 keeps the rig unshadowed); the Cocos main
       // directional light must mirror light 0's direction to own the shadow map.
       float mainShadow = mix(1.0, shadowFactor(normal), clamp(unityLightIntensities.z, 0.0, 1.0));
+      // URP GetMainLightShadowFade: realtime shadow fades out over the last cascade border up to the max
+      // shadow distance, by squared distance from the camera; unityShadowFade.xy is the source
+      // _MainLightShadowParams.zw (zero keeps the shadow unfaded). Without a shadowmask baked shadow is 1.
+      vec3 cameraToPixel = v_worldPosition - cc_cameraPos.xyz;
+      float shadowFade = clamp(dot(cameraToPixel, cameraToPixel) * unityShadowFade.x + unityShadowFade.y, 0.0, 1.0);
+      mainShadow = mix(mainShadow, 1.0, shadowFade);
       direct = unityDirectLight(baseColor.rgb, normal, viewDirection,
         normalize(unityLightDirection0.xyz), unityLightColor0.rgb, unityLightIntensities.x) * mainShadow;
       direct += unityDirectLight(baseColor.rgb, normal, viewDirection,

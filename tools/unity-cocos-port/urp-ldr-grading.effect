@@ -1,0 +1,121 @@
+// Unity URP "LDR colour grading" replayed as the Cocos builtin-pipeline colour-grading pass
+// (BuiltinPipelineSettings.colorGrading, driven by playable-core UnityUrpPostProcess).
+// URP UberPost order for an LDR camera target: vignette -> ApplyColorGrading, where LDR grading applies the
+// tonemapper to the clamped linear colour and then the internal (identity when no colour adjustments) LUT.
+// The radiance target is RGBA8 holding sRGB-encoded clamped colour, like URP's LDR camera target.
+// Both pass names the pipeline may request (nx1 / 8x8 LUT layout) run the same analytic grading; the LUT
+// texture the pipeline requires is only a placeholder.
+CCEffect %{
+  techniques:
+  - passes:
+    - vert: grading-vs
+      frag: grading-fs
+      pass: cc-color-grading-nx1
+      rasterizerState: &rasterizerState
+        cullMode: none
+      depthStencilState: &depthStencilState
+        depthTest: false
+        depthWrite: false
+      properties: &props
+        vignetteParams1: { value: [0, 0, 0, 1] }
+        vignetteParams2: { value: [0.5, 0.5, 0, 1] }
+        gradingParams: { value: [0, 0, 0, 0] }
+    - vert: grading-vs
+      frag: grading-fs
+      pass: cc-color-grading-8x8
+      rasterizerState: *rasterizerState
+      depthStencilState: *depthStencilState
+      properties: *props
+}%
+
+CCProgram ubo %{
+  #pragma rate ColorGradingUBO pass
+  uniform ColorGradingUBO {
+    vec2 lutTextureSize;
+    float contribute;
+  };
+  #pragma rate sceneColorMap pass
+  uniform sampler2D sceneColorMap;
+  uniform sampler2D colorGradingMap;
+  uniform UnityUrpGrading {
+    // URP _Vignette_Params1: colour.rgb, roundness (aspect when rounded, else 1)
+    vec4 vignetteParams1;
+    // URP _Vignette_Params2: center.xy, intensity * 3, smoothness * 5 (intensity 0 disables it)
+    vec4 vignetteParams2;
+    // x: tonemapper (0 None, 1 Neutral)
+    vec4 gradingParams;
+  };
+}%
+
+CCProgram grading-vs %{
+  precision highp float;
+  #include <legacy/decode-standard>
+  #include <post-process/pipeline>
+
+  out vec2 v_uv;
+
+  void main () {
+    StandardVertInput In;
+    CCDecode(In);
+    FLIP_VULKAN_NDC(In.position);
+    gl_Position = In.position;
+    v_uv = a_texCoord;
+  }
+}%
+
+CCProgram grading-fs %{
+  precision highp float;
+  #include <common/color/gamma>
+  #include <ubo>
+
+  in vec2 v_uv;
+  layout(location = 0) out vec4 fragColor;
+
+  // URP ShaderLibrary Color.hlsl NeutralCurve / NeutralTonemap.
+  vec3 NeutralCurve(vec3 x, float a, float b, float c, float d, float e, float f) {
+    return ((x * (a * x + c * b) + d * e) / (x * (a * x + b) + d * f)) - e / f;
+  }
+
+  vec3 NeutralTonemap(vec3 x) {
+    const float a = 0.2;
+    const float b = 0.29;
+    const float c = 0.24;
+    const float d = 0.272;
+    const float e = 0.02;
+    const float f = 0.3;
+    const float whiteLevel = 5.3;
+    const float whiteClip = 1.0;
+    vec3 whiteScale = vec3(1.0) / NeutralCurve(vec3(whiteLevel), a, b, c, d, e, f);
+    x = NeutralCurve(x * whiteScale, a, b, c, d, e, f);
+    x *= whiteScale;
+    x /= vec3(whiteClip);
+    return x;
+  }
+
+  // URP PostProcessing Common.hlsl ApplyVignette (linear colour, before colour grading).
+  vec3 ApplyVignette(vec3 color, vec2 uv) {
+    vec2 dist = abs(uv - vignetteParams2.xy) * vignetteParams2.z;
+    dist.x *= vignetteParams1.w;
+    float vfactor = pow(clamp(1.0 - dot(dist, dist), 0.0, 1.0), vignetteParams2.w);
+    return color * mix(vignetteParams1.rgb, vec3(1.0), vfactor);
+  }
+
+  void main () {
+    vec4 sceneColor = texture(sceneColorMap, v_uv);
+    #if CC_USE_FLOAT_OUTPUT
+      // An HDR radiance target is linear; URP LDR grading still clamps before tonemapping.
+      vec3 color = clamp(sceneColor.rgb, 0.0, 1.0);
+    #else
+      vec3 color = SRGBToLinear(sceneColor.rgb);
+    #endif
+    if (vignetteParams2.z > 0.0) {
+      color = ApplyVignette(color, v_uv);
+    }
+    if (gradingParams.x > 0.5) {
+      color = NeutralTonemap(color);
+    }
+    // The pipeline requires a colour-grading LUT binding; keep the placeholder sampler referenced.
+    color += texture(colorGradingMap, vec2(0.5)).rgb * 0.0;
+    fragColor = mix(sceneColor, vec4(LinearToSRGB(color), sceneColor.a), contribute);
+  }
+}%
