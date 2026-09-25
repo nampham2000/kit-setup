@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 
+const { matchUnitySubAssetName } = require('./unity-cocos-port/unity-file-id.js');
+
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
@@ -1689,10 +1691,13 @@ class CocosAssetDatabase {
     return null;
   }
 
-  resolveModelMeshByStem(stem, meshNameHint = '', requiredExt = '') {
+  resolveModelMeshByStem(stem, meshNameHint = '', requiredExt = '', unityFileId = '') {
     const candidates = this.findModelRecordsByStem(stem).filter((record) => !requiredExt || record.ext === requiredExt);
     for (const record of candidates) {
-      const meshRecord = firstImportedSubMetaRecord(record.uuid, record.subMetas, 'gltf-mesh', meshNameHint);
+      // Unity references FBX meshes by a deterministic fileID (xxHash64 of "Type:Mesh-><name><i>");
+      // match it exactly before falling back to the GameObject-name heuristic.
+      const meshRecord = (unityFileId && firstImportedSubMetaRecordByUnityFileId(record.uuid, record.subMetas, 'gltf-mesh', 'Mesh', unityFileId))
+        || firstImportedSubMetaRecord(record.uuid, record.subMetas, 'gltf-mesh', meshNameHint);
       const mesh = meshRecord?.uuid || '';
       const materials = subMetaRecords(record.uuid, record.subMetas, 'gltf-material');
       if (mesh) {
@@ -1892,6 +1897,18 @@ function findSubMetaRecordByName(baseUuid, subMetas, importer, nameHint = '') {
     if (normalizeKey(record.subMeta.name || record.subMeta.displayName || '').includes(hint)) return record;
   }
   return null;
+}
+
+function firstImportedSubMetaRecordByUnityFileId(parentUuid, subMetas, importer, unityClassName, unityFileId) {
+  const records = subMetaRecords(parentUuid, subMetas, importer)
+    .filter(({ subMeta }) => !isPendingGeneratedSubMeta(subMeta));
+  if (!records.length) return null;
+  const names = records.map(({ subMeta }) => String(subMeta.name || subMeta.displayName || '').replace(/.mesh$/i, ''));
+  const match = matchUnitySubAssetName(unityClassName, [...new Set(names)], unityFileId);
+  if (!match) return null;
+  // Duplicate names: Unity suffixes the n-th object with index n (import order).
+  const sameName = records.filter((_, i) => names[i] === match.name);
+  return sameName[match.index] || sameName[0] || null;
 }
 
 function firstImportedSubMetaRecord(baseUuid, subMetas, importer, nameHint = '') {

@@ -173,7 +173,7 @@ module.exports = function createRendererPorter(deps) {
 
     if (meshAsset && !meshUuid) {
       const requiredExt = meshAsset.ext === '.asset' ? '.fbx' : meshAsset.ext;
-      const resolved = cocosDb.resolveModelMeshByStem(meshAsset.stem, gameObject.name, requiredExt);
+      const resolved = cocosDb.resolveModelMeshByStem(meshAsset.stem, gameObject.name, requiredExt, deps.unityRefFileId(meshRef));
       if (resolved) {
         meshUuid = resolved.meshUuid;
         if (hasExplicitMaterialSlots) {
