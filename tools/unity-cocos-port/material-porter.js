@@ -76,6 +76,8 @@ const UNITY_BUILTIN_PARTICLE_SHADER_BY_FILE_ID = {
   10723: { name: 'Mobile/Particles/Multiply', technique: COCOS_PARTICLE_TECHNIQUE_ADD_MULTIPLY },
 };
 
+const MANUAL_EFFECT_MARKER = /^\s*\/\/\s*unity-port:\s*manual\b/m;
+
 module.exports = function createMaterialPorter(deps) {
   const {
     parseUnityScalar,
@@ -450,6 +452,23 @@ module.exports = function createMaterialPorter(deps) {
 
     if (options.dryRun) return stableUuid(`effect:${relativePosix}`);
     if (options[`_customEffectUuid_${effectStem}`]) return options[`_customEffectUuid_${effectStem}`];
+
+    // A hand-ported effect declares `// unity-port: manual` in its header when the canonical compiler
+    // cannot produce a valid effect for this shader. Re-porting must keep it (same path and UUID)
+    // instead of overwriting it with the failing auto-transpile.
+    if (fs.existsSync(effectFile) && MANUAL_EFFECT_MARKER.test(fs.readFileSync(effectFile, 'utf8').slice(0, 4096))) {
+      const meta = readJsonIfExists(`${effectFile}.meta`);
+      const effectUuid = meta?.uuid || stableUuid(`effect:${relativePosix}`);
+      options[`_customEffectUuid_${effectStem}`] = effectUuid;
+      reporter.low(
+        'CUSTOM_SHADER_MANUAL_PORT_KEPT',
+        shaderAsset.relativePath,
+        relativePosix,
+        `Kept the hand-ported effect for "${shaderAsset.stem}" (// unity-port: manual); materials must follow its property declaration`,
+        effectUuid,
+      );
+      return effectUuid;
+    }
 
     ensureDir(path.dirname(effectFile));
     ensureDirectoryMetas(path.dirname(effectFile), path.join(options.cocosRoot, 'assets'));
@@ -1108,5 +1127,6 @@ module.exports = function createMaterialPorter(deps) {
     resolveUnitySpriteRendererMaterialUuid,
     convertUnityParticleMaterialToCocos,
     resolveUnityParticleMaterial,
+    ensureCustomPortedShaderEffect,
   };
 };

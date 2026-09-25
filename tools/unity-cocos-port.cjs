@@ -1305,6 +1305,15 @@ function correctNestedModelForwardAxis(transform) {
   });
 }
 
+// Child node that carries NESTED_MODEL_FORWARD_BASIS for a MeshRenderer whose mesh is an FBX/glTF
+// sub-asset referenced directly by a MeshFilter (see CocosPrefabBuilder.addMeshBasisNode).
+const MESH_BASIS_NODE_NAME = '__meshBasis';
+const MESH_BASIS_TRANSFORM = Object.freeze(withConsistentCocosEuler({
+  localPosition: { x: 0, y: 0, z: 0 },
+  localRotation: NESTED_MODEL_FORWARD_BASIS,
+  localScale: { x: 1, y: 1, z: 1 },
+}));
+
 function hasExplicitNestedModelForwardBasisRotation(transform) {
   const rotation = transform?.localRotation || {};
   const epsilon = 1e-5;
@@ -4827,6 +4836,22 @@ class CocosPrefabBuilder {
     if (parentId == null) this.rootPrefabInfoId = prefabInfoId;
     this.attachChild(parentId, id);
     return id;
+  }
+
+  // A MeshFilter that references an FBX/glTF mesh sub-asset directly (no linked model prefab) needs
+  // the same Unity-to-Cocos model basis as a nested model root: Unity mirrors the file's mesh data on
+  // import while Cocos keeps it. The basis lives on a dedicated child that only hosts the renderer, so
+  // the authored node transform seen by scripts and child nodes stays identical to Unity.
+  addMeshBasisNode(nodeId, fileId) {
+    const parent = this.objects[nodeId];
+    return this.addNode(
+      MESH_BASIS_NODE_NAME,
+      nodeId,
+      MESH_BASIS_TRANSFORM,
+      parent?._layer ?? 1073741824,
+      true,
+      `${fileId}-mesh-basis`,
+    );
   }
 
   addTargetInfo(localId) {

@@ -4,6 +4,8 @@ const fs = require('fs');
 const path = require('path');
 const { toPosix, sanitizeFileId } = require('./core-utils');
 
+const MODEL_FILE_EXTENSIONS = new Set(['.fbx', '.gltf', '.glb']);
+
 module.exports = function createRendererPorter(deps) {
   const {
     resolveUnityMaterialUuids,
@@ -233,7 +235,24 @@ module.exports = function createRendererPorter(deps) {
       recordPendingMeshRepair(options, options.out, componentFileId, meshAsset.stem, gameObject.name, meshAsset.relativePath);
     }
     if (!meshUuid && !meshPendingImport) reporter.high('MESH_UNRESOLVED', model.file, gameObject.name, 'MeshRenderer has no resolved Cocos mesh');
-    builder.addMeshRenderer(nodeId, componentId, meshUuid, materialUuids, componentFileId, {
+
+    // Unity mirrors FBX/glTF mesh data on import (x -> -x) while Cocos keeps the file basis, so under
+    // the regular Unity -> Cocos node conversion (z -> -z) the mesh would appear turned 180 degrees
+    // about its local Y. Host the renderer on a basis child; the node keeps its authored transform.
+    let rendererNodeId = nodeId;
+    const modelFileMesh = Boolean(!builtinMeshUuid && meshAsset
+      && MODEL_FILE_EXTENSIONS.has(String(meshAsset.ext || '').toLowerCase())
+      && (meshUuid || meshPendingImport));
+    if (modelFileMesh && typeof builder.addMeshBasisNode === 'function') {
+      rendererNodeId = builder.addMeshBasisNode(nodeId, componentFileId);
+      reporter.low(
+        'MODEL_MESH_FORWARD_AXIS_CORRECTED',
+        meshAsset.relativePath,
+        gameObject.name,
+        'FBX mesh referenced by a MeshFilter was placed on a Unity-to-Cocos basis child (180 degrees about Y)',
+      );
+    }
+    builder.addMeshRenderer(rendererNodeId, componentId, meshUuid, materialUuids, componentFileId, {
       castShadows: Number(getField(doc, 'm_CastShadows', 1) || 0) !== 0,
       receiveShadows: Number(getField(doc, 'm_ReceiveShadows', 1) || 0) !== 0,
     });

@@ -25,6 +25,16 @@ test('Unity model sub-asset fileIDs follow Type:<Class>-><name><index> (captured
 
 test('matchUnitySubAssetName picks the imported mesh whose deterministic id matches', () => {
   const names = ['Candy.001', 'Candy.002', 'Candy.003', 'Candy.004', 'Candy.005'];
-  assert.deepEqual(matchUnitySubAssetName('Mesh', names, '-9026653672969465343'), { name: 'Candy.003', index: 0 });
+  assert.deepEqual(matchUnitySubAssetName('Mesh', names, '-9026653672969465343'), { name: 'Candy.003', index: 0, unityName: 'Candy.003' });
   assert.equal(matchUnitySubAssetName('Mesh', names, '123'), null);
+});
+
+test('matchUnitySubAssetName also matches Unity node-named meshes whose file geometry keeps a .NNN suffix', () => {
+  // pack_tray_lid_new (1).fbx: Unity 6000.3 reports Mesh 'obj_tray_color' -6158127508233790551 while the
+  // Cocos import names the geometry 'obj_tray_color.001'.
+  const names = ['obj_lid_color', 'obj_lid_unblock', 'obj_tray_color.001'];
+  assert.deepEqual(matchUnitySubAssetName('Mesh', names, '-6158127508233790551'),
+    { name: 'obj_tray_color.001', index: 0, unityName: 'obj_tray_color' });
+  assert.deepEqual(matchUnitySubAssetName('Mesh', names, '-2693560359648129942'),
+    { name: 'obj_lid_color', index: 0, unityName: 'obj_lid_color' });
 });

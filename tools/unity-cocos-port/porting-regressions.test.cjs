@@ -340,3 +340,23 @@ Transform:
   const rootActive=objects.find(o=>o.__type__==='CCPropertyOverrideInfo'&&objects[o.targetInfo.__id__].localID.includes('node-avatar-2')&&o.propertyPath[0]==='_active');
   assert.equal(rootActive?.value,true,'a child active override must not disable its parent');
 });
+
+test('a hand-ported effect marked "// unity-port: manual" survives re-porting with its UUID', () => {
+  // Screw Out Factory: the canonical compiler emits an invalid effect for JMO MatCap_TextureMult_Bumped,
+  // and every re-port used to overwrite the working hand port with that failing output.
+  const root = path.join(temp, 'manual-effect');
+  const shader = path.join(root, 'MatCap.shader');
+  const effect = path.join(root, 'assets', 'effects', 'MatCap.effect');
+  fs.mkdirSync(path.dirname(effect), { recursive: true });
+  fs.writeFileSync(shader, 'Shader "MatCap/Bumped/Textured Multiply" { SubShader { Pass { CGPROGRAM ENDCG } } }');
+  const handPort = '// Hand port of JMO MatCap\n// unity-port: manual\nCCEffect %{ techniques: [] }%\n';
+  fs.writeFileSync(effect, handPort);
+  fs.writeFileSync(`${effect}.meta`, JSON.stringify({ importer: 'effect', uuid: 'hand-port-uuid' }));
+  const porter = createMaterialPorter({ ensureDirectoryMetas() {} });
+  const report = reports();
+  const uuid = porter.ensureCustomPortedShaderEffect({ path: shader, relativePath: 'MatCap.shader', stem: 'MatCap' }, { cocosRoot: root }, report);
+  assert.equal(uuid, 'hand-port-uuid');
+  assert.equal(fs.readFileSync(effect, 'utf8'), handPort, 'the hand port must not be overwritten');
+  assert.ok(report.entries.some(entry => entry.args[0] === 'CUSTOM_SHADER_MANUAL_PORT_KEPT'));
+  assert.ok(!report.entries.some(entry => entry.level === 'high'));
+});

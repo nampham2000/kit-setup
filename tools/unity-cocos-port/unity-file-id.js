@@ -99,13 +99,21 @@ function unitySubAssetFileId(className, name, index = 0) {
 
 /**
  * Returns the candidate (from `names`) whose deterministic Unity fileID equals `fileId`, trying
- * duplicate indices 0..maxIndex. `names` are Unity object names (e.g. imported mesh names).
+ * duplicate indices 0..maxIndex. `names` are imported sub-asset names (e.g. Cocos mesh names).
+ * Unity can name an FBX mesh after its node while the file geometry keeps Blender's ".NNN" suffix
+ * (Cocos imports `obj_tray_color.001`, Unity hashes `obj_tray_color`), so the suffix-stripped name is
+ * also tried; the result still requires an exact 64-bit hash match.
  */
 function matchUnitySubAssetName(className, names, fileId, maxIndex = 8) {
   const target = String(fileId);
   for (const name of names) {
-    for (let index = 0; index <= maxIndex; index++) {
-      if (unitySubAssetFileId(className, name, index) === target) return { name, index };
+    const candidates = [name];
+    const stripped = String(name).replace(/\.\d{3}$/, '');
+    if (stripped !== name) candidates.push(stripped);
+    for (const candidate of candidates) {
+      for (let index = 0; index <= maxIndex; index++) {
+        if (unitySubAssetFileId(className, candidate, index) === target) return { name, index, unityName: candidate };
+      }
     }
   }
   return null;
