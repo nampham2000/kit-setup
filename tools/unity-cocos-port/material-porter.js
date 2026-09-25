@@ -534,6 +534,10 @@ module.exports = function createMaterialPorter(deps) {
       reporter.medium('LEGACY_PREVIEW_TEXTURE_PENDING', materialAsset.relativePath, name,
         'Main texture is not imported by Cocos yet; rerun the port after AssetDB import to bind it');
     }
+    // Whether output stays linear depends on the project's frame setup
+    // (a linear render target presents it), so keep a project's choice.
+    const previous = readJsonIfExists(dest);
+    if (previous?._defines?.[0]?.UNITY_LINEAR_OUTPUT === true) materialData._defines[0].UNITY_LINEAR_OUTPUT = true;
     if (options.dryRun) return { file: fs.existsSync(dest) ? dest : '', textureUuid };
     ensureDir(path.dirname(dest));
     ensureDirectoryMetas(path.dirname(dest), path.join(options.cocosRoot, 'assets'));

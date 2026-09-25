@@ -85,8 +85,8 @@ module.exports = function createScriptPorter(deps) {
     return value;
   }
 
-  function translateUnitySerializedValue(value, builder, reporter, source, fieldName) {
-    if (Array.isArray(value)) return value.map((item) => translateUnitySerializedValue(item, builder, reporter, source, fieldName));
+  function translateUnitySerializedValue(value, builder, reporter, source, fieldName, resolveAsset = null) {
+    if (Array.isArray(value)) return value.map((item) => translateUnitySerializedValue(item, builder, reporter, source, fieldName, resolveAsset));
     if (value && typeof value === 'object') {
       // Unity serializes LayerMask as { serializedVersion, m_Bits }. Cocos stores the
       // mask as a plain number, so unwrap it instead of emitting a nested object the
@@ -98,6 +98,10 @@ module.exports = function createScriptPorter(deps) {
       if (Object.prototype.hasOwnProperty.call(value, 'fileID')) {
         const fileId = deps.unityRefFileId(value);
         if (!fileId) return null;
+        if (unityRefGuid(value) && resolveAsset) {
+          const asset = resolveAsset(value);
+          if (asset) return asset;
+        }
         if (builder.nodeMapByGameObject.has(fileId)) return cocosRef(builder.nodeMapByGameObject.get(fileId));
         if (builder.nodeMapByTransform.has(fileId)) return cocosRef(builder.nodeMapByTransform.get(fileId));
         if (builder.componentMap.has(fileId)) return cocosRef(builder.componentMap.get(fileId));
@@ -105,7 +109,7 @@ module.exports = function createScriptPorter(deps) {
         return null;
       }
       const out = {};
-      for (const [key, child] of Object.entries(value)) out[key] = translateUnitySerializedValue(child, builder, reporter, source, fieldName);
+      for (const [key, child] of Object.entries(value)) out[key] = translateUnitySerializedValue(child, builder, reporter, source, fieldName, resolveAsset);
       return out;
     }
     return value;
@@ -143,6 +147,16 @@ module.exports = function createScriptPorter(deps) {
   }
 
   function emitMonoBehaviour(nodeId, componentId, doc, model, builder, reporter, options, unityDb, cocosDb, gameObject) {
+    // A GameObject field that points at a prefab asset (spawners, loopers)
+    // resolves to the generated Cocos prefab for that source.
+    const resolveAsset = (ref) => {
+      const asset = unityDb?.get(unityRefGuid(ref));
+      if (asset?.ext !== '.prefab' || typeof deps.generatedPrefabUuid !== 'function') return null;
+      const prefabUuid = deps.generatedPrefabUuid(asset, options, unityDb, reporter);
+      if (!prefabUuid) return null;
+      reporter.low('SCRIPT_FIELD_PREFAB_REF_WIRED', model.file, asset.relativePath, 'Serialized prefab asset reference was wired to its generated Cocos prefab', prefabUuid);
+      return cocosUuid(prefabUuid, 'cc.Prefab');
+    };
     if (emitUnityLayout({ nodeId, componentId, doc, model, builder, reporter, options, unityDb, cocosDb,
       getField, hasField, unityRefGuid, ensureLayoutScript: deps.ensureLayoutScript })) return;
     if (isUnityTextEffect(doc, unityDb)) {
@@ -294,7 +308,7 @@ module.exports = function createScriptPorter(deps) {
       translated[key] = coerceToCocosFieldType(
         script,
         key,
-        translateUnitySerializedValue(value, builder, reporter, model.file, key),
+        translateUnitySerializedValue(value, builder, reporter, model.file, key, resolveAsset),
       );
     }
 

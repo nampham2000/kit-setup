@@ -5,6 +5,7 @@ const {
   createEvidence,
   decidePhysicsBackend,
 } = require('../cocos-engine-feature-audit.cjs');
+const { isSimpleAnimatorControllerText } = require('../unity-cocos-port/animator-controller-shape.js');
 
 const ENGINE_FEATURE_CLOSURE_SCHEMA_VERSION = 1;
 const SUPPORTED_SPINE_SOURCE_VERSIONS = new Set(['3.8', '4.2']);
@@ -42,6 +43,9 @@ const MODULE_ORDER = Object.freeze([
 
 const FEATURE_MODULES = Object.freeze({
   'animator-controller': ['animation', 'skeletal-animation', 'marionette'],
+  // Single-clip controllers are ported as cc.Animation (animator-controller-shape.js).
+  'animator-simple': ['animation'],
+  'animator-reference': ['animation'],
   graphics: ['graphics'],
   primitive: ['3d', 'primitive'],
   'occlusion-query': ['3d', 'occlusion-query'],
@@ -176,9 +180,12 @@ function detectUnityEngineFeatureEvidence(input = {}) {
   const markers = [];
 
   const controllerReference = /\bm_Controller:\s*\{\s*fileID:\s*(?!0(?:\D|$))[-\d]+(?:,\s*guid:\s*[0-9a-f]{32})?/i.test(text);
-  if (extension === '.controller' || type === 'controller' ||
-      ((/(?:^|\n)(?:Animator:|---\s*!u!95\s)/m.test(text)) && controllerReference)) {
-    addMarker(markers, 'animator-controller', extension === '.controller' ? 'animator-controller-asset' : 'animator-with-controller');
+  if (extension === '.controller' || type === 'controller') {
+    if (isSimpleAnimatorControllerText(text)) addMarker(markers, 'animator-simple', 'animator-single-clip-controller');
+    else addMarker(markers, 'animator-controller', 'animator-controller-asset');
+  } else if ((/(?:^|\n)(?:Animator:|---\s*!u!95\s)/m.test(text)) && controllerReference) {
+    // The referenced controller asset decides whether marionette is needed.
+    addMarker(markers, 'animator-reference', 'animator-with-controller');
   }
 
   const detectedSpineVersion = spineVersion(text);

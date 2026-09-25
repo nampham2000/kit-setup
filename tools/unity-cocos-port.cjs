@@ -221,6 +221,10 @@ const {
   translateUnitySerializedValue: translateUnitySerializedValueImpl,
   emitMonoBehaviour: emitMonoBehaviourImpl,
 } = createScriptPorter({
+  // Hoisted: nested prefab queueing is defined further down this module.
+  generatedPrefabUuid: (asset, options, unityDb, reporter) => (options.recursive
+    ? queueNestedPrefabAsset(options, asset, unityDb, reporter).prefabUuid
+    : readJsonIfExists(`${nestedPrefabOutputPath(options, asset)}.meta`)?.uuid) || '',
   hasField,
   getField,
   getTopLevelSerializedFields,
