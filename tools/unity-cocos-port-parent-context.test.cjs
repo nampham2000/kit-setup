@@ -47,13 +47,13 @@ test('an inherited preflight is only trusted by a direct child with a matching r
   const previous = process.env.CC_PLAYABLE_PORT_PARENT_PREFLIGHT;
   try {
     delete process.env.CC_PLAYABLE_PORT_PARENT_PREFLIGHT;
-    assert.equal(porter.inheritedPreflightStillValid({}), false);
+    assert.equal(porter.inheritedPreflightStillValid({}), null);
     process.env.CC_PLAYABLE_PORT_PARENT_PREFLIGHT = JSON.stringify({ parentPid: process.ppid + 1, projectRoot: os.tmpdir(), receiptId: 'r' });
-    assert.equal(porter.inheritedPreflightStillValid({}), false, 'wrong parent');
+    assert.equal(porter.inheritedPreflightStillValid({}), null, 'wrong parent');
     process.env.CC_PLAYABLE_PORT_PARENT_PREFLIGHT = JSON.stringify({ parentPid: process.ppid, projectRoot: os.tmpdir(), receiptId: 'r' });
-    assert.equal(porter.inheritedPreflightStillValid({}), false, 'no receipt for that project');
+    assert.equal(porter.inheritedPreflightStillValid({}), null, 'no receipt for that project');
     process.env.CC_PLAYABLE_PORT_PARENT_PREFLIGHT = 'not json';
-    assert.equal(porter.inheritedPreflightStillValid({}), false);
+    assert.equal(porter.inheritedPreflightStillValid({}), null);
   } finally {
     if (previous === undefined) delete process.env.CC_PLAYABLE_PORT_PARENT_PREFLIGHT;
     else process.env.CC_PLAYABLE_PORT_PARENT_PREFLIGHT = previous;

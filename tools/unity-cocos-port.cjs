@@ -1569,17 +1569,23 @@ function cleanupUnityPortChildEnv(env) {
   } catch (_) { /* best effort temp cleanup */ }
 }
 
+/**
+ * The parent's validated preflight ({ projectRoot, receipt }) when this process
+ * is its direct child and the receipt on disk is still that exact receipt;
+ * otherwise null and the caller runs the full assertUnityPortPreflight.
+ */
 function inheritedPreflightStillValid(options) {
   const context = inheritedParentContext(PARENT_PREFLIGHT_ENV);
-  if (!context) return false;
+  if (!context) return null;
   const projectRoot = path.resolve(String(context.projectRoot || ''));
-  if (options.unityRoot && path.resolve(options.unityRoot) !== projectRoot) return false;
+  if (options.unityRoot && path.resolve(options.unityRoot) !== projectRoot) return null;
   let receipt;
-  try { receipt = readReceipt(projectRoot); } catch (_) { return false; }
-  return !!receipt && receipt.receiptId === context.receiptId && receipt.integrity === context.integrity
+  try { receipt = readReceipt(projectRoot); } catch (_) { return null; }
+  const valid = !!receipt && receipt.receiptId === context.receiptId && receipt.integrity === context.integrity
     && receipt.stateFingerprint === context.stateFingerprint
     && Date.parse(receipt.expiresAt) > Date.now()
     && !!receipt.decision?.implementationAllowed;
+  return valid ? { applicable: true, projectRoot, receipt, inherited: true } : null;
 }
 
 class CocosAssetDatabase {
@@ -7989,8 +7995,10 @@ async function main() {
     doctor(options);
     return;
   }
-  if (!options.dryRun && !inheritedPreflightStillValid(options)) {
-    options._preflight = assertUnityPortPreflight(options.src || options.unityRoot, {
+  if (!options.dryRun) {
+    // A sharded batch passes this on to its own shards, so a coordinator above
+    // it (a project port-all script) validates once for the whole chain.
+    options._preflight = inheritedPreflightStillValid(options) || assertUnityPortPreflight(options.src || options.unityRoot, {
       projectRoot: options.unityRoot || undefined,
       requireProject: true,
     });
