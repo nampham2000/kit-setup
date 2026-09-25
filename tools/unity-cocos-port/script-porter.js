@@ -75,6 +75,12 @@ module.exports = function createScriptPorter(deps) {
    */
   function coerceToCocosFieldType(script, fieldName, value) {
     if (script?.booleanFields?.has(fieldName) && typeof value === 'number') return value !== 0;
+    // Unity serializes Color as normalized sRGB floats {r,g,b,a}; cc.Color stores 0-255 sRGB bytes.
+    if (script?.colorFields?.has(fieldName) && value && typeof value === 'object' && !Array.isArray(value)
+      && !value.__type__ && 'r' in value && 'g' in value && 'b' in value) {
+      const byte = (v, d) => Math.max(0, Math.min(255, Math.round((Number.isFinite(Number(v)) ? Number(v) : d) * 255)));
+      return { __type__: 'cc.Color', r: byte(value.r, 1), g: byte(value.g, 1), b: byte(value.b, 1), a: byte(value.a, 1) };
+    }
     const vectorType = script?.vectorFields?.get(fieldName);
     if (vectorType && value && typeof value === 'object' && !Array.isArray(value)
       && !value.__type__ && !value.__uuid__ && !value.__id__ && 'x' in value && 'y' in value) {
@@ -85,8 +91,8 @@ module.exports = function createScriptPorter(deps) {
     return value;
   }
 
-  function translateUnitySerializedValue(value, builder, reporter, source, fieldName) {
-    if (Array.isArray(value)) return value.map((item) => translateUnitySerializedValue(item, builder, reporter, source, fieldName));
+  function translateUnitySerializedValue(value, builder, reporter, source, fieldName, unityDb = null) {
+    if (Array.isArray(value)) return value.map((item) => translateUnitySerializedValue(item, builder, reporter, source, fieldName, unityDb));
     if (value && typeof value === 'object') {
       // Unity serializes LayerMask as { serializedVersion, m_Bits }. Cocos stores the
       // mask as a plain number, so unwrap it instead of emitting a nested object the
@@ -101,11 +107,24 @@ module.exports = function createScriptPorter(deps) {
         if (builder.nodeMapByGameObject.has(fileId)) return cocosRef(builder.nodeMapByGameObject.get(fileId));
         if (builder.nodeMapByTransform.has(fileId)) return cocosRef(builder.nodeMapByTransform.get(fileId));
         if (builder.componentMap.has(fileId)) return cocosRef(builder.componentMap.get(fileId));
+        // Reference into another prefab asset (Unity stores the target GameObject/component fileID plus
+        // the prefab GUID): a script field holding a prefab is a cc.Prefab in Cocos. With --recursive
+        // the referenced prefab is queued for porting next to the current output.
+        const guid = deps.unityRefGuid(value);
+        const asset = guid && unityDb ? unityDb.get(guid) : null;
+        if (asset && String(asset.ext || '').toLowerCase() === '.prefab' && builder.options?.recursive
+          && typeof deps.queueNestedPrefabAsset === 'function') {
+          const entry = deps.queueNestedPrefabAsset(builder.options, asset, unityDb, reporter);
+          if (entry?.prefabUuid) {
+            reporter.low('SCRIPT_FIELD_PREFAB_WIRED', source, fieldName, `Script field references prefab ${asset.relativePath || asset.path}`);
+            return cocosUuid(entry.prefabUuid, 'cc.Prefab');
+          }
+        }
         reporter.low('SCRIPT_FIELD_REF_UNRESOLVED', source, fieldName, `Serialized reference ${fileId} could not be mapped yet`);
         return null;
       }
       const out = {};
-      for (const [key, child] of Object.entries(value)) out[key] = translateUnitySerializedValue(child, builder, reporter, source, fieldName);
+      for (const [key, child] of Object.entries(value)) out[key] = translateUnitySerializedValue(child, builder, reporter, source, fieldName, unityDb);
       return out;
     }
     return value;
@@ -294,7 +313,7 @@ module.exports = function createScriptPorter(deps) {
       translated[key] = coerceToCocosFieldType(
         script,
         key,
-        translateUnitySerializedValue(value, builder, reporter, model.file, key),
+        translateUnitySerializedValue(value, builder, reporter, model.file, key, unityDb),
       );
     }
 

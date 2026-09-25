@@ -224,6 +224,7 @@ const {
   hasField,
   getField,
   getTopLevelSerializedFields,
+  queueNestedPrefabAsset: (...args) => queueNestedPrefabAsset(...args),
   unityRefGuid,
   unityRefFileId,
   resolveUnitySpriteFrame: resolveUnitySpriteFrameImpl,
@@ -903,6 +904,58 @@ function readUnityAssetText(file) {
   return text;
 }
 
+/**
+ * A prefab variant whose root instance has no overridden/added children is serialized by Unity as a
+ * single PrefabInstance document, without the stripped root GameObject/Transform the porter uses to
+ * anchor nested prefabs (Tanks!: Demo_TankExplosion Variant.prefab). Synthesize those stripped records
+ * from the source prefab root so the variant ports like any other nested/flattened prefab instead of
+ * producing an empty prefab.
+ */
+function synthesizeStrippedRootForPrefabVariant(docs, unityDb, reporter, file) {
+  for (const doc of docs.slice()) {
+    if (doc.classId !== 1001) continue;
+    if (unityRefFileId(getField(doc, 'm_TransformParent'))) continue;
+    const instanceId = doc.fileId;
+    const anchored = docs.some((other) => other.stripped && (other.classId === 4 || other.classId === 224)
+      && unityRefFileId(getField(other, 'm_PrefabInstance')) === instanceId);
+    if (anchored) continue;
+    const source = getField(doc, 'm_SourcePrefab');
+    const sourceGuid = unityRefGuid(source);
+    const sourceAsset = sourceGuid && unityDb ? unityDb.get(sourceGuid) : null;
+    if (!sourceAsset || String(sourceAsset.ext || '').toLowerCase() !== '.prefab') continue;
+    let sourceDocs;
+    try { sourceDocs = parseUnityYaml(sourceAsset.path); } catch { continue; }
+    const rootTransform = sourceDocs.find((d) => (d.classId === 4 || d.classId === 224) && !unityRefFileId(getField(d, 'm_Father')));
+    if (!rootTransform) continue;
+    const rootGameObjectId = unityRefFileId(getField(rootTransform, 'm_GameObject'));
+    const transformId = `${instanceId}9001`;
+    const gameObjectId = `${instanceId}9002`;
+    docs.push({
+      classId: rootTransform.classId, fileId: transformId, stripped: true,
+      className: UNITY_CLASS[rootTransform.classId] || 'Transform', typeName: rootTransform.classId === 224 ? 'RectTransform' : 'Transform',
+      lines: [
+        rootTransform.classId === 224 ? 'RectTransform:' : 'Transform:',
+        `  m_CorrespondingSourceObject: {fileID: ${rootTransform.fileId}, guid: ${sourceGuid}, type: 3}`,
+        `  m_PrefabInstance: {fileID: ${instanceId}}`,
+        '  m_PrefabAsset: {fileID: 0}',
+      ],
+    });
+    if (rootGameObjectId) {
+      docs.push({
+        classId: 1, fileId: gameObjectId, stripped: true, className: 'GameObject', typeName: 'GameObject',
+        lines: [
+          'GameObject:',
+          `  m_CorrespondingSourceObject: {fileID: ${rootGameObjectId}, guid: ${sourceGuid}, type: 3}`,
+          `  m_PrefabInstance: {fileID: ${instanceId}}`,
+          '  m_PrefabAsset: {fileID: 0}',
+        ],
+      });
+    }
+    reporter?.low('PREFAB_VARIANT_ROOT_SYNTHESIZED', file, sourceAsset.relativePath || sourceAsset.path,
+      'Prefab variant stored only a root PrefabInstance; stripped root records were synthesized from the source prefab');
+  }
+}
+
 function parseUnityYaml(file) {
   const text = readUnityAssetText(file).replace(/\r\n/g, '\n');
   const docs = [];
@@ -1077,6 +1130,13 @@ function boundsForUnityPolygonPaths(paths, offset = { x: 0, y: 0 }) {
   };
 }
 
+// Unity's MonoBehaviour object header. Everything else at the top level is a serialized script field,
+// including user fields that follow the Unity "m_" naming convention (Tanks!: m_Speed, m_MaxDamage...).
+const UNITY_MONOBEHAVIOUR_HEADER_FIELDS = new Set([
+  'm_ObjectHideFlags', 'm_CorrespondingSourceObject', 'm_PrefabInstance', 'm_PrefabAsset', 'm_GameObject',
+  'm_Enabled', 'm_EditorHideFlags', 'm_Script', 'm_Name', 'm_EditorClassIdentifier',
+]);
+
 function getTopLevelSerializedFields(doc, options) {
   const fields = {};
   for (let i = 0; i < doc.lines.length; i++) {
@@ -1084,7 +1144,7 @@ function getTopLevelSerializedFields(doc, options) {
     const match = /^  ([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(.*)$/.exec(line);
     if (!match) continue;
     let key = match[1];
-    if (key.startsWith('m_')) continue;
+    if (UNITY_MONOBEHAVIOUR_HEADER_FIELDS.has(key)) continue;
     if (key.startsWith('Event')) continue;
     if (options.stripPrivatePrefix && key.startsWith('_')) key = key.slice(1);
 
@@ -1539,6 +1599,13 @@ class CocosAssetDatabase {
     // instead of a number where the inspector expects a checkbox.
     const booleanFields = new Set();
     const vectorFields = new Map();
+    const colorFields = new Set();
+    for (const match of source.matchAll(
+      /(?:^|[\n;{])[ \t]*(?:@property(?:\([^\n)]*\))?[ \t]*(?:\r?\n[ \t]*)?)?(?:public |private |protected |readonly )*([A-Za-z_$][\w$]*)[ \t]*!?\??[ \t]*(?::[ \t]*Color[ \t]*(?:\|[ \t]*null[ \t]*)?)?=[ \t]*(?:new Color\(|Color\.[A-Z_]+)/g,
+    )) colorFields.add(match[1]);
+    for (const match of source.matchAll(
+      /(?:^|[\n;{])[ \t]*(?:@property(?:\([^\n)]*\))?[ \t]*(?:\r?\n[ \t]*)?)?(?:public |private |protected |readonly )*([A-Za-z_$][\w$]*)[ \t]*!?\??[ \t]*:[ \t]*Color[ \t]*[;=|]/g,
+    )) colorFields.add(match[1]);
     for (const match of source.matchAll(
       /(?:^|[\n;{])[ \t]*(?:@property(?:\([^\n)]*\))?[ \t]*(?:\r?\n[ \t]*)?)?(?:public |private |protected |readonly )*([A-Za-z_$][\w$]*)[ \t]*!?\??[ \t]*(?::[ \t]*boolean[ \t]*)?=[ \t]*(?:true|false)\b/g,
     )) booleanFields.add(match[1]);
@@ -1573,6 +1640,7 @@ class CocosAssetDatabase {
         relativePath: record.relativePath,
         booleanFields,
         vectorFields,
+        colorFields,
         memberNames,
       });
     }
@@ -3296,6 +3364,7 @@ function recoverModelMetaFromLibrary(assetFile, options) {
 
 function buildUnityPrefabModel(file, unityDb, reporter, options, recursionDepth = 0) {
   const docs = parseUnityYaml(file);
+  synthesizeStrippedRootForPrefabVariant(docs, unityDb, reporter, file);
   const byId = new Map(docs.map((doc) => [doc.fileId, doc]));
   const gameObjects = new Map();
   const transforms = new Map();
@@ -4332,7 +4401,7 @@ function resolveNestedLabelSizing(props, sourceDoc) {
   };
 }
 
-function buildNestedPrefabPropertyOverrides(gameObject, transform, sourceModel) {
+function buildNestedPrefabPropertyOverrides(gameObject, transform, sourceModel, scriptContext = null) {
   const nestedPrefab = gameObject?.nestedPrefab;
   const overrideInfo = nestedPrefab?.overrideInfo;
   const sourceGuid = nestedPrefab?.sourceGuid;
@@ -4374,6 +4443,7 @@ function buildNestedPrefabPropertyOverrides(gameObject, transform, sourceModel) 
     }
     const sourceDoc = sourceModel.componentDocs.get(sourceFileId);
     if (!sourceDoc || Number(sourceDoc.classId) !== 114) continue;
+    if (scriptContext) overrides.push(...buildNestedScriptFieldOverrides(sourceDoc, sourceFileId, props, scriptContext));
     if (!hasField(sourceDoc, 'm_Text') && !hasField(sourceDoc, 'm_text')) continue;
 
     const localId = `cmp-label-${sourceFileId}`;
@@ -4435,6 +4505,81 @@ function buildNestedPrefabPropertyOverrides(gameObject, transform, sourceModel) 
   }
 
   return overrides;
+}
+
+/**
+ * Prefab variants / instances override custom MonoBehaviour fields through m_Modifications
+ * (Tanks!: ATV variant m_Speed 14, m_StartingHealth 150, m_Shell -> small shell prefab). Emit them as
+ * property overrides on the nested Cocos script component so the variant keeps its authored values.
+ */
+/** Flattened nested prefabs (prefab variants) get their script field overrides written in place. */
+function applyNestedScriptFieldOverrides(nestedBuilder, nestedPrefab, ctx) {
+  const { model, overrideInfo, sourceGuid } = nestedPrefab || {};
+  if (!model || !overrideInfo || !sourceGuid) return 0;
+  let applied = 0;
+  for (const [key, props] of overrideInfo.overridesByTarget.entries()) {
+    if (!key.startsWith(`${sourceGuid}:`)) continue;
+    const sourceFileId = key.slice(sourceGuid.length + 1);
+    const sourceDoc = model.componentDocs.get(sourceFileId);
+    if (!sourceDoc || Number(sourceDoc.classId) !== 114) continue;
+    const componentId = nestedBuilder.componentMap.get(sourceFileId);
+    const component = Number.isInteger(componentId) ? nestedBuilder.objects[componentId] : null;
+    if (!component) continue;
+    for (const override of buildNestedScriptFieldOverrides(sourceDoc, sourceFileId, props, ctx)) {
+      component[override.propertyPath] = override.value;
+      applied++;
+    }
+  }
+  return applied;
+}
+
+function buildNestedScriptFieldOverrides(sourceDoc, sourceFileId, props, ctx) {
+  const out = [];
+  const { unityDb, cocosDb, builder, reporter } = ctx || {};
+  if (!unityDb || !cocosDb || !props) return out;
+  const scriptAsset = unityDb.get(unityRefGuid(getField(sourceDoc, 'm_Script')));
+  if (!scriptAsset) return out;
+  const className = path.basename(scriptAsset.path, path.extname(scriptAsset.path));
+  const script = cocosDb.findScriptClass(className);
+  if (!script) return out;
+  const localId = `cmp-script-${className}-${sourceFileId}`;
+  const colorParts = new Map();
+  for (const [propertyPath, raw] of Object.entries(props)) {
+    const colorMatch = /^([A-Za-z_][A-Za-z0-9_]*)\.(r|g|b|a)$/.exec(propertyPath);
+    if (colorMatch && script.colorFields?.has(colorMatch[1])) {
+      if (!colorParts.has(colorMatch[1])) colorParts.set(colorMatch[1], {});
+      colorParts.get(colorMatch[1])[colorMatch[2]] = Number(raw);
+      continue;
+    }
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(propertyPath)) continue;
+    if (UNITY_MONOBEHAVIOUR_HEADER_FIELDS.has(propertyPath)) continue;
+    if (script.memberNames && !script.memberNames.has(propertyPath)) continue;
+    let value = raw;
+    if (value && typeof value === 'object') {
+      const guid = unityRefGuid(value);
+      const asset = guid ? unityDb.get(guid) : null;
+      if (asset && String(asset.ext || '').toLowerCase() === '.prefab' && builder?.options?.recursive) {
+        const entry = queueNestedPrefabAsset(builder.options, asset, unityDb, reporter);
+        if (!entry?.prefabUuid) continue;
+        value = cocosUuid(entry.prefabUuid, 'cc.Prefab');
+      } else {
+        reporter?.low('NESTED_SCRIPT_REF_OVERRIDE_SKIPPED', scriptAsset.relativePath, propertyPath, 'Object reference override inside a nested prefab was not mapped');
+        continue;
+      }
+    } else if (script.booleanFields?.has(propertyPath)) {
+      value = Number(value) !== 0;
+    } else if (typeof value === 'string' && value.trim() !== '' && Number.isFinite(Number(value))) {
+      value = Number(value);
+    }
+    out.push({ localId, propertyPath, value });
+  }
+  for (const [field, parts] of colorParts) {
+    const base = getField(sourceDoc, field, { r: 1, g: 1, b: 1, a: 1 }) || {};
+    const byte = (v) => Math.max(0, Math.min(255, Math.round(Number(v) * 255)));
+    const pick = (k) => (Number.isFinite(parts[k]) ? parts[k] : Number(base[k] ?? 1));
+    out.push({ localId, propertyPath: field, value: { __type__: 'cc.Color', r: byte(pick('r')), g: byte(pick('g')), b: byte(pick('b')), a: byte(pick('a')) } });
+  }
+  return out;
 }
 
 function nestedPrefabNeedsParticleOverrideFlattening(nestedPrefab) {
@@ -6414,6 +6559,7 @@ function emitNodeRecursive(transform, parentNodeId, model, builder, layerResolve
         cocosDb,
       );
     }
+    applyNestedScriptFieldOverrides(nestedBuilder, gameObject.nestedPrefab, { builder, reporter, unityDb, cocosDb });
     const flattened = builder.clonePrefabTree(nestedBuilder.objects, parentNodeId);
     if (flattened?.rootId != null) {
       for (const [unityComponentId, nestedComponentId] of nestedBuilder.componentMap.entries()) {
@@ -6474,7 +6620,7 @@ function emitNodeRecursive(transform, parentNodeId, model, builder, layerResolve
   }
 
   if (gameObject.nestedPrefab?.prefabUuid && gameObject.nestedPrefab?.rootLocalId) {
-    const nestedOverrides = buildNestedPrefabPropertyOverrides(gameObject, resolvedTransform, gameObject.nestedPrefab.model);
+    const nestedOverrides = buildNestedPrefabPropertyOverrides(gameObject, resolvedTransform, gameObject.nestedPrefab.model, { builder, reporter, unityDb, cocosDb });
     const nodeId = builder.addNestedPrefabInstance(
       gameObject.name,
       parentNodeId,
@@ -7792,5 +7938,9 @@ module.exports = {
   convertRotation,
   parseArgs,
   parseUnityAnimationClipForOracle,
+  getTopLevelSerializedFields,
+  synthesizeStrippedRootForPrefabVariant,
+  buildNestedScriptFieldOverrides,
+  parseUnityYaml,
   main,
 };
