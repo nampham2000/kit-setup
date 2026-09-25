@@ -938,10 +938,28 @@ function readUnityAssetText(file) {
   return text;
 }
 
+// Net `{` depth of a line, ignoring braces inside quoted scalars.
+function unityFlowDepth(line) {
+  let depth = 0;
+  let quote = '';
+  for (const ch of line) {
+    if (quote) { if (ch === quote) quote = ''; continue; }
+    if (ch === '"' || ch === "'") { quote = ch; continue; }
+    if (ch === '{') depth += 1;
+    else if (ch === '}') depth -= 1;
+  }
+  return depth;
+}
+
 function parseUnityYaml(file) {
-  const text = readUnityAssetText(file).replace(/\r\n/g, '\n');
+  return parseUnityYamlText(readUnityAssetText(file));
+}
+
+function parseUnityYamlText(source) {
+  const text = String(source).replace(/\r\n/g, '\n');
   const docs = [];
   let current = null;
+  let openFlow = 0;
   for (const line of text.split('\n')) {
     const header = /^--- !u!(\d+) &(-?\d+)(?:\s+stripped)?/.exec(line);
     if (header) {
@@ -954,9 +972,20 @@ function parseUnityYaml(file) {
         typeName: '',
         lines: [],
       };
+      openFlow = 0;
       continue;
     }
-    if (current) current.lines.push(line);
+    if (!current) continue;
+    // Unity wraps long flow mappings (19-digit fileIDs + guid) onto the next
+    // line: `- target: {fileID: 6544115798007152704, guid: 917d...,` / `type: 3}`.
+    // Keep one logical line per key so every field reader sees the whole value.
+    if (openFlow > 0 && current.lines.length) {
+      current.lines[current.lines.length - 1] += ` ${line.trim()}`;
+    } else {
+      current.lines.push(line);
+      openFlow = 0;
+    }
+    openFlow += unityFlowDepth(line);
   }
   if (current) docs.push(current);
 
@@ -8058,5 +8087,7 @@ module.exports = {
   cleanupUnityPortChildEnv,
   inheritedPreflightStillValid,
   scannedUnityAssetDatabase,
+  parseUnityYamlText,
+  parsePrefabInstanceInfo,
   main,
 };
