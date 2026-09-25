@@ -40,7 +40,7 @@ namespace CcPlayable.UnityIntelligence.Capture
         }
 
         [Serializable]
-        internal sealed class FrameRecord { public int frame; public float time; public string file = ""; public int activeParticles; }
+        internal sealed class FrameRecord { public int frame; public float time; public string file = ""; public int activeParticles; public bool shaderCompiling; }
 
         [Serializable]
         internal sealed class Manifest
@@ -110,10 +110,10 @@ namespace CcPlayable.UnityIntelligence.Capture
             colorSpace = QualitySettings.activeColorSpace.ToString(),
         };
 
-        internal static void Record(Manifest manifest, int frame, float time, string file, int particles, string camera)
+        internal static void Record(Manifest manifest, int frame, float time, string file, int particles, string camera, bool shaderCompiling)
         {
             manifest.camera = camera;
-            manifest.frames.Add(new FrameRecord { frame = frame, time = time, file = file, activeParticles = particles });
+            manifest.frames.Add(new FrameRecord { frame = frame, time = time, file = file, activeParticles = particles, shaderCompiling = shaderCompiling });
         }
 
         internal static void Fail(Request request, Manifest manifest, string error)
@@ -190,10 +190,11 @@ namespace CcPlayable.UnityIntelligence.Capture
             try
             {
                 var file = $"frame-{captured:D5}.png";
+                var shaderCompiling = ShaderUtil.anythingCompiling;
                 Capture(Path.Combine(request.outputDir, file));
                 var particles = 0;
                 foreach (var system in FindObjectsByType<ParticleSystem>(FindObjectsSortMode.None)) particles += system.particleCount;
-                ReferenceCapture.Record(manifest, captured, Time.time, file, particles, captureCamera.name);
+                ReferenceCapture.Record(manifest, captured, Time.time, file, particles, captureCamera.name, shaderCompiling);
                 if (request.skyboxFaceSize > 0 && !skyboxDone) { skyboxDone = true; CaptureSkyboxPanorama(); }
             }
             catch (Exception exception)
@@ -301,6 +302,10 @@ namespace CcPlayable.UnityIntelligence.Capture
         {
             var previous = captureCamera.targetTexture;
             var previousActive = RenderTexture.active;
+            // The Editor draws variants that are still compiling with a flat cyan
+            // placeholder; a reference frame must show the real shader.
+            var previousAsync = ShaderUtil.allowAsyncCompilation;
+            ShaderUtil.allowAsyncCompilation = false;
             try
             {
                 var standard = new RenderPipeline.StandardRequest();
@@ -323,6 +328,7 @@ namespace CcPlayable.UnityIntelligence.Capture
             }
             finally
             {
+                ShaderUtil.allowAsyncCompilation = previousAsync;
                 captureCamera.targetTexture = previous;
                 RenderTexture.active = previousActive;
             }
