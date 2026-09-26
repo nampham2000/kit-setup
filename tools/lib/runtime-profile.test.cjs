@@ -12,6 +12,14 @@ test('waits for browser shutdown and retries Windows locked files',async()=>{
   },async()=>{});
   assert.equal(result.ok,true);assert.equal(attempts,3);assert.deepEqual(events.slice(0,2),['Browser.close','socket-close']);
 });
+test('backs off ~30 s over 16 attempts while Chrome helpers still hold first_party_sets.db',async()=>{
+  // Loaded Windows machine: EBUSY persisted past the old ~14 s (10 attempts) and retained a profile per case.
+  const waits=[];let attempts=0;
+  const r=await closeRuntimeProfile({exitCode:0,signalCode:null},null,profile,{async lstat(){return{isSymbolicLink:()=>false}},async rm(){if(++attempts<16)throw Object.assign(new Error("EBUSY: resource busy or locked, unlink 'first_party_sets.db'"),{code:'EBUSY'})}},async ms=>{waits.push(ms)});
+  assert.equal(r.ok,true);assert.equal(r.attempts,16);
+  assert.deepEqual(waits,[250,500,750,1000,1250,1500,1750,2000,2250,2500,2750,3000,3250,3500,3750]);
+  assert.equal(waits.reduce((a,b)=>a+b,0),30000);
+});
 test('reports persistent cleanup failure instead of swallowing it',async()=>{
   const r=await closeRuntimeProfile({exitCode:0,signalCode:null},null,profile,{async lstat(){return{isSymbolicLink:()=>false}},async rm(){throw Object.assign(new Error('locked'),{code:'EPERM'})}},async()=>{});
   assert.equal(r.ok,false);assert.equal(r.directory,profile.directory);

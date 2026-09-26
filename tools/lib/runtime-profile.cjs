@@ -29,15 +29,19 @@ async function closeRuntimeProfile(child, session, profile, io = fs.promises, wa
     try { child.kill(); } catch (_) { /* already exited */ }
     for (let i = 0; i < 20 && child.exitCode === null && child.signalCode === null; i++) await wait(100);
   }
+  // Chrome's helper processes (GPU, network, storage) outlive the main process for a moment and
+  // keep profile files such as first_party_sets.db open; on a loaded Windows machine that moment
+  // exceeded the old ~14 s of retries. Back off ~30 s (16 attempts, 250 ms .. 3.75 s, capped at
+  // 4 s) before retaining the directory. Cleanup failure never decides a runtime verdict (see verify-runtime).
   let lastError;
-  for (let attempt = 0; attempt < 10; attempt++) {
+  for (let attempt = 0; attempt < 16; attempt++) {
     try {
       await io.rm(directory, { recursive: true, force: true });
       return { ok: true, removed: true, attempts: attempt + 1 };
     } catch (error) {
       lastError = error;
       if (!['EBUSY','EPERM','ENOTEMPTY','EACCES'].includes(error.code)) break;
-      await wait(250 * (attempt + 1));
+      await wait(Math.min(250 * (attempt + 1), 4000));
     }
   }
   return { ok: false, removed: false, directory, error: lastError?.message || 'Profile cleanup failed' };
