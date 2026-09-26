@@ -941,6 +941,10 @@ awaited command pending indefinitely.
 ### Native particle lights and fixed physics phase
 
 Close LightsModule over the actual Light template and quality settings. Native
+color probes must record project color space and GraphicsSettings.lightsUseLinearIntensity:
+Linear space alone does not enable linear light intensity. The supplied color
+producer requires Linear, temporarily enables linear intensity, restores it in
+finally, and records Play Mode. Its 72 recaptured rows match the original data.
 GPU fixtures prove that Use Particle Color replaces template RGB, followed by
 sRGB-to-linear conversion and intensity/alpha scaling. Range is template range
 times the constant multiplier, uniform emitter world scale and, when enabled,

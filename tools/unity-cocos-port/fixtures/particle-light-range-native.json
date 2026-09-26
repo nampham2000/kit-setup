@@ -1,1 +1,88 @@
-{"unityVersion":"6000.3.1f1","scope":"Native POINT unity_WorldToLight range; source color probe is a prerequisite","rows":[{"scale":1,"size":[2,2,2],"sizeAffects":false,"range":12},{"scale":1,"size":[2,2,2],"sizeAffects":true,"range":24},{"scale":1,"size":[2,3,4],"sizeAffects":false,"range":12},{"scale":1,"size":[2,3,4],"sizeAffects":true,"range":29.3938789},{"scale":1.29999995,"size":[2,2,2],"sizeAffects":false,"range":15.6000013},{"scale":1.29999995,"size":[2,2,2],"sizeAffects":true,"range":31.2000027},{"scale":1.29999995,"size":[2,3,4],"sizeAffects":false,"range":15.6000013},{"scale":1.29999995,"size":[2,3,4],"sizeAffects":true,"range":38.2120438}],"sourceProbeSha256":"aaa6a02fe1b1ec7846561748c4bf0cd11d57c886b2dd12d20fdf0f61a915ac84","prerequisiteProbeSha256":"2150685b0ce197b0459f5838402ca2fea99d3fab4caaa1787a1881a24ccab87a"}
+{
+  "unityVersion": "6000.3.1f1",
+  "scope": "Native POINT unity_WorldToLight range; source color probe is a prerequisite",
+  "rows": [
+    {
+      "scale": 1,
+      "size": [
+        2,
+        2,
+        2
+      ],
+      "sizeAffects": false,
+      "range": 12
+    },
+    {
+      "scale": 1,
+      "size": [
+        2,
+        2,
+        2
+      ],
+      "sizeAffects": true,
+      "range": 24
+    },
+    {
+      "scale": 1,
+      "size": [
+        2,
+        3,
+        4
+      ],
+      "sizeAffects": false,
+      "range": 12
+    },
+    {
+      "scale": 1,
+      "size": [
+        2,
+        3,
+        4
+      ],
+      "sizeAffects": true,
+      "range": 29.3938789
+    },
+    {
+      "scale": 1.29999995,
+      "size": [
+        2,
+        2,
+        2
+      ],
+      "sizeAffects": false,
+      "range": 15.6000013
+    },
+    {
+      "scale": 1.29999995,
+      "size": [
+        2,
+        2,
+        2
+      ],
+      "sizeAffects": true,
+      "range": 31.2000027
+    },
+    {
+      "scale": 1.29999995,
+      "size": [
+        2,
+        3,
+        4
+      ],
+      "sizeAffects": false,
+      "range": 15.6000013
+    },
+    {
+      "scale": 1.29999995,
+      "size": [
+        2,
+        3,
+        4
+      ],
+      "sizeAffects": true,
+      "range": 38.2120438
+    }
+  ],
+  "sourceProbeSha256": "aaa6a02fe1b1ec7846561748c4bf0cd11d57c886b2dd12d20fdf0f61a915ac84",
+  "prerequisiteProbeSha256": "6d2497c4a9e628a927e7836ce46bd208b9e41549430986eed7dd06f2e5b252a7"
+}
