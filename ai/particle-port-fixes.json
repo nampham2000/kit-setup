@@ -515,6 +515,21 @@
         "tools/unity-cocos-port/particle-random-force-native.test.cjs"
       ],
       "acceptance": "Require Application.isPlaying in native RNG captures. Gameplay uses ONE XYZ pass per four-lane block; old Edit Mode two-pass data is invalid for runtime. Includes guarded 196 random trajectories, 12 death/retained-slot/late-birth cases and independent automatic PostLateUpdate capture without Simulate. Target pool/trail expiry and full visual parity are separate gates."
+    },
+    {
+      "id": "native-edge-shape-sphere-jitter",
+      "origin": "fd52b45",
+      "applicability": "conditional",
+      "sharedPaths": [
+        "tools/unity-cocos-port/particle-edge-shape-binding.cjs",
+        "tools/unity-cocos-port/runtime/UnityParticleEdgeShape.ts",
+        "tools/unity-cocos-port/runtime/UnityParticleShapeDistribution.ts"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/particle-edge-shape.test.cjs",
+        "tools/unity-cocos-port/particle-shape-distribution.test.cjs"
+      ],
+      "acceptance": "Continuous constant-rate Loop Edge restores native X extent, +Y direction and radius-independent speed. 8192 native jitter offsets cover sphere surface before scale. Exact float wrap endpoints, RNG identity, burst/distance/prewarm and full visual parity remain unaccepted; require live imported adapter gates."
     }
   ]
 }

@@ -17,6 +17,20 @@ This skill provides step-by-step guidance and architectural rules for converting
 
 ### Reuse the measured VFX fixes
 
+SingleSidedEdge (Unity shape 12) is an X segment with initial +Y direction,
+not a Cocos Box edge. The shared Edge adapter supports continuous constant-rate
+Loop emission: position = -radius + (2 * speed * birthTime) modulo (2 * radius).
+Speed is independent of radius. Bind sub-frame birth timing; it can initialize
+on the first Update after the CPU processor exists, so check it at emission.
+Random/spherical directions mix before a single normalization and before jitter.
+Native randomPositionAmount is a sphere-surface offset before shape scale, not
+independent cube XYZ offsets. Fixtures cover 8192 offsets including nonuniform
+scale, native direction cases and multiple radii/speeds. Exact loop endpoint
+rounding and shape RNG identity remain unverified; keep that diagnostic visible.
+Burst, distance, prewarm, alignment and nonconstant Edge modes require their own
+source contracts. Check imported Edge component counts and active shape hooks.
+
+
 Billboard rendering frames are source contracts. Native fixtures
 `billboard-frames-native.json` and `billboard-spin-native.json` cover View,
 World and Local 3D births and Euler integration with a rotated camera/emitter.

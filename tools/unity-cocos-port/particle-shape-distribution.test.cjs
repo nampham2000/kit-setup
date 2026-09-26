@@ -23,6 +23,18 @@ const runtime = {};
 new Function('exports', 'require', ts.transpileModule(fs.readFileSync(path.join(__dirname, 'runtime/UnityParticleShapeDistribution.ts'), 'utf8'),
   { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText)(runtime, () => ({ Vec3, Mat4: class {}, Quat: class {}, ParticleSystem: class {} }));
 
+test('native randomPositionAmount uses a sphere surface before nonuniform shape scale',()=>{
+  const crypto=require('node:crypto');
+  for(const name of ['edge-jitter','edge-jitter-scale']){
+    const f=require('./fixtures/'+name+'-native.json');assert.equal(f.isPlaying,true);assert.equal(f.positions.length,4096);
+    assert.equal(f.sourceProbeSha256,crypto.createHash('sha256').update(fs.readFileSync(path.join(__dirname,'fixtures/capture-'+name+'.cs'),'utf8').replace(/\r\n/g,'\n')).digest('hex'));
+    const scale=name.endsWith('scale')?[2,3,4]:[1,1,1];
+    for(const p of f.positions)assert.ok(Math.abs(Math.hypot(...p.map((v,i)=>v/scale[i]))-.3)<2e-7);
+  }
+  const p=new Vec3();for(let i=0;i<1024;i++){Vec3.set(p,0,0,0);runtime.addUnityShapeJitter(p,.3,i/1023,(i*.61803398875)%1);assert.ok(Math.abs(p.length()-.3)<1e-12);}
+  const objects=[{__type__:'cc.ParticleSystem',_shapeModule:{__id__:1}},{_enable:true,_shapeType:0,emitFrom:1,radiusThickness:0,randomPositionAmount:.3}];assert.equal(shapeDistributionSystems({objects}).length,1);
+});
+
 // Cocos 3.8.8 ShapeModule.emit for the local frame (identity mat/quat), linear radius draw.
 function cocosShape(type, emitFrom, radius, thickness, angle, length) {
   return {
