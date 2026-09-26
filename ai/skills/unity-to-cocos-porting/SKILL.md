@@ -988,3 +988,19 @@ Unity SizeModule stores the X curve in `curve`, including separate-axis mode; Y/
 Cocos 3.8.8 exposes an arc mode value corresponding to Unity BurstSpread but its emitter falls through to loop emission. Preserve per-burst distribution explicitly: a closed 360-degree arc has count intervals; an open arc includes both endpoints and has count-1 intervals. Validate count 3 and 7 against Unity, including replay and a frame spanning repeated bursts.
 
 For short emission windows, the generic porter reads `Maximum Particle Timestep` from source `ProjectSettings/TimeManager.asset` and binds `UnityParticleSimulationStepAdapter`. Refresh AssetDB and rerun when registration is pending. The adapter subdivides long render frames and uses a float32 delay/active clock. Native non-looping rate emission stops BEFORE the step reaching duration; do not integrate a clipped terminal step. The 54 native short-window fixtures cover durations .09/.1/.11, delays 0/.05/7 and steps 1/60/.03. Terminal emission is checked exactly; birth-counter rounding remains a separately documented +/-1-particle limitation. Compare long frames and replay. Passing this regression does not establish burst, looping-boundary or whole-effect parity. For source lighting/color and capture-layer diagnosis, read [references/visual-parity.md](references/visual-parity.md).
+
+For per-frame `Transform.Translate` along local Z, preserve float32 rotation and
+position accumulation when collision boundaries depend on the exact trajectory.
+`UnityLocalZTranslation` has five native 180-frame trajectories, with reflected
+and unreflected tests. It does not establish arbitrary XYZ or changing-parent
+translation. A nominal 90-degree Unity turn can retain a tiny transverse
+component that Cocos quaternion multiplication cancels; do not round it away
+or claim that matching the trajectory alone proves physics contact parity.
+
+For `Destroy(obj, lifetime)` called in a collision callback, measure the deadline
+from fixed physics time, then expire against render time. Subtracting a complete
+render delta immediately at birth removes impacts early. The opt-in
+`UnityPhysicsBeforeUpdate` exports both clocks, advances fixed time per real
+backend step, and resets its comparison origin with `resetAccumulator`.
+Native Combat Magic expiry fixtures keep the first impact at frame 180 and
+remove it at 181. Collision generation remains a separate verification gate.
