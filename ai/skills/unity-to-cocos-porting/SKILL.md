@@ -892,6 +892,13 @@ This gate does not prove rotating-emitter interpolation, random/curve-rate
 emission, nested birth timing, or whole-effect visual acceptance. Do not report
 those as verified from these fixtures. Await actual scene readiness before the
 runtime probe and visual captures; a fixed short startup sleep is insufficient.
+Inactive prefab staging can precede ParticleSystem.onLoad: processor-dependent
+hooks must retry before the first actual particle Update, or initialize in
+start after all onLoad callbacks. A negative executionOrder on onLoad does not
+prove that ParticleSystem.processor exists. Keep the deferred-processor native
+birth regression passing. CDP capture commands must reject on socket close,
+send failure and deadline expiry; a disconnected browser must not leave an
+awaited command pending indefinitely.
 
 For Unity mesh particles in a Z-reflected port, axial start angles map to (-X, -Y, +Z). Keep the camera-facing billboard convention separate. Unity mesh rotation uses Euler Z then X then Y; the stock Cocos 3.8.8 particle shader combines axes differently. A custom particle shader must preserve the Unity order, verified with baked vertices from at least two asymmetric combined-angle cases. A corrected curve sign alone does not prove runtime orientation parity.
 

@@ -57,3 +57,12 @@ test('module replacements preserve native per-particle dt and pool reuse clears 
   const observed=[];s.processor._runAnimateList[1].animate=function(p,dt){observed.push(dt);};s.update(c.dt);
   assert.ok(observed.some(dt=>dt<c.dt));assert.ok(observed.some(dt=>dt===c.dt));
 });
+test('inactive prefab staging installs birth hooks when the CPU processor becomes available',()=>{
+  const module={exports:{}};
+  new Function('exports','module','require',ts.transpileModule(fs.readFileSync(path.join(__dirname,'runtime/UnityParticleSimulationStep.ts'),'utf8'),{compilerOptions:{module:1,target:7}}).outputText)(module.exports,module,()=>m.exports);
+  const c=fixture.cases.find(c=>c.rate===200&&!c.gravity&&!c.moving),system=engine(c),processor=system.processor;
+  system.processor=null;module.exports.installUnityParticleSimulationStep(system,.03);assert.equal(system.unityBirthTiming,undefined);
+  system.processor=processor;system.update(c.dt);
+  assert.ok(system.unityBirthTiming);const ages=processor._particles.data.map(p=>2-p.remainingLifetime).sort((a,b)=>a-b);
+  assert.ok(Math.abs(ages[0]-.001666667)<2e-6);assert.ok(Math.abs(ages[2]-.011666667)<2e-6);
+});

@@ -22,6 +22,9 @@ export function installUnityParticleSimulationStep(system: ParticleSystem, maxim
         if (end >= stop) this._isEmitting = false;
     };
     runtime.update = function (dt: number): void {
+        // Inactive prefabs can be staged before ParticleSystem.onLoad creates
+        // the CPU processor. Initialize birth hooks before their first Update.
+        installUnityParticleBirthTiming(system,gravityY);
         if (!(dt > maximumDeltaTime) || !this._isPlaying) { update.call(this, dt); return; }
         let remaining = dt;
         while (remaining > 1e-9) {
