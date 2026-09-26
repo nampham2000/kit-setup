@@ -11,7 +11,7 @@ const path = require('node:path');
 const { readUnityMcpConnection } = require('./unity-mcp-config.cjs');
 const { mcpCall } = require('./unity-mcp-script.cjs');
 
-const USAGE = `Usage: node playable-shared-kit/tools/unity-intel/unity-reference-capture.cjs --project <UnityProjectRoot> --scene <Assets/...unity> --out <dir> --frames <n,n,...> [--width 1280] [--height 720] [--frame-rate 60] [--camera <path>] [--skybox-face <size>] [--seed <n>] [--spawns <spawns.json>] [--field Component.field=value ...] [--timeout-ms 900000]`;
+const USAGE = `Usage: node playable-shared-kit/tools/unity-intel/unity-reference-capture.cjs --project <UnityProjectRoot> --scene <Assets/...unity> --out <dir> --frames <n,n,...> [--width 1280] [--height 720] [--frame-rate 60] [--camera <path>] [--skybox-face <size>] [--seed <n>] [--spawns <spawns.json>] [--disable-component <MonoBehaviourType> ...] [--field Component.field=value ...] [--timeout-ms 900000]`;
 
 function parseArgs(argv) {
   const options = { width: 1280, height: 720, frameRate: 60, skyboxFace: 0, seed: 12345, timeoutMs: 900000, camera: '' };
@@ -30,6 +30,11 @@ function parseArgs(argv) {
     else if (arg === '--skybox-face') options.skyboxFace = Number(next());
     else if (arg === '--seed') options.seed = Number(next());
     else if (arg === '--spawns') options.spawns = readSpawns(next());
+    else if (arg === '--disable-component') {
+      const type = next();
+      if (!/^[A-Za-z_][\w]*$/.test(type)) throw new Error('--disable-component requires a MonoBehaviour type name.');
+      (options.disableComponents ||= []).push(type);
+    }
     else if (arg === '--field') {
       // Component.field=value, set on every component of that type before Start.
       const match = /^([A-Za-z_][\w]*)\.([A-Za-z_][\w]*)=(.*)$/.exec(next());
@@ -101,6 +106,7 @@ async function captureUnityReference(options, dependencies = {}) {
     randomSeed: options.seed,
     skyboxFaceSize: options.skyboxFace,
     spawns: options.spawns || [],
+    disableComponents: options.disableComponents || [],
     fields: options.fields || [],
   };
   const result = await mcpCall(connection, 'script-execute', { csharpCode: captureScript(request), className: 'Script', methodName: 'Main' },
@@ -109,7 +115,22 @@ async function captureUnityReference(options, dependencies = {}) {
   if (!/capture queued/.test(text)) throw Object.assign(new Error(`Unity refused the capture: ${text.slice(0, 400)}`), { code: 'UNITY_CAPTURE_REJECTED' });
   const manifest = await waitForManifest(manifestFile, options.timeoutMs, dependencies.sleep);
   if (!manifest.complete) throw Object.assign(new Error(`Unity capture failed: ${manifest.error}`), { code: 'UNITY_CAPTURE_FAILED' });
+  validateManifestFrames(manifest, options.frames, outputDir, dependencies.readFile || fs.readFileSync);
   return manifest;
+}
+
+function validateManifestFrames(manifest, requestedFrames, outputDir, readFile) {
+  const expected = [...new Set(requestedFrames)].sort((a,b) => a-b);
+  const actual = (manifest.frames || []).map(row => row.frame).sort((a,b) => a-b);
+  const fail = message => { throw Object.assign(new Error(message), { code: 'UNITY_CAPTURE_INCOMPLETE' }); };
+  if (JSON.stringify(expected) !== JSON.stringify(actual) || !manifest.camera) fail('Capture manifest does not contain every requested frame and camera.');
+  for (const row of manifest.frames) {
+    if (row.file !== `frame-${String(row.frame).padStart(5, '0')}.png`) fail('Unexpected reference image path.');
+    let bytes;
+    try { bytes = readFile(path.join(outputDir, row.file)); } catch { fail('Reference image is missing: ' + row.file); }
+    if (bytes.length < 24 || bytes.subarray(0,8).toString('hex') !== '89504e470d0a1a0a'
+      || bytes.readUInt32BE(16) !== manifest.width || bytes.readUInt32BE(20) !== manifest.height) fail('Reference PNG is invalid or has the wrong viewport: ' + row.file);
+  }
 }
 
 async function main() {
@@ -126,4 +147,4 @@ async function main() {
 
 if (require.main === module) main();
 
-module.exports = { parseArgs, captureScript, captureUnityReference };
+module.exports = { parseArgs, captureScript, captureUnityReference, validateManifestFrames };

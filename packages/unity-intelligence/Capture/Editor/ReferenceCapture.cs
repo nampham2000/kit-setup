@@ -43,6 +43,8 @@ namespace CcPlayable.UnityIntelligence.Capture
             /// unless useRotation is set.
             /// </summary>
             public Spawn[] spawns = Array.Empty<Spawn>();
+            /// <summary>Disable demo cyclers in Play Mode before Start when isolating a spawned source prefab.</summary>
+            public string[] disableComponents = Array.Empty<string>();
             /// <summary>
             /// Field values set by reflection on every component of the named type once the
             /// scene has loaded (after Awake/OnEnable, before Start), e.g. the effect index of
@@ -211,6 +213,38 @@ namespace CcPlayable.UnityIntelligence.Capture
         bool skyboxDone;
         Camera captureCamera = null;
         RenderTexture target = null;
+        int batchCaptureFrame = -1;
+        static ReferenceCaptureRunner batchOwner;
+        sealed class BatchFrameHook { }
+
+        // WaitForEndOfFrame is not invoked in Editor batch mode. Capture after
+        // PostLateUpdate (including particle jobs) rather than earlier LateUpdate.
+        static void SetBatchHook(bool install)
+        {
+            var loop = UnityEngine.LowLevel.PlayerLoop.GetCurrentPlayerLoop();
+            for (var i = 0; i < loop.subSystemList.Length; i++)
+            {
+                if (loop.subSystemList[i].type != typeof(UnityEngine.PlayerLoop.PostLateUpdate)) continue;
+                var phase = loop.subSystemList[i];
+                var children = new List<UnityEngine.LowLevel.PlayerLoopSystem>(phase.subSystemList ?? Array.Empty<UnityEngine.LowLevel.PlayerLoopSystem>());
+                children.RemoveAll(child => child.type == typeof(BatchFrameHook));
+                if (install) children.Add(new UnityEngine.LowLevel.PlayerLoopSystem { type = typeof(BatchFrameHook), updateDelegate = BatchTick });
+                phase.subSystemList = children.ToArray();
+                loop.subSystemList[i] = phase;
+                UnityEngine.LowLevel.PlayerLoop.SetPlayerLoop(loop);
+                return;
+            }
+            throw new InvalidOperationException("PostLateUpdate missing from active PlayerLoop");
+        }
+
+        static void BatchTick()
+        {
+            var owner = batchOwner;
+            if (owner == null || owner.batchCaptureFrame < 0) return;
+            var captured = owner.batchCaptureFrame;
+            owner.batchCaptureFrame = -1;
+            owner.CaptureFrame(captured);
+        }
 
         internal void Configure(ReferenceCapture.Request value)
         {
@@ -218,12 +252,21 @@ namespace CcPlayable.UnityIntelligence.Capture
             manifest = ReferenceCapture.NewManifest(value);
             foreach (var f in value.frames) { pending.Add(f); lastFrame = Math.Max(lastFrame, f); }
             SceneManager.sceneLoaded += OnSceneLoaded;
+            if (Application.isBatchMode) { batchOwner = this; SetBatchHook(true); }
         }
 
         void OnSceneLoaded(Scene scene, LoadSceneMode mode)
         {
             if (scene.path != request.scenePath) return;
             SceneManager.sceneLoaded -= OnSceneLoaded;
+            foreach (var type in request.disableComponents ?? Array.Empty<string>())
+            {
+                var found = false;
+                foreach (var root in scene.GetRootGameObjects())
+                    foreach (var component in root.GetComponentsInChildren<MonoBehaviour>(true))
+                        if (component != null && component.GetType().Name == type) { component.enabled = false; found = true; }
+                if (!found) { ReferenceCapture.Fail(request, manifest, "no component to disable: " + type); return; }
+            }
             foreach (var entry in request.fields ?? Array.Empty<ReferenceCapture.FieldOverride>())
             {
                 var applied = 0;
@@ -283,7 +326,11 @@ namespace CcPlayable.UnityIntelligence.Capture
                 instance.transform.position = spawn.position;
                 if (spawn.useRotation) instance.transform.eulerAngles = spawn.eulerAngles;
             }
-            if (pending.Remove(frame)) StartCoroutine(CaptureAtEndOfFrame(frame));
+            if (pending.Remove(frame))
+            {
+                if (Application.isBatchMode) batchCaptureFrame = frame;
+                else StartCoroutine(CaptureAtEndOfFrame(frame));
+            }
             else if (frame > lastFrame) Done();
         }
 
@@ -291,7 +338,12 @@ namespace CcPlayable.UnityIntelligence.Capture
         IEnumerator CaptureAtEndOfFrame(int captured)
         {
             yield return new WaitForEndOfFrame();
-            if (!sceneReady) yield break;
+            CaptureFrame(captured);
+        }
+
+        void CaptureFrame(int captured)
+        {
+            if (!sceneReady) return;
             try
             {
                 var file = $"frame-{captured:D5}.png";
@@ -304,7 +356,7 @@ namespace CcPlayable.UnityIntelligence.Capture
             {
                 sceneReady = false;
                 ReferenceCapture.Fail(request, manifest, exception.Message);
-                yield break;
+                return;
             }
             if (pending.Count == 0) Done();
         }
@@ -441,11 +493,19 @@ namespace CcPlayable.UnityIntelligence.Capture
         {
             if (!sceneReady) return;
             sceneReady = false;
+            var expected = new HashSet<int>(request.frames).Count;
+            if (manifest.frames.Count != expected)
+            {
+                ReferenceCapture.Fail(request, manifest, $"incomplete frame capture: expected {expected}, received {manifest.frames.Count}");
+                return;
+            }
             ReferenceCapture.Finish(request, manifest);
         }
 
         void OnDestroy()
         {
+            SceneManager.sceneLoaded -= OnSceneLoaded;
+            if (batchOwner == this) { batchOwner = null; SetBatchHook(false); }
             if (target != null) target.Release();
         }
     }

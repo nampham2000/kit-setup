@@ -1,5 +1,14 @@
 # Evidence to check before adjusting a Unity port
 
+- **Native reference capture:** use `unity.intel.reference.capture` with the
+  original source pipeline, camera, materials and actual imported texture sizes.
+  Editor batch mode must retain graphics; its capture hook runs after particle
+  jobs in PostLateUpdate because WaitForEndOfFrame never fires in batch mode.
+  Refresh changed package C# and wait for compilation before capture. Require
+  every requested PNG, camera and exact viewport; `complete=true` with zero or
+  missing frames is invalid evidence. Inspect images and per-frame particle
+  counts/spatial bins before measuring Cocos against them.
+
 - **Particle alignment and gradient boundaries:** Unity `RenderAlignment=2`
   means emitter Local, while Cocos `2` means View. Cocos CPU alignment World
   (`0`) reads the full emitter world rotation; Local (`1`) reads only its local
