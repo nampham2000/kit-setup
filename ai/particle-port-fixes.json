@@ -444,6 +444,21 @@
         "tools/unity-cocos-port/particle-noise-size.test.cjs"
       ],
       "acceptance": "Native BakeMesh extents for billboard/mesh, 2D/3D start size and size-over-lifetime composition across repeated steps. Current-size API omits Noise scaling; bind original source contract and measure spatial and foreground visual parity."
+    },
+    {
+      "id": "native-standalone-trail-renderer",
+      "origin": "707dfec",
+      "applicability": "conditional",
+      "sharedPaths": [
+        "tools/unity-cocos-port/trail-renderer-binding.js",
+        "tools/unity-cocos-port/runtime/UnityTrailRendererGeometry.ts",
+        "tools/unity-cocos-port/runtime/UnityTrailRendererAdapter.ts"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/trail-renderer-native.test.cjs",
+        "tools/unity-cocos-port/trail-renderer-binding.test.cjs"
+      ],
+      "acceptance": "Native View/Stretch playback BakeMesh, path-distance width/gradient/UV, camera plane and endpoint lifetime retention. Bind actual AssetDB script/material IDs with a colored mesh shader and compare each new source in both viewports."
     }
   ]
 }
