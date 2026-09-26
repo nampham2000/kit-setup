@@ -45,6 +45,11 @@ test('installation is idempotent and rejects an invalid source timestep',()=>{
   const system=engine();install(system,.03);const update=system.update;install(system,.03);assert.equal(system.update,update);
   assert.throws(()=>install(engine(),0),/maximumParticleDeltaTime/);
 });
+test('replay resets the native delay clock after a completed effect',()=>{
+  const system=engine(.1,.05);install(system,.03);system.update(.27);
+  const first=system.emitted;system._time=0;system._isEmitting=true;system.emitted=0;
+  system.update(.27);assert.equal(system.emitted,first);
+});
 
 const {maximumParticleDeltaTime,attachSimulationStepRuntime}=require('./particle-simulation-step-binding');
 test('porter binds the real project timestep and reports missing source/AssetDB registration',()=>{
