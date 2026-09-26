@@ -22,6 +22,12 @@ function attachBirthStateRuntime(builder, reporter, options) {
   const meta=path.join(options.cocosRoot,'assets/script/UnityParticleBirthStateAdapter.ts.meta');
   if(!classId&&fs.existsSync(meta))classId=compressUuid(JSON.parse(fs.readFileSync(meta,'utf8')).uuid);
   for(const {p,id} of particles) {
+    const motion=['_velocityOvertimeModule','_forceOvertimeModule'].some(key=>{
+      const module=builder.objects[p[key]?.__id__];return module?._enable??module?.enable;
+    });
+    if(motion&&p.unityParticleScalingMode!=null&&p.unityParticleScalingMode!==0)
+      reporter.high('PARTICLE_MODULE_SCALE_ADAPTER_REQUIRED',options.src||'',builder.objects[p.node.__id__]?._name||'',
+        'Native velocity/force scaling is measured for Hierarchy mode only; Local/Shape remain unaccepted.');
     if(!classId) {
       reporter.high('PARTICLE_BIRTH_STATE_ADAPTER_REQUIRED',options.src||'',builder.objects[p.node.__id__]?._name||'',
         'Refresh AssetDB to import UnityParticleBirthStateAdapter.ts, then rerun porter.');

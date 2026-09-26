@@ -2,6 +2,11 @@
 const fs=require('fs'),path=require('path'),ts=require('typescript'),test=require('node:test'),assert=require('node:assert/strict');
 class V{constructor(x=0,y=0,z=0){this.set(x,y,z);}set(x,y,z){if(typeof x==='object')Object.assign(this,{x:x.x,y:x.y,z:x.z});else Object.assign(this,{x,y,z});}}
 const out={};new Function('exports','require',ts.transpileModule(fs.readFileSync(path.join(__dirname,'runtime/UnityParticleModuleScale.ts'),'utf8'),{compilerOptions:{module:1,target:7}}).outputText)(out,()=>({Vec3:V}));
+test('singular world-to-local module scale fails explicitly instead of emitting NaNs',()=>{
+ const q={x:0,y:0,z:0,w:1},v=new V();
+ for(const axis of ['x','y','z']){const s=new V(1,1,1);s[axis]=0;assert.throws(()=>out.transformUnityModuleVector(v,1,2,3,q,s,false,true),/Singular Hierarchy scale/);}
+ out.transformUnityModuleVector(v,1,2,3,q,new V(0,0,0),false,false);assert.deepEqual(v,new V(1,2,3));
+});
 function quat(e){const [x,y,z]=e.map(v=>v*Math.PI/360),sx=Math.sin(x),cx=Math.cos(x),sy=Math.sin(y),cy=Math.cos(y),sz=Math.sin(z),cz=Math.cos(z);return {x:sx*cy*cz+cx*sy*sz,y:cx*sy*cz-sx*cy*sz,z:cx*cy*sz-sx*sy*cz,w:cx*cy*cz+sx*sy*sz};}
 test('72 native Hierarchy module trajectories include scaled world and nonuniform local frames',()=>{
  const f=require('./fixtures/module-frame-native.json');assert.equal(f.rows.length,72);

@@ -5,6 +5,7 @@ interface Rotation extends Vector { w:number; }
 /** Native Hierarchy scaling of module vectors; startSpeed is intentionally separate. */
 export function transformUnityModuleVector(out:Vector,x:number,y:number,z:number,q:Rotation,s:Vector,systemWorld:boolean,moduleWorld:boolean):void {
     if(!systemWorld&&!moduleWorld){out.x=x;out.y=y;out.z=z;return;}
+    if(!systemWorld&&(Math.abs(s.x)<1e-8||Math.abs(s.y)<1e-8||Math.abs(s.z)<1e-8))throw new Error('Singular Hierarchy scale requires a native particle frame contract');
     x*=s.x;y*=s.y;z*=s.z;
     if(systemWorld&&moduleWorld){out.x=x;out.y=y;out.z=z;return;}
     const sign=systemWorld?1:-1,qx=q.x*sign,qy=q.y*sign,qz=q.z*sign;
