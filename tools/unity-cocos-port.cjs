@@ -329,6 +329,8 @@ Options:
   --skip-physics            Không emit Rigidbody/Collider/Joint/CharacterController (report low PHYSICS_COMPONENT_SKIPPED)
                             khi playable tự thay physics bằng logic riêng; collider mesh không bị export/import.
   --jobs <n>                Chạy song song n tiến trình con cho batch prefab.
+  --only-prefabs <names>    Batch từ folder: chỉ port các prefab trong danh sách (tên không đuôi hoặc
+                            path tương đối với --src; phân tách bằng dấu phẩy hoặc @file JSON/dòng).
   --quiet                   Chỉ in tổng kết (ít token hơn cho AI agent).
   --strip-private-prefix    Map Unity serialized _field to Cocos field when wiring custom scripts. Default.
   --no-strip-private-prefix Preserve leading underscore in custom script fields.
@@ -568,6 +570,23 @@ function parseArgs(argv) {
     }
     if (arg === '--force-physics-backend') {
       options.forcePhysicsBackend = true;
+      continue;
+    }
+    if (arg === '--only-prefabs' || arg.startsWith('--only-prefabs=')) {
+      // Folder batches only: keep the listed prefabs (base names without .prefab, or paths relative
+      // to --src), comma separated or @file (JSON array or one name per line).
+      const raw = String(arg.startsWith('--only-prefabs=') ? arg.slice('--only-prefabs='.length) : readValue(arg));
+      let names;
+      if (raw.startsWith('@')) {
+        const text = fs.readFileSync(path.resolve(raw.slice(1)), 'utf8').trim();
+        names = text.startsWith('[') ? JSON.parse(text) : text.split(/\r?\n/);
+      } else {
+        names = raw.split(',');
+      }
+      options.onlyPrefabs = new Set(names
+        .map(name => String(name).trim().split(path.sep).join('/').replace(/\.prefab$/i, ''))
+        .filter(Boolean));
+      if (!options.onlyPrefabs.size) fail('--only-prefabs needs at least one prefab name');
       continue;
     }
     if (arg === '--jobs' || arg.startsWith('--jobs=')) {
@@ -6171,8 +6190,23 @@ function buildPrefabBatchPlan(options) {
 
   const sourceRoot = path.resolve(options.src);
   const outputRoot = path.resolve(options.out);
-  const prefabFiles = findUnityPrefabFiles(sourceRoot);
+  let prefabFiles = findUnityPrefabFiles(sourceRoot);
   if (!prefabFiles.length) fail(`No Unity .prefab files found under: ${sourceRoot}`);
+  if (options.onlyPrefabs) {
+    const keyOf = file => toPosix(path.relative(sourceRoot, file)).replace(/\.prefab$/i, '');
+    const matched = new Set();
+    prefabFiles = prefabFiles.filter((file) => {
+      const key = keyOf(file);
+      const base = path.posix.basename(key);
+      const hit = options.onlyPrefabs.has(key) ? key : options.onlyPrefabs.has(base) ? base : null;
+      if (hit) matched.add(hit);
+      return !!hit;
+    });
+    const missing = [...options.onlyPrefabs].filter(name => !matched.has(name));
+    if (missing.length) {
+      fail(`--only-prefabs names not found under ${sourceRoot}: ${missing.slice(0, 10).join(', ')}${missing.length > 10 ? ` (+${missing.length - 10})` : ''}`);
+    }
+  }
 
   const plan = prefabFiles.map((sourceFile) => {
     const relative = path.relative(sourceRoot, sourceFile);
@@ -7874,6 +7908,7 @@ module.exports = {
   CocosAssetDatabase,
   portPrefab,
   portPrefabBatch,
+  buildPrefabBatchPlan,
   findFiles,
   runScriptScaffold,
   runSmartPort,
