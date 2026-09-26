@@ -6134,6 +6134,7 @@ function buildCocosPrefabBuilder(model, outputFile, options, reporter, unityDb, 
   require('./unity-cocos-port/particle-orbit-binding').attachOrbitRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-noise-binding').attachNoiseRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-custom-data-binding').attachCustomDataRuntime(builder, reporter, options);
+  require('./unity-cocos-port/particle-align-to-direction-binding').attachAlignToDirectionRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-birth-state-binding').attachBirthStateRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-burst-spread-binding').attachBurstSpreadRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-shape-distribution-binding').attachShapeDistributionRuntime(builder, reporter, options);
