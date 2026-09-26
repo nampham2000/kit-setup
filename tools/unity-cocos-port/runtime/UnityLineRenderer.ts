@@ -74,6 +74,13 @@ export class UnityLineRenderer extends Component {
         if (this.renderer) this.renderer.enabled = visible;
     }
 
+    get visibleState(): boolean { return this.visible; }
+
+    /** Unity `Renderer.material`: the per-renderer material instance (scripts set texture scale/offset on it). */
+    get materialInstance(): Material | null {
+        return this.renderer ? this.renderer.material : null;
+    }
+
     /** Unity LineRenderer.SetPosition; local or world per useWorldSpace. */
     setPosition(index: number, value: Vec3): void {
         while (this.positions.length <= index && this.positions.length < MAX_POINTS) this.positions.push(new Vec3());
