@@ -58,3 +58,20 @@ test('a bone hierarchy that differs from the model is reported, not bound', () =
   assert.deepEqual(codes, ['SKINNED_MESH_ROOT_UNRESOLVED']);
   assert.deepEqual(run(null).codes, ['SKINNED_MESH_SKELETON_UNRESOLVED']);
 });
+
+test('skinning roots get real-time skinning: the ported Animation becomes a SkeletalAnimation', () => {
+  const objects = [
+    { __type__: 'cc.Node', _name: 'Hero', _components: [{ __id__: 1 }] },
+    { __type__: 'cc.Animation', node: { __id__: 0 }, _clips: [], playOnLoad: false },
+    { __type__: 'cc.SkinnedMeshRenderer', node: { __id__: 0 }, _skinningRoot: { __id__: 0 } },
+    { __type__: 'cc.Node', _name: 'Other', _components: [] },
+    { __type__: 'cc.SkinnedMeshRenderer', node: { __id__: 3 }, _skinningRoot: { __id__: 3 } },
+  ];
+  const added = [], codes = [];
+  const builder = { objects, addComponent: (node, type, body) => added.push({ node, type, body }) };
+  createRendererPorter({}).attachRealtimeSkinning(builder, { low: (code) => codes.push(code) });
+  assert.equal(objects[1].__type__, 'cc.SkeletalAnimation');
+  assert.equal(objects[1]._useBakedAnimation, false);
+  assert.deepEqual(added.map((a) => [a.node, a.type, a.body._useBakedAnimation]), [[3, 'cc.SkeletalAnimation', false]]);
+  assert.deepEqual(codes, ['SKINNED_MESH_REALTIME_SKINNING', 'SKINNED_MESH_REALTIME_SKINNING']);
+});

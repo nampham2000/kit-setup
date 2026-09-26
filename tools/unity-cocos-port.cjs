@@ -177,6 +177,7 @@ const {
   emitSyntheticModelRenderer: emitSyntheticModelRendererImpl,
   emitMeshRenderer: emitMeshRendererImpl,
   emitSkinnedMeshRenderer: emitSkinnedMeshRendererImpl,
+  attachRealtimeSkinning: attachRealtimeSkinningImpl,
 } = createRendererPorter({
   resolveUnityMaterialUuids,
   resolveUnityMaterialUuid,
@@ -6167,6 +6168,7 @@ function buildCocosPrefabBuilder(model, outputFile, options, reporter, unityDb, 
   require('./unity-cocos-port/particle-euler-rotation-binding').attachEulerRotationRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-mesh-frame-binding').attachMeshFrameRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-collision-binding').attachCollisionRuntime(builder, reporter, options);
+  attachRealtimeSkinningImpl(builder, reporter);
   attachModelMeshBasisRuntime(builder, reporter, options);
   if (builder.rootPrefabInfoId && builder.nestedPrefabInstanceRootIds.length) {
     const existing = Array.isArray(builder.objects[builder.rootPrefabInfoId].nestedPrefabInstanceRoots)

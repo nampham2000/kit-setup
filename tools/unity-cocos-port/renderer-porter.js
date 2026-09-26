@@ -338,9 +338,38 @@ module.exports = function createRendererPorter(deps) {
       `SkinnedMeshRenderer bound to the imported skeleton (${skin.joints.length} joints) under ${builder.objects[skinningRoot]?._name || 'root'}.`);
   }
 
+  // Cocos SkinnedMeshRenderer defaults to BakedSkinningModel, which samples joint
+  // textures baked by a SkeletalAnimation and ignores bone transforms driven by an
+  // AnimationController or Animation. Every skinning root therefore gets a
+  // SkeletalAnimation with useBakedAnimation=false (the ported Animation component is
+  // converted in place; SkeletalAnimation extends it), after all components exist.
+  function attachRealtimeSkinning(builder, reporter) {
+    const roots = new Map();
+    for (const object of builder.objects) {
+      if (object?.__type__ !== 'cc.SkinnedMeshRenderer') continue;
+      const rootId = object._skinningRoot?.__id__;
+      if (Number.isInteger(rootId)) roots.set(rootId, (roots.get(rootId) || 0) + 1);
+    }
+    for (const [rootId, renderers] of roots) {
+      const root = builder.objects[rootId];
+      const animation = (root._components || []).map((ref) => builder.objects[ref.__id__])
+        .find((component) => component?.__type__ === 'cc.Animation' || component?.__type__ === 'cc.SkeletalAnimation');
+      if (animation) {
+        animation.__type__ = 'cc.SkeletalAnimation';
+        animation._useBakedAnimation = false;
+        if (!Array.isArray(animation._sockets)) animation._sockets = [];
+      } else {
+        builder.addComponent(rootId, 'cc.SkeletalAnimation', { playOnLoad: false, _clips: [], _defaultClip: null, _useBakedAnimation: false, _sockets: [] },
+          null, `cmp-skeletal-animation-${rootId}`);
+      }
+      reporter.low('SKINNED_MESH_REALTIME_SKINNING', '', root._name || '', `${renderers} skinned renderer(s) use real-time skinning under ${root._name || 'root'}.`);
+    }
+  }
+
   return {
     emitSyntheticModelRenderer,
     emitMeshRenderer,
     emitSkinnedMeshRenderer,
+    attachRealtimeSkinning,
   };
 };
