@@ -11,7 +11,7 @@ const path = require('node:path');
 const { readUnityMcpConnection } = require('./unity-mcp-config.cjs');
 const { mcpCall } = require('./unity-mcp-script.cjs');
 
-const USAGE = `Usage: node playable-shared-kit/tools/unity-intel/unity-reference-capture.cjs --project <UnityProjectRoot> --scene <Assets/...unity> --out <dir> --frames <n,n,...> [--width 1280] [--height 720] [--frame-rate 60] [--camera <path>] [--skybox-face <size>] [--seed <n>] [--timeout-ms 900000]`;
+const USAGE = `Usage: node playable-shared-kit/tools/unity-intel/unity-reference-capture.cjs --project <UnityProjectRoot> --scene <Assets/...unity> --out <dir> --frames <n,n,...> [--width 1280] [--height 720] [--frame-rate 60] [--camera <path>] [--skybox-face <size>] [--seed <n>] [--spawns <spawns.json>] [--timeout-ms 900000]`;
 
 function parseArgs(argv) {
   const options = { width: 1280, height: 720, frameRate: 60, skyboxFace: 0, seed: 12345, timeoutMs: 900000, camera: '' };
@@ -29,6 +29,7 @@ function parseArgs(argv) {
     else if (arg === '--camera') options.camera = next();
     else if (arg === '--skybox-face') options.skyboxFace = Number(next());
     else if (arg === '--seed') options.seed = Number(next());
+    else if (arg === '--spawns') options.spawns = readSpawns(next());
     else if (arg === '--timeout-ms') options.timeoutMs = Number(next());
     else throw new Error(`Option không hỗ trợ: ${arg}`);
   }
@@ -40,6 +41,23 @@ function parseArgs(argv) {
     if (!Number.isInteger(options[key]) || options[key] < 1 || options[key] > 8192) throw new Error(`--${key} không hợp lệ.`);
   }
   return options;
+}
+
+// Demo prefabs that only appear on click/key input: [{prefab: "Assets/...prefab", frame,
+// position: [x, y, z], eulerAngles?: [x, y, z]}] in Unity world space.
+function readSpawns(file) {
+  const list = JSON.parse(fs.readFileSync(file, 'utf8'));
+  if (!Array.isArray(list)) throw new Error('--spawns phải là JSON array.');
+  const vec = (value, label) => {
+    if (!Array.isArray(value) || value.length !== 3 || value.some(v => !Number.isFinite(v))) throw new Error(`--spawns ${label} phải là [x, y, z].`);
+    return { x: value[0], y: value[1], z: value[2] };
+  };
+  return list.map((entry, index) => {
+    if (!/^Assets\/.+\.prefab$/.test(entry?.prefab || ''))throw new Error(`--spawns[${index}].prefab phải là Assets/...prefab.`);
+    if (!Number.isInteger(entry.frame) || entry.frame < 0) throw new Error(`--spawns[${index}].frame phải là số nguyên >= 0.`);
+    return { prefab: entry.prefab, frame: entry.frame, position: vec(entry.position, `[${index}].position`),
+      useRotation: !!entry.eulerAngles, eulerAngles: entry.eulerAngles ? vec(entry.eulerAngles, `[${index}].eulerAngles`) : { x: 0, y: 0, z: 0 } };
+  });
 }
 
 function captureScript(request) {
@@ -76,6 +94,7 @@ async function captureUnityReference(options, dependencies = {}) {
     frames: options.frames,
     randomSeed: options.seed,
     skyboxFaceSize: options.skyboxFace,
+    spawns: options.spawns || [],
   };
   const result = await mcpCall(connection, 'script-execute', { csharpCode: captureScript(request), className: 'Script', methodName: 'Main' },
     60000, dependencies.fetch);

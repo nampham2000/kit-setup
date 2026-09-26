@@ -37,6 +37,22 @@ namespace CcPlayable.UnityIntelligence.Capture
             public bool includeOverlayUi = false;
             /// <summary>Face size of an optional skybox-only panorama (0 = off).</summary>
             public int skyboxFaceSize = 0;
+            /// <summary>
+            /// Prefabs instantiated during the Update of a given frame, for demos that only
+            /// spawn effects on user input (click/keys). Keeps the prefab's own rotation
+            /// unless useRotation is set.
+            /// </summary>
+            public Spawn[] spawns = Array.Empty<Spawn>();
+        }
+
+        [Serializable]
+        public sealed class Spawn
+        {
+            public string prefab = "";
+            public int frame;
+            public Vector3 position;
+            public bool useRotation;
+            public Vector3 eulerAngles;
         }
 
         [Serializable]
@@ -224,6 +240,15 @@ namespace CcPlayable.UnityIntelligence.Capture
         {
             if (!sceneReady) return;
             frame++;
+            foreach (var spawn in request.spawns ?? Array.Empty<ReferenceCapture.Spawn>())
+            {
+                if (spawn.frame != frame) continue;
+                var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(spawn.prefab);
+                if (prefab == null) { ReferenceCapture.Fail(request, manifest, "spawn prefab not found: " + spawn.prefab); return; }
+                var instance = Instantiate(prefab);
+                instance.transform.position = spawn.position;
+                if (spawn.useRotation) instance.transform.eulerAngles = spawn.eulerAngles;
+            }
             if (pending.Remove(frame)) StartCoroutine(CaptureAtEndOfFrame(frame));
             else if (frame > lastFrame) Done();
         }
