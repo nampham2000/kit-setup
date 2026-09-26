@@ -1041,8 +1041,9 @@ function validateManifest(cocosRoot, file) {
     }
   }
   validateLogicalPath(manifest.source.entryScene, 'source');
-  if (manifest.delivery.minimumFidelity !== 80 || manifest.delivery.targetFidelity !== 90) {
-    throw corePortError('CORE_PORT_MANIFEST_INVALID', 'Fidelity threshold bi thay doi; minimum/target bat buoc la 80/90.');
+  const minimum=manifest.delivery.minimumFidelity,target=manifest.delivery.targetFidelity;
+  if (!Number.isFinite(minimum)||!Number.isFinite(target)||minimum<80||target<90||target<minimum||target>100) {
+    throw corePortError('CORE_PORT_MANIFEST_INVALID', 'Fidelity minimum/target must be numbers, at least 80/90, ordered and at most 100. Stricter user targets are supported.');
   }
   if (!validEvidenceContract(manifest.delivery.evidenceContract)) {
     throw corePortError('CORE_PORT_MANIFEST_INVALID', 'Checkpoint evidence contract bi thay doi.');

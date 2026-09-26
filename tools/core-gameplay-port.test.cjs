@@ -298,7 +298,7 @@ test('preview-only verify can pass preview gates without build artifact or build
   assert.equal(result.nextActions.includes('Create/import builtHtml'), false);
 });
 
-test('manifest validation pins the exact 80/90 rubric and evidence paths', async t => {
+test('manifest validation preserves the rubric and accepts stricter user fidelity targets', async t => {
   const fixture = projectFixture(t);
   await initCorePort({ unityProject: fixture.unity, cocosProject: fixture.cocos }, {
     runPreflight: async () => ({ brief: fakeBrief() }),
@@ -306,6 +306,18 @@ test('manifest validation pins the exact 80/90 rubric and evidence paths', async
   const manifestFile = path.join(fixture.cocos, '.ai', 'port', 'core-gameplay.json');
   const manifest = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
   assert.equal(validateManifest(fixture.cocos, manifestFile).delivery.minimumFidelity, 80);
+
+  manifest.delivery.minimumFidelity=95;
+  manifest.delivery.targetFidelity=95;
+  fs.writeFileSync(manifestFile,JSON.stringify(manifest));
+  assert.equal(validateManifest(fixture.cocos,manifestFile).delivery.minimumFidelity,95);
+  assert.equal(evaluateFidelity(manifest,fixture.unity,fixture.cocos).minimum,95);
+  for(const [minimum,target]of [[79,90],[80,89],[96,95],[95,101],['95',95],[95,null]]){
+    manifest.delivery.minimumFidelity=minimum;manifest.delivery.targetFidelity=target;
+    fs.writeFileSync(manifestFile,JSON.stringify(manifest));
+    assert.throws(()=>validateManifest(fixture.cocos,manifestFile),error=>error.code==='CORE_PORT_MANIFEST_INVALID'&&/Fidelity/.test(error.message));
+  }
+  manifest.delivery.minimumFidelity=95;manifest.delivery.targetFidelity=95;
 
   manifest.checkpoints[0].weight = 100;
   fs.writeFileSync(manifestFile, JSON.stringify(manifest));

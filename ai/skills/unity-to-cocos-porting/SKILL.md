@@ -243,6 +243,11 @@ test and acceptance gate to that registry. The AOE source project runs
 ### Preview combat and filesystem pitfalls
 
 - Keep gameplay delivery first. For explicit preview-only acceptance use core verify with --preview-only --preview-url; keep all runtime, regression and evidence gates, exclude only packaged build. Never invent a build receipt.
+- The default core rubric is 80/90. Preserve a stricter user acceptance target
+  in the manifest (e.g. minimum/target 95/95); do not silently replace it with
+  the defaults. The validator accepts stronger ordered thresholds up to 100,
+  while evidence/rubric requirements remain unchanged. That score alone is not
+  an image similarity percentage or whole-pack visual acceptance.
 - Engine feature `ensure --dry-run` must return before opening an MCP client,
   calling `engineFeature_ensure_features`, writing a report/profile, or launching
   Cocos. Passing `dryRun` only to the filesystem fallback is insufficient: the
