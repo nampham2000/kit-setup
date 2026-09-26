@@ -17,6 +17,18 @@ This skill provides step-by-step guidance and architectural rules for converting
 
 ### Reuse the measured VFX fixes
 
+Circle and Cone Base use an independent system-owned four-lane shape RNG (same
+xorshift initialization as initial state, no salt; two draws per emitted lane,
+pad the last automatic batch). UnityParticleShapeRandom is installed through
+InitialState. Circle uses sqrt(inner^2+u*(1-inner^2)); Cone uses
+sqrt(1-u*min(thickness,.999)), not thickness*.999. Native probes bind position
+and direction across seeds/radii/thickness/arcs and288 continuous-emission rows
+including capacity clipping. Manual Emit uses a different lane schedule and
+cannot validate automatic bursts. This helper rejects nonzero arcSpread,
+nonrandom arc, alignment, direction/position jitter and unsupported shapes.
+Sphere/Hemisphere radius and stream matching remain unresolved; do not label
+their stock positions as matched merely because the Circle/Cone fixtures pass.
+
 Identify the active render pipeline from GraphicsSettings.currentRenderPipeline,
 not Camera.actualRenderingPath: URP cameras can report Forward. Never restore
 legacy Built-in materials into a user's URP project to recover pack appearance.

@@ -1,3 +1,4 @@
+import { installUnityParticleShapeRandom } from './UnityParticleShapeRandom';
 import { installUnityParticleSizeRandom } from './UnityParticleSizeRandom';
 import { Color, ParticleSystem } from 'cc';
 import { UnityStartRotationKernel, unityStartSpeedRandom } from './UnityParticleStartRotation';
@@ -23,6 +24,7 @@ export function installUnityParticleInitialState(system:ParticleSystem,spec:Unit
     // Existing generated start-rotation adapters become no-ops, avoiding two RNGs.
     runtime.unityStartRotation=state;
     installUnityParticleSizeRandom(system);
+    const shape=installUnityParticleShapeRandom(system);
     let initialized=false,index=0,emitting=false;
     const emit=runtime.emit,born=processor.setNewParticle,clear=processor.clear;
     const bind=(target:any,curve:Curve,channel:number,sign=1,minimum=-Infinity):void=>{
@@ -54,8 +56,8 @@ export function installUnityParticleInitialState(system:ParticleSystem,spec:Unit
         if(!available){emit.call(this,count,dt);return;}
         if(emitting)throw new Error('Recursive same-system birth needs a native initialization contract');
         const seed=(runtime.unityNoise?.seed??state.seed)>>>0;
-        if(!initialized||seed!==state.seed){state.seed=seed;kernel.reset(seed);initialized=true;}
-        kernel.beginBatch(available,spec.size3D,spec.rotation3D);index=0;emitting=true;
+        if(!initialized||seed!==state.seed){state.seed=seed;kernel.reset(seed);shape?.reset(seed);initialized=true;}
+        kernel.beginBatch(available,spec.size3D,spec.rotation3D);shape?.beginBatch(available);index=0;emitting=true;
         try{emit.call(this,count,dt);}finally{emitting=false;}
     };
     processor.setNewParticle=function(p:any):void {

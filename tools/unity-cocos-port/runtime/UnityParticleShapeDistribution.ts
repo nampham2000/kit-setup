@@ -41,7 +41,7 @@ export function installUnityShapeDistribution(system: ParticleSystem): void {
     shape.unityShapeDistribution = true;
     const originalEmit = shape.emit;
     shape.emit = function (p: any): void {
-        if(this.unityEdgeShape){originalEmit.call(this,p);return;}
+        if(this.unityEdgeShape||this.unityShapeRandom){originalEmit.call(this,p);return;}
         const type = this.shapeType, from = this.emitFrom;
         const adjustRadius=unityShapeDistributionApplies(type,from)&&this.radiusThickness>0;
         if (!adjustRadius && this.randomPositionAmount<=0) { originalEmit.call(this, p); return; }
