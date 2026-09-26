@@ -235,15 +235,18 @@
     },
     {
       "id": "particle-burst-catchup",
-      "origin": "ec2e841",
-      "applicability": "conditional",
+      "origin": "ec2e841,129336d",
+      "applicability": "automatic",
       "sharedPaths": [
-        "tools/unity-cocos-port/runtime/UnityParticleBurstEmission.ts"
+        "tools/unity-cocos-port/runtime/UnityParticleBurstEmission.ts",
+        "tools/unity-cocos-port/particle-burst-emission-binding.js",
+        "tools/unity-cocos-port/runtime/UnityParticleBurstEmissionAdapter.ts"
       ],
       "testPaths": [
-        "tools/unity-cocos-port/particle-burst-emission.test.cjs"
+        "tools/unity-cocos-port/particle-burst-emission.test.cjs",
+        "tools/unity-cocos-port/particle-burst-emission-binding.test.cjs"
       ],
-      "acceptance": "Capture authored burst repetitions and compare coarse-frame, boundary and loop replay before installing the shared catch-up function."
+      "acceptance": "Porter binds the catch-up to every repeating burst; authored burst repetitions match Unity per-system counts (ReferenceCapture systems[]) under coarse frames, boundaries and loop replay."
     },
     {
       "id": "death-terminal-position",
