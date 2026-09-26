@@ -375,6 +375,19 @@
         "tools/unity-cocos-port/particle-shape-distribution.test.cjs"
       ],
       "acceptance": "Birth radius quantiles within 0.02 of Unity for Circle, Cone Base/Volume, Sphere and Hemisphere with full and partial thickness (fixtures/shape-distribution-native.json), plus in-view camera-depth histogram of a wide emitter against Unity Play Mode."
+    },
+    {
+      "id": "sub-emitter-emission-instances",
+      "origin": "a1c98a7",
+      "applicability": "automatic",
+      "sharedPaths": [
+        "tools/unity-cocos-port/runtime-component-porter.js",
+        "tools/unity-cocos-port/runtime/UnityParticleSubEmitterFollower.ts"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/particle-sub-emitter-instances.test.cjs"
+      ],
+      "acceptance": "Birth/Death sub-emitters replay the sub system's authored bursts, repeat cycles, rate and duration once per parent event (birth instances follow and end with the parent); per-system particle counts match Unity Play Mode at a fixed frame (Hovl Magic shield 3: Glow/Stovb = parent count, not a fixed 36/s per parent)."
     }
   ]
 }
