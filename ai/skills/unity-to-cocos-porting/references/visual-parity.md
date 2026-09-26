@@ -116,6 +116,15 @@ Use `verify-runtime --viewport-size WxH --preview-device WebpageFullScreen` and
 check canvasSize; Chrome window dimensions include browser chrome and are not a
 reference viewport. These gates establish specific contracts, not a 95% score.
 
+Verify Scene/Prefab view separately when the user reports Editor-only darkness.
+Runtime-created native GPU textures do not populate serialized material samplers:
+bind imported Texture2D subasset UUIDs for the Editor and preserve source sampler
+wrap/filter settings. Serialize source light/SH defaults too. Keep the Editor
+color-output path separate from a custom linear HDR target whose presentation
+camera already encodes sRGB. An unbound distortion capture must skip its pass.
+Rerun the measured Preview comparison after adding Editor defaults; they must
+not introduce a second decode/encode or replace the native runtime mip chain.
+
 Run `node --test playable-shared-kit/tools/unity-cocos-port/porting-regressions.test.cjs`
 for the shared regressions. Integration fixtures must use temporary Unity/Cocos
 roots **and an explicit temporary report path**. Open actual generated output;
