@@ -59,11 +59,12 @@ export class UnityParticleRateOverDistanceEmitter extends Component {
             return;
         }
 
-        if (!this._wasPlaying) {
-            this._lastWorldPosition.set(this._currentWorldPosition);
-            this._wasPlaying = true;
-            return;
-        }
+        // First playing frame: keep the position tracked since onEnable / the last
+        // non-playing frame. Unity measures the emitter's move from where it was
+        // instantiated, so a system whose owner snaps it elsewhere on its first
+        // Update (Hovl_Laser parking HitEffect at the raycast hit) emits rate *
+        // distance particles spread along that jump.
+        this._wasPlaying = true;
 
         const rate = Math.max(0, this.rateOverDistance);
         const distance = Vec3.distance(this._lastWorldPosition, this._currentWorldPosition);
