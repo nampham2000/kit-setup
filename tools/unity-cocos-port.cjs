@@ -269,6 +269,7 @@ const componentDispatcher = createComponentDispatcher({
   emitParticleSystem,
   emitMeshRenderer,
   emitSkinnedMeshRenderer,
+  emitLineRenderer,
   emitMeshCollider,
   emitSpriteRenderer,
   emitLight,
@@ -7312,6 +7313,39 @@ function emitMeshRenderer(gameObject, nodeId, componentId, doc, model, builder, 
 
 function emitSkinnedMeshRenderer(gameObject, nodeId, componentId, doc, model, builder, reporter, options, unityDb, cocosDb) {
   return emitSkinnedMeshRendererImpl(gameObject, nodeId, componentId, doc, model, builder, reporter, options, unityDb, cocosDb);
+}
+
+// Unity LineRenderer (class 120): runtime/UnityLineRenderer.ts rebuilds a camera-facing
+// strip each frame from the serialized points, width curve and gradient; the first
+// material slot is the line material (the Hovl material pass rebinds it later).
+function emitLineRenderer(gameObject, nodeId, componentId, doc, model, builder, reporter, options, unityDb, cocosDb) {
+  const { lineRendererContract, cocosLinePositions, stageLineRendererRuntime } = require('./unity-cocos-port/line-renderer-binding');
+  const parsed = parseUnityRendererDoc(doc);
+  const line = parsed.LineRenderer || parsed;
+  const contract = lineRendererContract(line);
+  const positions = cocosLinePositions(line);
+  const materialRef = getNestedList(doc, 'm_Materials')[0];
+  const materialAsset = unityDb.get(unityRefGuid(materialRef));
+  const materialUuid = materialAsset ? resolveUnityMaterialUuid(materialAsset, options, unityDb, cocosDb, reporter, gameObject.name) : '';
+  stageLineRendererRuntime(options);
+  let classId = cocosDb?.findScriptClass?.('UnityLineRenderer')?.classId;
+  const meta = path.join(options.cocosRoot, 'assets/script/UnityLineRenderer.ts.meta');
+  if (!classId && fs.existsSync(meta)) classId = compressUuid(JSON.parse(fs.readFileSync(meta, 'utf8')).uuid);
+  if (!classId) {
+    reporter.high('LINE_RENDERER_ADAPTER_REQUIRED', model.file, gameObject.name, 'AssetDB must import assets/script/UnityLineRenderer.ts; refresh and rerun porter.');
+    return;
+  }
+  if (contract.numCapVertices || contract.numCornerVertices) {
+    reporter.medium('LINE_RENDERER_CAPS_UNPORTED', model.file, gameObject.name, 'LineRenderer corner/cap vertices are not generated.');
+  }
+  if (contract.alignment !== 0) reporter.medium('LINE_RENDERER_ALIGNMENT', model.file, gameObject.name, 'LineRenderer TransformZ alignment uses the node up axis; unmeasured.');
+  if (!materialUuid) reporter.high('LINE_RENDERER_MATERIAL_UNRESOLVED', model.file, gameObject.name, 'LineRenderer material could not be resolved.');
+  builder.addComponent(nodeId, classId, {
+    material: materialUuid ? cocosUuid(materialUuid, 'cc.Material') : null,
+    sourceContract: JSON.stringify(contract),
+    positions,
+  }, componentId, `cmp-line-renderer-${componentId}`);
+  reporter.low('LINE_RENDERER_BOUND', model.file, gameObject.name, `LineRenderer strip runtime attached (${positions.length} points); live visual acceptance still required.`);
 }
 
 function emitMeshCollider(nodeId, componentId, doc, gameObject, model, builder, reporter, options, unityDb, cocosDb) {
