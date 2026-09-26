@@ -986,6 +986,16 @@ The 196 controlled traces cover up to 17 particles and staggered births; Local
 space, random curves, retained trail slots and deletion still need separate
 evidence. A successful Preview and kernel test do not establish visual parity.
 
+Fixed per-particle Force also needs independent XYZ random factors. Cocos 3.8.8
+uses one correlated factor on all axes. In measured World-space two-constant
+ranges, `unityFixedForceRandom` seeds the four-word generator with uint32
+`particle.randomSeed + 0x12460f3b`, then reads three consecutive low-23-bit draws.
+The source contract binds `randomized:false` to the same CPU adapter, preserving
+source Z reflection without consuming system RNG or depending on pool order.
+The 196 original plus 64 held-out native cases include high/wrapping seeds,
+asymmetric ranges, 17-particle pools and staggered births. Local/curve Force
+and whole-effect visual parity remain outside this measured contract.
+
 For Unity mesh particles in a Z-reflected port, axial start angles map to (-X, -Y, +Z). Keep the camera-facing billboard convention separate. Unity mesh rotation uses Euler Z then X then Y; the stock Cocos 3.8.8 particle shader combines axes differently. A custom particle shader must preserve the Unity order, verified with baked vertices from at least two asymmetric combined-angle cases. A corrected curve sign alone does not prove runtime orientation parity.
 
 Rotation over lifetime is Euler integration, not a body-frame spin: Unity adds the angular velocity, sampled at the start-of-step age with one random draw for X/Y/Z, to each `rotation3D` component and then applies Z-X-Y. A Y spin on a mesh started at X=270 therefore turns about the emitter's vertical axis. Cocos 3.8.8 right-multiplies Y-Z-X delta quaternions, so it only matches single-axis cases whose start rotation commutes (Z-only with X0 or Z0 zero, X-only with Z0 zero, Y-only with X0 and Z0 zero). The porter binds `UnityParticleEulerRotationAdapter` (`particle-euler-rotation-binding.js`) and reports `PARTICLE_EULER_ROTATION_ADAPTER_REQUIRED` until AssetDB imports it.

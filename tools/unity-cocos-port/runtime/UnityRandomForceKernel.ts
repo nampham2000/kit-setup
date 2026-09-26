@@ -1,4 +1,18 @@
 interface Lane { a: number; b: number; c: number; d: number; }
+/** Native fixed Force: three independent draws, stable for a particle's seed. */
+export function unityFixedForceRandom(out: {x:number;y:number;z:number},seed:number):void {
+    let a=(seed+0x12460f3b)>>>0;
+    let b=(Math.imul(a,1812433253)+1)>>>0;
+    let c=(Math.imul(b,1812433253)+1)>>>0;
+    let d=(Math.imul(c,1812433253)+1)>>>0;
+    let t=a^(a<<11);
+    d=(d^(d>>>19)^t^(t>>>8))>>>0;
+    out.x=Math.fround((d&8388607)/8388607);
+    t=b^(b<<11);d=(d^(d>>>19)^t^(t>>>8))>>>0;
+    out.y=Math.fround((d&8388607)/8388607);
+    t=c^(c<<11);d=(d^(d>>>19)^t^(t>>>8))>>>0;
+    out.z=Math.fround((d&8388607)/8388607);
+}
 /** Native randomized Force uses four SIMD lanes and two XYZ passes per tick. */
 export class UnityRandomForceKernel {
     private readonly lanes: Lane[];
