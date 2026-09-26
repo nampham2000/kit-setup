@@ -156,6 +156,7 @@ and direct library cache writes alone do not prove Editor import success.
 
 - A Cocos effect contains `CCEffect` pass/property YAML and one or more `CCProgram` blocks.
 - Keep sampler declarations outside UBOs. Pack scalar/vector uniforms for std140 alignment and bind property targets explicitly.
+- An effect property's declared default does not guarantee Material.getProperty returns a value before runtime assignment. Initialize serialized or runtime Vec4 values before cloning/saving them. Animated uniforms and light/depth/color textures must reach actual renderer MaterialInstances; changing a shared parent alone does not prove instance UBO updates. Track instance replacement and destroyed instances, and verify a measured live surface response rather than only shader import.
 - Match source cull, depth test/write, blend, alpha clip and queue behavior before tuning color.
 - `--unity-uv` changes texture sampling convention for Unity-authored mesh UVs; never compensate by globally flipping mesh UVs when procedural shader code also reads `uv.y`.
 

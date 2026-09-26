@@ -900,6 +900,34 @@ birth regression passing. CDP capture commands must reject on socket close,
 send failure and deadline expiry; a disconnected browser must not leave an
 awaited command pending indefinitely.
 
+### Native particle lights and fixed physics phase
+
+Close LightsModule over the actual Light template and quality settings. Native
+GPU fixtures prove that Use Particle Color replaces template RGB, followed by
+sRGB-to-linear conversion and intensity/alpha scaling. Range is template range
+times the constant multiplier, uniform emitter world scale and, when enabled,
+sqrt(abs(currentSizeX * currentSizeY)); size Z does not affect range. Stage
+UnityParticleLightKernel and UnityParticleLightsAdapter together. Ratio zero is
+dormant; random ratios/curves, nonuniform scale, shadows and color temperature
+remain explicit unsupported evidence gaps. The native ForceVertex probe's zero
+output is experimental, not proof of vertex-light selection or renderer parity.
+The kernel's 44 GPU cases do not establish whole-effect acceptance. Verify
+actual receiving surfaces and Standard mesh particles in live Preview.
+
+Unity fixed physics precedes behaviour Update; stock Cocos physics postUpdate
+follows it. UnityPhysicsBeforeUpdate is an explicit, single-owner scene opt-in,
+not a global switch for all Cocos games. It advances physics once before Update
+and synchronizes Update-authored transforms to the backend afterwards without
+a second simulation, before render clears transform flags. Verify movement,
+contact callbacks and impact lifetime separately; matching phase/movement does
+not prove PhysX/Cannon collision-event parity.
+
+For fixed-step captures, pause the automatic game clock and yield to browser
+requestAnimationFrame between small tick batches. Long synchronous loops can
+starve the Editor socket.io heartbeat and close preview connections. Keep the
+native float32 dt/count unchanged; never filter these errors to obtain PASS.
+Record console error URL/line/stack so harness and effect failures can be traced.
+
 For Unity mesh particles in a Z-reflected port, axial start angles map to (-X, -Y, +Z). Keep the camera-facing billboard convention separate. Unity mesh rotation uses Euler Z then X then Y; the stock Cocos 3.8.8 particle shader combines axes differently. A custom particle shader must preserve the Unity order, verified with baked vertices from at least two asymmetric combined-angle cases. A corrected curve sign alone does not prove runtime orientation parity.
 
 Rotation over lifetime is Euler integration, not a body-frame spin: Unity adds the angular velocity, sampled at the start-of-step age with one random draw for X/Y/Z, to each `rotation3D` component and then applies Z-X-Y. A Y spin on a mesh started at X=270 therefore turns about the emitter's vertical axis. Cocos 3.8.8 right-multiplies Y-Z-X delta quaternions, so it only matches single-axis cases whose start rotation commutes (Z-only with X0 or Z0 zero, X-only with Z0 zero, Y-only with X0 and Z0 zero). The porter binds `UnityParticleEulerRotationAdapter` (`particle-euler-rotation-binding.js`) and reports `PARTICLE_EULER_ROTATION_ADAPTER_REQUIRED` until AssetDB imports it.
