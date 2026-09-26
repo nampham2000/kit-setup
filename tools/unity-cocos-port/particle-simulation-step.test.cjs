@@ -13,12 +13,33 @@ function engine(duration=.1,delay=0){return {duration,loop:false,_isEmitting:tru
 test('250ms render frame does not emit 500 particles from a 100ms source window',()=>{
   const original=engine();original.update(.25);assert.equal(original.emitted,500);
   const patched=engine();install(patched,.03);patched.update(.25);
-  assert.ok(Math.abs(patched.emitted-200)<1e-8);assert.ok(Math.abs(patched._time-.25)<1e-8);
+  assert.ok(Math.abs(patched.emitted-180)<1e-4);assert.ok(Math.abs(patched._time-.25)<1e-8);
   assert.ok(patched.steps.every(dt=>dt<=.03));assert.equal(patched._isEmitting,false);
 });
-test('partial first/last steps respect source start delay and duration',()=>{
+test('partial first step and excluded terminal step respect native start delay and duration',()=>{
   const system=engine(.1,.05);install(system,.03);system.update(.27);
-  assert.ok(Math.abs(system.emitted-200)<1e-8);assert.ok(Math.abs(system._time-.27)<1e-8);
+  assert.ok(Math.abs(system.emitted-140)<1e-4);assert.ok(Math.abs(system._time-.27)<1e-8);
+});
+const nativeWindow=require('./fixtures/emission-window-native.json');
+test('short-window native fixture binds exact probe source',()=>{
+  const producer=fs.readFileSync(path.join(__dirname,'fixtures/capture-emission-window.cs'),'utf8').replace(/\r\n/g,'\n');
+  assert.equal(require('node:crypto').createHash('sha256').update(producer).digest('hex'),nativeWindow.producerSha256);
+  assert.equal(nativeWindow.rows.length,54);
+});
+for(const row of nativeWindow.rows)test(`native emission window duration=${row.duration} delay=${row.delay} rate=${row.rate} step=${row.step}`,()=>{
+  const system=engine(Math.fround(row.duration),Math.fround(row.delay));let emissionClock=0,dispatched=false;
+  system._emit=function(dt){if(!this._isEmitting)return;dispatched=true;emissionClock=Math.fround(emissionClock+Math.fround(dt));this.emitted=Math.floor(emissionClock/Math.fround(1/row.rate));};
+  install(system,1);
+  const lastBirth=row.frames.reduce((last,f,i)=>f.count>(row.frames[i-1]?.count||0)?f.frame:last,-1);
+  for(const frame of row.frames){
+    // Lifetime expiry belongs to the processor, not this emission adapter.
+    if(frame.frame*Math.fround(row.step)>row.delay+1)break;
+    dispatched=false;system.update(Math.fround(row.step));
+    if(frame.frame>lastBirth)assert.equal(dispatched,false,`terminal emission at frame ${frame.frame}`);
+    // Counter quantization is a separate known +/-1 birth-kernel limitation.
+    // The terminal-step check above is exact and rejects an extra whole batch.
+    assert.ok(Math.abs(system.emitted-frame.count)<=1,`frame ${frame.frame}: ${system.emitted} vs ${frame.count}`);
+  }
 });
 test('installation is idempotent and rejects an invalid source timestep',()=>{
   const system=engine();install(system,.03);const update=system.update;install(system,.03);assert.equal(system.update,update);

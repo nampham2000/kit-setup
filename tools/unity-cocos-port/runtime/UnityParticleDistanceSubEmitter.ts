@@ -28,7 +28,7 @@ export class UnityParticleDistanceSubEmitter {
         if (target.startDelay.mode !== 0) throw new Error('Unverified random/curve distance sub-emitter delay');
         const delay=target.startDelay.evaluate(0,1);
         if(delay>0){
-            if(![0,3].includes(source.startLifetime.mode))throw new Error('Unverified curved parent lifetime with sub-emitter delay');
+            if(source.startLifetime.mode!==0&&source.startLifetime.mode!==3)throw new Error('Unverified curved parent lifetime with sub-emitter delay');
             const maximum=Math.max(source.startLifetime.evaluate(0,0),source.startLifetime.evaluate(0,1));
             if(delay<maximum)throw new Error('Unverified partial distance sub-emitter start delay');
         }
