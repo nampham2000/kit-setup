@@ -72,12 +72,12 @@ namespace CcPlayable.UnityIntelligence.Capture
         }
 
         [Serializable]
-        internal sealed class FrameRecord { public int frame; public float time; public string file = ""; public int activeParticles; public bool shaderCompiling; public List<SystemRecord> systems = new List<SystemRecord>(); public List<TrailRecord> trails = new List<TrailRecord>(); public List<CollisionRecord> collisions = new List<CollisionRecord>(); public List<LightRecord> lights = new List<LightRecord>(); }
+        internal sealed class FrameRecord { public int frame; public float time; public string file = ""; public int activeParticles; public bool shaderCompiling; public List<SystemRecord> systems = new List<SystemRecord>(); public List<TrailRecord> trails = new List<TrailRecord>(); public List<CollisionRecord> collisions = new List<CollisionRecord>(); public List<CollisionRecord> contactTrace = new List<CollisionRecord>(); public List<LightRecord> lights = new List<LightRecord>(); }
 
         [Serializable]
         internal sealed class TrailRecord { public string path; public float time; public float width; public float[] position; public float[] positions; public float[] vertices; public float[] uv; public float[] color; public int[] indices; }
         [Serializable]
-        internal sealed class CollisionRecord { public string actor; public string collider; public float time; public float fixedTime; public float[] position; public float[] velocity; public int contacts; public bool sleeping; }
+        internal sealed class CollisionRecord { public string actor; public string collider; public string phase; public float time; public float fixedTime; public float[] position; public float[] velocity; public int contacts; public bool sleeping; public float[] contactPoint; public float[] contactNormal; public float separation; }
         [Serializable]
         internal sealed class LightRecord { public string path; public int type; public float[] position; public float[] color; public float intensity; public float range; public int renderMode; }
 
@@ -298,6 +298,7 @@ namespace CcPlayable.UnityIntelligence.Capture
         bool skyboxDone;
         Camera captureCamera = null;
         readonly List<ReferenceCapture.CollisionRecord> collisionEvents = new List<ReferenceCapture.CollisionRecord>();
+        readonly List<ReferenceCapture.CollisionRecord> contactTrace = new List<ReferenceCapture.CollisionRecord>();
         RenderTexture target = null;
         int batchCaptureFrame = -1;
         static ReferenceCaptureRunner batchOwner;
@@ -450,7 +451,7 @@ namespace CcPlayable.UnityIntelligence.Capture
                 var shaderCompiling = ShaderUtil.anythingCompiling;
                 Capture(Path.Combine(request.outputDir, file));
                 ReferenceCapture.Record(manifest, captured, Time.time, file, ReferenceCapture.ParticleSystems(captureCamera), captureCamera.name, shaderCompiling);
-                var record=manifest.frames[manifest.frames.Count-1];record.trails=ReferenceCapture.Trails(captureCamera);record.collisions=new List<ReferenceCapture.CollisionRecord>(collisionEvents);record.lights=ReferenceCapture.Lights();
+                var record=manifest.frames[manifest.frames.Count-1];record.trails=ReferenceCapture.Trails(captureCamera);record.collisions=new List<ReferenceCapture.CollisionRecord>(collisionEvents);record.contactTrace=new List<ReferenceCapture.CollisionRecord>(contactTrace);record.lights=ReferenceCapture.Lights();
                 if (request.skyboxFaceSize > 0 && !skyboxDone) { skyboxDone = true; CaptureSkyboxPanorama(); }
             }
             catch (Exception exception)
@@ -470,9 +471,12 @@ namespace CcPlayable.UnityIntelligence.Capture
             catch (Exception exception) { sceneReady = false; ReferenceCapture.Fail(request, manifest, exception.Message); }
         }
 
-        internal void ObserveCollision(Transform actor, Collision collision) {
+        internal void ObserveCollision(Transform actor, Collision collision, string phase) {
             var body=actor.GetComponent<Rigidbody>();var position=actor.position;var velocity=body!=null?body.velocity:Vector3.zero;
-            collisionEvents.Add(new ReferenceCapture.CollisionRecord {actor=ReferenceCapture.HierarchyPath(actor),collider=ReferenceCapture.HierarchyPath(collision.collider.transform),time=Time.time,fixedTime=Time.fixedTime,position=ReferenceCapture.VectorValues(position),velocity=ReferenceCapture.VectorValues(velocity),contacts=collision.contactCount,sleeping=body!=null&&body.IsSleeping()});
+            var contact=collision.contactCount>0?collision.GetContact(0):default(ContactPoint);
+            var record=new ReferenceCapture.CollisionRecord {actor=ReferenceCapture.HierarchyPath(actor),collider=ReferenceCapture.HierarchyPath(collision.collider.transform),phase=phase,time=Time.time,fixedTime=Time.fixedTime,position=ReferenceCapture.VectorValues(position),velocity=ReferenceCapture.VectorValues(velocity),contacts=collision.contactCount,sleeping=body!=null&&body.IsSleeping(),contactPoint=ReferenceCapture.VectorValues(contact.point),contactNormal=ReferenceCapture.VectorValues(contact.normal),separation=contact.separation};
+            if(phase=="enter")collisionEvents.Add(record);
+            contactTrace.Add(record);
         }
 
         void CaptureSkyboxPanorama()
@@ -630,6 +634,8 @@ namespace CcPlayable.UnityIntelligence.Capture
 
     public sealed class ReferenceCollisionObserver : MonoBehaviour {
         internal ReferenceCaptureRunner owner;
-        void OnCollisionEnter(Collision collision) { if(owner!=null)owner.ObserveCollision(transform,collision); }
+        void OnCollisionEnter(Collision collision) { if(owner!=null)owner.ObserveCollision(transform,collision,"enter"); }
+        void OnCollisionStay(Collision collision) { if(owner!=null)owner.ObserveCollision(transform,collision,"stay"); }
+        void OnCollisionExit(Collision collision) { if(owner!=null)owner.ObserveCollision(transform,collision,"exit"); }
     }
 }
