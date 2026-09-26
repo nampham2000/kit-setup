@@ -15,6 +15,8 @@ const {
   cocosUuid,
 } = require('./core-utils');
 const { parseUnityParticleDoc } = require('./particle-system-converter');
+const { distanceSubEmitterContract } = require('./particle-distance-subemitter-contract.cjs');
+const { writeGeneratedAssetText } = require('./generated-asset-writer.cjs');
 
 const RUNTIME_DIR = path.join(__dirname, 'runtime');
 const SCRIPT_TARGET_DIR = path.join('assets', 'script');
@@ -555,6 +557,9 @@ function createRuntimeComponentPorter(deps) {
         const subEmitterNodeId = Number(subEmitterParticle?.node?.__id__);
         const subEmitterNode = Number.isInteger(subEmitterNodeId) ? builder.objects[subEmitterNodeId] : null;
         if (!subEmitterParticle || !subEmitterNode) continue;
+        let distanceContract=null;
+        try { distanceContract=distanceSubEmitterContract(entry,parseUnityParticleDoc(model.componentDocs.get(subEmitterFileId))); }
+        catch(error){ reporter.high('PARTICLE_DISTANCE_SUB_EMITTER_UNVERIFIED',model.file,sourceNode._name||'',error.message);continue; }
 
         if (!followerClassId) {
           reporter.medium(
@@ -578,19 +583,22 @@ function createRuntimeComponentPorter(deps) {
         if (!Array.isArray(followerComponent.entries)) followerComponent.entries = [];
         if (hasSubEmitterEntry(followerComponent, type, subEmitterParticleId)) continue;
 
-        subEmitterParticle._simulationSpace = 0;
+        subEmitterParticle._simulationSpace = distanceContract?.simulationSpace ?? 0;
         subEmitterParticle.playOnAwake = false;
-        subEmitterParticle.loop = type === SUB_EMITTER_TYPE.birth;
+        if(!distanceContract)subEmitterParticle.loop = type === SUB_EMITTER_TYPE.birth;
         if (type === SUB_EMITTER_TYPE.death) subEmitterNode._active = false;
         setCocosCurveConstant(builder.objects, subEmitterParticle, 'rateOverTime', 0);
         setCocosCurveConstant(builder.objects, subEmitterParticle, 'rateOverDistance', 0);
 
-        followerComponent.entries.push(makeSubEmitterEntry(script, type, entry, subEmitterParticleId, subEmitterNodeId));
+        followerComponent.entries.push({...makeSubEmitterEntry(script, type, entry, subEmitterParticleId, subEmitterNodeId),
+          ...(distanceContract?{sourceDistanceRate:distanceContract.rate,sourceSimulationSpace:distanceContract.simulationSpace,emitRatePerParticle:0}:{}),
+        });
 
         reporter.low(
-          'PARTICLE_SUB_EMITTER_FOLLOWER',
+          distanceContract?'PARTICLE_DISTANCE_SUB_EMITTER_BOUND':'PARTICLE_SUB_EMITTER_FOLLOWER',
           model.file,
           sourceNode._name || '',
+          distanceContract?`Native constant Birth distance emission (${distanceContract.rate}/unit) bound; live acceptance required`:
           `Unity ${subEmitterTypeName(type)} Sub Emitter is approximated by ${script.className} targeting ${subEmitterNode._name || 'sub-emitter'}`
         );
       }
@@ -743,7 +751,11 @@ function createRuntimeComponentPorter(deps) {
   return {
     ensureParticleRendererVisibilityScript: (options, reporter) => ensureRuntimeScript(RUNTIME_SCRIPTS.particleRendererVisibility, options, reporter),
     attachParticleRendererVisibility,
-    ensureParticleSubEmitterFollowerScript: (options, reporter) => ensureRuntimeScript(RUNTIME_SCRIPTS.particleSubEmitterFollower, options, reporter),
+    ensureParticleSubEmitterFollowerScript: (options, reporter) => {
+      if(!options.dryRun)for(const name of ['UnityParticleDistanceSubEmitter','UnityParticleBirthTiming'])
+        writeGeneratedAssetText(path.join(options.cocosRoot,SCRIPT_TARGET_DIR,name+'.ts'),fs.readFileSync(path.join(RUNTIME_DIR,name+'.ts'),'utf8'),{cocosRoot:options.cocosRoot});
+      return ensureRuntimeScript(RUNTIME_SCRIPTS.particleSubEmitterFollower, options, reporter);
+    },
     ensureUiLayoutScript: (options, reporter, cocosDb) => {
       const script = RUNTIME_SCRIPTS.uiLayout;
       ensureRuntimeScript(script, options, reporter);
