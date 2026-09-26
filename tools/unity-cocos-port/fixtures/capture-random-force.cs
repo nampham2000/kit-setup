@@ -1,6 +1,7 @@
 using System;using System.IO;using System.Collections.Generic;using UnityEngine;
 public class Script {
  public static string Main(){
+  if(!Application.isPlaying)throw new InvalidOperationException("Randomized Force acceptance requires Play Mode; Edit Mode consumes extra RNG draws");
   var cases=new List<object>();
   foreach(var randomize in new[]{false,true})foreach(var count in new[]{1,2,17})foreach(var stagger in new[]{false,true})for(uint seed=1;seed<=64;seed++){
    if(stagger&&count!=2||count==17&&seed>4)continue;
@@ -14,6 +15,6 @@ public class Script {
     cases.Add(new{randomize,seed,systemSeed=123+seed,count,stagger,frames});
    }finally{UnityEngine.Object.DestroyImmediate(go);}
   }
-  File.WriteAllText("OUTPUT_FILE",System.Text.Json.JsonSerializer.Serialize(new{unityVersion=Application.unityVersion,dt=1f/60,min=-10,max=10,cases}));return "Native random force cases="+cases.Count;
+  File.WriteAllText("OUTPUT_FILE",System.Text.Json.JsonSerializer.Serialize(new{unityVersion=Application.unityVersion,isPlaying=Application.isPlaying,dt=1f/60,min=-10,max=10,cases}));return "Native random force cases="+cases.Count;
  }
 }

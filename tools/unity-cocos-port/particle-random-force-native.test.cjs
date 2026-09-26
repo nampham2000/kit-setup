@@ -5,6 +5,7 @@ new Function('exports',ts.transpileModule(fs.readFileSync(path.join(__dirname,'r
 test('randomized force fixture binds its exact native producer',()=>{
  const p=fs.readFileSync(path.join(__dirname,'fixtures/capture-random-force.cs'),'utf8').replace(/\r\n/g,'\n');
  assert.equal(crypto.createHash('sha256').update(p).digest('hex'),fixture.sourceProbeSha256);
+ assert.equal(fixture.isPlaying,true,'Edit Mode consumes extra RNG and is not a gameplay oracle');
 });
 test('native randomized force matches per-tick velocity and position in 196 cases, including 17 lanes and staggered births',()=>{
  const cases=fixture.cases.filter(c=>c.randomize);assert.equal(cases.length,196);
@@ -52,4 +53,24 @@ test('randomized force contract keeps source Z correlation and rejects unmeasure
  assert.deepEqual(randomForceContract(source),{autoRandomSeed:false,randomSeed:123,x:[-1,2],y:[-3,4],z:[-6,5]});
  assert.throws(()=>randomForceContract({...source,ForceModule:{...source.ForceModule,inWorldSpace:false}}),/Local/);
  assert.throws(()=>randomForceContract({...source,ForceModule:{...source.ForceModule,x:{minMaxState:1}}}),/two-constant/);
+});
+test('native Play Mode retained slots, deaths, swaps and late births consume pre-update pool lanes',()=>{
+ const retained=require('./fixtures/retained-force-native.json');assert.equal(retained.isPlaying,true);assert.equal(retained.cases.length,12);
+ const producer=fs.readFileSync(path.join(__dirname,'fixtures/capture-retained-force.cs'),'utf8').replace(/\r\n/g,'\n');assert.equal(crypto.createHash('sha256').update(producer).digest('hex'),retained.sourceProbeSha256);
+ for(const c of retained.cases){
+  const kernel=new mod.UnityRandomForceKernel(64);let previous=Array.from({length:c.count},(_,i)=>({seed:i+1,velocity:[1,0,0],remaining:i%3===0?.05:10}));
+  for(const frame of c.frames){
+   if(frame.frame===7)previous.push({seed:55,velocity:[1,0,0],remaining:10});
+   kernel.beginFrame(c.systemSeed,previous.length);
+   for(const particle of frame.particles){
+    if(particle.remaining<=0)continue;
+    const index=previous.findIndex(p=>p.seed===particle.seed),random={};assert.ok(index>=0);kernel.sample(random,index);
+    for(let axis=0;axis<3;axis++){
+     const expected=previous[index].velocity[axis]+(-10+20*[random.x,random.y,random.z][axis])*retained.dt;
+     assert.ok(Math.abs(expected-particle.velocity[axis])<1e-5,`trails ${c.trails}, pool ${c.count}, seed ${c.systemSeed}, tick ${frame.frame}, slot ${index}, axis ${axis}`);
+    }
+   }
+   previous=frame.particles;
+  }
+ }
 });

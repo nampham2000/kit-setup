@@ -988,12 +988,19 @@ include zero-lifetime parents retained for trails; record alive counts separatel
 For randomized Force in measured World-space XYZ two-constant ranges, stage
 UnityParticleRandomForce and UnityRandomForceKernel with the simulation-step
 adapter. Native fixtures establish four RNG lanes initialized from the system
-seed plus lane*367, then two XYZ passes per ceil(poolCount/4) block each tick.
+seed plus lane*367, then ONE XYZ pass per ceil(poolCount/4) block each tick.
+Capture in Play Mode and record/assert Application.isPlaying. Edit Mode consumes
+two passes for the same Simulate call; this previously contaminated the oracle
+and produced a wrong runtime despite passing tests. A native API alone is not
+proof of gameplay semantics; bind the execution mode and rerun held-out cases.
 Retain source Z correlation by negating the sampled value, not merely swapping
 range endpoints. Use the same system seed as Noise when both modules exist.
 The 196 controlled traces cover up to 17 particles and staggered births; Local
-space, random curves, retained trail slots and deletion still need separate
-evidence. A successful Preview and kernel test do not establish visual parity.
+space and random curves still need separate evidence. The retained-force oracle
+checks 12 Play Mode cases with deaths, retained zero-life trail parents, pool
+swaps and late births: consume RNG using the pre-update pool count and index.
+Do not discard RNG slots merely because remainingLifetime is zero. Native
+pool evidence does not establish target trail expiry/pool parity or visual parity.
 
 Fixed per-particle Force also needs independent XYZ random factors. Cocos 3.8.8
 uses one correlated factor on all axes. In measured World-space two-constant

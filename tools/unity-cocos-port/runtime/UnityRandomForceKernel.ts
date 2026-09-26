@@ -13,7 +13,7 @@ export function unityFixedForceRandom(out: {x:number;y:number;z:number},seed:num
     t=c^(c<<11);d=(d^(d>>>19)^t^(t>>>8))>>>0;
     out.z=Math.fround((d&8388607)/8388607);
 }
-/** Native randomized Force uses four SIMD lanes and two XYZ passes per tick. */
+/** Native Play Mode randomized Force uses four SIMD lanes, one XYZ pass per tick. */
 export class UnityRandomForceKernel {
     private readonly lanes: Lane[];
     private readonly values: Float32Array;
@@ -33,9 +33,6 @@ export class UnityRandomForceKernel {
             const i=group*4+lane,l=this.lanes[lane];
             const x=this.next(l),y=this.next(l),z=this.next(l);
             if(i<count){const offset=i*3;this.values[offset]=x;this.values[offset+1]=y;this.values[offset+2]=z;}
-        }
-        for(let group=0;group<groups;group++)for(let lane=0;lane<4;lane++){
-            const l=this.lanes[lane];this.next(l);this.next(l);this.next(l);
         }
     }
     reset(seed: number): void {
