@@ -375,6 +375,34 @@
         "tools/unity-cocos-port/particle-shape-distribution.test.cjs"
       ],
       "acceptance": "Birth radius quantiles within 0.02 of Unity for Circle, Cone Base/Volume, Sphere and Hemisphere with full and partial thickness (fixtures/shape-distribution-native.json), plus in-view camera-depth histogram of a wide emitter against Unity Play Mode."
+    },
+    {
+      "id": "short-emission-window-timestep",
+      "origin": "a2b7f67",
+      "applicability": "automatic",
+      "sharedPaths": [
+        "tools/unity-cocos-port/particle-simulation-step-binding.js",
+        "tools/unity-cocos-port/runtime/UnityParticleSimulationStep.ts",
+        "tools/unity-cocos-port/runtime/UnityParticleSimulationStepAdapter.ts"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/particle-simulation-step.test.cjs"
+      ],
+      "acceptance": "Source TimeManager maximum particle timestep, AssetDB bound adapter, long-frame emission and full elapsed simulation, replay; looping boundaries/bursts and visual fidelity require additional native acceptance."
+    },
+    {
+      "id": "capture-camera-all-layer-bits",
+      "origin": "a2b7f67",
+      "applicability": "conditional",
+      "sharedPaths": [
+        "tools/shader-compiler/capture-visibility-contract.cjs",
+        "tools/verify-runtime.cjs"
+      ],
+      "testPaths": [
+        "tools/shader-compiler/capture-visibility-contract.test.cjs",
+        "tools/verify-runtime-viewport.test.cjs"
+      ],
+      "acceptance": "Actual camera/node masks, exclusive capture layer, intended preceding-transparent inclusion and distortion exclusion, material-instance capture binding and matching native canvas dimensions."
     }
   ]
 }
