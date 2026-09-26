@@ -877,6 +877,22 @@ a fixed rate per second and a capped sample of parents are not equivalent.
 
 ## Validate mesh particle axes and serialized size fields
 
+### Verify within-frame particle births
+
+`UnityParticleSimulationStep` installs `UnityParticleBirthTiming` for CPU particles.
+Stage both dependencies and refresh AssetDB. Rate-over-time particles must have
+their authored start lifetime, their actual partial-frame age, uniform Z size
+when startSize3D is false, and partial-step module/gravity/position integration.
+World-space constant-rate births interpolate a translating emitter between its
+previous and current positions. Bind gravityY from DynamicsManager.asset, and
+use float32 capture steps. Source-bound fixtures cover 12 static/moving cases
+and 9 rates across 32 frames. The rate-60 cadence matches exactly; other tested
+rates retain a documented tolerance of one particle at precision boundaries.
+This gate does not prove rotating-emitter interpolation, random/curve-rate
+emission, nested birth timing, or whole-effect visual acceptance. Do not report
+those as verified from these fixtures. Await actual scene readiness before the
+runtime probe and visual captures; a fixed short startup sleep is insufficient.
+
 For Unity mesh particles in a Z-reflected port, axial start angles map to (-X, -Y, +Z). Keep the camera-facing billboard convention separate. Unity mesh rotation uses Euler Z then X then Y; the stock Cocos 3.8.8 particle shader combines axes differently. A custom particle shader must preserve the Unity order, verified with baked vertices from at least two asymmetric combined-angle cases. A corrected curve sign alone does not prove runtime orientation parity.
 
 Rotation over lifetime is Euler integration, not a body-frame spin: Unity adds the angular velocity, sampled at the start-of-step age with one random draw for X/Y/Z, to each `rotation3D` component and then applies Z-X-Y. A Y spin on a mesh started at X=270 therefore turns about the emitter's vertical axis. Cocos 3.8.8 right-multiplies Y-Z-X delta quaternions, so it only matches single-axis cases whose start rotation commutes (Z-only with X0 or Z0 zero, X-only with Z0 zero, Y-only with X0 and Z0 zero). The porter binds `UnityParticleEulerRotationAdapter` (`particle-euler-rotation-binding.js`) and reports `PARTICLE_EULER_ROTATION_ADAPTER_REQUIRED` until AssetDB imports it.

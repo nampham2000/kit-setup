@@ -2,7 +2,9 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),ts=require('typescript');
 const source=fs.readFileSync(path.join(__dirname,'runtime/UnityParticleSimulationStep.ts'),'utf8');
 const moduleStub={exports:{}};
-new Function('exports','module',ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText)(moduleStub.exports,moduleStub);
+const birthStub={exports:{}};
+new Function('exports','module','require',ts.transpileModule(fs.readFileSync(path.join(__dirname,'runtime/UnityParticleBirthTiming.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText)(birthStub.exports,birthStub,()=>({}));
+new Function('exports','module','require',ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText)(moduleStub.exports,moduleStub,()=>birthStub.exports);
 const install=moduleStub.exports.installUnityParticleSimulationStep;
 function engine(duration=.1,delay=0){return {duration,loop:false,_isEmitting:true,_isPlaying:true,_time:0,startDelay:{evaluate:()=>delay},emitted:0,steps:[],
   _emit(dt){if(this._time>delay){if(this._time-(this.duration+delay)>dt&&!this.loop)this._isEmitting=false;

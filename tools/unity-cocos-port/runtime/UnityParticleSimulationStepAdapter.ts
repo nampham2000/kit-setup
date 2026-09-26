@@ -6,8 +6,9 @@ const { ccclass, property, executionOrder } = _decorator;
 export class UnityParticleSimulationStepAdapter extends Component {
     @property(ParticleSystem) source: ParticleSystem | null = null;
     @property maximumDeltaTime = 0;
+    @property gravityY = -9.81;
     protected onLoad(): void {
         if (!this.source) throw new Error('Missing simulation-step particle system');
-        installUnityParticleSimulationStep(this.source, this.maximumDeltaTime);
+        installUnityParticleSimulationStep(this.source, this.maximumDeltaTime, this.gravityY);
     }
 }

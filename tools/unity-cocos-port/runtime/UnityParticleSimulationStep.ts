@@ -1,10 +1,12 @@
 import { ParticleSystem } from 'cc';
+import { installUnityParticleBirthTiming } from './UnityParticleBirthTiming';
 
 /** Keep a long render frame from extending a short Unity emission window. */
-export function installUnityParticleSimulationStep(system: ParticleSystem, maximumDeltaTime: number): void {
+export function installUnityParticleSimulationStep(system: ParticleSystem, maximumDeltaTime: number, gravityY = -9.81): void {
     const runtime = system as any;
     if (runtime.unitySimulationStep) return;
     if (!(maximumDeltaTime > 0) || !Number.isFinite(maximumDeltaTime)) throw new Error('Invalid Unity maximumParticleDeltaTime');
+    installUnityParticleBirthTiming(system,gravityY);
     runtime.unitySimulationStep = true;
     const update = runtime.update;
     const emit = runtime._emit;
