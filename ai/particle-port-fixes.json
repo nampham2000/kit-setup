@@ -388,6 +388,20 @@
         "tools/unity-cocos-port/particle-sub-emitter-instances.test.cjs"
       ],
       "acceptance": "Birth/Death sub-emitters replay the sub system's authored bursts, repeat cycles, rate and duration once per parent event (birth instances follow and end with the parent); per-system particle counts match Unity Play Mode at a fixed frame (Hovl Magic shield 3: Glow/Stovb = parent count, not a fixed 36/s per parent)."
+    },
+    {
+      "id": "custom1-data-stream",
+      "origin": "5b5a8b9",
+      "applicability": "automatic",
+      "sharedPaths": [
+        "tools/unity-cocos-port/particle-custom-data-binding.js",
+        "tools/unity-cocos-port/runtime/UnityParticleCustomData.ts",
+        "tools/unity-cocos-port/runtime/UnityParticleCustomDataAdapter.ts"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/particle-custom-data-binding.test.cjs"
+      ],
+      "acceptance": "Custom1 curves for exactly the renderer-streamed components (m_VertexStreams kept as hex) reach the material per particle age; the material reads customDataTexture under UNITY_PARTICLE_CUSTOM_DATA. Shader-specific use of Custom1 (Hovl center glow, Lightning reveal/edge) still needs a Unity reference at a fixed frame."
     }
   ]
 }
