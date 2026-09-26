@@ -1031,6 +1031,20 @@ For Unity mesh particles in a Z-reflected port, axial start angles map to (-X, -
 
 Rotation over lifetime is Euler integration, not a body-frame spin: Unity adds the angular velocity, sampled at the start-of-step age with one random draw for X/Y/Z, to each `rotation3D` component and then applies Z-X-Y. A Y spin on a mesh started at X=270 therefore turns about the emitter's vertical axis. Cocos 3.8.8 right-multiplies Y-Z-X delta quaternions, so it only matches single-axis cases whose start rotation commutes (Z-only with X0 or Z0 zero, X-only with Z0 zero, Y-only with X0 and Z0 zero). The porter binds `UnityParticleEulerRotationAdapter` (`particle-euler-rotation-binding.js`) and reports `PARTICLE_EULER_ROTATION_ADAPTER_REQUIRED` until AssetDB imports it.
 
+Random 3D START rotation is a separate contract: native axes are independent,
+while Cocos reuses one random factor for XYZ and biases ring orientations.
+`particle-start-rotation-binding.cjs` binds the CPU start adapter before birth
+quaternion packing, preserving renderer signs and source radians. Its native
+oracle covers 240 seed/axis/batch cases, 64 size/shape/color cases, automatic
+PlayerLoop births and repeated bursts over twelve frames. Automatic births and
+plain Emit consume rotation draws Z-X-Y after seed/speed/size channels; explicit
+EmitParams uses a different initialization path and must not be its oracle.
+Retain four-lane padded batch consumption, source size3D, replay reset and compare
+by generated seed when native pool compaction changes order. Constant/two-constant
+axes are supported; flipRotation, shape alignment and curve modes remain gated.
+This fixes rotation only: other initial channels still use Cocos random values,
+and different emission schedules cannot claim bitwise or whole-effect parity.
+
 Unity SizeModule stores the X curve in `curve`, including separate-axis mode; Y/Z use `y`/`z`. Never leave a template X curve because `x` is absent. Compare every axis against the serialized source and actual particle size.
 
 Cocos 3.8.8 exposes an arc mode value corresponding to Unity BurstSpread but its emitter falls through to loop emission. Preserve per-burst distribution explicitly: a closed 360-degree arc has count intervals; an open arc includes both endpoints and has count-1 intervals. Validate count 3 and 7 against Unity, including replay and a frame spanning repeated bursts.
