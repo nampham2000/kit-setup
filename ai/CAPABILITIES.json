@@ -1766,7 +1766,7 @@
         "limits": [
           "Score là rubric parity có evidence, không phải pixel-perfect hoặc semantic proof tự động; target 90 và minimum accept 80.",
           "User yêu cầu preview-only: dùng --preview-url http://localhost:7456/. Giữ verify/lint/assets/regressions/runtime và evidence rubric; chỉ loại build.playable/builtHtml. Report deliveryMode=browser-preview, packagedReadiness=not-assessed; không tạo build receipt.",
-          "Compiler confidence, status boolean hoặc file tồn tại đơn lẻ không được tính điểm. Evidence schema v1 phải bind current brief/state/checkpoint và SHA-256 của từng Cocos target; target đổi làm evidence stale. Mandatory input/rules/win-lose chỉ nhận runtime, không nhận visual-only.",
+          "Compiler confidence, status boolean hoặc file tồn tại đơn lẻ không được tính điểm. Evidence schema v2 phải bind current brief/state/checkpoint và SHA-256 của từng Cocos target theo contract `sha256-text-lf-v1` (text gộp CRLF->LF, binary png/jpg/mp3/fbx... giữ byte-exact) để evidence commit trên checkout CRLF vẫn khớp checkout LF; tính bằng `currentTargetHashes`, không dùng sha256sum thô. Evidence v1 raw-byte không còn được tính, manifest cũ vẫn hợp lệ; nội dung target đổi làm evidence stale. Mandatory input/rules/win-lose chỉ nhận runtime, không nhận visual-only.",
           "Mặc định chạy tuần tự `ai:verify`, `ai:lint`, `ai:verify:assets`, `ai:verify:regressions:check`, `build`, `ai:verify:runtime`; dừng ở gate đầu thất bại, timeout/output bounded và redacted. Full `ai:verify:regressions` phải chạy sau mỗi thay đổi watched target; core acceptance chỉ check receipt hash-bound hiện hành để không lặp playthrough dài hoặc false-timeout. Regression gate buộc registry/matrix/oracle/watchFiles đã nằm trong Git và receipt khớp hash hiện tại. `--no-run-gates` không thể trả accepted/runnable.",
           "`--preview-only` bỏ build gate/builtHtml và gọi `ai:verify -- --skip-build-size` để không đọc/fail bởi HTML build cũ; vẫn giữ TS/config/feature/meta/import, lint, assets, regressions và runtime smoke với loopback editor URL. Kết quả chỉ được ghi `preview-accepted`/`preview-runnable`; `accepted=false`, build runnable=false và claim phải nói rõ build acceptance chưa chạy.",
           "`--preview-url` chỉ nhận loopback http(s) origin không credentials/query/hash/path để argument Windows cmd không trở thành shell injection surface."
@@ -1961,7 +1961,7 @@
           "Mỗi risk có contract riêng: input cần real gesture + semantic eval; input-concurrency cần `gestures[]` + pre/post overlap/reservation metrics; hold-drag cần gestureHoldBeforeMoveMs; transparent hold cần gestureKeepPressed; raycast cần positive+negative gesture tags; animation cần requiredTrace; particle-vfx cần semantic eval + screenshotRegion và bounded min/max screenshot metrics. Nếu tag `spatial-distribution`, mỗi case phải khai báo >=3 `requiredSpatialMetrics` có min/max trong requiredEvalMetrics ở ít nhất hai viewport explicit; runtime-mesh-animation cần linear-path + curved-path, Unity reference, ordered trace và bounded metrics; visual cần Unity reference; level-lifecycle cần win tag và chạy ít nhất 2 rounds.",
           "`requiredEvalMetrics`/`requiredEvalBeforeMetrics` fail-closed nếu eval thiếu metric, không finite hoặc vượt min/max. Runtime mesh animation phải chứng minh actionStarted=0 trước gesture và >=1 sau gesture; evalBefore không được tự gọi action đang test. Dùng metric cho UV span/error, position, direction dot, root scale và thickness; `{ok:true}` đơn lẻ không đủ.",
           "Trước run, tool gọi Cocos `editorRuntime_reload_preview` với refreshAssets=true để tránh test bundle TypeScript cũ. `--no-refresh` chỉ dùng khi chủ ý và được ghi rõ trong receipt.",
-          "Receipt bind SHA-256 của registry, matrix, eval/reference và watchFiles; thay đổi byte sau PASS làm `check` fail stale. Tool không tự đánh giá pixel parity ngoài oracle/reference contract.",
+          "Receipt schema v2 bind SHA-256 của registry, matrix, eval/reference và watchFiles theo contract `sha256-text-lf-v1` (text gộp CRLF->LF, binary giữ byte-exact) nên checkout CRLF/LF của cùng commit cho cùng digest; receipt v1 raw-byte báo stale và phải chạy lại. Thay đổi nội dung sau PASS làm `check` fail stale; `check` không ghi receipt. Tool không tự đánh giá pixel parity ngoài oracle/reference contract.",
           "`--suite <id>` chỉ re-run suite đã chọn rồi merge vào receipt base khi base cùng snapshot và đủ mọi suite còn lại; receipt thiếu/stale hoặc suite lạ phải fail trước preview. Không dùng selective rerun để bỏ qua suite fail."
         ],
         "verify": null,
@@ -2058,7 +2058,7 @@
       },
       {
         "id": "texture.compress-policy",
-        "title": "Gán preset nén PlayableTransparent cho PNG/JPG/JPEG qua Cocos Asset DB",
+        "title": "Áp policy preset nén portable cho PNG/JPG/JPEG qua Cocos Asset DB",
         "run": "npm run ai:texture:compress",
         "command": "node playable-shared-kit/tools/texture-compression-policy.cjs --json",
         "optional": [
@@ -2071,13 +2071,14 @@
           "--verify",
           "--json"
         ],
-        "when": "Sau khi checkout/sync shared kit, sau batch import texture, và trước build cuối để bảo đảm mọi PNG/JPG/JPEG dùng preset PlayableTransparent.",
+        "when": "Sau khi checkout/sync shared kit, sau batch import texture, và trước build cuối để áp tools/texture-compression-policy.json hoặc fallback PlayableTransparent.",
         "outputs": [
           "stdout JSON; Cocos builder profile và image importer metadata được ghi qua Editor.Profile/Asset DB"
         ],
         "limits": [
           "Cocos Creator phải đang mở đúng project và Cocos MCP phải reachable; tool fail-closed nếu Asset DB chưa ready.",
           "Không sửa `.meta` bằng filesystem. Tool chỉ dùng `save-asset-meta`, đọc lại để verify presetId/useCompressTexture, và listener asset-add/asset-change áp dụng tự động cho import sau này.",
+          "Project có thể commit `tools/texture-compression-policy.json` với `default` và `overrides[].pathPrefix`; longest prefix thắng, nên UI và background có thể giữ preset khác nhau một cách portable.",
           "Nếu tìm thấy preset tên `PlayableTransparent` hoặc `Playable Transparent`, tool vẫn kiểm và chuẩn hóa Web target thành đúng một format WebP quality 50. Chỉ khi thiếu mới tạo fallback với stable preset ID.",
           "Chỉ áp dụng case-insensitive cho `.png`, `.jpg`, `.jpeg`; không tự áp dụng WebP/TGA/HDR để tránh đổi contract ngoài yêu cầu.",
           "`--verify` chạy dry-run và fail nếu còn texture cần sửa hoặc fallback preset chưa tồn tại."

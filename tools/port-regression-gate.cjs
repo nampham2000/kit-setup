@@ -8,9 +8,11 @@
  * A project-owned registry declares the Unity -> Cocos regressions that must
  * stay covered. The shared kit validates the oracle contract for each risk,
  * refreshes the Cocos preview, executes every mandatory matrix, and writes a
- * receipt bound to the exact bytes of the registry, matrices, and watched
- * target files. A later code/config/asset change therefore invalidates the
- * receipt instead of silently reusing an old PASS.
+ * receipt bound to the content of the registry, matrices, and watched target
+ * files. A later code/config/asset change therefore invalidates the receipt
+ * instead of silently reusing an old PASS. Text files hash with CRLF folded to
+ * LF (binary assets stay byte-exact) so a receipt produced on a CRLF checkout
+ * still matches an LF checkout of the same commit.
  */
 
 const crypto = require('node:crypto');
@@ -20,10 +22,13 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
 const { createMcpClient, unwrapToolResult } = require('./cocos-engine-feature-audit.cjs');
+const { PORTABLE_HASH_CONTRACT, hashPortableFile } = require('./lib/portable-content-hash.cjs');
 
 const REGISTRY_SCHEMA_VERSION = 1;
 const REGISTRY_KIND = 'cc-playable-port-regression-registry';
-const RECEIPT_SCHEMA_VERSION = 1;
+// v2: snapshot hashes follow PORTABLE_HASH_CONTRACT (text CRLF -> LF). v1
+// receipts hashed raw working-copy bytes and are reported stale, never reused.
+const RECEIPT_SCHEMA_VERSION = 2;
 const RECEIPT_KIND = 'cc-playable-port-regression-receipt';
 const DEFAULT_CONFIG = 'tools/port-regressions.json';
 const DEFAULT_RECEIPT = '.ai/port/regression-receipt.json';
@@ -203,8 +208,9 @@ function readJsonBounded(file, maxBytes, code) {
   }
 }
 
+// Evidence hash for registry/matrix/eval/watchFiles; see lib/portable-content-hash.cjs.
 function hashFile(file) {
-  return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+  return hashPortableFile(file);
 }
 
 function stableStringify(value) {
@@ -621,6 +627,7 @@ function validateRegistry(projectRoot, value, options = {}) {
 function registrySnapshot(projectRoot, registry) {
   const relative = file => path.relative(projectRoot, file).replace(/\\/g, '/');
   const snapshot = {
+    hashContract: PORTABLE_HASH_CONTRACT,
     registry: { path: relative(registry.configFile), hash: hashFile(registry.configFile) },
     suites: registry.suites.map(suite => ({
       id: suite.id,
@@ -823,6 +830,15 @@ function readReceipt(projectRoot, options = {}) {
   const file = resolveContained(projectRoot, options.receipt || DEFAULT_RECEIPT, 'receipt', { mustExist: true });
   // Expanded per-suite file hashes are larger than the compact registry input.
   const value = readJsonBounded(file, 4 * 1024 * 1024, 'REGRESSION_RECEIPT_INVALID');
+  if (value && value.kind === RECEIPT_KIND && Number.isInteger(value.schemaVersion) &&
+      value.schemaVersion < RECEIPT_SCHEMA_VERSION) {
+    throw regressionError('REGRESSION_RECEIPT_STALE',
+      `Receipt schema v${value.schemaVersion} dùng hash contract cũ; chạy lại ai:verify:regressions để tạo schema v${RECEIPT_SCHEMA_VERSION}.`, {
+        expectedSchemaVersion: RECEIPT_SCHEMA_VERSION,
+        actualSchemaVersion: value.schemaVersion,
+        hashContract: PORTABLE_HASH_CONTRACT,
+      });
+  }
   if (value.schemaVersion !== RECEIPT_SCHEMA_VERSION || value.kind !== RECEIPT_KIND ||
       !value.snapshot || typeof value.snapshot.digest !== 'string' || !Array.isArray(value.suites)) {
     throw regressionError('REGRESSION_RECEIPT_INVALID', `Receipt phải là ${RECEIPT_KIND} schema v${RECEIPT_SCHEMA_VERSION}.`);
@@ -985,6 +1001,7 @@ module.exports = {
   REGISTRY_KIND,
   RECEIPT_SCHEMA_VERSION,
   RECEIPT_KIND,
+  PORTABLE_HASH_CONTRACT,
   DEFAULT_CONFIG,
   DEFAULT_RECEIPT,
   DEFAULT_OUTPUT,
