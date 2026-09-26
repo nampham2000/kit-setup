@@ -1572,14 +1572,37 @@ function loadInheritedUnityAssetDatabase(key) {
   return db;
 }
 
-function scannedUnityAssetDatabase(unityRoot) {
+// The preflight receipt's stateFingerprint covers every Unity .meta, so the GUID
+// index scanned under one fingerprint is reused across porter runs. Walking a
+// large project's metas took minutes per run on a loaded machine.
+function guidIndexCacheFile(unityRoot, stateFingerprint) {
+  const { resolveDefaultCacheDir } = require('./unity-intel/cache.cjs');
+  const id = require('node:crypto').createHash('sha256').update(`${toPosix(unityRoot)}\n${stateFingerprint}`).digest('hex').slice(0, 32);
+  return path.join(resolveDefaultCacheDir(), 'guid-index', `${id}.json`);
+}
+
+function scannedUnityAssetDatabase(unityRoot, stateFingerprint = '') {
   const key = path.resolve(unityRoot);
   let db = unityAssetDatabases.get(key);
   if (!db) {
     db = loadInheritedUnityAssetDatabase(key);
+    const cacheFile = !db && stateFingerprint ? guidIndexCacheFile(key, stateFingerprint) : '';
+    if (!db && cacheFile) {
+      const cached = readJsonIfExists(cacheFile);
+      if (cached?.unityRoot === key && cached.stateFingerprint === stateFingerprint && Array.isArray(cached.records)) {
+        db = new UnityAssetDatabase(key, []);
+        for (const record of cached.records) db.byGuid.set(record.guid, record);
+      }
+    }
     if (!db) {
       db = new UnityAssetDatabase(key, unityPackageAssetRoots(key));
       db.scan();
+      if (cacheFile) {
+        fs.mkdirSync(path.dirname(cacheFile), { recursive: true });
+        const temp = `${cacheFile}.${process.pid}.tmp`;
+        fs.writeFileSync(temp, JSON.stringify({ unityRoot: key, stateFingerprint, records: [...db.byGuid.values()] }));
+        fs.renameSync(temp, cacheFile);
+      }
     }
     unityAssetDatabases.set(key, db);
   }
@@ -1604,7 +1627,7 @@ function prepareUnityPortChildEnv(options, preflight) {
   }
   if (options.unityRoot) {
     const unityRoot = path.resolve(options.unityRoot);
-    const db = scannedUnityAssetDatabase(unityRoot);
+    const db = scannedUnityAssetDatabase(unityRoot, preflight?.receipt?.stateFingerprint || '');
     const file = path.join(require('os').tmpdir(), `cc-playable-guid-index-${process.pid}.json`);
     fs.writeFileSync(file, JSON.stringify({ unityRoot, records: [...db.byGuid.values()] }));
     env[PARENT_GUID_INDEX_ENV] = JSON.stringify({ parentPid: process.pid, unityRoot, file });
