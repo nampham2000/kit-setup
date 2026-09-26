@@ -168,6 +168,11 @@ test and acceptance gate to that registry. The AOE source project runs
   renderer properties cannot be copied to trail/static effects that lack
   their uniforms. EFX3302 can subsequently cause an import-UUID download
   failure for the same effect; identify the UUID before diagnosing networking.
+- Generated material/effect publication uses `generated-asset-writer.cjs`: skip
+  identical writes and stage complete content outside Assets on the same project
+  volume before rename. This reduces watcher churn and prevents partial reads.
+  Refresh/register assets through AssetDB before opening the prefab/scene;
+  filesystem `.meta` or library cache content is not a live import receipt.
 - Regression: `particle-renderer-contract.test.cjs`,
   `particle-renderer-native.test.cjs`, and `porting-regressions.test.cjs` under
   `tools/unity-cocos-port`. Check native geometry under a rotated parent,

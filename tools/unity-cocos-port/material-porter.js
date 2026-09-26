@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { writeGeneratedAssetText } = require('./generated-asset-writer.cjs');
 
 // --keep-existing-imports: converted materials that already exist (with their
 // .meta) belong to another binding pipeline, for example Hovl materials rebound
@@ -331,8 +332,7 @@ module.exports = function createMaterialPorter(deps) {
     if (!meta?.uuid || !materialData || options.dryRun) return false;
     const libraryFile = libraryJsonPathForUuid(options, meta.uuid);
     ensureDir(path.dirname(libraryFile));
-    fs.writeFileSync(libraryFile, `${JSON.stringify(materialData, null, 2)}\n`, 'utf8');
-    return true;
+    return writeGeneratedAssetText(libraryFile, `${JSON.stringify(materialData, null, 2)}\n`, options);
   }
 
   function ensureInvisibleShadowReceiverEffect(options, reporter) {
@@ -345,7 +345,7 @@ module.exports = function createMaterialPorter(deps) {
     ensureDirectoryMetas(path.dirname(effectFile), path.join(options.cocosRoot, 'assets'));
     const effectText = fs.readFileSync(INVISIBLE_SHADOW_RECEIVER_EFFECT_TEMPLATE, 'utf8');
     if (!fs.existsSync(effectFile) || fs.readFileSync(effectFile, 'utf8') !== effectText) {
-      fs.writeFileSync(effectFile, effectText, 'utf8');
+      writeGeneratedAssetText(effectFile, effectText, options);
     }
 
     const metaFile = `${effectFile}.meta`;
@@ -384,7 +384,7 @@ module.exports = function createMaterialPorter(deps) {
     ensureDirectoryMetas(path.dirname(effectFile), path.join(options.cocosRoot, 'assets'));
     const effectText = fs.readFileSync(config.template, 'utf8');
     if (!fs.existsSync(effectFile) || fs.readFileSync(effectFile, 'utf8') !== effectText) {
-      fs.writeFileSync(effectFile, effectText, 'utf8');
+      writeGeneratedAssetText(effectFile, effectText, options);
     }
 
     const metaFile = `${effectFile}.meta`;
@@ -551,7 +551,7 @@ module.exports = function createMaterialPorter(deps) {
     ensureDir(path.dirname(dest));
     ensureDirectoryMetas(path.dirname(dest), path.join(options.cocosRoot, 'assets'));
     const serialized = `${JSON.stringify(materialData, null, 2)}\n`;
-    if (!fs.existsSync(dest) || fs.readFileSync(dest, 'utf8') !== serialized) fs.writeFileSync(dest, serialized, 'utf8');
+    writeGeneratedAssetText(dest, serialized, options);
     const meta = ensureMaterialAssetMeta(dest, options);
     syncImportedMaterialLibraryCache(materialData, meta, options);
     return { file: dest, textureUuid };
@@ -794,7 +794,7 @@ module.exports = function createMaterialPorter(deps) {
 
     ensureDir(path.dirname(convertedDest));
     ensureDirectoryMetas(path.dirname(convertedDest), path.join(options.cocosRoot, 'assets'));
-    fs.writeFileSync(convertedDest, `${JSON.stringify(materialData, null, 2)}\n`, 'utf8');
+    writeGeneratedAssetText(convertedDest, `${JSON.stringify(materialData, null, 2)}\n`, options);
     const meta = ensureMaterialAssetMeta(convertedDest, options);
     syncImportedMaterialLibraryCache(materialData, meta, options);
     return convertedDest;
@@ -991,7 +991,7 @@ module.exports = function createMaterialPorter(deps) {
       if (!options.dryRun) {
         const content = fs.readFileSync(path.join(__dirname, 'source-particle.effect'), 'utf8');
         ensureDir(path.dirname(effectFile));
-        if (!fs.existsSync(effectFile) || fs.readFileSync(effectFile, 'utf8') !== content) fs.writeFileSync(effectFile, content);
+        writeGeneratedAssetText(effectFile, content, options);
       }
       const imported = readJsonIfExists(`${effectFile}.meta`);
       if (imported?.importer === 'effect') sourceEffectUuid = imported.uuid || '';
@@ -1038,7 +1038,7 @@ module.exports = function createMaterialPorter(deps) {
     ensureDirectoryMetas(path.dirname(convertedDest), path.join(options.cocosRoot, 'assets'));
     if (!keepExistingImport(options, convertedDest)) {
       const serialized = `${JSON.stringify(materialData, null, 2)}\n`;
-      if (!fs.existsSync(convertedDest) || fs.readFileSync(convertedDest, 'utf8') !== serialized) fs.writeFileSync(convertedDest, serialized, 'utf8');
+      writeGeneratedAssetText(convertedDest, serialized, options);
       const meta = ensureMaterialAssetMeta(convertedDest, options);
       syncImportedMaterialLibraryCache(materialData, meta, options);
     }
@@ -1129,7 +1129,7 @@ module.exports = function createMaterialPorter(deps) {
 
     ensureDir(path.dirname(convertedDest));
     ensureDirectoryMetas(path.dirname(convertedDest), path.join(options.cocosRoot, 'assets'));
-    fs.writeFileSync(convertedDest, `${JSON.stringify(materialData, null, 2)}\n`, 'utf8');
+    writeGeneratedAssetText(convertedDest, `${JSON.stringify(materialData, null, 2)}\n`, options);
     const meta = ensureMaterialAssetMeta(convertedDest, options);
     syncImportedMaterialLibraryCache(materialData, meta, options);
     return convertedDest;

@@ -30,6 +30,25 @@ UV varying widths, including particle custom data in float4 UV channels.
 Passing static checks does not close the issue: reimport the affected effects,
 verify Editor compilation and exercise their particle variants in Preview.
 
+Before publishing effect text, use `assertEffectPropertyBindings` from
+`tools/shader-compiler/effect-property-bindings.cjs`. It checks properties against
+the selected vertex/fragment pair per technique/pass, resolves anchors, merge
+keys, `propertyIndex`, local includes and explicit `target` names. Uniforms in
+an unrelated program do not satisfy a property. The CLI accepts `--chunk-root
+<CreatorEngine/editor/assets/chunks>` to resolve installed engine declarations;
+unresolved vendor includes are explicitly unverified and still need live import.
+Never delete all hidden properties or silently drop an intended binding to make
+the check pass. An invalid property binding is rejected before an existing
+effect is overwritten by the shared publisher/transpiler.
+
+Use the shared `generated-asset-writer.cjs` for generated material/effect text.
+It stages complete content on the project volume outside Assets, atomically
+publishes it, and skips identical writes. Finish AssetDB refresh/registration
+before opening the graph. A `Can not change the asset ... original asset is not
+exist` stack in the Assets tree is a registration/UI synchronization symptom,
+not a shader compile diagnosis. Resolve the exact URL and UUID first; `.meta`
+and direct library cache writes alone do not prove Editor import success.
+
 1. Run Unity port preflight before reading raw Unity source or writing output:
 
    ```bash

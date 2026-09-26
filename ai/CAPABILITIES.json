@@ -805,6 +805,10 @@
     {
       "id": "legacy-particle-blend-and-import",
       "rule": "Preserve native Legacy particle equations: Soft Additive uses One/OneMinusSrcColor and Premultiply uses One/OneMinusSrcAlpha; SrcAlpha double-multiplies alpha. Clamp alpha after tinted two-times product. Validate every generated particle/trail/static effect through live AssetDB; a property must exist in its selected vertex ABI. EFX3302 can cause subsequent import-UUID download failure for that effect; identify the asset UUID before attributing networking or shared-kit failure. Blend unit tests and import success do not establish runtime or visual parity."
+    },
+    {
+      "id": "effect-property-and-publication-gates",
+      "rule": "Before publishing generated effects, run assertEffectPropertyBindings per technique/pass, including anchors, merge keys, propertyIndex, targets and selected-program includes. A uniform in an unused program cannot bind another pass. Resolve engine chunks with shader validate --chunk-root; unresolved vendor includes remain unverified. Do not erase intended properties to suppress EFX3302. Use generated-asset-writer for complete same-volume staging outside Assets and identical-write suppression; finish live AssetDB registration before graph/preview load. Assets-tree Can not change asset messages concern registration/UI synchronization, not shader compile. Correlate download UUIDs with failed imports before diagnosing networking. Static validation, generated metadata and library caches cannot prove live import or visual parity."
     }
   ],
   "capabilities": {
