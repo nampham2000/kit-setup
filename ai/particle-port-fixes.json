@@ -403,6 +403,34 @@
         "tools/verify-runtime-viewport.test.cjs"
       ],
       "acceptance": "Actual camera/node masks, exclusive capture layer, intended preceding-transparent inclusion and distortion exclusion, material-instance capture binding and matching native canvas dimensions."
+    },
+    {
+      "id": "native-billboard-render-frames",
+      "origin": "7931027",
+      "applicability": "automatic",
+      "sharedPaths": [
+        "tools/unity-cocos-port/particle-renderer-contract.js",
+        "tools/unity-cocos-port/particle-system-converter.js",
+        "tools/unity-cocos-port/source-particle.effect",
+        "tools/unity-cocos-port/particle-euler-rotation-binding.js"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/particle-billboard-frames.test.cjs"
+      ],
+      "acceptance": "Native BakeMesh four UV corners for View/World/Local 3D births and Euler spin, rotated camera/emitter, axial rotation before anisotropic size. Vertical pitched/yawed camera remains blocking. Bind the adapter and remeasure the new source pack in Preview."
+    },
+    {
+      "id": "batch-runtime-reference-checkpoints",
+      "origin": "7931027",
+      "applicability": "recipe",
+      "sharedPaths": [
+        "tools/verify-runtime.cjs",
+        "tools/lib/runtime-checkpoints.cjs"
+      ],
+      "testPaths": [
+        "tools/runtime-checkpoints.test.cjs"
+      ],
+      "acceptance": "One isolated Preview target, independent case setup, declared runtime evidence, exact canvas/PNG viewport and screenshot SHA256; failure on evaluation/runtime/console errors. Native frame zero follows the first tick; live gameplay and statistical visual acceptance remain required."
     }
   ]
 }
