@@ -17,6 +17,22 @@ This skill provides step-by-step guidance and architectural rules for converting
 
 ### Reuse the measured VFX fixes
 
+Identify the active render pipeline from GraphicsSettings.currentRenderPipeline,
+not Camera.actualRenderingPath: URP cameras can report Forward. Never restore
+legacy Built-in materials into a user's URP project to recover pack appearance.
+Keep working compatibility fixes; reconstruct the original in an isolated project
+or implement a verified pipeline-compatible equivalent. Backups do not substitute
+for checking compatibility before changing a working source project.
+Reference projects must include the source QualitySettings.asset, not just pack
+assets. Combat Magic's historical quality is 150 pixel lights, MSAA 4 and soft
+particles; omitting that file silently used 4 lights and invalidated lighting
+comparisons. ReferenceCapture records active pipeline and quality, and
+reference-render-state.cjs rejects missing/mismatched state before acceptance.
+UnityForwardAutoLights additionally covers budget150 without overflow (24 native
+regular/particle-light cases, counts1..150). More than150 selected lights remains
+an explicit unsupported boundary. Shader light loops and texture width must grow
+together; changing only the CPU budget still drops lights.
+
 Native GetCurrentSize3D excludes Noise size, unlike the final Cocos particle.size.
 ReferenceCapture labels this measurement. Compare native API size with Cocos
 startSize composed with SizeOverLifetime only; compare Noise via BakeMesh or

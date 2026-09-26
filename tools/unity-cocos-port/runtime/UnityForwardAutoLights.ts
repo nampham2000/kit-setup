@@ -15,12 +15,13 @@ function fade(current:number,next:number,previous:number):number {
 export class UnityForwardAutoLights {
     readonly indices:Int32Array;
     readonly scores:Float64Array;
-    readonly slots=new Int32Array(8);
-    readonly weights=new Float64Array(8);
+    readonly slots=new Int32Array(154);
+    readonly weights=new Float64Array(154);
     readonly sh=new Float64Array(28);
     count=0;pixelCount=0;vertexCount=0;unverifiedSHOverflow=false;
     constructor(capacity:number){this.indices=new Int32Array(capacity);this.scores=new Float64Array(capacity);}
-    select(samples:Float32Array,count:number,center:Vector,extents:Vector):void {
+    select(samples:Float32Array,count:number,center:Vector,extents:Vector,pixelBudget=4):void {
+        if(pixelBudget!==4&&pixelBudget!==150)throw new Error('Unmeasured native Forward pixel budget');
         if(count>this.indices.length)throw new Error('Forward light selection capacity exceeded');
         this.count=0;this.slots.fill(-1);this.weights.fill(0);
         for(let i=0;i<count;i++){
@@ -32,7 +33,14 @@ export class UnityForwardAutoLights {
             let at=this.count;while(at>0&&this.scores[at-1]<score){this.scores[at]=this.scores[at-1];this.indices[at]=this.indices[at-1];at--;}
             this.scores[at]=score;this.indices[at]=i;this.count++;
         }
-        const n=this.count;this.pixelCount=Math.min(4,n);this.vertexCount=n>4?Math.min(4,n-3):0;
+        const n=this.count;
+        if(pixelBudget===150){
+            if(n>150)throw new Error('Native quality 150 overflow requires separate weighted/SH validation');
+            this.pixelCount=n;this.vertexCount=0;this.sh.fill(0);this.unverifiedSHOverflow=false;
+            for(let i=0;i<n;i++){this.slots[i]=this.indices[i];this.weights[i]=1;}
+            return;
+        }
+        this.pixelCount=Math.min(4,n);this.vertexCount=n>4?Math.min(4,n-3):0;
         this.unverifiedSHOverflow=false;this.sh.fill(0);
         const boundsSquared=extents.x*extents.x+extents.y*extents.y+extents.z*extents.z;
         for(let i=8;i<n;i++){

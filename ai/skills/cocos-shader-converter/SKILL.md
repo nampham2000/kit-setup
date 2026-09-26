@@ -20,6 +20,16 @@ mesh geometry to compensate for these material differences.
 
 ## Mandatory workflow
 
+Before replacing source materials, read GraphicsSettings.currentRenderPipeline.
+Camera.actualRenderingPath=Forward does not prove Built-in; an active URP project
+can report the same value. Restoring old Built-in particle materials into URP can
+produce black geometry. Preserve working compatibility fixes and validate original
+shader behavior in an isolated matching-pipeline reference or a verified compatible
+shader. Capture the source QualitySettings.asset and assert active pipeline, color
+space, pixel-light budget, MSAA, soft particles and linear-light flag using
+unity-intel/reference-render-state.cjs. Asset hashes alone cannot prove equivalent
+render settings. Missing quality state invalidates previous lighting acceptance.
+
 For Editor shader import failures, repair the shared generator and add a portable
 regression fixture before regenerating project assets. In Creator 3.8, fog
 uniforms belong to `builtin/uniforms/cc-global`; there is no `cc-fog` uniform

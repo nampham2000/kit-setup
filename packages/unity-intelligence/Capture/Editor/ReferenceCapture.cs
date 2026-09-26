@@ -131,6 +131,13 @@ namespace CcPlayable.UnityIntelligence.Capture
             public int frameRate;
             public string unityVersion = "";
             public string colorSpace = "";
+            public string renderPipeline = "";
+            public int qualityLevel;
+            public string qualityName = "";
+            public int pixelLightCount;
+            public int antiAliasing;
+            public bool softParticles;
+            public bool lightsUseLinearIntensity;
             public List<FrameRecord> frames = new List<FrameRecord>();
             public string error = "";
             public bool complete;
@@ -139,6 +146,14 @@ namespace CcPlayable.UnityIntelligence.Capture
         static ReferenceCapture()
         {
             EditorApplication.playModeStateChanged += OnPlayModeChanged;
+            // A package refresh between Begin and the delayed Play Mode entry
+            // clears managed callbacks, but SessionState retains the request.
+            // Re-arm it instead of leaving the capture waiting until timeout.
+            if (!EditorApplication.isPlayingOrWillChangePlaymode && !string.IsNullOrEmpty(SessionState.GetString(PendingKey, "")))
+            {
+                enterPlayModeAfter = EditorApplication.timeSinceStartup + 1;
+                EditorApplication.update += EnterQueuedCapture;
+            }
         }
 
         /// <summary>Queue a capture and enter Play Mode. Returns immediately.</summary>
@@ -199,6 +214,13 @@ namespace CcPlayable.UnityIntelligence.Capture
             frameRate = request.frameRate,
             unityVersion = Application.unityVersion,
             colorSpace = QualitySettings.activeColorSpace.ToString(),
+            renderPipeline = GraphicsSettings.currentRenderPipeline == null ? "Built-in" : GraphicsSettings.currentRenderPipeline.GetType().FullName,
+            qualityLevel = QualitySettings.GetQualityLevel(),
+            qualityName = QualitySettings.names[QualitySettings.GetQualityLevel()],
+            pixelLightCount = QualitySettings.pixelLightCount,
+            antiAliasing = QualitySettings.antiAliasing,
+            softParticles = QualitySettings.softParticles,
+            lightsUseLinearIntensity = GraphicsSettings.lightsUseLinearIntensity,
         };
 
         internal static void Record(Manifest manifest, int frame, float time, string file, List<SystemRecord> systems, string camera, bool shaderCompiling)

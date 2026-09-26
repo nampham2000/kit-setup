@@ -11,6 +11,16 @@ function compare(row,samples,sumColor){
  for(let j=0;j<4;j++){const index=selection.slots[4+j],weight=selection.weights[4+j];for(let c=0;c<3;c++)assert.ok(Math.abs((index>=0?samples[index*8+4+c]*weight:0)-row.slots[j][c])<1e-5,JSON.stringify({n:row.count,spacing:row.spacing,j,c,got:index>=0?samples[index*8+4+c]*weight:0,native:row.slots[j][c]}));}
  assert.equal(selection.unverifiedSHOverflow,false);
 }
+test('24 native quality 150 cases retain every point light below the overflow boundary',()=>{
+ const rows=fixture('forward-quality150','forward-quality150').rows.filter(r=>r.count<=150);assert.equal(rows.length,24);
+ for(const r of rows){const samples=new Float32Array(r.count*8);for(let i=0;i<r.count;i++)samples.set([Math.fround(1000+Math.fround((i%4)*.1)),1,Math.fround(Math.floor(i/4)*.1),20,.107020572,.0254380442,.5,.20375],i*8);
+  const selection=new out.UnityForwardAutoLights(200);selection.select(samples,r.count,{x:1000,y:0,z:0},{x:5,y:0,z:5},150);
+  assert.equal(selection.pixelCount,r.pixelPasses);assert.equal(selection.vertexCount,0);assert.equal(r.vertexRed,0);
+  let red=0;for(let i=0;i<selection.pixelCount;i++)red+=samples[selection.slots[i]*8+4]*selection.weights[i];assert.ok(Math.abs(red-r.pixelRed)<5e-5);
+ }
+ const samples=new Float32Array(151*8);for(let i=0;i<151;i++)samples.set([0,1,0,20,1,1,1,1],i*8);
+ assert.throws(()=>new out.UnityForwardAutoLights(200).select(samples,151,{x:0,y:0,z:0},{x:5,y:0,z:5},150),/overflow requires/);
+});
 test('27 native Auto cases bind ranked lights and pixel/vertex overlap at quality budget four',()=>{
  const rows=fixture('forward-light-slots','forward-light-slots').rows.filter(r=>r.pixelCount===4&&r.mode===0);assert.equal(rows.length,27);
  for(const r of rows){const samples=new Float32Array(r.count*8);for(let i=0;i<r.count;i++)samples.set([Math.fround(1000+Math.fround((i%4)*r.spacing)),1,Math.fround(Math.floor(i/4)*r.spacing),20,.107020572,.0254380442,.5,.20375],i*8);compare(r,samples,()=>.107020572);}
