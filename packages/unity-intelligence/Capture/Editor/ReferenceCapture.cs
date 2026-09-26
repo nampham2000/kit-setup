@@ -72,7 +72,24 @@ namespace CcPlayable.UnityIntelligence.Capture
         }
 
         [Serializable]
-        internal sealed class FrameRecord { public int frame; public float time; public string file = ""; public int activeParticles; public bool shaderCompiling; public List<SystemRecord> systems = new List<SystemRecord>(); }
+        internal sealed class FrameRecord { public int frame; public float time; public string file = ""; public int activeParticles; public bool shaderCompiling; public List<SystemRecord> systems = new List<SystemRecord>(); public List<TrailRecord> trails = new List<TrailRecord>(); public List<CollisionRecord> collisions = new List<CollisionRecord>(); public List<LightRecord> lights = new List<LightRecord>(); }
+
+        [Serializable]
+        internal sealed class TrailRecord { public string path; public float time; public float width; public float[] position; public float[] positions; public float[] vertices; public float[] uv; public float[] color; public int[] indices; }
+        [Serializable]
+        internal sealed class CollisionRecord { public string actor; public string collider; public float time; public float fixedTime; public float[] position; public float[] velocity; public int contacts; public bool sleeping; }
+        [Serializable]
+        internal sealed class LightRecord { public string path; public int type; public float[] position; public float[] color; public float intensity; public float range; public int renderMode; }
+
+        internal static List<LightRecord> Lights() {
+            var records = new List<LightRecord>();
+            foreach (var light in UnityEngine.Object.FindObjectsOfType<Light>()) {
+                if (!light.enabled || !light.gameObject.activeInHierarchy) continue;
+                var c = light.color;
+                records.Add(new LightRecord { path=HierarchyPath(light.transform),type=(int)light.type,position=VectorValues(light.transform.position),color=new[]{c.r,c.g,c.b,c.a},intensity=light.intensity,range=light.range,renderMode=(int)light.renderMode });
+            }
+            return records;
+        }
 
         /// <summary>
         /// Per-system particle oracle: live count plus a histogram of particle depth along
@@ -80,7 +97,19 @@ namespace CcPlayable.UnityIntelligence.Capture
         /// where particles are, not only how many exist.
         /// </summary>
         [Serializable]
-        internal sealed class SystemRecord { public string path = ""; public int count; public int[] depth = Array.Empty<int>(); public int[] inView = Array.Empty<int>(); }
+        internal sealed class ParticlePose {
+            public float[] position; public float[] velocity; public float[] size;
+            public float[] color; public float[] rotation; public float remainingLifetime; public float startLifetime;
+        }
+        [Serializable]
+        internal sealed class SystemRecord {
+            public string path = ""; public int count; public int[] depth = Array.Empty<int>(); public int[] inView = Array.Empty<int>();
+            public float[] position; public float[] rotation; public float[] scale; public float[] matrix;
+            public float[] meanWorldPosition; public float[] meanSize; public float[] meanColor;
+            public List<ParticlePose> particles = new List<ParticlePose>();
+        }
+
+        internal static float[] VectorValues(Vector3 vector) { return new[] { vector.x, vector.y, vector.z }; }
 
         internal static readonly float[] DepthBins = { 0.3f, 1f, 2f, 4f, 8f, 16f };
 
@@ -160,7 +189,7 @@ namespace CcPlayable.UnityIntelligence.Capture
             manifest.frames.Add(new FrameRecord { frame = frame, time = time, file = file, activeParticles = particles, shaderCompiling = shaderCompiling, systems = systems });
         }
 
-        static string HierarchyPath(Transform t) => t.parent == null ? t.name : HierarchyPath(t.parent) + "/" + t.name;
+        internal static string HierarchyPath(Transform t) => t.parent == null ? t.name : HierarchyPath(t.parent) + "/" + t.name;
 
         internal static List<SystemRecord> ParticleSystems(Camera camera)
         {
@@ -171,15 +200,27 @@ namespace CcPlayable.UnityIntelligence.Capture
             foreach (var system in UnityEngine.Object.FindObjectsByType<ParticleSystem>(FindObjectsSortMode.None))
             {
                 var record = new SystemRecord { path = HierarchyPath(system.transform), count = system.particleCount, depth = new int[DepthBins.Length + 1], inView = new int[DepthBins.Length + 1] };
+                var transform = system.transform; var quaternion = transform.rotation; var matrix = transform.localToWorldMatrix;
+                record.position = VectorValues(transform.position); record.rotation = new[] { quaternion.x, quaternion.y, quaternion.z, quaternion.w };
+                record.scale = VectorValues(transform.lossyScale); record.matrix = new float[16];
+                for (var index = 0; index < 16; index++) record.matrix[index] = matrix[index];
                 if (buffer.Length < system.particleCount) buffer = new ParticleSystem.Particle[system.particleCount];
                 var n = system.GetParticles(buffer);
                 var main = system.main;
                 var toWorld = main.simulationSpace == ParticleSystemSimulationSpace.World ? Matrix4x4.identity
                     : main.simulationSpace == ParticleSystemSimulationSpace.Custom && main.customSimulationSpace != null ? main.customSimulationSpace.localToWorldMatrix
                     : system.transform.localToWorldMatrix;
+                var meanPosition = Vector3.zero; var meanSize = Vector3.zero; var meanColor = Color.clear;
                 for (var i = 0; i < n; i++)
                 {
                     var world = toWorld.MultiplyPoint3x4(buffer[i].position);
+                    var size = buffer[i].GetCurrentSize3D(system); Color color = buffer[i].GetCurrentColor(system);
+                    meanPosition += world; meanSize += size; meanColor += color;
+                    if (i < 8) record.particles.Add(new ParticlePose {
+                        position = VectorValues(buffer[i].position), velocity = VectorValues(buffer[i].velocity), size = VectorValues(size),
+                        color = new[] { color.r, color.g, color.b, color.a }, rotation = VectorValues(buffer[i].rotation3D),
+                        remainingLifetime = buffer[i].remainingLifetime, startLifetime = buffer[i].startLifetime,
+                    });
                     var d = Vector3.Dot(world - eye, forward);
                     var bin = 0;
                     while (bin < DepthBins.Length && d >= DepthBins[bin]) bin++;
@@ -188,10 +229,32 @@ namespace CcPlayable.UnityIntelligence.Capture
                     var v = camera.WorldToViewportPoint(world);
                     if (v.z >= camera.nearClipPlane && v.x >= 0f && v.x <= 1f && v.y >= 0f && v.y <= 1f) record.inView[bin]++;
                 }
+                record.meanWorldPosition = VectorValues(n > 0 ? meanPosition / n : meanPosition);
+                record.meanSize = VectorValues(n > 0 ? meanSize / n : meanSize);
+                if (n > 0) meanColor /= n;
+                record.meanColor = new[] { meanColor.r, meanColor.g, meanColor.b, meanColor.a };
                 records.Add(record);
             }
             records.Sort((a, b) => string.CompareOrdinal(a.path, b.path));
             return records;
+        }
+
+        internal static float[] Flatten(Vector3[] values) {
+            var flat = new float[values.Length * 3]; for(var i=0;i<values.Length;i++) { flat[i*3]=values[i].x;flat[i*3+1]=values[i].y;flat[i*3+2]=values[i].z; } return flat;
+        }
+        internal static List<TrailRecord> Trails(Camera camera) {
+            var records = new List<TrailRecord>();
+            foreach(var trail in UnityEngine.Object.FindObjectsByType<TrailRenderer>(FindObjectsSortMode.None)) {
+                var mesh=new Mesh();
+                try {
+                    trail.BakeMesh(mesh,camera,true);var positions=new Vector3[trail.positionCount];trail.GetPositions(positions);
+                    var uv=mesh.uv;var colors=mesh.colors;var flatUV=new float[uv.Length*2];var flatColor=new float[colors.Length*4];
+                    for(var i=0;i<uv.Length;i++){flatUV[i*2]=uv[i].x;flatUV[i*2+1]=uv[i].y;}
+                    for(var i=0;i<colors.Length;i++){flatColor[i*4]=colors[i].r;flatColor[i*4+1]=colors[i].g;flatColor[i*4+2]=colors[i].b;flatColor[i*4+3]=colors[i].a;}
+                    records.Add(new TrailRecord{path=HierarchyPath(trail.transform),time=trail.time,width=trail.widthMultiplier,position=VectorValues(trail.transform.position),positions=Flatten(positions),vertices=Flatten(mesh.vertices),uv=flatUV,color=flatColor,indices=mesh.triangles});
+                }finally{UnityEngine.Object.DestroyImmediate(mesh);}
+            }
+            records.Sort((a,b)=>string.CompareOrdinal(a.path,b.path));return records;
         }
 
         internal static void Fail(Request request, Manifest manifest, string error)
@@ -212,6 +275,7 @@ namespace CcPlayable.UnityIntelligence.Capture
         bool sceneReady;
         bool skyboxDone;
         Camera captureCamera = null;
+        readonly List<ReferenceCapture.CollisionRecord> collisionEvents = new List<ReferenceCapture.CollisionRecord>();
         RenderTexture target = null;
         int batchCaptureFrame = -1;
         static ReferenceCaptureRunner batchOwner;
@@ -325,6 +389,9 @@ namespace CcPlayable.UnityIntelligence.Capture
                 var instance = Instantiate(prefab);
                 instance.transform.position = spawn.position;
                 if (spawn.useRotation) instance.transform.eulerAngles = spawn.eulerAngles;
+                foreach(var body in instance.GetComponentsInChildren<Rigidbody>()) {
+                    var observer=body.GetComponent<ReferenceCollisionObserver>() ?? body.gameObject.AddComponent<ReferenceCollisionObserver>();observer.owner=this;
+                }
             }
             if (pending.Remove(frame))
             {
@@ -350,6 +417,7 @@ namespace CcPlayable.UnityIntelligence.Capture
                 var shaderCompiling = ShaderUtil.anythingCompiling;
                 Capture(Path.Combine(request.outputDir, file));
                 ReferenceCapture.Record(manifest, captured, Time.time, file, ReferenceCapture.ParticleSystems(captureCamera), captureCamera.name, shaderCompiling);
+                var record=manifest.frames[manifest.frames.Count-1];record.trails=ReferenceCapture.Trails(captureCamera);record.collisions=new List<ReferenceCapture.CollisionRecord>(collisionEvents);record.lights=ReferenceCapture.Lights();
                 if (request.skyboxFaceSize > 0 && !skyboxDone) { skyboxDone = true; CaptureSkyboxPanorama(); }
             }
             catch (Exception exception)
@@ -359,6 +427,11 @@ namespace CcPlayable.UnityIntelligence.Capture
                 return;
             }
             if (pending.Count == 0) Done();
+        }
+
+        internal void ObserveCollision(Transform actor, Collision collision) {
+            var body=actor.GetComponent<Rigidbody>();var position=actor.position;var velocity=body!=null?body.velocity:Vector3.zero;
+            collisionEvents.Add(new ReferenceCapture.CollisionRecord {actor=ReferenceCapture.HierarchyPath(actor),collider=ReferenceCapture.HierarchyPath(collision.collider.transform),time=Time.time,fixedTime=Time.fixedTime,position=ReferenceCapture.VectorValues(position),velocity=ReferenceCapture.VectorValues(velocity),contacts=collision.contactCount,sleeping=body!=null&&body.IsSleeping()});
         }
 
         void CaptureSkyboxPanorama()
@@ -508,5 +581,10 @@ namespace CcPlayable.UnityIntelligence.Capture
             if (batchOwner == this) { batchOwner = null; SetBatchHook(false); }
             if (target != null) target.Release();
         }
+    }
+
+    public sealed class ReferenceCollisionObserver : MonoBehaviour {
+        internal ReferenceCaptureRunner owner;
+        void OnCollisionEnter(Collision collision) { if(owner!=null)owner.ObserveCollision(transform,collision); }
     }
 }

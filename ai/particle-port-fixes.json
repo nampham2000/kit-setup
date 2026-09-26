@@ -431,6 +431,19 @@
         "tools/runtime-checkpoints.test.cjs"
       ],
       "acceptance": "One isolated Preview target, independent case setup, declared runtime evidence, exact canvas/PNG viewport and screenshot SHA256; failure on evaluation/runtime/console errors. Native frame zero follows the first tick; live gameplay and statistical visual acceptance remain required."
+    },
+    {
+      "id": "native-noise-size-composition",
+      "origin": "9b51a85",
+      "applicability": "automatic",
+      "sharedPaths": [
+        "tools/unity-cocos-port/particle-noise-binding.js",
+        "tools/unity-cocos-port/runtime/UnityParticleNoise.ts"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/particle-noise-size.test.cjs"
+      ],
+      "acceptance": "Native BakeMesh extents for billboard/mesh, 2D/3D start size and size-over-lifetime composition across repeated steps. Current-size API omits Noise scaling; bind original source contract and measure spatial and foreground visual parity."
     }
   ]
 }
