@@ -459,6 +459,20 @@
         "tools/unity-cocos-port/trail-renderer-binding.test.cjs"
       ],
       "acceptance": "Native View/Stretch playback BakeMesh, path-distance width/gradient/UV, camera plane and endpoint lifetime retention. Bind actual AssetDB script/material IDs with a colored mesh shader and compare each new source in both viewports."
+    },
+    {
+      "id": "native-fixed-force-independent-axes",
+      "origin": "ad23e70",
+      "applicability": "conditional",
+      "sharedPaths": [
+        "tools/unity-cocos-port/particle-random-force-contract.cjs",
+        "tools/unity-cocos-port/runtime/UnityRandomForceKernel.ts",
+        "tools/unity-cocos-port/runtime/UnityParticleRandomForce.ts"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/particle-fixed-force-native.test.cjs"
+      ],
+      "acceptance": "Bind the measured World-space two-constant contract with randomized:false. Native original and held-out high/wrapping seed XYZ trajectories, source Z reflection, pool-order independence and staggered births pass. Local/curve Force and full effect visual parity require separate native and Preview evidence."
     }
   ]
 }
