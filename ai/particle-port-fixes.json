@@ -403,6 +403,21 @@
         "tools/unity-cocos-port/particle-custom-data-binding.test.cjs"
       ],
       "acceptance": "Custom1 curves for exactly the renderer-streamed components (m_VertexStreams kept as hex) reach the material per particle age; the material reads customDataTexture under UNITY_PARTICLE_CUSTOM_DATA. Shader-specific use of Custom1 (Hovl center glow, Lightning reveal/edge) still needs a Unity reference at a fixed frame."
+    },
+    {
+      "id": "shape-align-to-direction",
+      "origin": "216607a",
+      "applicability": "automatic",
+      "sharedPaths": [
+        "tools/unity-cocos-port/particle-align-to-direction-binding.js",
+        "tools/unity-cocos-port/runtime/UnityParticleAlignToDirection.ts",
+        "tools/unity-cocos-port/runtime/UnityParticleAlignToDirectionAdapter.ts"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/particle-align-to-direction.test.cjs",
+        "tools/unity-cocos-port/fixtures/align-to-direction.json"
+      ],
+      "acceptance": "Mesh particles with ShapeModule.alignToDirection match native Unity rotation3D within 0.05 deg for circle, rotated circle, 3D start rotation, cone and sphere (fixtures/align-to-direction.json); billboard and world-space variants stay reported until measured."
     }
   ]
 }
