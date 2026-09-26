@@ -6094,6 +6094,7 @@ function buildCocosPrefabBuilder(model, outputFile, options, reporter, unityDb, 
   require('./unity-cocos-port/particle-birth-state-binding').attachBirthStateRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-burst-spread-binding').attachBurstSpreadRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-shape-distribution-binding').attachShapeDistributionRuntime(builder, reporter, options);
+  require('./unity-cocos-port/particle-burst-emission-binding').attachBurstEmissionRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-limit-velocity-binding').attachLimitVelocityRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-prewarm-binding').attachPrewarmRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-euler-rotation-binding').attachEulerRotationRuntime(builder, reporter, options);
