@@ -581,6 +581,7 @@ async function runOne(target, options) {
     exceptions: [],
     exceptionDetails: [],
     consoleErrors: [],
+    consoleErrorDetails: [],
     consoleWarnings: [],
     eventCounts: { exceptions: 0, consoleErrors: 0, consoleWarnings: 0 },
     frames: 0,
@@ -646,6 +647,7 @@ async function runOne(target, options) {
       if (params.type === 'error') {
         result.eventCounts.consoleErrors += 1;
         pushUniqueBounded(result.consoleErrors, text.slice(0, 300), 50);
+        pushUniqueBounded(result.consoleErrorDetails, {message:text.slice(0,1000),source:'console',stack:params.stackTrace?.callFrames||[]},20,item=>JSON.stringify(item));
       } else if (params.type === 'warning') {
         result.eventCounts.consoleWarnings += 1;
         pushUniqueBounded(result.consoleWarnings, text.slice(0, 200), 50);
@@ -656,6 +658,7 @@ async function runOne(target, options) {
       if (e.level === 'error') {
         result.eventCounts.consoleErrors += 1;
         pushUniqueBounded(result.consoleErrors, `[${e.source}] ${String(e.text).slice(0, 300)}`, 50);
+        pushUniqueBounded(result.consoleErrorDetails, {message:String(e.text).slice(0,1000),source:e.source||'',url:e.url||'',line:Number(e.lineNumber??-1)+1,stack:e.stackTrace?.callFrames||[]},20,item=>JSON.stringify(item));
       }
     });
 
