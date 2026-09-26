@@ -1,11 +1,13 @@
 import { Mat4, ParticleSystem } from 'cc';
+import { installUnityParticleModuleScale } from './UnityParticleModuleScale';
 
 /** Initialize render state even when a sub-emitter births after its update. */
-export function installUnityParticleBirthState(system: ParticleSystem): void {
+export function installUnityParticleBirthState(system: ParticleSystem, nativeScalingMode = -1): void {
     const runtime = system as any;
     const processor = runtime.processor;
     if (!processor?.setNewParticle || runtime.unityParticleBirthState) return;
     runtime.unityParticleBirthState = true;
+    if(nativeScalingMode===0)installUnityParticleModuleScale(system);
     const born = processor.setNewParticle;
     // Resolve lazy Cocos modules at installation, never during emission.
     const rotation = system.rotationOvertimeModule;

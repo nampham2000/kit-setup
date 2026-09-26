@@ -1393,6 +1393,7 @@ function applyUnityParticleDataToCocos(builder, particleId, data = {}, rendererD
   const targetRenderer = refObject(builder.objects, particle.renderer);
   if (targetRenderer) targetRenderer._alignSpace = rendererContract.cocosAlignment;
   Object.defineProperty(particle, 'unityRendererContract', { value: rendererContract, configurable: true });
+  Object.defineProperty(particle, 'unityParticleScalingMode', { value: Number(data.scalingMode ?? 0), configurable: true });
   Object.defineProperty(particle, 'unityOrbitContract', { value: particleOrbitContract(data), configurable: true });
   Object.defineProperty(particle, 'unityNoiseContract', { value: particleNoiseContract(data), configurable: true });
   Object.defineProperty(particle, 'unityStartRotationContract', { value: startRotationContract(data), configurable: true });

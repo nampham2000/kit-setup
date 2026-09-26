@@ -1050,11 +1050,16 @@ World/Local velocity, force and limit frame transforms stale. BirthState now
 refreshes those enabled modules before simulation; fetch a fresh world matrix
 for each because the engine may invert it in place. Fire tornado's rotated
 local system with world velocity demonstrates the former wrong-axis motion.
-The 72-case Play Mode module-frame fixture accepts 36 unit-scale or uniformly
-scaled local-system trajectories. Scaled world simulation and nonuniform scale
-expose additional native scale semantics; these remaining 36 cases are diagnostic,
-not accepted by the rotation-only frame repair. Prewarm before adapter start
-and general limit-space parity still require separate evidence.
+The rotation-only repair covers 36 of 72 native trajectories. For source
+Hierarchy scaling, `UnityParticleModuleScale` now covers all 72, including
+nonuniform scale and reflected axes: local-to-world uses R*S, world-to-world S,
+world-to-local inverse(S)*inverse(R)*S, local-to-local identity. Preserve the
+module's sampler and speed modifier; Orbit already applies its full matrix.
+Do not scale startSpeed: 108 plain and 18 automatic shapeless births verify that
+it stays unchanged. Local/Shape module scaling, parent shear, singular scales,
+prewarm before adapter start and general limit-space fidelity remain separate
+gates. Bind nativeScalingMode from source; old prefabs default to the earlier
+rotation-only behavior rather than assuming a source scale mode.
 
 Unity SizeModule stores the X curve in `curve`, including separate-axis mode; Y/Z use `y`/`z`. Never leave a template X curve because `x` is absent. Compare every axis against the serialized source and actual particle size.
 
