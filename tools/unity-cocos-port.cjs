@@ -176,6 +176,7 @@ const {
 const {
   emitSyntheticModelRenderer: emitSyntheticModelRendererImpl,
   emitMeshRenderer: emitMeshRendererImpl,
+  emitSkinnedMeshRenderer: emitSkinnedMeshRendererImpl,
 } = createRendererPorter({
   resolveUnityMaterialUuids,
   resolveUnityMaterialUuid,
@@ -266,6 +267,7 @@ const componentDispatcher = createComponentDispatcher({
   emitSyntheticModelRenderer,
   emitParticleSystem,
   emitMeshRenderer,
+  emitSkinnedMeshRenderer,
   emitMeshCollider,
   emitSpriteRenderer,
   emitLight,
@@ -1890,6 +1892,25 @@ class CocosAssetDatabase {
           source: record.relativePath,
           fallbackExt: record.ext,
         };
+      }
+    }
+    return null;
+  }
+
+  // Skeleton the Cocos model prefab pairs with this mesh (its SkinnedMeshRenderer),
+  // and the skeleton's joint paths, relative to the model root (skinningRoot).
+  resolveModelSkinByMesh(stem, meshUuid, requiredExt = '') {
+    const candidates = this.findModelRecordsByStem(stem).filter((record) => !requiredExt || record.ext === requiredExt);
+    for (const record of candidates) {
+      for (const scene of subMetaRecords(record.uuid, record.subMetas, 'gltf-scene')) {
+        const objects = readJsonIfExists(libraryJsonPathForUuid({ cocosRoot: this.root }, scene.uuid));
+        const renderer = (objects || []).find((object) => object?.__type__ === 'cc.SkinnedMeshRenderer'
+          && object._mesh?.__uuid__ === meshUuid);
+        const skeletonUuid = renderer?._skeleton?.__uuid__ || '';
+        if (!skeletonUuid) continue;
+        const skeleton = readJsonIfExists(libraryJsonPathForUuid({ cocosRoot: this.root }, skeletonUuid));
+        const asset = Array.isArray(skeleton) ? skeleton.find((object) => Array.isArray(object?._joints)) : skeleton;
+        return { skeletonUuid, joints: asset?._joints || [] };
       }
     }
     return null;
@@ -5382,6 +5403,27 @@ class CocosPrefabBuilder {
     }, unityComponentId, fileId);
   }
 
+  addSkinnedMeshRenderer(nodeId, unityComponentId, meshUuid, materialUuids, skeletonUuid, skinningRootId, fileId, config = {}) {
+    return this.addComponent(nodeId, 'cc.SkinnedMeshRenderer', {
+      _materials: materialUuids.filter(Boolean).map((uuid) => cocosUuid(uuid, 'cc.Material')),
+      _visFlags: 0,
+      bakeSettings: cocosRef(this.addModelBakeSettings()),
+      _mesh: meshUuid ? cocosUuid(meshUuid, 'cc.Mesh') : null,
+      _shadowCastingMode: config.castShadows ? 1 : 0,
+      _shadowReceivingMode: config.receiveShadows === false ? 0 : 1,
+      _shadowBias: 0,
+      _shadowNormalBias: 0,
+      _reflectionProbeId: -1,
+      _reflectionProbeBlendId: -1,
+      _reflectionProbeBlendWeight: 0,
+      _enabledGlobalStandardSkinObject: false,
+      _enableMorph: true,
+      _skeleton: skeletonUuid ? cocosUuid(skeletonUuid, 'cc.Skeleton') : null,
+      _skinningRoot: Number.isInteger(skinningRootId) ? cocosRef(skinningRootId) : null,
+      _clip: null,
+    }, unityComponentId, fileId);
+  }
+
   addRigidBody(nodeId, unityComponentId, config, fileId) {
     const linearFactor = config?.linearFactor ? vec3(config.linearFactor.x, config.linearFactor.y, config.linearFactor.z) : vec3(1, 1, 1);
     const angularFactor = config?.angularFactor ? vec3(config.angularFactor.x, config.angularFactor.y, config.angularFactor.z) : vec3(1, 1, 1);
@@ -7240,6 +7282,10 @@ function emitParticleSystem(nodeId, componentId, doc, gameObject, builder, repor
 
 function emitMeshRenderer(gameObject, nodeId, componentId, doc, model, builder, reporter, options, unityDb, cocosDb) {
   return emitMeshRendererImpl(gameObject, nodeId, componentId, doc, model, builder, reporter, options, unityDb, cocosDb);
+}
+
+function emitSkinnedMeshRenderer(gameObject, nodeId, componentId, doc, model, builder, reporter, options, unityDb, cocosDb) {
+  return emitSkinnedMeshRendererImpl(gameObject, nodeId, componentId, doc, model, builder, reporter, options, unityDb, cocosDb);
 }
 
 function emitMeshCollider(nodeId, componentId, doc, gameObject, model, builder, reporter, options, unityDb, cocosDb) {

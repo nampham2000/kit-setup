@@ -268,8 +268,79 @@ module.exports = function createRendererPorter(deps) {
     }
   }
 
+  // Node reached from `rootId` by a Cocos skeleton joint path ("Alpha:Hips/Alpha:Spine").
+  function nodeAtPath(builder, rootId, jointPath) {
+    let current = rootId;
+    for (const name of String(jointPath || '').split('/').filter(Boolean)) {
+      const next = (builder.objects[current]?._children || []).map((ref) => ref?.__id__)
+        .find((id) => builder.objects[id]?._name === name);
+      if (!Number.isInteger(next)) return null;
+      current = next;
+    }
+    return current;
+  }
+
+  function parentNodeId(builder, nodeId) {
+    const id = builder.objects[nodeId]?._parent?.__id__;
+    return Number.isInteger(id) ? id : null;
+  }
+
+  // Unity SkinnedMeshRenderer on an unpacked model instance. The Cocos model prefab
+  // pairs the imported mesh with a skeleton whose joint paths are relative to the
+  // model root; that root is the ancestor from which every joint path resolves.
+  // Unity's X reflection of the FBX and the scene's Z reflection compose to a Y
+  // rotation, the same for bind pose and animated bones, so skinning stays coherent.
+  function emitSkinnedMeshRenderer(gameObject, nodeId, componentId, doc, model, builder, reporter, options, unityDb, cocosDb) {
+    const meshRef = getField(doc, 'm_Mesh');
+    const meshAsset = unityDb.get(unityRefGuid(meshRef));
+    const componentFileId = `cmp-skinned-mesh-renderer-${componentId}`;
+    if (!meshAsset || !['.fbx', '.gltf', '.glb'].includes(meshAsset.ext)) {
+      reporter.high('SKINNED_MESH_UNRESOLVED', model.file, gameObject.name, 'SkinnedMeshRenderer mesh is not an imported model sub-asset');
+      return;
+    }
+    const meshName = unityModelMeshName(meshAsset, deps.unityRefFileId(meshRef)) || gameObject.name;
+    let resolved = cocosDb.resolveModelMeshByStem(meshAsset.stem, meshName, meshAsset.ext);
+    if (!resolved) {
+      const missing = handleMissingModel(meshAsset, reporter, options, { autoCopy: true, meshNameHint: meshName });
+      resolved = missing.resolved || null;
+      if (!resolved?.meshUuid) {
+        reporter.medium('SKINNED_MESH_PENDING_IMPORT', meshAsset.relativePath, gameObject.name,
+          'Model copied for AssetDB import; refresh and rerun the porter to bind the skinned mesh.');
+        return;
+      }
+    }
+    const skin = cocosDb.resolveModelSkinByMesh(meshAsset.stem, resolved.meshUuid, meshAsset.ext);
+    if (!skin?.skeletonUuid || !skin.joints.length) {
+      reporter.high('SKINNED_MESH_SKELETON_UNRESOLVED', meshAsset.relativePath, gameObject.name,
+        'The imported Cocos model has no skeleton for this mesh; refresh AssetDB and rerun the porter.');
+      return;
+    }
+    let skinningRoot = parentNodeId(builder, nodeId);
+    while (Number.isInteger(skinningRoot) && !skin.joints.every((joint) => Number.isInteger(nodeAtPath(builder, skinningRoot, joint)))) {
+      skinningRoot = parentNodeId(builder, skinningRoot);
+    }
+    if (!Number.isInteger(skinningRoot)) {
+      reporter.high('SKINNED_MESH_ROOT_UNRESOLVED', model.file, gameObject.name,
+        `No ancestor resolves every skeleton joint path (first: ${skin.joints[0]}); the ported bone hierarchy differs from the model.`);
+      return;
+    }
+    const materialRefs = getNestedList(doc, 'm_Materials');
+    const materialUuids = materialRefs.map((materialRef) => {
+      const materialAsset = unityDb.get(unityRefGuid(materialRef));
+      return materialAsset ? resolveUnityMaterialUuid(materialAsset, options, unityDb, cocosDb, reporter, gameObject.name) : '';
+    });
+    builder.addSkinnedMeshRenderer(nodeId, componentId, resolved.meshUuid,
+      materialUuids.some(Boolean) ? materialUuids : (resolved.materialUuids || []), skin.skeletonUuid, skinningRoot, componentFileId, {
+        castShadows: Number(getField(doc, 'm_CastShadows', 1) || 0) !== 0,
+        receiveShadows: Number(getField(doc, 'm_ReceiveShadows', 1) || 0) !== 0,
+      });
+    reporter.low('SKINNED_MESH_BOUND', meshAsset.relativePath, gameObject.name,
+      `SkinnedMeshRenderer bound to the imported skeleton (${skin.joints.length} joints) under ${builder.objects[skinningRoot]?._name || 'root'}.`);
+  }
+
   return {
     emitSyntheticModelRenderer,
     emitMeshRenderer,
+    emitSkinnedMeshRenderer,
   };
 };
