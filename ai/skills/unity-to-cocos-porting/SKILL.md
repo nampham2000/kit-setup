@@ -45,6 +45,15 @@ regular/particle-light cases, counts1..150). More than150 selected lights remain
 an explicit unsupported boundary. Shader light loops and texture width must grow
 together; changing only the CPU budget still drops lights.
 
+Preserve GraphicsSettings too: Linear color space does not imply linear light
+intensity. Combat Magic's historical Built-in settings have
+lightsUseLinearIntensity=false. Native POINT probes show legacy light RGB is
+sRGBDecode(gammaColor*effectiveIntensity), whereas the modern flag uses
+sRGBDecode(gammaColor)*effectiveIntensity. Alpha participates in effectiveIntensity
+before that conversion. UnityParticleLightKernel accepts this source flag; do
+not hard-code the modern formula. The legacy fixture has36 valid POINT rows;
+its ForceVertex rows lack a verified VERTEXLIGHT_ON variant and are excluded.
+
 Native GetCurrentSize3D excludes Noise size, unlike the final Cocos particle.size.
 ReferenceCapture labels this measurement. Compare native API size with Cocos
 startSize composed with SizeOverLifetime only; compare Noise via BakeMesh or

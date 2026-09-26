@@ -27,7 +27,7 @@ export class UnityParticleLightsAdapter extends Component {
         };
         processor.setNewParticle=this.wrapper;
     }
-    writeSamples(out:Float32Array,count:number,capacity:number):number {
+    writeSamples(out:Float32Array,count:number,capacity:number,linearIntensity=true):number {
         if(!this.enabledInHierarchy||!this.source?.enabledInHierarchy)return count;
         this.source.node.getWorldScale(this.scale);
         if(Math.abs(Math.abs(this.scale.x)-Math.abs(this.scale.y))>1e-3||Math.abs(Math.abs(this.scale.x)-Math.abs(this.scale.z))>1e-3)throw new Error('Particle-light nonuniform world scale requires native verification');
@@ -37,7 +37,7 @@ export class UnityParticleLightsAdapter extends Component {
             this.position.set(p.position);
             if(this.source.simulationSpace!==0)Vec3.transformMat4(this.position,this.position,this.source.node.worldMatrix);
             const offset=count*8;out[offset]=this.position.x;out[offset+1]=this.position.y;out[offset+2]=this.position.z;
-            writeUnityParticleLight(out,offset,this.spec,p,Math.abs(this.scale.x));count++;
+            writeUnityParticleLight(out,offset,this.spec,p,Math.abs(this.scale.x),linearIntensity);count++;
         }
         return count;
     }

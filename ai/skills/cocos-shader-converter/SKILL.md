@@ -29,6 +29,10 @@ shader. Capture the source QualitySettings.asset and assert active pipeline, col
 space, pixel-light budget, MSAA, soft particles and linear-light flag using
 unity-intel/reference-render-state.cjs. Asset hashes alone cannot prove equivalent
 render settings. Missing quality state invalidates previous lighting acceptance.
+Read the intensity flag independently of ColorSpace: legacy Built-in lighting
+uses sRGBDecode(gammaRGB*intensity), not sRGBDecode(gammaRGB)*intensity. Include
+GraphicsSettings.asset in the reference source closure; do not synthesize modern
+lighting flags while claiming original project settings.
 
 For Editor shader import failures, repair the shared generator and add a portable
 regression fixture before regenerating project assets. In Creator 3.8, fog

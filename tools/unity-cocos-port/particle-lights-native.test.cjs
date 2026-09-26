@@ -3,6 +3,13 @@ const m={exports:{}};new Function('module','exports',ts.transpileModule(fs.readF
 const color=require('./fixtures/particle-light-color-native.json'),range=require('./fixtures/particle-light-range-native.json');
 const sha=file=>crypto.createHash('sha256').update(fs.readFileSync(path.join(__dirname,'fixtures',file),'utf8').replace(/\r\n/g,'\n')).digest('hex');
 const base={range:10,intensity:1,color:[1,1,1],rangeMultiplier:1.2,intensityMultiplier:.5,useParticleColor:true,sizeAffectsRange:true,alphaAffectsIntensity:true,maxLights:20};
+test('36 native POINT legacy-intensity cases decode gamma RGB after intensity and alpha',()=>{
+ const f=require('./fixtures/particle-light-legacy-intensity.json');assert.equal(f.lightsUseLinearIntensity,false);assert.equal(f.rows.length,72);assert.equal(f.sourceProbeSha256,sha('capture-particle-light-legacy-intensity.cs'));
+ // This probe has no main directional light and does not establish the
+ // VERTEXLIGHT_ON variant. Only its 36 POINT rows measure _LightColor0.
+ const rows=f.rows.filter(r=>r.mode===1);assert.equal(rows.length,36);
+ for(const r of rows){const out=new Float32Array(8);m.exports.writeUnityParticleLight(out,0,{...base,color:r.templateColor,useParticleColor:r.useColor,alphaAffectsIntensity:r.alphaAffects},{color:{r:r.color[0],g:r.color[1],b:r.color[2],a:r.color[3]},size:{x:1,y:1}},1,false);for(let c=0;c<3;c++)assert.ok(Math.abs(out[4+c]-r.linearLightColor[c])<1e-6,JSON.stringify({r,c,actual:out[4+c]}));}
+});
 test('color oracle binds Linear space and linear light intensity explicitly',()=>{assert.equal(color.colorSpace,'Linear');assert.equal(color.lightsUseLinearIntensity,true);assert.equal(color.isPlaying,true);});
 test('native GPU light fixtures bind portable capture producers and the range prerequisite',()=>{assert.equal(sha('capture-particle-light-color.cs'),color.sourceProbeSha256);assert.equal(sha('capture-particle-light-range.cs'),range.sourceProbeSha256);assert.equal(range.prerequisiteProbeSha256,color.sourceProbeSha256);});
 for(const [i,r] of color.rows.filter(r=>r.mode===1).entries())test(`native particle light color ${i}: template choice, linear decode and alpha intensity`,()=>{const out=new Float32Array(8);m.exports.writeUnityParticleLight(out,0,{...base,color:r.templateColor,useParticleColor:r.useColor,alphaAffectsIntensity:r.alphaAffects},{color:{r:r.color[0],g:r.color[1],b:r.color[2],a:r.color[3]},size:{x:1,y:1}},1);for(let c=0;c<3;c++)assert.ok(Math.abs(out[4+c]-r.linearLightColor[c])<1e-6);});
