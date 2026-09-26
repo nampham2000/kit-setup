@@ -4,6 +4,7 @@ const { particleNoiseContract } = require('./particle-noise-contract');
 const { particleOrbitContract } = require('./particle-orbit-contract');
 const { particleLimitVelocityContract } = require('./particle-limit-velocity-binding');
 const { particleCollisionContract } = require('./particle-collision-binding');
+const { particleCustomDataContract } = require('./particle-custom-data-binding');
 
 const { particleShapeRotation } = require('./particle-shape-rotation');
 
@@ -84,7 +85,8 @@ function splitTopLevel(text, delimiter) {
 function parseScalar(raw, keyHint = '') {
   let value = String(raw ?? '').trim();
   if (value === '') return '';
-  if (keyHint === 'guid') return value;
+  // Hex byte strings (one ParticleSystemVertexStream per byte) lose leading zeros as numbers.
+  if (keyHint === 'guid' || keyHint === 'm_VertexStreams') return value;
   if (keyHint === 'fileID') return value === '0' ? '' : value;
   if (value === '[]') return [];
   if (value === '{}') return {};
@@ -1389,6 +1391,7 @@ function applyUnityParticleDataToCocos(builder, particleId, data = {}, rendererD
   Object.defineProperty(particle, 'unityNoiseContract', { value: particleNoiseContract(data), configurable: true });
   Object.defineProperty(particle, 'unityLimitVelocityContract', { value: particleLimitVelocityContract(data), configurable: true });
   Object.defineProperty(particle, 'unityCollisionContract', { value: particleCollisionContract(data), configurable: true });
+  Object.defineProperty(particle, 'unityCustomDataContract', { value: particleCustomDataContract(data, rendererData || {}), configurable: true });
 
   return { applied };
 }
