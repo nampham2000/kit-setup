@@ -146,11 +146,20 @@ test and acceptance gate to that registry. The AOE source project runs
   for 2D rotation), independent of position amount; the adapter writes it into the
   Euler accumulator with the renderer's Z-reflection signs. Noise size multiplies
   each current size axis by `1 + 0.5 * fieldAxis * strengthAxis * sizeAmount`,
-  without dt, including startSize2D. Rebase from startSize when size-over-lifetime
+  without dt for 3D particles. True scalar-size particles use the X factor on
+  every rendered axis. Preserve InitialModule.size3D in the Noise contract;
+  setting Particle.startSize3D in a probe sets a per-particle flag even if main
+  startSize3D is off, so a probe must also cover particles initialized only with
+  startSize. Rebase from startSize when size-over-lifetime
   is disabled; otherwise compose after its current size. Validate rendered
   extents with BakeMesh: GetCurrentSize3D does not include Noise size. The
   `noise-size-native.json` fixture covers billboard/mesh, 2D/3D start sizes and
-  lifetime composition over multiple steps. Remap and random curves remain
+  lifetime composition over multiple steps. Two-constant strength uses stable
+  independent XYZ xorshift draws from particle seed + 0x3edcba94 (uint32 wrap);
+  shared strength uses X for all axes. The 312-case noise-random-native.json
+  covers held-out/wrapping seeds, all qualities, shared/separate axes, scalar/3D
+  size, position and rotation. Run particle-noise-random.test.cjs. Remap and
+  two-curve random modes or random amount/scroll channels remain
   explicit obligations; do not silently drop the entire Noise module.
 - Install Noise after velocity animation and before limit. After limiting,
   subtract the complete animated contribution from stored base velocity;

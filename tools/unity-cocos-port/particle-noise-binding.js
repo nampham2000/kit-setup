@@ -21,7 +21,8 @@ function unsupportedNoiseReasons(spec, limitEnabled) {
   if (noiseRotates(spec)) curves.push('rotationAmount');
   for (const name of curves) {
     const curve = spec[name];
-    if (!curve || ![0, 1].includes(curve.minMaxState)) reasons.push(`${name}-random-or-missing`);
+    const modes = name === 'strength' || name === 'strengthY' || name === 'strengthZ' ? [0, 1, 3] : [0, 1];
+    if (!curve || !modes.includes(curve.minMaxState)) reasons.push(`${name}-random-or-missing`);
     if (curve?.maxCurve?.m_Curve?.some(key => key.weightedMode)) reasons.push(`${name}-weighted`);
   }
   return reasons;

@@ -23,7 +23,7 @@ test('generic prefab porter binds native Noise without any AOE controller or too
 });
 for(const [name,mutate,limit,renderer,rotation] of [
   ['unknown quality',s=>s.quality=3,false],['remap',s=>s.remapEnabled=true,false],
-  ['random curve',s=>s.strength.minMaxState=3,false],['random size amount',s=>s.sizeAmount.minMaxState=3,false],
+  ['random curve',s=>s.strength.minMaxState=2,false],['random size amount',s=>s.sizeAmount.minMaxState=3,false],
   ['weighted curve',s=>s.strength.maxCurve={m_Curve:[{weightedMode:1}]},false],
   ['random rotation amount',s=>s.rotationAmount={minMaxState:3,scalar:5,minScalar:0},false],
   ['rotation amount with builtin rotation over lifetime',s=>s.rotationAmount=constant(5),false,{mode:0,localBillboard:false,eulerSigns:[-1,1,-1]},true],
@@ -67,4 +67,8 @@ test('staging is idempotent and leaves metadata to AssetDB',()=>{
   }finally{
     assert.equal(path.dirname(fs.realpathSync(root)),fs.realpathSync(base));fs.rmSync(root,{recursive:true});
   }
+});
+test('measured two-constant strength binds each native random axis',()=>{
+ const source=spec();for(const name of ['strength','strengthY','strengthZ'])source[name]={minMaxState:3,minScalar:.7,scalar:.8};
+ const result=run(source);assert.deepEqual(result.issues,[]);assert.equal(result.objects.length,5);
 });
