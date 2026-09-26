@@ -560,7 +560,7 @@
         "tools/unity-cocos-port/forward-auto-lights.test.cjs",
         "tools/unity-cocos-port/particle-lights-native.test.cjs"
       ],
-      "acceptance": "90 native ForwardBase/ForwardAdd uniform cases cover Auto point lights at pixelLightCount=4. Importance uses gamma luminance .3R+.59G+.11B and attenuation 1/(1+25*d2/r2). Pixel/vertex overlap uses neighboring score differences, not a fixed 3+4 split. Weighted linear RGB tolerance 1e-5 for near ties. Per-renderer integration, SH overflow (>8 lights), other quality budgets/modes, spot lights and complete Standard BRDF visual acceptance remain unverified; this is a reusable kernel, not automatic project wiring."
+      "acceptance": "90 native ForwardBase/ForwardAdd uniform cases cover Auto point lights at pixelLightCount=4. Importance uses gamma luminance .3R+.59G+.11B and attenuation 1/(1+25*d2/r2). Pixel/vertex overlap uses neighboring score differences, not a fixed 3+4 split. Weighted linear RGB tolerance 1e-5 for near ties. Packed overflow SH starts at ranked index8; 204 valid native rows cover RGB/intensity, bounds/range, directions and zero distance. Use normalized Lambert L2 (16/17), clamp distance squared to bounds radius squared, and scale by min(1,rangeSquared/boundsRadiusSquared). Small-plane bounds rows lacking shader pixel coverage are excluded; direction probes independently cover small bounds. Dynamic particle bounds, mixed overflow ordering, other quality budgets/modes, spots and full rendered acceptance remain separate gates; this is a kernel, not automatic wiring."
     }
   ]
 }

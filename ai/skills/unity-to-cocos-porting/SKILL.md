@@ -25,8 +25,20 @@ neighboring score differences. GPU-linear RGB maximum is the wrong ranking.
 ParticleLightKernel sample channel7 preserves gamma luminance independently of
 linear RGB. 90 native uniform cases cover intensity, range, RGB, distance and
 ties (weighted RGB tolerance 1e-5). The kernel is a recipe, not automatic wiring:
-bind per-renderer bounds and material light textures; >8-light SH overflow,
-other quality budgets/modes and final rendered acceptance remain separate gates.
+bind per-renderer bounds and material light textures. Overflow starts at ranked
+index 8 (the ninth point), independent of the faded vertex boundary. Its packed
+Lambert L2 SH uses 16/17 normalization, distance squared clamped to renderer
+bounds-radius squared, and min(1,rangeSquared/boundsRadiusSquared). 204 valid
+native rows (126 lit plus ambient baselines) cover RGB/intensity, counts, bounds,
+range, arbitrary direction and zero distance. The small-plane bounds probe did
+not cover every diagnostic shader pixel: those rows are excluded explicitly;
+the direction probe adjusts the camera and covers small bounds separately.
+Imported/procedural lit meshes must provide bounds: Cocos utils.createMesh
+defaults to no bounds unless minPos/maxPos or calculateBounds:true is supplied.
+Assert live MeshRenderer.model.worldBounds before per-renderer light selection;
+a material import PASS cannot prove this runtime prerequisite.
+Other quality budgets/modes, dynamic particle bounds, mixed overflow ordering
+and final rendered acceptance remain separate gates.
 
 
 Cocos reuses one birth random value for lifetime, speed, size, rotation and
