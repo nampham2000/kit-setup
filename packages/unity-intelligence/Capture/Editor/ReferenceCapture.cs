@@ -103,7 +103,8 @@ namespace CcPlayable.UnityIntelligence.Capture
         }
         [Serializable]
         internal sealed class SystemRecord {
-            public string path = ""; public int count; public int[] depth = Array.Empty<int>(); public int[] inView = Array.Empty<int>();
+            public string path = ""; public int count; public int alive; public float simulationTime; public float simulationSpeed;
+            public int[] depth = Array.Empty<int>(); public int[] inView = Array.Empty<int>();
             public float[] position; public float[] rotation; public float[] scale; public float[] matrix;
             public float[] meanWorldPosition; public float[] meanSize; public float[] meanColor;
             public List<ParticlePose> particles = new List<ParticlePose>();
@@ -207,12 +208,14 @@ namespace CcPlayable.UnityIntelligence.Capture
                 if (buffer.Length < system.particleCount) buffer = new ParticleSystem.Particle[system.particleCount];
                 var n = system.GetParticles(buffer);
                 var main = system.main;
+                record.simulationTime=system.time;record.simulationSpeed=main.simulationSpeed;
                 var toWorld = main.simulationSpace == ParticleSystemSimulationSpace.World ? Matrix4x4.identity
                     : main.simulationSpace == ParticleSystemSimulationSpace.Custom && main.customSimulationSpace != null ? main.customSimulationSpace.localToWorldMatrix
                     : system.transform.localToWorldMatrix;
                 var meanPosition = Vector3.zero; var meanSize = Vector3.zero; var meanColor = Color.clear;
                 for (var i = 0; i < n; i++)
                 {
+                    if(buffer[i].remainingLifetime>0)record.alive++;
                     var world = toWorld.MultiplyPoint3x4(buffer[i].position);
                     var size = buffer[i].GetCurrentSize3D(system); Color color = buffer[i].GetCurrentColor(system);
                     meanPosition += world; meanSize += size; meanColor += color;

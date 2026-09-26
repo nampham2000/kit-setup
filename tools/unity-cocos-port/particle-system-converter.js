@@ -1381,6 +1381,10 @@ function applyUnityParticleDataToCocos(builder, particleId, data = {}, rendererD
   count(applyNoiseModule(builder, particle, data.NoiseModule));
   count(applyVelocityModule(builder, particle, velocityData));
   count(applyForceModule(builder, particle, forceData));
+  let unityForceContract;
+  try{unityForceContract=require('./particle-random-force-contract.cjs').randomForceContract(data);}
+  catch(error){unityForceContract={unsupported:error.message};}
+  Object.defineProperty(particle,'unityForceContract',{value:unityForceContract,configurable:true});
   count(applyLimitVelocityModule(builder, particle, data.ClampVelocityModule));
   count(applyTrailModule(builder, particle, data.TrailModule));
   count(applyRenderer(builder, particle, rendererData));

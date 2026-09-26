@@ -947,6 +947,16 @@ must also be closed: a fixed random acceleration makes parents travel too far
 and causes distance sub-emission to overproduce. Native particle counts may
 include zero-lifetime parents retained for trails; record alive counts separately.
 
+For randomized Force in measured World-space XYZ two-constant ranges, stage
+UnityParticleRandomForce and UnityRandomForceKernel with the simulation-step
+adapter. Native fixtures establish four RNG lanes initialized from the system
+seed plus lane*367, then two XYZ passes per ceil(poolCount/4) block each tick.
+Retain source Z correlation by negating the sampled value, not merely swapping
+range endpoints. Use the same system seed as Noise when both modules exist.
+The 196 controlled traces cover up to 17 particles and staggered births; Local
+space, random curves, retained trail slots and deletion still need separate
+evidence. A successful Preview and kernel test do not establish visual parity.
+
 For Unity mesh particles in a Z-reflected port, axial start angles map to (-X, -Y, +Z). Keep the camera-facing billboard convention separate. Unity mesh rotation uses Euler Z then X then Y; the stock Cocos 3.8.8 particle shader combines axes differently. A custom particle shader must preserve the Unity order, verified with baked vertices from at least two asymmetric combined-angle cases. A corrected curve sign alone does not prove runtime orientation parity.
 
 Rotation over lifetime is Euler integration, not a body-frame spin: Unity adds the angular velocity, sampled at the start-of-step age with one random draw for X/Y/Z, to each `rotation3D` component and then applies Z-X-Y. A Y spin on a mesh started at X=270 therefore turns about the emitter's vertical axis. Cocos 3.8.8 right-multiplies Y-Z-X delta quaternions, so it only matches single-axis cases whose start rotation commutes (Z-only with X0 or Z0 zero, X-only with Z0 zero, Y-only with X0 and Z0 zero). The porter binds `UnityParticleEulerRotationAdapter` (`particle-euler-rotation-binding.js`) and reports `PARTICLE_EULER_ROTATION_ADAPTER_REQUIRED` until AssetDB imports it.

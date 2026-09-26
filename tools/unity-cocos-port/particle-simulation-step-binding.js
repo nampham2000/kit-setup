@@ -22,7 +22,7 @@ function attachSimulationStepRuntime(builder,reporter,options) {
     reporter.high('PARTICLE_TIMESTEP_SOURCE_REQUIRED',options.src||'','',
       'Read Maximum Particle Timestep from source ProjectSettings/TimeManager.asset; a guessed timestep cannot verify short emission windows.');return;
   }
-  if(!options.dryRun)for(const name of ['UnityParticleSimulationStep','UnityParticleSimulationStepAdapter','UnityParticleBirthTiming']) {
+  if(!options.dryRun)for(const name of ['UnityParticleSimulationStep','UnityParticleSimulationStepAdapter','UnityParticleBirthTiming','UnityRandomForceKernel','UnityParticleRandomForce']) {
     const target=path.join(options.cocosRoot,'assets/script',name+'.ts');
     writeGeneratedAssetText(target,fs.readFileSync(path.join(__dirname,'runtime',name+'.ts'),'utf8'),{cocosRoot:options.cocosRoot});
   }
@@ -33,7 +33,9 @@ function attachSimulationStepRuntime(builder,reporter,options) {
   for(const {p,id} of systems) {
     if(!classId){reporter.high('PARTICLE_TIMESTEP_ADAPTER_REQUIRED',options.src||'',builder.objects[p.node.__id__]?._name||'',
       'Refresh AssetDB to register UnityParticleSimulationStepAdapter.ts, then rerun porter.');continue;}
-    builder.addComponent(p.node.__id__,classId,{source:{__id__:id},maximumDeltaTime,...(gravityY!==null?{gravityY}:{})},null,`cmp-unity-simulation-step-${id}`);
+    if(p.unityForceContract?.unsupported)reporter.high('PARTICLE_RANDOM_FORCE_UNVERIFIED',options.src||'',builder.objects[p.node.__id__]?._name||'',p.unityForceContract.unsupported);
+    builder.addComponent(p.node.__id__,classId,{source:{__id__:id},maximumDeltaTime,...(gravityY!==null?{gravityY}:{}),
+      ...(p.unityForceContract&&!p.unityForceContract.unsupported?{sourceForceContract:JSON.stringify(p.unityForceContract)}:{})},null,`cmp-unity-simulation-step-${id}`);
   }
 }
 module.exports={maximumParticleDeltaTime,sourceGravityY,attachSimulationStepRuntime};
