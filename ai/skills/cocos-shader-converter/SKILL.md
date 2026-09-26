@@ -173,6 +173,17 @@ For Unity soft particles and GrabPass conversions, bind scene-depth/color render
 
 Unbound GrabPass adapters must not draw an opaque black quad: use an explicit capture-ready uniform, bind on emitter activation and after material variant compilation, and keep descriptor bindings current. Prefab-edit views without an opaque capture should skip the refraction pass. Verify the actual refraction in the game Preview before accepting this fallback.
 
+GrabPass inclusion must preserve equal-key transparent draws too. Native Built-in
+`FX/Glass/Stained BumpDistort` includes tied Legacy Particles Additive, Alpha
+Blended, Additive (Soft), and Alpha Blended Premultiply in its grabbed image.
+The 192-case `stained-grab-ties-native.json` fixture covers coincident bounds,
+perspective/orthographic cameras and creation/material/sibling permutations;
+higher sorting order stays after glass and fails its depth test when behind it.
+Use `UnityStainedGrabOrdering` for this measured tie contract. A strict `<`
+comparison alone can omit the central glow and turn an explosion dark even
+when particle counts, material colors and lighting match. Do not transfer this
+shader-specific tie behavior to arbitrary custom shaders without a native probe.
+
 For bright ground spots, isolate emitter lighting from particle alpha/depth. Built-in Unity point lights sample `_LightTextureB0` using squared distance normalized by range, while Cocos sphere lights use inverse-square and size attenuation. A universal luminance multiplier does not preserve the near-field result. Capture the live source attenuation table and account for Cocos exposure/light-meter scaling in a scoped adapter; do not dim every particle or globally change light import heuristics based on one scene.
 
 For Standard metallic/gloss imports, preserve TextureImporter sRGB decoding of RGB separately from linear alpha and apply `_GlossMapScale` before converting smoothness to roughness. The shared PBR packer accepts `smoothnessScale`, detects adjacent Unity metadata, and permits explicit `metallicSrgb` when metadata is unavailable. Do not silently substitute Cocos gamma-square approximations for source sRGB or normalize a scaled normal without checking Unity's reconstructed Z.
