@@ -17,6 +17,14 @@ This skill provides step-by-step guidance and architectural rules for converting
 
 ### Reuse the measured VFX fixes
 
+For vendor catalogs loaded with `Resources.LoadAll`, inspect the preflight
+closure against the native catalog count. The scanner resolves literal folder
+paths and a `foreach` over a literal string array; folder loads include nested
+Resources assets while `Resources.Load` keeps exact-key semantics. Dynamic or
+computed folder expressions need a live oracle and explicit closure evidence.
+A demo scene with no serialized particle references does not prove an empty
+VFX closure. Gate engine modules from the resolved catalog before porting.
+
 Before porting a particle prefab, read `ai/particle-port-fixes.json` in the
 shared kit and run `node playable-shared-kit/tools/unity-cocos-port/particle-port-fix-audit.cjs --check`.
 The registry maps each resolved AOE bug to its reusable implementation, test,

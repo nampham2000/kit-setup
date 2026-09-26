@@ -210,6 +210,7 @@ const CAPABILITIES = [
     limits: [
       'Không ghi Cocos project; receipt atomic <=4 KiB nằm trong user-local cache. Khi Packages/manifest.json thiếu Unity-MCP của shared kit (com.ccplayable.unity-intelligence + com.ivanmurzak.unity.mcp), provider auto|unity-mcp tự bootstrap cài trước khi scan; --no-bootstrap hoặc --provider static giữ Unity project nguyên trạng. Khi đã khai báo thì chỉ --bootstrap mới cài/reload lại package.',
       'MCP Unity bên thứ ba (vd com.unity.ai.assistant) không thay thế scanner playable-port-scan hay script-execute của shared kit; không dùng nó làm live evidence và không dừng port vì approval của nó.',
+      'Resources.LoadAll literal folder và foreach qua literal string[] mở closure cả folder/subfolder; Resources.Load vẫn exact-key. Đối chiếu catalog count native; dynamic/computed folder cần live oracle, không suy closure rỗng từ demo không serialize prefab.',
       '`--cache-dir` chỉ đổi incremental scan index; mutation receipt luôn nằm trong fixed user-local store để mọi port gate cùng đọc được.',
       'Hard source-integrity high chặn implement; DOTween/coroutine/animator/shader high trở thành nghĩa vụ implement/verify và không gây deadlock.',
       'Receipt hết hạn hoặc tự stale khi C#/prefab/shader/meta/manifest/project settings hay extractor thay đổi.',
