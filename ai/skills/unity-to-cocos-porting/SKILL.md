@@ -997,6 +997,14 @@ translation. A nominal 90-degree Unity turn can retain a tiny transverse
 component that Cocos quaternion multiplication cancels; do not round it away
 or claim that matching the trajectory alone proves physics contact parity.
 
+Unity ParticleSystem `scalingMode=1` means Local, mapped to Cocos
+`scaleSpace=Local`. Preserve the authored node scale: Cocos CPU renderer already
+uses `node.getScale()` for particle size. Dividing node scale by parent scale
+again corrupts both size and descendant transforms. The Combat Magic frost
+impact regression has local scale .5 under parent 1.2: local stays .5 and world
+scale is .6. Do not compensate hierarchy transforms to implement particle-only
+scaling semantics.
+
 For `Destroy(obj, lifetime)` called in a collision callback, measure the deadline
 from fixed physics time, then expire against render time. Subtracting a complete
 render delta immediately at birth removes impacts early. The opt-in
