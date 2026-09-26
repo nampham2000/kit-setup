@@ -1513,6 +1513,26 @@ class UnityAssetDatabase {
   }
 }
 
+// A folder batch ports many prefabs in one process. The Unity project is immutable for the whole
+// run (the preflight receipt goes stale otherwise), so its GUID index is scanned once per process:
+// rescanning every .meta for each prefab read ~200 MB per prefab on a 27k-asset project. The Cocos
+// database is rebuilt per prefab because every port adds assets.
+const scannedUnityAssetDatabases = new Map();
+
+function scannedUnityAssetDatabase(root, extraRoots = []) {
+  const key = JSON.stringify([
+    path.resolve(root),
+    extraRoots.map((entry) => [path.resolve(entry.dir), entry.prefix || '']),
+  ]);
+  let db = scannedUnityAssetDatabases.get(key);
+  if (!db) {
+    db = new UnityAssetDatabase(root, extraRoots);
+    db.scan();
+    scannedUnityAssetDatabases.set(key, db);
+  }
+  return db;
+}
+
 class CocosAssetDatabase {
   constructor(root) {
     this.root = path.resolve(root);
@@ -6132,8 +6152,7 @@ function portPrefab(options, reporter) {
   if (!reporter) reporter = new Reporter();
   if (!options._addedCocosCustomLayers) options._addedCocosCustomLayers = new Map();
 
-  const unityDb = new UnityAssetDatabase(options.unityRoot, unityPackageAssetRoots(options.unityRoot));
-  unityDb.scan();
+  const unityDb = scannedUnityAssetDatabase(options.unityRoot, unityPackageAssetRoots(options.unityRoot));
   runtimeComponentPorter.ensureParticleSubEmitterFollowerScript(options, reporter);
   runtimeComponentPorter.ensureParticleHierarchyTransformSyncScript(options, reporter);
   runtimeComponentPorter.ensureParticleRendererVisibilityScript(options, reporter);
@@ -7909,6 +7928,7 @@ module.exports = {
   portPrefab,
   portPrefabBatch,
   buildPrefabBatchPlan,
+  scannedUnityAssetDatabase,
   findFiles,
   runScriptScaffold,
   runSmartPort,
