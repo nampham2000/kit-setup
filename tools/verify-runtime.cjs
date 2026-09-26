@@ -70,6 +70,7 @@ Options:
   --seconds <n>        Thời gian chạy để đo FPS. Default: 6.
   --min-fps <n>        FPS tối thiểu coi là đạt. Default: 20.
   --window-size <WxH>  Kích thước cửa sổ Chrome. Default: 720x1280 (dọc).
+  --viewport-size <WxH> Set the exact page viewport at device scale 1 for aligned reference captures.
   --preview-device <name>
                        Chọn device trong toolbar Cocos preview (vd
                        "WebpageFullScreen") trước eval/gesture/screenshot.
@@ -643,6 +644,7 @@ async function runOne(target, options) {
     await session.send('Runtime.enable', {}, sessionId);
     await session.send('Log.enable', {}, sessionId);
     await session.send('Page.enable', {}, sessionId);
+    if(options.viewportSize)await applyViewportSize(session,sessionId,options.viewportSize);
     await session.send('Page.addScriptToEvaluateOnNewDocument', { source: FRAME_COUNTER }, sessionId);
     if (options.gesture || options.gestures?.length || options.gestureFromEvalBefore
       || options.gesturesFromEvalBefore?.length) {
@@ -828,6 +830,7 @@ async function runOne(target, options) {
   }
 
   result.ok = result.exceptions.length === 0
+    && !result.evalError && !result.evalBeforeError
     && result.profileCleanup?.ok !== false
     && result.consoleErrors.length === 0
     && !result.previewDeviceError
@@ -844,6 +847,17 @@ async function runOne(target, options) {
 function normaliseWindowSize(value) {
   const m = /^(\d+)\s*[x,]\s*(\d+)$/i.exec(String(value || '').trim());
   return m ? m[1] + ',' + m[2] : '720,1280';
+}
+
+function parseViewportSize(value) {
+  const match=/^(\d+)\s*[x,]\s*(\d+)$/i.exec(String(value||'').trim());
+  if(!match)throw new Error('--viewport-size requires WxH');
+  const width=Number(match[1]),height=Number(match[2]);
+  if(width<1 || height<1 || width>16384 || height>16384)throw new Error('--viewport-size dimensions must be 1..16384');
+  return {width,height};
+}
+async function applyViewportSize(session,sessionId,size) {
+  await session.send('Emulation.setDeviceMetricsOverride',{width:size.width,height:size.height,deviceScaleFactor:1,mobile:false},sessionId);
 }
 
 function parseArgs(argv) {
@@ -871,6 +885,8 @@ function parseArgs(argv) {
     if (a.startsWith('--min-fps=')) { o.minFps = Number(a.split('=')[1]) || 20; continue; }
     if (a === '--window-size') { o.windowSize = normaliseWindowSize(argv[++i]); continue; }
     if (a.startsWith('--window-size=')) { o.windowSize = normaliseWindowSize(a.split('=')[1]); continue; }
+    if(a==='--viewport-size'){o.viewportSize=parseViewportSize(argv[++i]);continue;}
+    if(a.startsWith('--viewport-size=')){o.viewportSize=parseViewportSize(a.slice('--viewport-size='.length));continue;}
     if (a === '--preview-device') { o.previewDevice = String(argv[++i] || ''); continue; }
     if (a.startsWith('--preview-device=')) { o.previewDevice = a.slice('--preview-device='.length); continue; }
     if (a === '--browser') { o.browser = argv[++i]; continue; }
@@ -994,4 +1010,5 @@ module.exports = {
   parseArgs, parseGesture, resolveGestureFromEvalBefore,
   isNavigationEvaluationError, evaluatePageWithNavigationRetry,
   dispatchTouchGesture, dispatchTouchGestureSequence, selectCocosPreviewDevice,
+  parseViewportSize,applyViewportSize,
 };

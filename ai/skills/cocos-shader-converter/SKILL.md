@@ -161,6 +161,12 @@ and direct library cache writes alone do not prove Editor import success.
 
 ### Particle depth, capture and material-instance validation
 
+For black Standard geometry and flat-color distortion captures, read the source
+lighting/color and capture-layer checks in
+[Unity port visual parity](../unity-to-cocos-porting/references/visual-parity.md).
+SolidColor camera clears do not disable skybox ambient/reflection. Cocos 3.8.8
+capture masks require every node-layer bit, unlike Unity's intersection test.
+
 For Unity soft particles and GrabPass conversions, bind scene-depth/color render textures to the particle renderer's **material instance**, not only its shared parent material. Creator recompiles per-emitter instances and can retain default samplers from the parent. Initialize render textures before assigning camera targets; exclude particles and UI from opaque captures; remove destroyed renderers/materials from capture tracking. Validate both depth-contact fade and distortion with a non-black background in Preview. Check source render alignment (View, Local, Facing, Velocity) explicitly; camera-axis billboards alone do not cover these modes. A shader import pass does not verify these runtime contracts.
 
 Unbound GrabPass adapters must not draw an opaque black quad: use an explicit capture-ready uniform, bind on emitter activation and after material variant compilation, and keep descriptor bindings current. Prefab-edit views without an opaque capture should skip the refraction pass. Verify the actual refraction in the game Preview before accepting this fallback.

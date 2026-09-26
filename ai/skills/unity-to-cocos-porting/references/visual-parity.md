@@ -93,6 +93,29 @@ source, UV orientation, and import settings together. See the shader conversion
 skill for the shader-specific checks. Avoid changing geometry to hide a material
 or importer error.
 
+When opaque geometry appears black, capture the source ambient mode, all 27 SH
+coefficients, directional-light direction/color/intensity and default reflection
+texture with its HDR decode values and mip chain. A Unity camera using SolidColor
+can still use a procedural skybox for ambient/reflection; preserve that distinction.
+Reflect lighting vectors and SH odd-Z terms along with world coordinates. Compare
+an effect-free wall/floor frame with matching camera and viewport before changing
+particle brightness. Legacy Additive/Alpha particles can be unlit even when their
+distortion capture includes lit geometry. Material.GetColor/API values alone do
+not prove GPU uniform values: Color and HDR properties have different conversion
+rules. Probe the original shader-bound values in linear floating-point render
+targets when uncertain; do not gamma-decode every color property blindly.
+
+Creator 3.8.8 camera culling requires `(visibility & node.layer) === node.layer`.
+A node with DEFAULT|CAPTURE is excluded from a camera seeing only CAPTURE. Use
+exclusive capture layers and preserve original layers across cached selections;
+validate intended inclusions and exclusions with
+`tools/shader-compiler/capture-visibility-contract.cjs` using actual Preview masks.
+For GrabPass, prove the preceding transparent objects are captured, the refracting
+surface is excluded, and its actual material instance receives the capture texture.
+Use `verify-runtime --viewport-size WxH --preview-device WebpageFullScreen` and
+check canvasSize; Chrome window dimensions include browser chrome and are not a
+reference viewport. These gates establish specific contracts, not a 95% score.
+
 Run `node --test playable-shared-kit/tools/unity-cocos-port/porting-regressions.test.cjs`
 for the shared regressions. Integration fixtures must use temporary Unity/Cocos
 roots **and an explicit temporary report path**. Open actual generated output;
