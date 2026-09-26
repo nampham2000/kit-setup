@@ -154,6 +154,22 @@ test and acceptance gate to that registry. The AOE source project runs
 
 ### Particle renderer frames and pivots
 
+- A standalone Unity TrailRenderer is separate from a ParticleSystem trail
+  module. `trail-renderer-binding.js` stages the native View/Stretch adapter and
+  binds an AssetDB-registered component, a source material with mesh vertex color,
+  the actual camera path and source queue/layer/order. Unsupported alignment,
+  tiling, rounded caps/corners, weighted width and autodestruct remain explicit.
+  Preserve width and color keys by normalized path distance, camera-plane facing,
+  the duplicate head pair and expired endpoint retention. Do not infer width age
+  from same-time AddPositions probes: native Play Mode BakeMesh is the authority.
+  Run `trail-renderer-native.test.cjs` and `trail-renderer-binding.test.cjs`, then
+  compare native live geometry and colors in two viewports. The geometry fixture
+  covers fireball playback, not acceptance of every new trail source.
+  Reuse typed views and GPU draw state; Cocos Mesh.updateSubMesh allocates arrays
+  and views internally, and passing a large buffer with a prefix size can slice
+  in WebGL. Imported scripts/colored-mesh shader ABI and native HDR texture
+  binding are required before Preview acceptance.
+
 - A ring that appears to grow/shrink may be a texture panner on a constant-size
   mesh. Read active Size modules, material panner and mesh UVs before editing
   lifetime curves. If native/imported vertex pairs prove `Vc = 1 - Vu`, use
