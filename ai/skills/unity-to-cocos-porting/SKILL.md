@@ -996,6 +996,17 @@ The 196 original plus 64 held-out native cases include high/wrapping seeds,
 asymmetric ranges, 17-particle pools and staggered births. Local/curve Force
 and whole-effect visual parity remain outside this measured contract.
 
+For a missing repeated projectile impact, trace native Enter/Stay/Exit and
+preserve the original collider mesh, including tiny vertex residuals. Unity's
+built-in Plane contains Y values near 1e-16; float32 triangle front-face tests
+can interrupt a frozen sphere's contact when local translation drifts in Z.
+`UnityPlanarMeshContactGate` matches 1,248 native interior samples across scale
+1/2.5/3 and small signed Z offsets. Bind it only to the measured frozen sphere,
+static axis-aligned uniformly scaled near-XZ plane contract. Process backend
+Stay events as well as Enter to detect source contact re-entry. Border and
+off-plane queries return null and stay backend-owned. Never add an impact at
+a hard-coded frame, flatten the source mesh, or claim general solver parity.
+
 For Unity mesh particles in a Z-reflected port, axial start angles map to (-X, -Y, +Z). Keep the camera-facing billboard convention separate. Unity mesh rotation uses Euler Z then X then Y; the stock Cocos 3.8.8 particle shader combines axes differently. A custom particle shader must preserve the Unity order, verified with baked vertices from at least two asymmetric combined-angle cases. A corrected curve sign alone does not prove runtime orientation parity.
 
 Rotation over lifetime is Euler integration, not a body-frame spin: Unity adds the angular velocity, sampled at the start-of-step age with one random draw for X/Y/Z, to each `rotation3D` component and then applies Z-X-Y. A Y spin on a mesh started at X=270 therefore turns about the emitter's vertical axis. Cocos 3.8.8 right-multiplies Y-Z-X delta quaternions, so it only matches single-axis cases whose start rotation commutes (Z-only with X0 or Z0 zero, X-only with Z0 zero, Y-only with X0 and Z0 zero). The porter binds `UnityParticleEulerRotationAdapter` (`particle-euler-rotation-binding.js`) and reports `PARTICLE_EULER_ROTATION_ADAPTER_REQUIRED` until AssetDB imports it.
