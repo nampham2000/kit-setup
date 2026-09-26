@@ -11,6 +11,7 @@ const {
   REQUIRED_SCRIPTS,
   findAbsolutePathTokens,
   gitTrackedFiles,
+  inspectEngineProfilePortability,
   inspectPackageScripts,
   inspectProjectPortableEvidence,
   normalizeSkillSource,
@@ -210,4 +211,38 @@ test('Git ignores per-checkout memory while retaining the global portable databa
   });
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(result.stdout.trim().split(/\r?\n/), [local]);
+});
+
+test('engine profile portability flags module drift that Git does not carry', (t) => {
+  const root = tempDirectory(t, 'portable-engine-');
+  const settings = path.join(root, 'settings', 'v2', 'packages');
+  fs.mkdirSync(settings, { recursive: true });
+  const engineFile = path.join(settings, 'engine.json');
+  const profile = marionette => ({
+    __version__: '1.0.12',
+    modules: {
+      globalConfigKey: 'defaultConfig',
+      configs: { defaultConfig: {
+        cache: { base: { _value: true }, animation: { _value: true }, marionette: { _value: marionette } },
+        includeModules: ['base', 'animation', ...(marionette ? ['marionette'] : [])],
+      } },
+    },
+  });
+  fs.writeFileSync(engineFile, JSON.stringify(profile(false), null, 2));
+  assert.equal(inspectEngineProfilePortability(root).severity, 'info');
+
+  assert.equal(git(root, ['init', '-q']).status, 0);
+  const untracked = inspectEngineProfilePortability(root);
+  assert.equal(untracked.ok, false);
+  assert.match(untracked.summary, /not tracked/);
+
+  assert.equal(git(root, ['add', 'settings/v2/packages/engine.json']).status, 0);
+  assert.equal(inspectEngineProfilePortability(root).ok, true);
+
+  fs.writeFileSync(engineFile, JSON.stringify(profile(true), null, 2));
+  const drifted = inspectEngineProfilePortability(root);
+  assert.equal(drifted.ok, false);
+  assert.equal(drifted.severity, 'high');
+  assert.deepEqual(drifted.details.drift, ['+marionette']);
+  assert.match(drifted.nextAction, /Commit settings\/v2\/packages\/engine\.json/);
 });
