@@ -13,6 +13,7 @@ const {
   decidePhysicsBackend,
   inferRequiredModules,
   auditCocosEngineFeatures,
+  ensureCocosEngineFeatures,
   patchEngineProfile,
   restartCocosProject,
   sha256,
@@ -80,6 +81,37 @@ function makeProject(sourceText, options = {}) {
     fs.writeFileSync(path.join(preview, 'import-map.json'), `${JSON.stringify({ scopes: { cc: scope } }, null, 2)}\n`);
   }
   return root;
+}
+
+for (const complete of [false, true]) {
+  test(`ensure dry-run never contacts MCP or writes files (complete=${complete})`, async t => {
+    const root = makeProject('[{"__type__":"cc.Graphics"},{"__type__":"cc.MeshCollider"}]', {
+      backend: complete ? 'physics-cannon' : 'physics-builtin',
+      graphics: complete,
+      appliedFeatures: complete ? ['graphics', 'physics-cannon'] : undefined,
+    });
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const tree = () => fs.readdirSync(root, { recursive: true }).sort().map(relative => {
+      const file = path.join(root, relative);
+      return fs.statSync(file).isFile() ? [relative, fs.readFileSync(file).toString('hex'), fs.statSync(file).mtimeMs] : [relative];
+    });
+    const before = tree();
+    const result = await ensureCocosEngineFeatures(root, {
+      dryRun: true,
+      // Any attempted MCP connection makes this test fail rather than writing
+      // through a real running Editor on the test machine.
+      mcpUrl: 'invalid://must-not-contact-editor',
+      timeoutMs: 1,
+    });
+    assert.equal(result.dryRun, true);
+    assert.equal(result.ok, true);
+    assert.equal(result.complete, complete);
+    assert.equal(result.wouldChangeProfile, !complete);
+    assert.deepEqual(result.mcpAttempts, []);
+    assert.deepEqual(result.restartReceipts, []);
+    assert.equal(result.fallbackUsed, false);
+    assert.deepEqual(tree(), before);
+  });
 }
 
 test('simple box/sphere query stays on Builtin even though Unity source uses PhysX', () => {

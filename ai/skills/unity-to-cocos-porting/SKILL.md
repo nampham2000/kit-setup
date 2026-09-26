@@ -232,6 +232,12 @@ test and acceptance gate to that registry. The AOE source project runs
 ### Preview combat and filesystem pitfalls
 
 - Keep gameplay delivery first. For explicit preview-only acceptance use core verify with --preview-only --preview-url; keep all runtime, regression and evidence gates, exclude only packaged build. Never invent a build receipt.
+- Engine feature `ensure --dry-run` must return before opening an MCP client,
+  calling `engineFeature_ensure_features`, writing a report/profile, or launching
+  Cocos. Passing `dryRun` only to the filesystem fallback is insufficient: the
+  Profile API already changes the Editor. Keep both incomplete and complete
+  profile regression cases. A planned backend is not an applied Preview backend;
+  verify the import map and a runtime capture after applying it.
 - On exFAT, run portable-npm-policy before install. Internal dependencies must be copied, never symlinked. Audio conversion must stage on the destination volume; publishing a C: temp file with rename into D: fails EXDEV. A failed publish must preserve the source and any existing destination.
 - Long combat tests may use gestureDelaysMs (0–60000 ms each, <=180000 ms total) with separate real touch lifecycles. Verify heal-drop positive/negative, pause/resume, loss/retry and two wins without changing HP or invoking gameplay methods.
 - Native Unity render baking is an alternative for SpriteSkin/IK/Timeline closures: keep gameplay/state in TypeScript, record every relevant clip at >=30 fps with source hashes and frame digests, and preserve animation signal/sound times. Do not relabel incomplete curve extraction as complete. Use a unity-rendered-animation-oracle plus measured frame/state/position/timing checks, >=80 runtime samples, ordered trace and Unity ROI similarity >=0.90. Keep every atlas/config watched; registry supports up to 512 files per suite. Environment/feedback animation and PSD half-banner mirroring remain source obligations.

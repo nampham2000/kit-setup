@@ -965,6 +965,25 @@ async function ensureCocosEngineFeatures(projectRoot, options = {}) {
     initialAudit: audit,
     finalAudit: audit,
   };
+  // A dry run must stop before creating a client: ensure_features mutates the
+  // Editor Profile even when the direct fallback receives dryRun=true.
+  if (options.dryRun) {
+    result.dryRun = true;
+    result.ok = true;
+    result.complete = audit.complete;
+    result.pendingEditorApply = !audit.complete;
+    result.wouldChangeProfile = !audit.profile.complete;
+    if (!audit.profile.complete) {
+      result.patchReceipt = patchEngineProfile(root, {
+        requiredModules: audit.requiredModules,
+        disabledModules: audit.disabledModules,
+        physicsBackend: audit.physicsDecision.backend,
+        spineBackend: resolveSpineBackend(audit.requiredModules, options),
+        physics2dBackend: resolvePhysics2dBackend(audit.requiredModules, options),
+      }, { ...options, dryRun: true });
+    }
+    return result;
+  }
   if (audit.complete) {
     result.ok = result.complete = true;
     writeAuditReport(root, result, options);
