@@ -53,8 +53,11 @@ export class UnityStartRotationKernel {
 }
 
 /** Start speed has its own particle-seed channel, independent of size/lifetime. */
-export function unityStartSpeedRandom(seed:number):number {
-    const a=(seed+0x96aa4de3)>>>0,b=(Math.imul(a,1812433253)+1)>>>0,c=(Math.imul(b,1812433253)+1)>>>0,d=(Math.imul(c,1812433253)+1)>>>0;
+export function unityStartSpeedRandom(seed:number):number {return unityParticleSeedRandom(seed,0x96aa4de3);}
+
+/** Native particle-seed channel, with a source-measured module salt. */
+export function unityParticleSeedRandom(seed:number,salt:number):number {
+    const a=(seed+salt)>>>0,b=(Math.imul(a,1812433253)+1)>>>0,c=(Math.imul(b,1812433253)+1)>>>0,d=(Math.imul(c,1812433253)+1)>>>0;
     const t=a^(a<<11),next=(d^(d>>>19)^t^(t>>>8))>>>0;
     return Math.fround((next&8388607)/8388607);
 }

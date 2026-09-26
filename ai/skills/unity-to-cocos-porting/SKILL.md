@@ -17,6 +17,17 @@ This skill provides step-by-step guidance and architectural rules for converting
 
 ### Reuse the measured VFX fixes
 
+Native GetCurrentSize3D excludes Noise size, unlike the final Cocos particle.size.
+ReferenceCapture labels this measurement. Compare native API size with Cocos
+startSize composed with SizeOverLifetime only; compare Noise via BakeMesh or
+rendered imagery. Otherwise a valid noise effect produces a false size failure.
+Random SizeOverLifetime uses the particle-seed channel salted 0x8d2c8431, shared
+across XYZ. The InitialState dependency installs UnityParticleSizeRandom only
+for random curves; deterministic modules remain untouched. 512 native fixed-seed
+samples cover this channel (four fit, 508 held out); automatic rendered fidelity
+is a separate gate. Combat Magic has no random SizeOverLifetime contracts, so
+this sampler does not explain or fix its stochastic Noise/shape differences.
+
 Built-in Auto point-light selection is not a fixed pixel/vertex split. The
 UnityForwardAutoLights kernel covers pixelLightCount=4 with one main directional:
 rank authored gamma luminance (.3R+.59G+.11B)*intensity attenuated by

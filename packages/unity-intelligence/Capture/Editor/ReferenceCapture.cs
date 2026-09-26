@@ -104,6 +104,8 @@ namespace CcPlayable.UnityIntelligence.Capture
         }
         [Serializable]
         internal sealed class SystemRecord {
+            // Noise modifies rendered geometry after GetCurrentSize3D; use BakeMesh for that gate.
+            public string sizeMeasurement = "GetCurrentSize3D-excludes-Noise";
             public uint randomSeed; public bool useAutoRandomSeed; public int simulationSpace; public int scalingMode;
             public string path = ""; public int count; public int alive; public float simulationTime; public float simulationSpeed;
             public int cullingMode; public bool rendererVisible; public float[] boundsCenter; public float[] boundsSize;

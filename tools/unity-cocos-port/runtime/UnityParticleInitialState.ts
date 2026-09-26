@@ -1,3 +1,4 @@
+import { installUnityParticleSizeRandom } from './UnityParticleSizeRandom';
 import { Color, ParticleSystem } from 'cc';
 import { UnityStartRotationKernel, unityStartSpeedRandom } from './UnityParticleStartRotation';
 interface Curve {minMaxState:number;scalar:number;minScalar:number;}
@@ -21,6 +22,7 @@ export function installUnityParticleInitialState(system:ParticleSystem,spec:Unit
     const state=runtime.unityInitialState={seed:choose(),kernel,spec};
     // Existing generated start-rotation adapters become no-ops, avoiding two RNGs.
     runtime.unityStartRotation=state;
+    installUnityParticleSizeRandom(system);
     let initialized=false,index=0,emitting=false;
     const emit=runtime.emit,born=processor.setNewParticle,clear=processor.clear;
     const bind=(target:any,curve:Curve,channel:number,sign=1,minimum=-Infinity):void=>{
