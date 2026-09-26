@@ -27,12 +27,24 @@ CCEffect %{
       peekFresnelEnd: { value: 0.62, target: peekParams.z }
       peekSideColorMix: { value: 0.18, target: peekParams.w }
       planarShadowDirection: { value: [-0.3213938, -0.7660444, -0.5566705, 0] }
+      parallaxAmplitude: { value: 0, target: parallaxParams.x }
+      parallaxSteps: { value: 5, target: parallaxParams.y }
+      emissiveIntensity: { value: 1, target: parallaxParams.z }
     d1: &d1 { depthTest: true, depthWrite: false }
     b1: &b1
       targets:
       - blend: true
         blendSrc: src_alpha
         blendDst: one_minus_src_alpha
+        blendDstAlpha: one_minus_src_alpha
+    # URP Alpha blending with "Preserve Specular Lighting" (_ALPHAPREMULTIPLY_ON): One / OneMinusSrcAlpha,
+    # only the diffuse term is multiplied by alpha in the shader (USE_ALPHA_PREMULTIPLY).
+    b2: &b2
+      targets:
+      - blend: true
+        blendSrc: one
+        blendDst: one_minus_src_alpha
+        blendSrcAlpha: one
         blendDstAlpha: one_minus_src_alpha
 
   techniques:
@@ -79,6 +91,19 @@ CCEffect %{
       propertyIndex: 0
       depthStencilState: *d1
       blendState: *b1
+  - name: transparent-premultiplied
+    passes:
+    - vert: urp-lit-vs:vert
+      frag: urp-lit-fs:frag
+      depthStencilState: *d1
+      blendState: *b2
+      properties: *p1
+    - vert: urp-lit-vs:vert
+      frag: urp-lit-fs:frag
+      phase: deferred-forward
+      propertyIndex: 0
+      depthStencilState: *d1
+      blendState: *b2
 }%
 
 CCProgram urp-lit-shared %{
@@ -101,6 +126,7 @@ CCProgram urp-lit-shared %{
     vec4 peekSideColor;
     vec4 peekParams;
     vec4 planarShadowDirection;
+    vec4 parallaxParams;
   };
 }%
 
@@ -119,6 +145,10 @@ CCProgram urp-lit-vs %{
   #if CC_RECEIVE_SHADOW
     out mediump vec2 v_shadowBias;
   #endif
+  #if USE_PARALLAX_EMISSION
+    out mediump vec3 v_worldTangent;
+    out mediump vec3 v_worldBitangent;
+  #endif
 
   vec4 vert () {
     StandardVertInput In;
@@ -129,6 +159,11 @@ CCProgram urp-lit-vs %{
     v_worldPosition = worldPosition.xyz;
     v_worldNormal = (matWorldIT * vec4(In.normal, 0.0)).xyz;
     v_uv = a_texCoord * tilingOffset.xy + tilingOffset.zw;
+    #if USE_PARALLAX_EMISSION
+      // Tangent frame for ShaderGraph's TangentSpaceViewDirection (bitangent = cross(N, T) * w).
+      v_worldTangent = normalize((matWorld * vec4(In.tangent.xyz, 0.0)).xyz);
+      v_worldBitangent = cross(normalize(v_worldNormal), v_worldTangent) * In.tangent.w;
+    #endif
     #if CC_RECEIVE_SHADOW
       v_shadowBias = CCGetShadowBias();
     #endif
@@ -153,9 +188,63 @@ CCProgram urp-lit-fs %{
   #if CC_RECEIVE_SHADOW
     in mediump vec2 v_shadowBias;
   #endif
+  #if USE_PARALLAX_EMISSION
+    in mediump vec3 v_worldTangent;
+    in mediump vec3 v_worldBitangent;
+  #endif
   uniform sampler2D mainTexture;
-  #if USE_EMISSIVE_MAP
+  #if USE_EMISSIVE_MAP || USE_PARALLAX_EMISSION
     uniform sampler2D emissiveMap;
+  #endif
+
+  // URP _ALPHAPREMULTIPLY_ON (Preserve Specular Lighting): only the diffuse BRDF term is scaled by
+  // alpha; specular and emission are added at full strength (blend One / OneMinusSrcAlpha).
+  float g_diffuseAlpha = 1.0;
+
+  #if USE_PARALLAX_EMISSION
+    // The emissive map is an sRGB color texture in Unity (hardware-decoded): heights are linear.
+    float pomHeight (vec2 uv) {
+      return SRGBToLinear(texture(emissiveMap, uv).rgb).r;
+    }
+
+    // ShaderGraph ParallaxOcclusionMapping node (Heightmap channel R, Tiling 1, Offset 0,
+    // PrimitiveSize 1) + PerPixelDisplacement.hlsl ParallaxOcclusionMapping: linear search of
+    // `steps` samples, then 3 secant refinements. MaxHeight = Amplitude * 0.01 (cm -> m). The
+    // heightmap has no mipmaps, so the node's LOD 0 samples equal plain texture() lookups.
+    vec2 parallaxOcclusionUV (vec2 uv, vec3 viewDirTS) {
+      float steps = max(min(floor(parallaxParams.y), 256.0), 1.0);
+      float maxHeight = parallaxParams.x * 0.01;
+      vec3 viewDirUV = normalize(vec3(viewDirTS.xy * maxHeight, viewDirTS.z));
+      float stepSize = 1.0 / steps;
+      vec2 offsetPerStep = stepSize * (viewDirUV.xy / -viewDirUV.z);
+      vec2 current = vec2(0.0);
+      float prevHeight = pomHeight(uv);
+      current += offsetPerStep;
+      float currHeight = pomHeight(uv + current);
+      float rayHeight = 1.0 - stepSize;
+      for (int i = 0; i < 256; i++) {
+        if (float(i) >= steps || currHeight > rayHeight) break;
+        prevHeight = currHeight;
+        rayHeight -= stepSize;
+        current += offsetPerStep;
+        currHeight = pomHeight(uv + current);
+      }
+      float pt0 = rayHeight + stepSize;
+      float pt1 = rayHeight;
+      float delta0 = pt0 - prevHeight;
+      float delta1 = pt1 - currHeight;
+      vec2 offset = vec2(0.0);
+      for (int i = 0; i < 3; i++) {
+        float intersectionHeight = (pt0 * delta1 - pt1 * delta0) / (delta1 - delta0);
+        offset = (1.0 - intersectionHeight) * offsetPerStep * steps;
+        currHeight = pomHeight(uv + offset);
+        float delta = intersectionHeight - currHeight;
+        if (abs(delta) <= 0.01) break;
+        if (delta < 0.0) { delta1 = delta; pt1 = intersectionHeight; }
+        else { delta0 = delta; pt0 = intersectionHeight; }
+      }
+      return uv + offset;
+    }
   #endif
 
   float shadowFactor (vec3 normal) {
@@ -223,7 +312,7 @@ CCProgram urp-lit-fs %{
   vec3 unityDirectLight (vec3 baseColor, vec3 normal, vec3 viewDirection,
     vec3 lightDirection, vec3 lightColor, float intensity) {
     float noL = max(dot(normal, lightDirection), 0.0);
-    vec3 diffuse = baseColor * unityOneMinusReflectivity();
+    vec3 diffuse = baseColor * unityOneMinusReflectivity() * g_diffuseAlpha;
     float specularTerm = unityDirectSpecular(normal, lightDirection, viewDirection, pbrParams.x);
     vec3 brdf = diffuse + specularTerm * unityBrdfSpecular(baseColor);
     return brdf * lightColor * intensity * noL;
@@ -261,6 +350,9 @@ CCProgram urp-lit-fs %{
     #if USE_ALPHA_TEST
       if (baseColor.a < pbrParams.z) discard;
     #endif
+    #if USE_ALPHA_PREMULTIPLY
+      g_diffuseAlpha = baseColor.a;
+    #endif
 
     vec3 normal = normalize(v_worldNormal);
     vec3 lightDirection = normalize(-cc_mainLitDir.xyz);
@@ -291,7 +383,7 @@ CCProgram urp-lit-fs %{
         normalize(unityLightDirection0.xyz), unityLightColor0.rgb, unityLightIntensities.x);
       direct += unityDirectLight(baseColor.rgb, normal, viewDirection,
         normalize(unityLightDirection1.xyz), unityLightColor1.rgb, unityLightIntensities.y);
-      ambient = unityTrilightAmbient(normal) * baseColor.rgb * unityOneMinusReflectivity();
+      ambient = unityTrilightAmbient(normal) * baseColor.rgb * unityOneMinusReflectivity() * g_diffuseAlpha;
     #else
       vec3 halfDirection = normalize(lightDirection + viewDirection);
       float noL = max(dot(normal, lightDirection), 0.0);
@@ -304,13 +396,20 @@ CCProgram urp-lit-fs %{
       vec3 fresnel = f0 + (vec3(1.0) - f0) * pow(1.0 - voH, 5.0);
       vec3 specular = distributionGGX(noH, pbrParams.x)
         * geometrySmith(noL, noV, pbrParams.x) * fresnel;
-      vec3 diffuse = baseColor.rgb * (1.0 - pbrParams.y) / 3.14159265;
+      vec3 diffuse = baseColor.rgb * (1.0 - pbrParams.y) * g_diffuseAlpha / 3.14159265;
       direct = (diffuse + specular) * lightColor * noL * shadow;
       float hemisphere = normal.y * 0.5 + 0.5;
-      ambient = mix(cc_ambientGround.rgb, cc_ambientSky.rgb, hemisphere) * cc_ambientSky.w * baseColor.rgb;
+      ambient = mix(cc_ambientGround.rgb, cc_ambientSky.rgb, hemisphere) * cc_ambientSky.w * baseColor.rgb * g_diffuseAlpha;
     #endif
-    vec3 emissionContribution = emissive.rgb;
-    #if USE_EMISSIVE_MAP
+    // Unity HDR emission = color (<= 1) * intensity: cc.Color stores 8-bit sRGB, so HDR values are
+    // split into an sRGB-encoded color and emissiveIntensity (default 1).
+    vec3 emissionContribution = emissive.rgb * parallaxParams.z;
+    #if USE_PARALLAX_EMISSION
+      // Emission = SampleTexture2D(emissiveMap, ParallaxOcclusionMapping UVs) * EmissionColor.
+      vec3 viewDirTS = vec3(dot(viewDirection, normalize(v_worldTangent)),
+        dot(viewDirection, normalize(v_worldBitangent)), dot(viewDirection, normal));
+      emissionContribution *= SRGBToLinear(texture(emissiveMap, parallaxOcclusionUV(v_uv, viewDirTS)).rgb);
+    #elif USE_EMISSIVE_MAP
       emissionContribution *= SRGBToLinear(texture(emissiveMap, v_uv).rgb);
     #endif
     // Unity and Cocos both render in linear space, but their final browser
