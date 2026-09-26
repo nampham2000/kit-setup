@@ -928,6 +928,14 @@ starve the Editor socket.io heartbeat and close preview connections. Keep the
 native float32 dt/count unchanged; never filter these errors to obtain PASS.
 Record console error URL/line/stack so harness and effect failures can be traced.
 
+Keep AI/config generation idempotent while the Editor is open. Compare final
+rendered bytes before writing assets or instruction mirrors: copying a raw
+template and then injecting generated blocks causes two unnecessary writes.
+Unchanged configuration typings must preserve their mtime, including CRLF
+checkouts. `config-typings-generator.cjs --check` / `--verify` is read-only and
+must reject stale output. Do not run asset-changing generation concurrently
+with capture; a Preview navigation invalidates the capture receipt.
+
 For Unity mesh particles in a Z-reflected port, axial start angles map to (-X, -Y, +Z). Keep the camera-facing billboard convention separate. Unity mesh rotation uses Euler Z then X then Y; the stock Cocos 3.8.8 particle shader combines axes differently. A custom particle shader must preserve the Unity order, verified with baked vertices from at least two asymmetric combined-angle cases. A corrected curve sign alone does not prove runtime orientation parity.
 
 Rotation over lifetime is Euler integration, not a body-frame spin: Unity adds the angular velocity, sampled at the start-of-step age with one random draw for X/Y/Z, to each `rotation3D` component and then applies Z-X-Y. A Y spin on a mesh started at X=270 therefore turns about the emitter's vertical axis. Cocos 3.8.8 right-multiplies Y-Z-X delta quaternions, so it only matches single-axis cases whose start rotation commutes (Z-only with X0 or Z0 zero, X-only with Z0 zero, Y-only with X0 and Z0 zero). The porter binds `UnityParticleEulerRotationAdapter` (`particle-euler-rotation-binding.js`) and reports `PARTICLE_EULER_ROTATION_ADAPTER_REQUIRED` until AssetDB imports it.
