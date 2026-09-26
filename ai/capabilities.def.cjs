@@ -1012,6 +1012,7 @@ const CAPABILITIES = [
       'Khi visual được tách khỏi hierarchy Unity để pool/reuse, phải kiểm cả render ownership ngoài world transform: parent-driven active state, lid/cover depth occlusion, sorting/layer và clip. Chụp đúng frame cover đã landed nhưng transition chưa kết thúc; oracle phải chứng minh visual đáng lẽ bị che có zero active renderer/node hoặc quan hệ occlusion tương đương.',
       'Nếu evalBefore/gesture khởi động animation hoặc gameplay async, đặt `postActionSeconds` ở manifest/case (0-60 giây) đủ dài để flow kết thúc trước eval cuối. `seconds` chỉ là thời gian boot/settle trước action, không thay thế post-action wait.',
       'Runtime sạch và ảnh được chụp chỉ là evidence để agent/người dùng mở đối chiếu; tool không tự chứng minh pixel parity hoặc tự chọn candidate đẹp nhất.',
+      'Máy có antivirus/proxy chèn script vào mọi trang (vd Kaspersky gc.kis...) có thể sinh console error CORS/network không thuộc game. Chỉ khai báo `environmentHosts` (tối đa 8 hostname chính xác, không wildcard/IP/localhost/host preview) ở manifest khi đã xác minh nguồn chèn; lỗi chỉ nhắc host đó (và origin preview) được tách sang `environmentErrors` trong evidence, mọi lỗi khác vẫn fail.',
     ],
     status: 'partial',
     probe: 'help',

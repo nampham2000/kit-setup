@@ -534,6 +534,61 @@ async function dispatchTouchGestureSequence(session, sessionId, gestures, timing
  * lets the editor's live preview be smoke-tested without producing a build -
  * same checks, same monochrome-frame heuristic.
  */
+const HOSTNAME_RE = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/;
+const MAX_ENVIRONMENT_HOSTS = 8;
+
+/**
+ * Exact hostnames of scripts the machine injects into every page (antivirus / proxy web injection), declared by the
+ * matrix. Wildcards, IPs, localhost and the preview's own host are refused: the game's own traffic can never be
+ * classified as environment noise.
+ */
+function normalizeEnvironmentHosts(value, previewUrl) {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value) || value.length > MAX_ENVIRONMENT_HOSTS) {
+    throw new Error(`environmentHosts must be an array of at most ${MAX_ENVIRONMENT_HOSTS} exact hostnames`);
+  }
+  let previewHost = '';
+  try { previewHost = new URL(String(previewUrl)).hostname.toLowerCase(); } catch (_) { /* file target */ }
+  const hosts = [...new Set(value.map((item) => String(item || '').trim().toLowerCase()))];
+  for (const host of hosts) {
+    if (!HOSTNAME_RE.test(host) || /^[0-9.]+$/.test(host) || host === 'localhost' || host.endsWith('.localhost')
+      || host === previewHost) {
+      throw new Error(`environmentHosts: "${host}" is not an allowed exact external hostname`);
+    }
+  }
+  return hosts;
+}
+
+/** Hostnames of every absolute http(s) URL named by a console entry (message text, request URL, initiator stack). */
+function referencedHosts(texts) {
+  const hosts = new Set();
+  for (const text of texts) {
+    if (!text) continue;
+    for (const match of String(text).matchAll(/https?:\/\/[^\s'"<>)]+/gi)) {
+      try { hosts.add(new URL(match[0]).hostname.toLowerCase()); } catch (_) { /* not a URL */ }
+    }
+  }
+  return hosts;
+}
+
+/**
+ * An error is environment noise only when it names a declared injected host and no other external host: a request the
+ * page makes to that host (the injected script's own XHR) is reported by the page origin, so the preview host is allowed
+ * alongside. Anything else stays a console error.
+ */
+function isEnvironmentError(texts, environmentHosts, previewUrl) {
+  if (!environmentHosts.length) return false;
+  let previewHost = '';
+  try { previewHost = new URL(String(previewUrl)).hostname.toLowerCase(); } catch (_) { /* file target */ }
+  const hosts = referencedHosts(texts);
+  let injected = false;
+  for (const host of hosts) {
+    if (environmentHosts.includes(host)) injected = true;
+    else if (host !== previewHost) return false;
+  }
+  return injected;
+}
+
 async function runOne(target, options) {
   const isUrl = isUrlTarget(target);
   const htmlFile = isUrl ? null : target;
@@ -563,7 +618,8 @@ async function runOne(target, options) {
     exceptionDetails: [],
     consoleErrors: [],
     consoleWarnings: [],
-    eventCounts: { exceptions: 0, consoleErrors: 0, consoleWarnings: 0 },
+    environmentErrors: [],
+    eventCounts: { exceptions: 0, consoleErrors: 0, consoleWarnings: 0, environmentErrors: 0 },
     frames: 0,
     fps: 0,
     hasCanvas: false,
@@ -620,10 +676,19 @@ async function runOne(target, options) {
         (item) => `${item.message}|${item.url}|${item.line}|${item.column}`,
       );
     });
+    const environmentHosts = normalizeEnvironmentHosts(options.environmentHosts, target);
+    const environmentNoise = (texts, line) => {
+      if (!isEnvironmentError(texts, environmentHosts, target)) return false;
+      result.eventCounts.environmentErrors += 1;
+      pushUniqueBounded(result.environmentErrors, line.slice(0, 300), 20);
+      return true;
+    };
     session.on('Runtime.consoleAPICalled', (params) => {
       const text = (params.args || [])
         .map((a) => (a.value !== undefined ? a.value : a.description || a.type))
         .join(' ');
+      const stackUrls = (params.stackTrace?.callFrames || []).map((frame) => frame.url);
+      if (params.type === 'error' && environmentNoise([text, ...stackUrls], text)) return;
       if (params.type === 'error') {
         result.eventCounts.consoleErrors += 1;
         pushUniqueBounded(result.consoleErrors, text.slice(0, 300), 50);
@@ -634,6 +699,8 @@ async function runOne(target, options) {
     });
     session.on('Log.entryAdded', (params) => {
       const e = params.entry || {};
+      const stackUrls = (e.stackTrace?.callFrames || []).map((frame) => frame.url);
+      if (e.level === 'error' && environmentNoise([e.text, e.url, ...stackUrls], `[${e.source}] ${String(e.text)}`)) return;
       if (e.level === 'error') {
         result.eventCounts.consoleErrors += 1;
         // network entries name the failing request so environment noise can be told apart from the game
@@ -998,6 +1065,8 @@ if (require.main === module) {
 }
 
 module.exports = {
+  normalizeEnvironmentHosts,
+  isEnvironmentError,
   runOne, findBuiltHtml, findBrowser, ensureWebSocketRuntime,
   parseArgs, parseGesture, resolveGestureFromEvalBefore,
   isNavigationEvaluationError, evaluatePageWithNavigationRetry,

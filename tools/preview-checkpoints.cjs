@@ -15,7 +15,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const { runOne, parseGesture } = require('./verify-runtime.cjs');
+const { runOne, parseGesture, normalizeEnvironmentHosts } = require('./verify-runtime.cjs');
 
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
 const REEXEC_ENV = 'PLAYABLE_PREVIEW_CHECKPOINTS_WEBSOCKET_REEXEC';
@@ -813,6 +813,8 @@ function validateConfig(config, overrides = {}) {
     minFps: Math.max(0, Number(config.minFps) || 20),
     windowSize: normalizeWindowSize(config.windowSize || '720x1280'),
     previewDevice: typeof config.previewDevice === 'string' ? config.previewDevice.trim() : '',
+    // exact hostnames of machine-injected scripts (antivirus web injection); their errors are reported separately
+    environmentHosts: normalizeEnvironmentHosts(config.environmentHosts, url),
     browser: overrides.browser || config.browser || undefined,
     cases: selected,
   };
@@ -905,6 +907,7 @@ async function main() {
       minFps: Number(caseEntry.minFps) || config.minFps,
       windowSize: normalizeWindowSize(caseEntry.windowSize || config.windowSize),
       previewDevice: caseEntry.previewDevice || config.previewDevice,
+      environmentHosts: config.environmentHosts,
       screenshotDir: relativeCaseDir,
       noScreenshot: false,
       evalBeforeExpression: caseEntry.evalBeforeExpression,
@@ -958,6 +961,7 @@ async function main() {
         exceptions: runtime.exceptions,
         consoleErrors: runtime.consoleErrors,
         consoleWarnings: runtime.consoleWarnings,
+        environmentErrors: runtime.environmentErrors,
         evalBeforeResult: runtime.evalBeforeResult,
         gesture: runtime.gesture,
         gestures: runtime.gestures,
