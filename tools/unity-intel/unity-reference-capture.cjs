@@ -11,7 +11,7 @@ const path = require('node:path');
 const { readUnityMcpConnection } = require('./unity-mcp-config.cjs');
 const { mcpCall } = require('./unity-mcp-script.cjs');
 
-const USAGE = `Usage: node playable-shared-kit/tools/unity-intel/unity-reference-capture.cjs --project <UnityProjectRoot> --scene <Assets/...unity> --out <dir> --frames <n,n,...> [--width 1280] [--height 720] [--frame-rate 60] [--camera <path>] [--skybox-face <size>] [--seed <n>] [--spawns <spawns.json>] [--timeout-ms 900000]`;
+const USAGE = `Usage: node playable-shared-kit/tools/unity-intel/unity-reference-capture.cjs --project <UnityProjectRoot> --scene <Assets/...unity> --out <dir> --frames <n,n,...> [--width 1280] [--height 720] [--frame-rate 60] [--camera <path>] [--skybox-face <size>] [--seed <n>] [--spawns <spawns.json>] [--field Component.field=value ...] [--timeout-ms 900000]`;
 
 function parseArgs(argv) {
   const options = { width: 1280, height: 720, frameRate: 60, skyboxFace: 0, seed: 12345, timeoutMs: 900000, camera: '' };
@@ -30,6 +30,12 @@ function parseArgs(argv) {
     else if (arg === '--skybox-face') options.skyboxFace = Number(next());
     else if (arg === '--seed') options.seed = Number(next());
     else if (arg === '--spawns') options.spawns = readSpawns(next());
+    else if (arg === '--field') {
+      // Component.field=value, set on every component of that type before Start.
+      const match = /^([A-Za-z_][\w]*)\.([A-Za-z_][\w]*)=(.*)$/.exec(next());
+      if (!match) throw new Error('--field phải có dạng Component.field=value.');
+      (options.fields ||= []).push({ component: match[1], field: match[2], value: match[3] });
+    }
     else if (arg === '--timeout-ms') options.timeoutMs = Number(next());
     else throw new Error(`Option không hỗ trợ: ${arg}`);
   }
@@ -95,6 +101,7 @@ async function captureUnityReference(options, dependencies = {}) {
     randomSeed: options.seed,
     skyboxFaceSize: options.skyboxFace,
     spawns: options.spawns || [],
+    fields: options.fields || [],
   };
   const result = await mcpCall(connection, 'script-execute', { csharpCode: captureScript(request), className: 'Script', methodName: 'Main' },
     60000, dependencies.fetch);

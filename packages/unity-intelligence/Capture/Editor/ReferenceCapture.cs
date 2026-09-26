@@ -43,6 +43,20 @@ namespace CcPlayable.UnityIntelligence.Capture
             /// unless useRotation is set.
             /// </summary>
             public Spawn[] spawns = Array.Empty<Spawn>();
+            /// <summary>
+            /// Field values set by reflection on every component of the named type once the
+            /// scene has loaded (after Awake/OnEnable, before Start), e.g. the effect index of
+            /// a demo cycler. Supports int, float, bool and string fields (public or private).
+            /// </summary>
+            public FieldOverride[] fields = Array.Empty<FieldOverride>();
+        }
+
+        [Serializable]
+        public sealed class FieldOverride
+        {
+            public string component = "";
+            public string field = "";
+            public string value = "";
         }
 
         [Serializable]
@@ -210,6 +224,26 @@ namespace CcPlayable.UnityIntelligence.Capture
         {
             if (scene.path != request.scenePath) return;
             SceneManager.sceneLoaded -= OnSceneLoaded;
+            foreach (var entry in request.fields ?? Array.Empty<ReferenceCapture.FieldOverride>())
+            {
+                var applied = 0;
+                foreach (var root in scene.GetRootGameObjects())
+                    foreach (var component in root.GetComponentsInChildren<MonoBehaviour>(true))
+                    {
+                        if (component == null || component.GetType().Name != entry.component) continue;
+                        var field = component.GetType().GetField(entry.field, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
+                        if (field == null) continue;
+                        var type = field.FieldType;
+                        object value = type == typeof(int) ? int.Parse(entry.value, System.Globalization.CultureInfo.InvariantCulture)
+                            : type == typeof(float) ? float.Parse(entry.value, System.Globalization.CultureInfo.InvariantCulture)
+                            : type == typeof(bool) ? (object)bool.Parse(entry.value)
+                            : type == typeof(string) ? entry.value : null;
+                        if (value == null) { ReferenceCapture.Fail(request, manifest, $"unsupported field type {type.Name} for {entry.component}.{entry.field}"); return; }
+                        field.SetValue(component, value);
+                        applied++;
+                    }
+                if (applied == 0) { ReferenceCapture.Fail(request, manifest, $"no {entry.component}.{entry.field} in scene"); return; }
+            }
             captureCamera = FindCamera(scene);
             if (captureCamera == null) { ReferenceCapture.Fail(request, manifest, "camera not found"); return; }
             target = new RenderTexture(request.width, request.height, 24, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB) { antiAliasing = 1 };

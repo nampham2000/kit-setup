@@ -33,3 +33,9 @@ test('malformed spawns fail before Unity is contacted', t => {
   assert.throws(() => parseArgs([...base, '--spawns', spawnsFile(t, [{ prefab: 'Assets/x.prefab', frame: -1, position: [0, 0, 0] }])]), /frame/);
   assert.throws(() => parseArgs([...base, '--spawns', spawnsFile(t, [{ prefab: 'Assets/x.prefab', frame: 1, position: [0, 0] }])]), /position/);
 });
+
+test('--field overrides reach the request and reject malformed input', () => {
+  const options = parseArgs([...base, '--field', 'CameraHolder.Prefab=3', '--field', 'Demo.speed=0.5']);
+  assert.deepEqual(options.fields, [{ component: 'CameraHolder', field: 'Prefab', value: '3' }, { component: 'Demo', field: 'speed', value: '0.5' }]);
+  assert.throws(() => parseArgs([...base, '--field', 'CameraHolder=3']), /Component\.field=value/);
+});
