@@ -21,6 +21,7 @@ const path = require('path');
 const { spawn, spawnSync } = require('child_process');
 const { color } = require('./lib/term-color.cjs');
 const { createRuntimeProfile, closeRuntimeProfile } = require('./lib/runtime-profile.cjs');
+const { validateCheckpoints, captureRuntimeCheckpoints } = require('./lib/runtime-checkpoints.cjs');
 
 const WEBSOCKET_REEXEC_ENV = 'PLAYABLE_VERIFY_RUNTIME_WEBSOCKET_REEXEC';
 
@@ -536,6 +537,7 @@ async function dispatchTouchGestureSequence(session, sessionId, gestures, timing
  * same checks, same monochrome-frame heuristic.
  */
 async function runOne(target, options) {
+  if(options.checkpoints)validateCheckpoints(options.checkpoints);
   const isUrl = isUrlTarget(target);
   const htmlFile = isUrl ? null : target;
   const browser = findBrowser(options.browser);
@@ -787,6 +789,12 @@ async function runOne(target, options) {
       }
     }
 
+    if(options.checkpoints){
+      result.checkpoints=await captureRuntimeCheckpoints(session,sessionId,options.checkpoints,{
+        directory:path.resolve(PROJECT_ROOT,options.screenshotDir),viewportSize:options.viewportSize,
+        eventCounts:result.eventCounts,onCheckpoint:options.onCheckpoint,
+      });
+    }
     if (!options.noScreenshot) {
       const shot = await session.send('Page.captureScreenshot', { format: 'png' }, sessionId);
       if (shot && shot.data) {
@@ -831,6 +839,7 @@ async function runOne(target, options) {
 
   result.ok = result.exceptions.length === 0
     && !result.evalError && !result.evalBeforeError
+    && result.checkpoints?.ok !== false
     && result.profileCleanup?.ok !== false
     && result.consoleErrors.length === 0
     && !result.previewDeviceError

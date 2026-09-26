@@ -274,7 +274,7 @@ vec4 lpvs_main () {
       #endif
       vec4 rot = quaternionFromEuler(rotEuler);
       #if CC_RENDER_MODE == RENDER_MODE_BILLBOARD
-        if(sourceRendererPivot.w == 2.0) rot=sourceEuler(rotEuler);
+        rot=sourceEuler(rotEuler);
       #endif
     #endif
     #if CC_RENDER_MODE == RENDER_MODE_MESH
@@ -292,19 +292,30 @@ vec4 lpvs_main () {
 
     #if CC_RENDER_MODE == RENDER_MODE_BILLBOARD || CC_RENDER_MODE == RENDER_MODE_VERTICAL_BILLBOARD
       #if CC_RENDER_MODE == RENDER_MODE_BILLBOARD
-        if(sourceRendererPivot.w == 2.0) {
+        if(sourceRendererPivot.w == 2.0 || sourceRendererPivot.w == 4.0) {
           vec3 offset=vec3(cornerOffset*compScale.xy,0.0);
           rotateVecFromQuat(offset,rot);
-          rotateVecFromQuat(offset,nodeRotation);
+          if(sourceRendererPivot.w == 2.0) rotateVecFromQuat(offset,nodeRotation);
           pos.xyz+=offset;
         } else {
           // Unity View billboards (BakeMesh): pivot x/y move the quad by pivot*size in its
           // rotated camera plane; pivot z moves it toward the camera by pivot.z*size.x.
-          computeVertPos(pos, cornerOffset + sourceRendererPivot.xy, rot, compScale, cc_matViewInv);
+          vec3 offset=vec3((cornerOffset+sourceRendererPivot.xy)*compScale.xy,0.0);
+          rotateVecFromQuat(offset,rot);
+          // Camera basis vectors are columns of the inverse view matrix.
+          // The builtin helper reads rows, inverting camera pitch/yaw.
+          pos.xyz+=normalize(cc_matViewInv[0].xyz)*offset.x
+                 +normalize(cc_matViewInv[1].xyz)*offset.y
+                 +normalize(cc_matViewInv[2].xyz)*offset.z;
           pos.xyz += normalize(cc_matViewInv[2].xyz) * (sourceRendererPivot.z * compScale.x);
         }
       #else
-        computeVertPos(pos, cornerOffset, rot, compScale, cc_matViewInv);
+        // Native axial quads rotate their unscaled corner, then apply each
+        // size axis. Rotating an anisotropically scaled quad changes its shape.
+        vec3 offset=vec3(cornerOffset,0.0);rotateVecFromQuat(offset,rot);
+        offset.xy*=compScale.xy;
+        vec3 right=normalize(vec3(cc_matView[0][0],cc_matView[1][0],cc_matView[2][0]));
+        pos.xyz+=right*offset.x+vec3(0.0,1.0,0.0)*offset.y;
       #endif
     #elif CC_RENDER_MODE == RENDER_MODE_STRETCHED_BILLBOARD
       // Unity bakes a zero-velocity stretched particle as a degenerate quad at
@@ -313,8 +324,10 @@ vec4 lpvs_main () {
         pos.xyz+=normalize(velocity.xyz)*(2.0*compScale.y*sourceRendererPivot.y);
         computeVertPos(pos, cornerOffset, rot, compScale, cc_cameraPos.xyz, velocity, frameTile_velLenScale.z, frameTile_velLenScale.w, a_texCoord.x);
       }
-    #elif RENDER_MODE_HORIZONTAL_BILLBOARD
-      computeVertPos(pos, cornerOffset, rot, compScale);
+    #elif CC_RENDER_MODE == RENDER_MODE_HORIZONTAL_BILLBOARD
+      vec3 offset=vec3(cornerOffset,0.0);rotateVecFromQuat(offset,rot);
+      offset.xy*=compScale.xy;
+      pos.xyz+=vec3(offset.x,0.0,-offset.y);
     #endif
 
     color = a_color;

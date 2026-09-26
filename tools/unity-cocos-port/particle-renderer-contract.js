@@ -8,6 +8,7 @@ function particleRendererContract(particle = {}, renderer = {}) {
   const mode = Number(renderer.m_RenderMode ?? 0);
   const alignment = Number(renderer.m_RenderAlignment ?? 0);
   const localBillboard = mode === 0 && alignment === 2;
+  const worldBillboard = mode === 0 && alignment === 1;
   const mesh = mode === 4;
   const pivot = renderer.m_Pivot || {};
   const shape = particle.ShapeModule || {}, initial = particle.InitialModule || {};
@@ -27,6 +28,10 @@ function particleRendererContract(particle = {}, renderer = {}) {
   const pivotValues = [Number(pivot.x || 0), Number(pivot.y || 0), Number(pivot.z || 0)];
   const pivotSet = pivotValues.some(value => value !== 0);
   const viewBillboard = mode === 0 && alignment === 0;
+  // Native billboard-frames BakeMesh: axial render modes ignore the alignment
+  // enum and emitter rotation. Vertical still tracks camera yaw; Horizontal
+  // stays in the world XZ plane. Do not classify their World enum as a gap.
+  const axialBillboard = mode === 2 || mode === 3;
   const meshWorldFrame = mesh && alignment === 1;
   const meshVelocityFrame = mesh && alignment === 4 && !straightBoxVelocity;
   const unsupported = [];
@@ -34,7 +39,8 @@ function particleRendererContract(particle = {}, renderer = {}) {
   const sorting = { fudge: Number(renderer.m_SortingFudge || 0), order: Number(renderer.m_SortingOrder || 0), layer: Number(renderer.m_SortingLayerID || 0), sortMode: Number(renderer.m_SortMode || 0) };
   // Local/axial billboard pivots, stretched X/Z pivots, Facing and billboard World/Velocity are unmeasured.
   if (pivotSet && !(mesh || viewBillboard || (mode === 1 && pivotValues[0] === 0 && pivotValues[2] === 0))) unsupported.push('pivot-axes');
-  if (alignment !== 0 && alignment !== 2 && !straightBoxVelocity && mode !== 1 && !meshWorldFrame && !meshVelocityFrame) unsupported.push('alignment');
+  if (alignment !== 0 && alignment !== 2 && !worldBillboard && !straightBoxVelocity && mode !== 1 && !axialBillboard && !meshWorldFrame && !meshVelocityFrame) unsupported.push('alignment');
+  if(mode===3)unsupported.push('vertical-camera-frame');
   if ((localBillboard || mesh) && Number(particle.RotationModule?.enabled) === 1) unsupported.push('euler-rotation-over-lifetime');
   // Min/Max Particle Size (Unity defaults 0 and 0.5) are fractions of the
   // viewport WIDTH at the particle's view depth. BakeMesh: billboards scale
@@ -44,15 +50,15 @@ function particleRendererContract(particle = {}, renderer = {}) {
   const sizeClamp = { min: sizeValue(renderer.m_MinParticleSize, 0), max: sizeValue(renderer.m_MaxParticleSize, 0.5) };
   if (mode === 1 && sizeClamp.min > 0) unsupported.push('stretched-min-particle-size');
   return {
-    version: 3, sorting, mode, alignment, localBillboard, straightBoxVelocity,
+    version: 4, sorting, mode, alignment, localBillboard, worldBillboard, straightBoxVelocity,
     cocosAlignment: localBillboard || straightBoxVelocity || alignment === 2 ? 0 : alignment === 0 ? 2 : 1,
-    eulerSigns: mesh ? [-1, -1, 1] : localBillboard ? [1, 1, -1] : [-1, 1, -1],
+    eulerSigns: mesh ? [-1, -1, 1] : localBillboard || worldBillboard ? [1, 1, -1] : viewBillboard ? [-1, -1, -1] : [-1, 1, -1],
     // Horizontal/Vertical billboards need the source vertex program for Unity's
     // size/sqrt(2) corner geometry; builtin particle effects draw them at size.
-    requiresMaterialAdapter: localBillboard || stretchedPivot || mesh || mode === 2 || mode === 3 || (viewBillboard && pivotSet),
+    requiresMaterialAdapter: localBillboard || worldBillboard || stretchedPivot || mesh || mode === 2 || mode === 3 || (viewBillboard && pivotSet),
     // w: 2 Local billboard; 3 Mesh rotation already in world space (World alignment,
     // or the Velocity frame written by UnityParticleMeshFrameAdapter).
-    sourceRendererPivot: [...pivotValues, localBillboard ? 2 : meshWorldFrame || meshVelocityFrame ? 3 : 0],
+    sourceRendererPivot: [...pivotValues, localBillboard ? 2 : worldBillboard ? 4 : meshWorldFrame || meshVelocityFrame ? 3 : 0],
     // Runtime state a material cannot carry: mesh bounds for the pivot, per-particle Velocity frame.
     meshFrame: mesh && (pivotSet || meshVelocityFrame) ? { pivot: pivotSet, velocity: meshVelocityFrame } : null,
     // Unity linearizes particle vertex colors in a Linear project unless the

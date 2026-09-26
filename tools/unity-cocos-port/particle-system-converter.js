@@ -537,6 +537,19 @@ function applyCurveByRef(builder, particle, prop, data, multiplier = 1) {
   return applyCurveRange(builder, refObject(builder.objects, particle?.[prop]), data, multiplier);
 }
 
+function applyParticleStartRotation(builder, particle, data, rendererData) {
+  const initial=data.InitialModule||{},contract=particleRendererContract(data,rendererData);
+  const source3D=bool(initial.rotation3D,false),mesh=contract.mode===4;
+  particle.startRotation3D=mesh||source3D;
+  let applied=0;
+  if(particle.startRotation3D){
+    applied+=Number(applyCurveByRef(builder,particle,'startRotationX',source3D?initial.startRotationX:constantCurveRange(0),contract.eulerSigns[0]));
+    applied+=Number(applyCurveByRef(builder,particle,'startRotationY',source3D?initial.startRotationY:constantCurveRange(0),contract.eulerSigns[1]));
+    applied+=Number(applyCurveByRef(builder,particle,'startRotationZ',initial.startRotation||constantCurveRange(0),contract.eulerSigns[2]));
+  }else applied+=Number(applyCurveByRef(builder,particle,'startRotationZ',initial.startRotation,-1));
+  return applied;
+}
+
 function addCurveRange(builder, data, multiplier = 1) {
   const id = addObject(builder, { __type__: 'cc.CurveRange' });
   if (id < 0) return null;
@@ -1356,17 +1369,7 @@ function applyUnityParticleDataToCocos(builder, particleId, data = {}, rendererD
   }
 
   count(applyCurveByRef(builder, particle, 'startSpeed', initial.startSpeed));
-  const unityStartRotation3D = bool(initial.rotation3D, false);
-  particle.startRotation3D = forceMeshCommon3D || unityStartRotation3D;
-  if (particle.startRotation3D) {
-    count(applyCurveByRef(builder, particle, 'startRotationX', unityStartRotation3D ? initial.startRotationX : constantCurveRange(0), particleRendererContract(data, rendererData).eulerSigns[0]));
-    // Mesh coordinates are reflected in Z. Axial rotations consequently map
-    // (-X,-Y,+Z), unlike the camera-facing billboard convention.
-    count(applyCurveByRef(builder, particle, 'startRotationY', unityStartRotation3D ? initial.startRotationY : constantCurveRange(0), forceMeshCommon3D ? -1 : 1));
-    count(applyCurveByRef(builder, particle, 'startRotationZ', initial.startRotation || constantCurveRange(0), forceMeshCommon3D ? 1 : -1));
-  } else {
-    count(applyCurveByRef(builder, particle, 'startRotationZ', initial.startRotation, -1));
-  }
+  applied+=applyParticleStartRotation(builder,particle,data,rendererData);
   count(applyCurveByRef(builder, particle, 'gravityModifier', gravityData));
 
   count(applyShapeModule(builder, particle, data.ShapeModule));
@@ -1410,6 +1413,7 @@ function restoreOrbitalSourceModules(builder, particleId, data) {
 }
 
 module.exports = {
+  applyParticleStartRotation,
   applyTrailModule,
   restoreOrbitalSourceModules,
   applyUnityParticleDataToCocos,

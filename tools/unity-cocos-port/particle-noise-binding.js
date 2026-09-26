@@ -55,7 +55,7 @@ function attachNoiseRuntime(builder, reporter, options) {
     if (noiseRotates(spec) && !renderer?.eulerSigns) reasons.push('rotationAmount-renderer-signs');
     // Rotation noise feeds the Unity Euler accumulator: packed by the Euler adapter for
     // Mesh/Local billboards, or read directly when rotation over lifetime is off.
-    if (noiseRotates(spec) && !!(rotation?._enable ?? rotation?.enable) && !(renderer?.localBillboard || renderer?.mode === 4)) reasons.push('rotationAmount-with-builtin-rotation-over-lifetime');
+    if (noiseRotates(spec) && !!(rotation?._enable ?? rotation?.enable) && !(renderer?.localBillboard || renderer?.worldBillboard || renderer?.mode === 4 || renderer?.mode===0&&renderer?.alignment===0&&p.startRotation3D)) reasons.push('rotationAmount-with-builtin-rotation-over-lifetime');
     if (reasons.length || !classId) {
       reporter.high('PARTICLE_NOISE_ADAPTER_REQUIRED', options.src || '', builder.objects[p.node.__id__]?._name || '',
         `Native Noise not accepted: ${reasons.length ? reasons.join(', ') : 'AssetDB must import assets/script/UnityParticleNoiseAdapter.ts; refresh and rerun porter'}`);

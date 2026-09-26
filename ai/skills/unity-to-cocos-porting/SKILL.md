@@ -17,6 +17,28 @@ This skill provides step-by-step guidance and architectural rules for converting
 
 ### Reuse the measured VFX fixes
 
+Billboard rendering frames are source contracts. Native fixtures
+`billboard-frames-native.json` and `billboard-spin-native.json` cover View,
+World and Local 3D births and Euler integration with a rotated camera/emitter.
+View uses Z-X-Y, reflected signs (-X,-Y,-Z), and inverse-view **columns**.
+World uses (+X,+Y,-Z), ignores emitter/camera rotation, and needs source vertex
+mode w=4 plus the Euler adapter when rotation over lifetime is enabled. Local
+retains emitter rotation. Horizontal alignment enums do not change its world
+XZ plane; rotate its unit corner before anisotropic size. Vertical with a
+pitched/yawed camera remains `vertical-camera-frame`, not a measured pass.
+Do not transfer an AOE 95% claim to another catalog after these repairs.
+
+For large reference catalogs, `runOne` in `tools/verify-runtime.cjs` accepts
+`checkpoints: [{name, expression, requireOk:true}]` and `onCheckpoint` in its
+programmatic options. It reuses one isolated Preview target, records runtime
+evidence and PNG hashes, checks exact canvas/PNG dimensions, and fails closed
+on evaluation/import/runtime errors. Every expression must reset its own state;
+reuse is not isolation between cases. For fixed-frame Cocos sampling, pause
+`game`, then call `director.tick(1/frameRate)` so physics and component order
+still run. Native reference frame 0 follows the first tick; an extra bootstrap
+`tick(0)` still calls Update and incorrectly moves per-frame projectiles.
+Keep live controls/replay/collision tests in addition to diagnostic sampling.
+
 For vendor catalogs loaded with `Resources.LoadAll`, inspect the preflight
 closure against the native catalog count. The scanner resolves literal folder
 paths and a `foreach` over a literal string array; folder loads include nested
