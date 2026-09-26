@@ -1,4 +1,5 @@
-import { _decorator, Component, Enum, Mat4, Node, ParticleSystem, Vec3 } from 'cc';
+import { _decorator, Component, CurveRange, Enum, Mat4, Node, ParticleSystem, Vec3 } from 'cc';
+import { EDITOR_NOT_IN_PREVIEW } from 'cc/env';
 
 const { ccclass, executeInEditMode, executionOrder, playOnFocus, property } = _decorator;
 
@@ -16,7 +17,31 @@ Enum(UnityParticleSubEmitterInherit);
 type ParticleLike = {
     position: Vec3;
     remainingLifetime?: number;
+    randomSeed?: number;
 };
+
+type BurstLike = { time: number; repeatCount: number; repeatInterval: number; count: CurveRange };
+
+// The sub system's own emission, taken over at runtime: every Unity sub-emitter
+// event starts an instance that replays it from time 0.
+type EmissionSchedule = { duration: number; loop: boolean; rate: CurveRange; bursts: BurstLike[] };
+
+type EmissionInstance = {
+    entry: UnityParticleSubEmitterEntry;
+    schedule: EmissionSchedule;
+    particle: ParticleLike | null;
+    seed: number;
+    position: Vec3;
+    time: number;
+    fresh: boolean;
+    rateAccumulator: number;
+    cycles: number[];
+};
+
+type TrackedParticle = { seed: number; position: Vec3; stamp: number };
+
+// Keyed by target so birth and death entries sharing one sub system read its authored emission once.
+const schedules = new WeakMap<ParticleSystem, EmissionSchedule>();
 
 type ParticlePoolLike = {
     data: ParticleLike[];
@@ -65,6 +90,10 @@ export class UnityParticleSubEmitterEntry {
 
     @property({ displayName: 'Play On Enable' })
     public playSubEmitterOnEnable = true;
+
+    /** Unity semantics: each birth/death starts an instance that replays the sub system's bursts and rate over its duration. */
+    @property({ displayName: 'Unity Instances' })
+    public unityInstances = false;
 }
 
 @ccclass('UnityParticleSubEmitterFollower')
@@ -104,6 +133,11 @@ export class UnityParticleSubEmitterFollower extends Component {
     private readonly _worldPosition = new Vec3();
     private readonly _sourceWorldMatrix = new Mat4();
     private _sourceHadParticles = false;
+    private readonly _instances: EmissionInstance[] = [];
+    private readonly _freeInstances: EmissionInstance[] = [];
+    private readonly _tracked = new Map<ParticleLike, TrackedParticle>();
+    private readonly _freeTracks: TrackedParticle[] = [];
+    private _stamp = 0;
 
     protected onLoad (): void {
         this.prepareSubEmitters(this.getRuntimeEntries(), true);
@@ -123,6 +157,9 @@ export class UnityParticleSubEmitterFollower extends Component {
         this._currentParticles.clear();
         this._deathEmitterHoldTimes.clear();
         this._sourceHadParticles = false;
+        while (this._instances.length) this.releaseInstance(this._instances.length - 1);
+        for (const track of this._tracked.values()) this._freeTracks.push(track);
+        this._tracked.clear();
     }
 
     protected lateUpdate (dt: number): void {
@@ -133,6 +170,10 @@ export class UnityParticleSubEmitterFollower extends Component {
 
         const pool = this.getSourceParticlePool(this.source);
         if (!pool) return;
+
+        if (!EDITOR_NOT_IN_PREVIEW && entries.some((entry) => entry.unityInstances && entry.subEmitter)) {
+            this.updateInstances(pool, this.source, entries, dt);
+        }
 
         const sourceHasParticles = this.poolHasActiveParticles(pool);
         if (sourceHasParticles && !this._sourceHadParticles) {
@@ -171,7 +212,7 @@ export class UnityParticleSubEmitterFollower extends Component {
 
     private prepareSubEmitters (entries: UnityParticleSubEmitterEntry[], resetDeathEmitters: boolean): void {
         for (const entry of entries) {
-            if (!entry.subEmitter) continue;
+            if (!entry.subEmitter || entry.unityInstances) continue;
 
             const emitterNode = entry.subEmitterNode || entry.subEmitter.node;
             entry.subEmitterNode = emitterNode;
@@ -230,7 +271,7 @@ export class UnityParticleSubEmitterFollower extends Component {
         if (this._currentParticles.size <= 0) return;
 
         for (const entry of entries) {
-            if (entry.type !== UnityParticleSubEmitterType.Birth || !entry.subEmitter) continue;
+            if (entry.type !== UnityParticleSubEmitterType.Birth || !entry.subEmitter || entry.unityInstances) continue;
 
             const emitRate = Math.max(0, entry.emitRatePerParticle);
             const accumulated = (this._birthAccumulators.get(entry) || 0) + dt * emitRate;
@@ -248,7 +289,7 @@ export class UnityParticleSubEmitterFollower extends Component {
     }
 
     private emitDeathEntries (entries: UnityParticleSubEmitterEntry[]): void {
-        const hasDeathEntry = entries.some((entry) => entry.type === UnityParticleSubEmitterType.Death && entry.subEmitter);
+        const hasDeathEntry = entries.some((entry) => entry.type === UnityParticleSubEmitterType.Death && entry.subEmitter && !entry.unityInstances);
         if (!hasDeathEntry) {
             for (const particle of [...this._lastParticleWorldPositions.keys()]) {
                 if (!this._currentParticles.has(particle)) this._lastParticleWorldPositions.delete(particle);
@@ -260,7 +301,7 @@ export class UnityParticleSubEmitterFollower extends Component {
             if (this._currentParticles.has(particle)) continue;
 
             for (const entry of entries) {
-                if (entry.type !== UnityParticleSubEmitterType.Death || !entry.subEmitter) continue;
+                if (entry.type !== UnityParticleSubEmitterType.Death || !entry.subEmitter || entry.unityInstances) continue;
                 if (!this.shouldEmit(entry.emitProbability)) continue;
                 this.emitAtWorldPosition(entry, position, Math.max(1, Math.floor(entry.deathBurstCount)));
             }
@@ -308,14 +349,14 @@ export class UnityParticleSubEmitterFollower extends Component {
 
     private resetDeathEmitters (entries: UnityParticleSubEmitterEntry[]): void {
         for (const entry of entries) {
-            if (entry.type !== UnityParticleSubEmitterType.Death) continue;
+            if (entry.type !== UnityParticleSubEmitterType.Death || entry.unityInstances) continue;
             this.stopDeathEmitter(entry);
         }
     }
 
     private cleanupIdleDeathEmitters (entries: UnityParticleSubEmitterEntry[], dt: number): void {
         for (const entry of entries) {
-            if (entry.type !== UnityParticleSubEmitterType.Death || !entry.subEmitter) continue;
+            if (entry.type !== UnityParticleSubEmitterType.Death || !entry.subEmitter || entry.unityInstances) continue;
 
             const holdTime = this._deathEmitterHoldTimes.get(entry) || 0;
             if (holdTime > 0) {
@@ -343,6 +384,148 @@ export class UnityParticleSubEmitterFollower extends Component {
         (entry.subEmitter as any).stop?.();
         emitterNode.active = false;
         this._deathEmitterHoldTimes.delete(entry);
+    }
+
+    private updateInstances (pool: ParticlePoolLike, source: ParticleSystem, entries: UnityParticleSubEmitterEntry[], dt: number): void {
+        const stamp = ++this._stamp;
+        const count = Math.min(pool.length, this.maxTrackedSourceParticles(entries));
+        for (let i = 0; i < count; i += 1) {
+            const particle = pool.data[i];
+            if (!particle || particle.remainingLifetime !== undefined && particle.remainingLifetime <= 0) continue;
+            const seed = particle.randomSeed ?? 0;
+            let track = this._tracked.get(particle);
+            if (track && track.seed !== seed) {
+                // The pool recycled this particle object: the old one died this frame.
+                this.startInstances(entries, UnityParticleSubEmitterType.Death, null, track.position);
+                track.stamp = 0;
+            }
+            this.getParticleWorldPosition(source, particle, this._worldPosition);
+            if (!track || track.stamp === 0) {
+                if (!track) {
+                    track = this._freeTracks.pop() || { seed: 0, position: new Vec3(), stamp: 0 };
+                    this._tracked.set(particle, track);
+                }
+                track.seed = seed;
+                track.position.set(this._worldPosition);
+                this.startInstances(entries, UnityParticleSubEmitterType.Birth, particle, this._worldPosition);
+            }
+            track.position.set(this._worldPosition);
+            track.stamp = stamp;
+        }
+        this._sweepEntries = entries;
+        this._tracked.forEach(this.sweepTrack);
+        this._sweepEntries = null;
+
+        for (let i = this._instances.length - 1; i >= 0; i -= 1) {
+            if (!this.advanceInstance(this._instances[i], source, dt)) this.releaseInstance(i);
+        }
+    }
+
+    private _sweepEntries: UnityParticleSubEmitterEntry[] | null = null;
+
+    private readonly sweepTrack = (track: TrackedParticle, particle: ParticleLike): void => {
+        if (track.stamp === this._stamp || !this._sweepEntries) return;
+        this.startInstances(this._sweepEntries, UnityParticleSubEmitterType.Death, null, track.position);
+        this._tracked.delete(particle);
+        this._freeTracks.push(track);
+    };
+
+    private startInstances (entries: UnityParticleSubEmitterEntry[], type: UnityParticleSubEmitterType, particle: ParticleLike | null, position: Vec3): void {
+        for (const entry of entries) {
+            if (!entry.unityInstances || entry.type !== type || !entry.subEmitter) continue;
+            if (!this.shouldEmit(entry.emitProbability)) continue;
+            const schedule = this.captureSchedule(entry);
+            const instance = this._freeInstances.pop() || {
+                entry, schedule, particle: null, seed: 0, position: new Vec3(), time: 0, fresh: true, rateAccumulator: 0, cycles: [],
+            };
+            instance.entry = entry;
+            instance.schedule = schedule;
+            instance.particle = particle;
+            instance.seed = particle?.randomSeed ?? 0;
+            instance.position.set(position);
+            instance.time = 0;
+            instance.fresh = true;
+            instance.rateAccumulator = 0;
+            instance.cycles.length = schedule.bursts.length;
+            instance.cycles.fill(0);
+            this._instances.push(instance);
+        }
+    }
+
+    /** Returns false once the instance can no longer emit. */
+    private advanceInstance (instance: EmissionInstance, source: ParticleSystem, dt: number): boolean {
+        const { schedule, particle } = instance;
+        if (particle) {
+            // Unity stops a birth sub-emitter when its parent particle dies.
+            if ((particle.randomSeed ?? 0) !== instance.seed || particle.remainingLifetime !== undefined && particle.remainingLifetime <= 0) return false;
+            this.getParticleWorldPosition(source, particle, instance.position);
+        }
+        if (instance.fresh) instance.fresh = false;
+        else instance.time += dt;
+        if (instance.time >= schedule.duration) {
+            if (!schedule.loop) {
+                this.emitDueBursts(instance, schedule.duration);
+                return false;
+            }
+            this.emitDueBursts(instance, schedule.duration);
+            instance.time -= schedule.duration;
+            instance.cycles.fill(0);
+        }
+        this.emitDueBursts(instance, instance.time);
+        const rate = schedule.rate.evaluate(instance.time / schedule.duration, Math.random());
+        if (rate > 0 && dt > 0) {
+            instance.rateAccumulator += rate * dt;
+            const emitCount = Math.floor(instance.rateAccumulator);
+            instance.rateAccumulator -= emitCount;
+            if (emitCount > 0) this.emitAtWorldPosition(instance.entry, instance.position, emitCount);
+        }
+        return true;
+    }
+
+    private emitDueBursts (instance: EmissionInstance, time: number): void {
+        const { bursts, duration } = instance.schedule;
+        for (let b = 0; b < bursts.length; b += 1) {
+            const burst = bursts[b];
+            if (time < burst.time) continue;
+            const interval = Math.max(1e-4, burst.repeatInterval);
+            const due = Math.min(Math.max(1, burst.repeatCount), Math.floor((time - burst.time) / interval + 1e-6) + 1);
+            for (; instance.cycles[b] < due; instance.cycles[b] += 1) {
+                const count = Math.round(burst.count.evaluate(Math.min(1, time / duration), Math.random()));
+                if (count > 0) this.emitAtWorldPosition(instance.entry, instance.position, count);
+            }
+        }
+    }
+
+    private captureSchedule (entry: UnityParticleSubEmitterEntry): EmissionSchedule {
+        const target = entry.subEmitter!;
+        let schedule = schedules.get(target);
+        if (schedule) return schedule;
+        schedule = {
+            duration: Math.max(1e-4, target.duration),
+            loop: target.loop,
+            rate: target.rateOverTime,
+            bursts: target.bursts.slice(),
+        };
+        schedules.set(target, schedule);
+        // The target keeps simulating what the instances emit but must not emit by itself.
+        target.rateOverTime = new CurveRange();
+        target.rateOverTime.constant = 0;
+        this.setCurveConstant(target.rateOverDistance, 0);
+        target.bursts.length = 0;
+        target.loop = true;
+        const emitterNode = entry.subEmitterNode || target.node;
+        entry.subEmitterNode = emitterNode;
+        if (!emitterNode.active) emitterNode.active = true;
+        if (!(target as any)._isPlaying) target.play();
+        return schedule;
+    }
+
+    private releaseInstance (index: number): void {
+        const instance = this._instances[index];
+        const last = this._instances.pop()!;
+        if (index < this._instances.length) this._instances[index] = last;
+        instance.particle = null;
+        this._freeInstances.push(instance);
     }
 
     private setCurveConstant (curveRange: any, value: number): void {
