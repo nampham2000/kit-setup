@@ -74,3 +74,12 @@ test('native Play Mode retained slots, deaths, swaps and late births consume pre
   }
  }
 });
+test('actual automatic PlayerLoop Force uses one pass, independent of manual Simulate evidence',()=>{
+ const live=require('./fixtures/force-gameplay-native.json');assert.equal(live.isPlaying,true);assert.equal(live.rows.length,2);
+ const producer=fs.readFileSync(path.join(__dirname,'fixtures/capture-force-gameplay.cs'),'utf8').replace(/\r\n/g,'\n');assert.equal(crypto.createHash('sha256').update(producer).digest('hex'),live.sourceProbeSha256);
+ for(const rows of live.rows){const kernel=new mod.UnityRandomForceKernel(10),velocities=rows[0].particles.map(()=>[0,0,0]);assert.equal(rows.length,12);
+  for(const row of rows){assert.ok(Math.abs(row.dt-1/60)<1e-8);assert.ok(Math.abs(row.time-(row.frame+1)/60)<1e-6);kernel.beginFrame(live.systemSeed,row.particles.length);
+   for(let i=0;i<row.particles.length;i++){const u={};kernel.sample(u,i);for(let a=0;a<3;a++){velocities[i][a]+=(-10+20*[u.x,u.y,u.z][a])*row.dt;assert.ok(Math.abs(velocities[i][a]-row.particles[i].velocity[a])<3e-6);}}
+  }
+ }
+});
