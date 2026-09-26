@@ -33,6 +33,7 @@ const MAX_MATRIX_BYTES = 512 * 1024;
 const MAX_SUITES = 64;
 const MAX_WATCH_FILES = 512;
 const RUN_TIMEOUT_MS = 10 * 60 * 1000;
+const MAX_RUN_TIMEOUT_MINUTES = 60;
 const RUN_MAX_BUFFER_BYTES = 2 * 1024 * 1024;
 
 const RISKS = Object.freeze([
@@ -594,6 +595,11 @@ function validateRegistry(projectRoot, value, options = {}) {
     if (!Number.isInteger(runs) || runs < 1 || runs > 5) {
       throw regressionError('REGRESSION_RUNS_INVALID', `${id}.runs phải nằm trong 1-5.`);
     }
+    // long real-time playthroughs (many cases, slow shared machines) may declare a larger per-run budget, still bounded
+    const timeoutMinutes = entry.timeoutMinutes === undefined ? RUN_TIMEOUT_MS / 60000 : Number(entry.timeoutMinutes);
+    if (!Number.isInteger(timeoutMinutes) || timeoutMinutes < 1 || timeoutMinutes > MAX_RUN_TIMEOUT_MINUTES) {
+      throw regressionError('REGRESSION_TIMEOUT_INVALID', `${id}.timeoutMinutes phải là số nguyên 1-${MAX_RUN_TIMEOUT_MINUTES}.`);
+    }
     if (!Array.isArray(entry.watchFiles) || entry.watchFiles.length < 1 || entry.watchFiles.length > MAX_WATCH_FILES) {
       throw regressionError('REGRESSION_WATCH_INVALID', `${id}.watchFiles phải có 1-${MAX_WATCH_FILES} file.`);
     }
@@ -607,7 +613,7 @@ function validateRegistry(projectRoot, value, options = {}) {
     const matrixRelative = String(entry.matrix || '').replace(/\\/g, '/');
     const matrixFile = resolveContained(projectRoot, matrixRelative, `${id}.matrix`, { mustExist: true });
     const matrix = readJsonBounded(matrixFile, MAX_MATRIX_BYTES, 'REGRESSION_MATRIX_INVALID');
-    const normalized = { id, risks, mandatory, runs, matrix: matrixRelative, watchFiles, watch };
+    const normalized = { id, risks, mandatory, runs, timeoutMs: timeoutMinutes * 60000, matrix: matrixRelative, watchFiles, watch };
     normalized.matrixEvidence = validateMatrixPolicy(projectRoot, normalized, matrix, matrixFile);
     return normalized;
   });
@@ -789,7 +795,7 @@ function executeMatrix(projectRoot, suite, runNumber, options = {}) {
     cwd: projectRoot,
     encoding: 'utf8',
     windowsHide: true,
-    timeout: options.timeoutMs || RUN_TIMEOUT_MS,
+    timeout: options.timeoutMs || suite.timeoutMs || RUN_TIMEOUT_MS,
     maxBuffer: RUN_MAX_BUFFER_BYTES,
     shell: false,
   });

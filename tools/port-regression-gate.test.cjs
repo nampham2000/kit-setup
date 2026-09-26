@@ -17,6 +17,7 @@ const {
   parseArgs,
   runRegressionGate,
   checkRegressionReceipt,
+  executeMatrix,
   validateRegistry,
 } = require('./port-regression-gate.cjs');
 
@@ -483,6 +484,27 @@ test('run refreshes once, executes declared rounds, and binds receipt to watched
   assert.throws(() => checkRegressionReceipt({ project: root, portabilityCheck: false }),
     error => error.code === 'REGRESSION_RECEIPT_STALE');
   assert.equal(fs.existsSync(path.join(root, ...DEFAULT_RECEIPT.split('/'))), true);
+});
+
+test('suite timeoutMinutes is bounded and bounds the matrix run', t => {
+  const root = fixture(t);
+  const matrix = 'tools/qa/input.json';
+  writeMatrix(root, matrix, [{
+    name: 'tap', gesture: '0.5,0.5,0.5,0.5,100,1', eval: '({ok:true})', requireEvalOk: true,
+  }]);
+  const suite = (timeoutMinutes) => ({ id: 'input', risks: ['input-response'], matrix, watchFiles: ['assets/script/Game.ts'], timeoutMinutes });
+  for (const bad of [0, 61, 2.5, 'x']) {
+    writeRegistry(root, registry([suite(bad)], ['input-response']));
+    assert.throws(() => loadRegistry(root), error => error.code === 'REGRESSION_TIMEOUT_INVALID');
+  }
+  writeRegistry(root, registry([suite(undefined)], ['input-response']));
+  assert.equal(loadRegistry(root).suites[0].timeoutMs, 10 * 60 * 1000);
+  writeRegistry(root, registry([suite(35)], ['input-response']));
+  const loaded = loadRegistry(root).suites[0];
+  assert.equal(loaded.timeoutMs, 35 * 60 * 1000);
+  let seen = null;
+  executeMatrix(root, loaded, 1, { spawnSync(_cmd, _args, opts) { seen = opts.timeout; return { status: 1, stdout: '', stderr: '' }; } });
+  assert.equal(seen, 35 * 60 * 1000);
 });
 
 test('mandatory suite failure writes evidence but keeps the gate red', async t => {

@@ -1035,6 +1035,7 @@ const CAPABILITIES = [
       'Trước run, tool gọi Cocos `editorRuntime_reload_preview` với refreshAssets=true để tránh test bundle TypeScript cũ. `--no-refresh` chỉ dùng khi chủ ý và được ghi rõ trong receipt.',
       'Receipt bind SHA-256 của registry, matrix, eval/reference và watchFiles; thay đổi byte sau PASS làm `check` fail stale. Tool không tự đánh giá pixel parity ngoài oracle/reference contract.',
       '`--suite <id>` chỉ re-run suite đã chọn rồi merge vào receipt base khi base cùng snapshot và đủ mọi suite còn lại; receipt thiếu/stale hoặc suite lạ phải fail trước preview. Không dùng selective rerun để bỏ qua suite fail.',
+      'Mỗi run của một suite mặc định có ngân sách 10 phút; suite playthrough thời gian thực dài có thể khai báo `timeoutMinutes` nguyên 1-60. Không dùng timeout lớn để che case treo: mọi case vẫn phải tự kết thúc bằng eval/postActionSeconds có giới hạn.',
     ],
     status: 'partial',
     probe: 'help',
