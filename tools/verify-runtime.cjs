@@ -636,7 +636,9 @@ async function runOne(target, options) {
       const e = params.entry || {};
       if (e.level === 'error') {
         result.eventCounts.consoleErrors += 1;
-        pushUniqueBounded(result.consoleErrors, `[${e.source}] ${String(e.text).slice(0, 300)}`, 50);
+        // network entries name the failing request so environment noise can be told apart from the game
+        const where = e.url ? ` <${String(e.url).slice(0, 160)}>` : '';
+        pushUniqueBounded(result.consoleErrors, `[${e.source}] ${String(e.text).slice(0, 300)}${where}`, 50);
       }
     });
 
