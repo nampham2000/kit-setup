@@ -82,12 +82,44 @@ function checkEffectPropertyBindings(effectText, options = {}) {
     for (const uniform of code.matchAll(/\buniform\s+(?:lowp\s+|mediump\s+|highp\s+)?(\w+)\s+(\w+)\s*(?:\[[^\]]+\])?\s*;/g)) uniforms.set(uniform[2], uniform[1]);
     for (const include of code.matchAll(/#\s*include\s*[<"]([^>"]+)[>"]/g)) collect(include[1], uniforms, unresolved, visited);
   }
+  function stageBlocks(name, stage, visited = new Set()) {
+    if(visited.has(name))return '';visited.add(name);
+    const raw=chunk(name);if(raw==null)return '';
+    return stripComments(raw).replace(/#\s*include\s*[<"]([^>"]+)[>"]/g,(_,include)=>stageBlocks(include,stage,visited));
+  }
+  function blockPrecisions(name,stage) {
+    const defaults={float:stage==='vert'?'highp':null,int:stage==='vert'?'highp':'mediump'},blocks=new Map();
+    const code=stageBlocks(name,stage);
+    for(const token of code.matchAll(/\bprecision\s+(lowp|mediump|highp)\s+(float|int)\s*;|\buniform\s+(\w+)\s*\{([^}]*)\}/g)){
+      if(token[1]){defaults[token[2]]=token[1];continue;}
+      const members=new Map();
+      for(const m of token[4].matchAll(/\b(?:(lowp|mediump|highp)\s+)?(\w+)\s+(\w+)\s*(?:\[[^\]]+\])?\s*;/g)){
+        const scalar=/^(?:float|vec[234]|mat[234](?:x[234])?)$/.test(m[2])?'float':/^(?:int|uint|[iu]vec[234])$/.test(m[2])?'int':null;
+        if(scalar)members.set(m[3],m[1]||defaults[scalar]);
+      }
+      // Conditional duplicate block declarations need the actual preprocessor.
+      blocks.set(token[3],blocks.has(token[3])?null:members);
+    }
+    return blocks;
+  }
   let complete = true;
   for (const [ti, technique] of header.techniques.entries()) {
     const passes = technique.passes || [];
     for (const [pi, pass] of passes.entries()) {
       const uniforms = new Map(), unresolved = new Set();
       for (const stage of ['vert', 'frag']) if (pass[stage]) collect(String(pass[stage]).split(':')[0], uniforms, unresolved, new Set());
+      const vertex=blockPrecisions(String(pass.vert||'').split(':')[0],'vert'),fragment=blockPrecisions(String(pass.frag||'').split(':')[0],'frag');
+      for(const [block,members]of vertex){
+        if(!fragment.has(block))continue;
+        const other=fragment.get(block);
+        if(!members||!other){warnings.push(`[STAGE_PRECISION_UNVERIFIED] technique ${ti} pass ${pi}: conditional duplicate block '${block}' requires live variant compilation.`);complete=false;continue;}
+        for(const [member,precision]of members){
+          if(!other.has(member))continue;
+          const second=other.get(member);
+          if(!precision||!second){warnings.push(`[STAGE_PRECISION_UNVERIFIED] technique ${ti} pass ${pi}: '${block}.${member}' needs explicit precision or a default float precision.`);complete=false;}
+          else if(precision!==second)errors.push(`[EFFECT_STAGE_PRECISION_MISMATCH] technique ${ti} pass ${pi}: '${block}.${member}' is ${precision} in vertex and ${second} in fragment. WebGL cannot link this uniform block; declare matching member precision in both stages.`);
+        }
+      }
       // propertyIndex is local to the technique, never to the whole effect.
       const owner = pass.propertyIndex == null ? pass : passes[Number(pass.propertyIndex)];
       if (pass.propertyIndex != null && (!Number.isInteger(Number(pass.propertyIndex)) || !owner)) {
@@ -111,7 +143,7 @@ function checkEffectPropertyBindings(effectText, options = {}) {
 }
 function assertEffectPropertyBindings(text, options = {}) {
   const result = checkEffectPropertyBindings(text, options);
-  if (result.errors.length) throw Object.assign(new Error(result.errors.join('\n')), { code: 'EFX3302_PROPERTY_UNIFORM_MISSING' });
+  if (result.errors.length) throw Object.assign(new Error(result.errors.join('\n')), { code: /^\[([^\]]+)\]/.exec(result.errors[0])?.[1]||'EFFECT_BINDING_INVALID' });
   return result;
 }
 module.exports = { checkEffectPropertyBindings, parseEffectHeader, createEffectChunkResolver, assertEffectPropertyBindings };
