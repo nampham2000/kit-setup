@@ -82,6 +82,7 @@ const {
   importedUnityAssetPath: importedUnityAssetPathImpl,
   ensureAssetMeta: ensureAssetMetaImpl,
   copyUnityAssetToCocos: copyUnityAssetToCocosImpl,
+  writePreparedUnityTexture: writePreparedUnityTextureImpl,
   handleMissingModel: handleMissingModelImpl,
 } = createAssetImportPorter({
   ensureDirectoryMetas,
@@ -105,6 +106,7 @@ const {
   resolveCurrentStandaloneMaterialUuid,
   firstSubMetaRecord,
   copyUnityAssetToCocos: copyUnityAssetToCocosImpl,
+  writePreparedUnityTexture: writePreparedUnityTextureImpl,
   ensureDirectoryMetas,
   ensureMaterialAssetMeta,
   libraryJsonPathForUuid,
