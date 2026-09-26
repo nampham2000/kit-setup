@@ -34,7 +34,12 @@ test('URP Lit source rig follows the material workflow like URP InitializeBRDFDa
   assert.match(direct, /baseColor \* unityOneMinusReflectivity\(\)/);
   assert.match(direct, /specularTerm \* unityBrdfSpecular\(baseColor\)/);
   assert.doesNotMatch(direct, /specularColor\.rgb/, 'a metallic material must not use its dormant _SpecColor');
-  assert.match(source, /ambient = unityTrilightAmbient\(normal\) \* baseColor\.rgb \* unityOneMinusReflectivity\(\);/);
+  // USE_ALPHA_PREMULTIPLY (URP _ALPHAPREMULTIPLY_ON, "Preserve Specular Lighting") scales only the
+  // diffuse and ambient terms by alpha (g_diffuseAlpha, 1.0 when off); specular stays unscaled.
+  assert.match(source, /ambient = unityTrilightAmbient\(normal\) \* baseColor\.rgb \* unityOneMinusReflectivity\(\) \* g_diffuseAlpha;/);
+  assert.match(direct, /vec3 diffuse = baseColor \* unityOneMinusReflectivity\(\) \* g_diffuseAlpha;/);
+  assert.doesNotMatch(direct, /unityBrdfSpecular\(baseColor\)[^\n;]*g_diffuseAlpha/, 'preserve-specular: the specular term is not multiplied by alpha');
+  assert.match(source, /#if USE_ALPHA_PREMULTIPLY[\s\S]*g_diffuseAlpha = baseColor\.a;/);
 });
 
 test('URP Lit can preserve an HDR camera that has no Unity post-processing tone mapper', () => {

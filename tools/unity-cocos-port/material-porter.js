@@ -1086,8 +1086,36 @@ module.exports = function createMaterialPorter(deps) {
     return '';
   }
 
+  // A renderer slot that references a model file (`{fileID: <material>, guid: <fbx>}`) uses a material
+  // Unity built from the FBX's material description (ModelImporter "Import via Material Description"
+  // + embedded materials: URP Lit, base map, sqrt(Shininess*0.01) smoothness, ...). Cocos imports the
+  // same FBX material as a builtin-standard `gltf-material` sub-asset from the raw Phong data, which
+  // renders black/flat under a ported Unity light rig. Screw Out Factory: 17 level bodies + 63
+  // Level_5 screw decorations (whose FBX was never copied, so the slot fell back to the default
+  // material) needed a Unity-side capture (see tools/screw/fix-embedded-materials.cjs).
+  const MODEL_MATERIAL_EXTENSIONS = new Set(['.fbx', '.gltf', '.glb', '.obj', '.blend', '.dae']);
+
+  function resolveModelEmbeddedMaterialUuid(materialAsset, cocosDb, reporter, gameObjectName) {
+    const resolved = (cocosDb && typeof cocosDb.resolveMaterialByStem === 'function'
+      ? cocosDb.resolveMaterialByStem(materialAsset.stem)
+      : '') || '';
+    reporter.high(
+      'MODEL_EMBEDDED_MATERIAL_UNPORTED',
+      materialAsset.relativePath,
+      gameObjectName,
+      resolved
+        ? 'Renderer uses a material embedded in a model file; the Cocos model sub-asset is builtin-standard from raw FBX data, not the material Unity built from its material description. Capture the Unity material (shader, base map, smoothness, surface) and bind a converted material'
+        : 'Renderer uses a material embedded in a model file that has no imported Cocos model; the slot uses the default material. Capture the Unity material and bind a converted material',
+      resolved || BUILTIN_DEFAULT_MESH_MATERIAL_UUID,
+    );
+    return resolved || BUILTIN_DEFAULT_MESH_MATERIAL_UUID;
+  }
+
   function resolveUnityMaterialUuid(materialAsset, options, unityDb, cocosDb, reporter, gameObjectName) {
     if (!materialAsset) return '';
+    if (MODEL_MATERIAL_EXTENSIONS.has(String(materialAsset.ext || '').toLowerCase())) {
+      return resolveModelEmbeddedMaterialUuid(materialAsset, cocosDb, reporter, gameObjectName);
+    }
 
     const convertedDest = convertUnityMaterialToCocos(materialAsset, options, unityDb, reporter);
     let resolvedMaterial = resolveStandaloneMaterialAssetUuid(convertedDest, options);
