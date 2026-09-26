@@ -28,7 +28,7 @@ const path = require('path');
 const { readTextureImportLimits } = require('./texture-import-limit');
 
 // v3 invalidates missing UI layouts and aspect-fitted sliced/tiled images.
-const CACHE_VERSION = 7; // Replace orbital approximations with source-bound native integration.
+const CACHE_VERSION = 8; // Unity textures keep raw texels: PNG colour-profile chunks are stripped.
 
 /** Dấu vân tay của một file: kích thước + mtime. Đủ nhạy, không cần đọc nội dung. */
 function fileStamp(file) {

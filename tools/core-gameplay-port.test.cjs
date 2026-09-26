@@ -10,6 +10,7 @@ const { isLinkUnavailableError } = require('./unity-intel/test-fixture.cjs');
 const {
   EVIDENCE_KIND,
   EVIDENCE_SCHEMA_VERSION,
+  PORTABLE_HASH_CONTRACT,
   DEFAULT_RESUME_PACKET,
   DEFAULT_PREVIEW_URL,
   PREVIEW_REQUIRED_SCRIPTS,
@@ -378,6 +379,84 @@ test('checkpoint evidence is stale after target mutation and visual-only cannot 
   malformed.targetHashes = [null];
   fs.writeFileSync(evidenceFile, JSON.stringify(malformed));
   assert.doesNotThrow(() => evaluateFidelity(manifest, fixture.unity, fixture.cocos));
+});
+
+test('committed evidence from a CRLF checkout stays grounded on an LF checkout; binary targets stay byte-exact', async t => {
+  const fixture = projectFixture(t);
+  await initCorePort({ unityProject: fixture.unity, cocosProject: fixture.cocos }, {
+    runPreflight: async () => ({ brief: fakeBrief() }),
+  });
+  const manifestFile = path.join(fixture.cocos, '.ai', 'port', 'core-gameplay.json');
+  const manifest = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
+  const script = path.join(fixture.cocos, 'assets', 'script', 'Gameplay.ts');
+  const texture = path.join(fixture.cocos, 'assets', 'resources', 'hud.png');
+  const lfSource = 'export class Gameplay {\n  tap(): void {}\n}\n';
+  const pngBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x0d, 0x0a]);
+  // PC A: autocrlf=true checkout writes CRLF text; evidence is produced there.
+  fs.writeFileSync(script, lfSource.replace(/\n/g, '\r\n'));
+  fs.writeFileSync(texture, pngBytes);
+  const checkpoint = manifest.checkpoints.find(item => item.id === 'input-response');
+  checkpoint.status = 'pass';
+  checkpoint.sourceEvidence = ['Assets/Game/Gameplay.cs'];
+  checkpoint.targetEvidence = ['assets/script/Gameplay.ts', 'assets/resources/hud.png'];
+  checkpoint.verificationEvidence = [writeCheckpointEvidence(fixture, manifest, checkpoint)];
+  assert.equal(evaluateFidelity(manifest, fixture.unity, fixture.cocos).items[0].grounded, true);
+
+  // PC B: same commit checked out with LF. Evidence must not go stale.
+  fs.writeFileSync(script, lfSource);
+  assert.equal(evaluateFidelity(manifest, fixture.unity, fixture.cocos).items[0].grounded, true);
+  const evidenceFile = path.join(fixture.cocos, ...checkpoint.verificationEvidence[0].split('/'));
+  const evidence = JSON.parse(fs.readFileSync(evidenceFile, 'utf8'));
+  assert.deepEqual(evidence.targetHashes, currentTargetHashes(fixture.cocos, checkpoint.targetEvidence));
+
+  // A real content change is still detected.
+  fs.writeFileSync(script, lfSource.replace('tap', 'hold'));
+  assert.equal(evaluateFidelity(manifest, fixture.unity, fixture.cocos).items[0].grounded, false);
+  fs.writeFileSync(script, lfSource);
+
+  // Binary targets are never line-ending normalized.
+  fs.writeFileSync(texture, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0a, 0x1a, 0x0a, 0x0a]));
+  assert.equal(evaluateFidelity(manifest, fixture.unity, fixture.cocos).items[0].grounded, false);
+  fs.writeFileSync(texture, pngBytes);
+  assert.equal(evaluateFidelity(manifest, fixture.unity, fixture.cocos).items[0].grounded, true);
+});
+
+test('evidence schema bump retires raw-byte v1 evidence without invalidating committed v1 manifests', async t => {
+  const fixture = projectFixture(t);
+  await initCorePort({ unityProject: fixture.unity, cocosProject: fixture.cocos }, {
+    runPreflight: async () => ({ brief: fakeBrief() }),
+  });
+  assert.equal(EVIDENCE_SCHEMA_VERSION, 2);
+  const manifestFile = path.join(fixture.cocos, '.ai', 'port', 'core-gameplay.json');
+  const manifest = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
+  assert.equal(manifest.delivery.evidenceContract.schemaVersion, 2);
+  assert.equal(manifest.delivery.evidenceContract.targetHashContract, PORTABLE_HASH_CONTRACT);
+
+  // A manifest committed before the bump keeps validating (no forced core:init)...
+  const legacy = JSON.parse(JSON.stringify(manifest));
+  legacy.delivery.evidenceContract.schemaVersion = 1;
+  delete legacy.delivery.evidenceContract.targetHashContract;
+  fs.writeFileSync(manifestFile, JSON.stringify(legacy));
+  assert.equal(validateManifest(fixture.cocos, manifestFile).delivery.evidenceContract.schemaVersion, 1);
+  // ...but a current-version contract must name the portable hash contract.
+  const unnamed = JSON.parse(JSON.stringify(manifest));
+  delete unnamed.delivery.evidenceContract.targetHashContract;
+  fs.writeFileSync(manifestFile, JSON.stringify(unnamed));
+  assert.throws(() => validateManifest(fixture.cocos, manifestFile),
+    error => error.code === 'CORE_PORT_MANIFEST_INVALID' && /evidence contract/.test(error.message));
+
+  // v1 evidence (raw working-copy bytes) is never grounded, even when hashes happen to match.
+  const checkpoint = legacy.checkpoints.find(item => item.id === 'input-response');
+  checkpoint.status = 'pass';
+  checkpoint.sourceEvidence = ['Assets/Game/Gameplay.cs'];
+  checkpoint.targetEvidence = ['assets/script/Gameplay.ts'];
+  checkpoint.verificationEvidence = [writeCheckpointEvidence(fixture, legacy, checkpoint)];
+  assert.equal(evaluateFidelity(legacy, fixture.unity, fixture.cocos).items[0].grounded, true);
+  const evidenceFile = path.join(fixture.cocos, ...checkpoint.verificationEvidence[0].split('/'));
+  const v1 = JSON.parse(fs.readFileSync(evidenceFile, 'utf8'));
+  v1.schemaVersion = 1;
+  fs.writeFileSync(evidenceFile, JSON.stringify(v1));
+  assert.equal(evaluateFidelity(legacy, fixture.unity, fixture.cocos).items[0].grounded, false);
 });
 
 test('atomic manifest CAS preserves a concurrent edit', t => {

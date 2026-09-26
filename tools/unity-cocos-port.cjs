@@ -89,6 +89,7 @@ const {
   importedUnityAssetPath: importedUnityAssetPathImpl,
   ensureAssetMeta: ensureAssetMetaImpl,
   copyUnityAssetToCocos: copyUnityAssetToCocosImpl,
+  writePreparedUnityTexture: writePreparedUnityTextureImpl,
   handleMissingModel: handleMissingModelImpl,
 } = createAssetImportPorter({
   ensureDirectoryMetas,
@@ -112,6 +113,7 @@ const {
   resolveCurrentStandaloneMaterialUuid,
   firstSubMetaRecord,
   copyUnityAssetToCocos: copyUnityAssetToCocosImpl,
+  writePreparedUnityTexture: writePreparedUnityTextureImpl,
   ensureDirectoryMetas,
   ensureMaterialAssetMeta,
   libraryJsonPathForUuid,
@@ -5619,7 +5621,8 @@ class CocosPrefabBuilder {
     else if (unityClearFlags === 3) cocosClearFlags = 2; // Depth only
     else if (unityClearFlags === 4) cocosClearFlags = 0; // Nothing
 
-    const cullingMask = Number(getField(doc, 'm_CullingMask.m_Bits', 0xffffffff) ?? 0xffffffff);
+    const unityCullingMask = getField(doc, 'm_CullingMask', null);
+    const cullingMask = Number(unityCullingMask?.m_Bits ?? 0xffffffff);
 
     return this.addComponent(nodeId, 'cc.Camera', {
       _projection: projection,

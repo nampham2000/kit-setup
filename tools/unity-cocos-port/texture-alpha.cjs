@@ -23,15 +23,16 @@ function encodeRgba(width, height, rgba) {
   for(let y=0;y<height;y++) pixels.copy(scan,y*(width*4+1)+1,y*width*4,(y+1)*width*4);
   return Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),chunk('IHDR',header),chunk('IDAT',zlib.deflateSync(scan)),chunk('IEND',Buffer.alloc(0))]);
 }
-function applyUnityTextureAlpha(source, destination) {
-  if (!fs.existsSync(source+'.meta')) return false;
-  const mode = Number(fs.readFileSync(source+'.meta','utf8').match(/^\s*alphaUsage:\s*(\d+)/m)?.[1] ?? 1);
-  if (mode === 1) return false;
-  if (path.resolve(source).toLowerCase() === path.resolve(destination).toLowerCase()) {
-    throw Error('Unity alpha conversion must not overwrite its source texture');
-  }
-  const bytes=fs.readFileSync(destination);
-  if (mode === 0 && bytes[0] === 0xff && bytes[1] === 0xd8) return false; // JPEG is already opaque.
+function unityAlphaUsage(source) {
+  if (!fs.existsSync(source+'.meta')) return 1;
+  return Number(fs.readFileSync(source+'.meta','utf8').match(/^\s*alphaUsage:\s*(\d+)/m)?.[1] ?? 1);
+}
+// Pure transform so callers can compare the prepared bytes with the Cocos copy before
+// writing; returns the input Buffer itself when Unity keeps the source alpha.
+function unityTextureAlphaBytes(source, bytes) {
+  const mode = unityAlphaUsage(source);
+  if (mode === 1) return bytes;
+  if (mode === 0 && bytes[0] === 0xff && bytes[1] === 0xd8) return bytes; // JPEG is already opaque.
   if (bytes.length<29 || !bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])) || ![8,16].includes(bytes[24]) || bytes[28]!==0) {
     throw Error('Unity alpha import requires a non-interlaced 8/16-bit PNG or a live Unity texture export: '+source);
   }
@@ -40,8 +41,17 @@ function applyUnityTextureAlpha(source, destination) {
   const data=image.rgba;
   for(let i=0;i<data.length;i+=4) data[i+3]=mode===0?255:Math.round(data[i]*0.299+data[i+1]*0.587+data[i+2]*0.114);
   const output=encodeRgba(image.width,image.height,data);
-  if(output.equals(bytes))return false;
+  return output.equals(bytes) ? bytes : output;
+}
+function applyUnityTextureAlpha(source, destination) {
+  if (unityAlphaUsage(source) === 1) return false;
+  if (path.resolve(source).toLowerCase() === path.resolve(destination).toLowerCase()) {
+    throw Error('Unity alpha conversion must not overwrite its source texture');
+  }
+  const bytes=fs.readFileSync(destination);
+  const output=unityTextureAlphaBytes(source, bytes);
+  if(output===bytes)return false;
   fs.writeFileSync(destination,output);
   return true;
 }
-module.exports={applyUnityTextureAlpha,encodeRgba};
+module.exports={applyUnityTextureAlpha,unityTextureAlphaBytes,encodeRgba};

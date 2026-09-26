@@ -1,7 +1,13 @@
+import * as fs from 'fs';
+import * as path from 'path';
+
 const DEFAULT_DIRECTORY = 'db://assets';
 export const PLAYABLE_TRANSPARENT_PRESET_ID = '1fYG0h7MJDcp+zA2cMcUsR';
 export const PLAYABLE_TRANSPARENT_PRESET_NAME = 'PlayableTransparent';
 export const PLAYABLE_TRANSPARENT_WEBP_QUALITY = 50;
+export const PLAYABLE_OPAQUE_PRESET_ID = 'caN1shVmpEEKSqquZ64sut';
+export const PLAYABLE_OPAQUE_PRESET_NAME = 'PlayableOpaque';
+export const PLAYABLE_OPAQUE_WEBP_QUALITY = 20;
 
 const TEXTURE_EXTENSION = /\.(?:png|jpe?g)$/i;
 const MAX_TEXTURES_PER_SCAN = 20_000;
@@ -12,6 +18,19 @@ type TexturePolicyOptions = {
     presetName?: string;
     quality?: number;
     dryRun?: boolean;
+};
+
+type TexturePresetSpec = {
+    presetId: string;
+    presetName: string;
+    quality: number;
+};
+
+type TexturePolicyRule = TexturePresetSpec & { pathPrefix: string };
+type TexturePolicyDocument = {
+    version: 1;
+    default: TexturePresetSpec;
+    overrides?: TexturePolicyRule[];
 };
 
 type TextureApplyResult = {
@@ -32,6 +51,7 @@ export type TexturePolicyReport = {
         changed: boolean;
         webpQuality: number | string | null;
     };
+    presets?: Array<TexturePolicyReport['preset']>;
     scanned: number;
     eligible: number;
     updated: number;
@@ -60,6 +80,69 @@ function deepClone<T>(value: T): T {
     return JSON.parse(JSON.stringify(value ?? {}));
 }
 
+function presetKey(spec: TexturePresetSpec): string {
+    return `${spec.presetId}\u0000${spec.presetName}\u0000${spec.quality}`;
+}
+
+function normalizeDbUrl(value: unknown): string {
+    return String(value || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+}
+
+function validatePresetSpec(value: any, label: string): TexturePresetSpec {
+    const presetId = String(value?.presetId || '').trim();
+    const presetName = String(value?.presetName || '').trim();
+    const quality = Number(value?.quality);
+    if (!presetId || !presetName || !Number.isFinite(quality) || quality < 1 || quality > 100) {
+        throw new Error(`Invalid texture compression ${label}; presetId, presetName, and quality 1-100 are required.`);
+    }
+    return { presetId, presetName, quality: normalizeWebpQuality(quality) };
+}
+
+export function loadProjectTexturePolicy(options: TexturePolicyOptions = {}): TexturePolicyDocument {
+    const fallback: TexturePolicyDocument = {
+        version: 1,
+        default: validatePresetSpec({
+            presetId: options.presetId || PLAYABLE_TRANSPARENT_PRESET_ID,
+            presetName: options.presetName || PLAYABLE_TRANSPARENT_PRESET_NAME,
+            quality: options.quality ?? PLAYABLE_TRANSPARENT_WEBP_QUALITY,
+        }, 'default'),
+        overrides: [],
+    };
+    const projectRoot = String((Editor as any)?.Project?.path || '').trim();
+    if (!projectRoot) return fallback;
+    const policyFile = path.join(projectRoot, 'tools', 'texture-compression-policy.json');
+    if (!fs.existsSync(policyFile)) return fallback;
+    let source: any;
+    try {
+        source = JSON.parse(fs.readFileSync(policyFile, 'utf8').replace(/^\uFEFF/, ''));
+    } catch (error: any) {
+        throw new Error(`Cannot read ${policyFile}: ${error?.message || String(error)}`);
+    }
+    if (source?.version !== 1) throw new Error(`Unsupported texture compression policy version in ${policyFile}.`);
+    const document: TexturePolicyDocument = {
+        version: 1,
+        default: validatePresetSpec(source.default, 'default'),
+        overrides: [],
+    };
+    for (const [index, rule] of (source.overrides || []).entries()) {
+        const pathPrefix = normalizeDbUrl(rule?.pathPrefix);
+        if (!pathPrefix.startsWith('db://assets/')) throw new Error(`Invalid texture compression override ${index}; pathPrefix must be under db://assets/.`);
+        document.overrides!.push({ pathPrefix, ...validatePresetSpec(rule, `override ${index}`) });
+    }
+    return document;
+}
+
+export function texturePresetForUrl(url: string, policy: TexturePolicyDocument): TexturePresetSpec {
+    const normalized = normalizeDbUrl(url);
+    let selected: TexturePolicyRule | null = null;
+    for (const rule of policy.overrides || []) {
+        if (normalized === rule.pathPrefix || normalized.startsWith(`${rule.pathPrefix}/`)) {
+            if (!selected || rule.pathPrefix.length > selected.pathPrefix.length) selected = rule;
+        }
+    }
+    return selected || policy.default;
+}
+
 function assetIdentity(payload: any): string | null {
     if (typeof payload === 'string') return payload;
     if (Array.isArray(payload)) {
@@ -76,6 +159,7 @@ function assetIdentity(payload: any): string | null {
 export class TextureCompressionPolicy {
     private fullScan: Promise<TexturePolicyReport> | null = null;
     private readonly assetInFlight = new Set<string>();
+    private presetMutation: Promise<void> = Promise.resolve();
 
     async enforceAll(options: TexturePolicyOptions = {}): Promise<TexturePolicyReport> {
         if (this.fullScan) return this.fullScan;
@@ -91,7 +175,12 @@ export class TextureCompressionPolicy {
         if (this.assetInFlight.has(identity)) return { status: 'unchanged', url: identity };
         this.assetInFlight.add(identity);
         try {
-            const preset = await this.ensurePreset(options);
+            const info: any = await Editor.Message.request('asset-db', 'query-asset-info', identity);
+            const url = String(info?.url || info?.path || info?.source || identity);
+            if (!info || info.isDirectory || !isPlayableTextureUrl(url)) return { status: 'skipped', url };
+            const policy = loadProjectTexturePolicy(options);
+            const spec = texturePresetForUrl(url, policy);
+            const preset = await this.ensurePreset({ ...options, ...spec });
             return await this.applyAsset(identity, preset.id, Boolean(options.dryRun));
         } catch (error: any) {
             return { status: 'failed', url: identity, error: error?.message || String(error) };
@@ -106,7 +195,14 @@ export class TextureCompressionPolicy {
         const ready = await Editor.Message.request('asset-db', 'query-ready');
         if (!ready) throw new Error('Cocos Asset DB is not ready; texture compression policy was not applied.');
 
-        const preset = await this.ensurePreset(options);
+        const policy = loadProjectTexturePolicy(options);
+        const presetSpecs = [policy.default, ...(policy.overrides || [])];
+        const presetsByKey = new Map<string, TexturePolicyReport['preset']>();
+        for (const spec of presetSpecs) {
+            const key = presetKey(spec);
+            if (!presetsByKey.has(key)) presetsByKey.set(key, await this.ensurePreset({ ...options, ...spec }));
+        }
+        const preset = presetsByKey.get(presetKey(policy.default))!;
         const assets: any[] = await Editor.Message.request('asset-db', 'query-assets', {
             pattern: `${directory}/**/*`,
         });
@@ -120,6 +216,7 @@ export class TextureCompressionPolicy {
             dryRun,
             directory,
             preset,
+            presets: Array.from(presetsByKey.values()),
             scanned: assets.length,
             eligible: 0,
             updated: 0,
@@ -136,7 +233,10 @@ export class TextureCompressionPolicy {
                 continue;
             }
             report.eligible += 1;
-            const result = await this.applyAsset(asset?.uuid || url, preset.id, dryRun);
+            const spec = texturePresetForUrl(url, policy);
+            const targetPreset = presetsByKey.get(presetKey(spec));
+            if (!targetPreset) throw new Error(`Texture policy preset was not initialized for ${url}.`);
+            const result = await this.applyAsset(asset?.uuid || url, targetPreset.id, dryRun);
             if (result.status === 'updated') report.updated += 1;
             else if (result.status === 'unchanged') report.unchanged += 1;
             else if (result.status === 'skipped') report.skipped += 1;
@@ -152,6 +252,20 @@ export class TextureCompressionPolicy {
     }
 
     private async ensurePreset(options: TexturePolicyOptions): Promise<TexturePolicyReport['preset']> {
+        const previous = this.presetMutation;
+        let release!: () => void;
+        this.presetMutation = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        await previous;
+        try {
+            return await this.ensurePresetExclusive(options);
+        } finally {
+            release();
+        }
+    }
+
+    private async ensurePresetExclusive(options: TexturePolicyOptions): Promise<TexturePolicyReport['preset']> {
         const profileApi: any = (Editor as any).Profile;
         if (!profileApi?.getProject || !profileApi?.setProject) {
             throw new Error('Editor.Profile project API is unavailable; cannot ensure texture compression preset.');

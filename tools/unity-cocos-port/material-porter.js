@@ -21,7 +21,6 @@ const {
   UNITY_MATERIAL_EMISSIVE_TEXTURE_KEYS,
 } = require('./constants');
 const {
-  copyAssetIfChanged,
   ensureDir,
   readJsonIfExists,
   stableUuid,
@@ -101,6 +100,7 @@ module.exports = function createMaterialPorter(deps) {
     resolveCurrentStandaloneMaterialUuid,
     firstSubMetaRecord,
     copyUnityAssetToCocos,
+    writePreparedUnityTexture,
     ensureDirectoryMetas,
     ensureMaterialAssetMeta,
     libraryJsonPathForUuid,
@@ -290,7 +290,7 @@ module.exports = function createMaterialPorter(deps) {
       // An already-imported texture is reused for its stable uuid, but its bytes still
       // have to track the Unity source. Without this the playable silently keeps the art
       // from the first port after Unity re-exports the texture, and nothing reports it.
-      if (!options.dryRun && copyAssetIfChanged(textureAsset.path, importedDest) === 'refreshed') {
+      if (!options.dryRun && writePreparedUnityTexture(textureAsset, importedDest, options, reporter) === 'refreshed') {
         reporter.low(
           'ASSET_REFRESHED',
           textureAsset.relativePath,

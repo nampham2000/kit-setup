@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { copyAssetIfChanged, ensureDir, randomUuid, toPosix } = require('./core-utils');
 const { exportUnityMeshAssetToFbx } = require('./unity-mesh-fbx-exporter');
-const { textureImportLimit, copyTextureWithLimit } = require('./texture-import-limit');
+const { textureImportLimit, writeUnityTexture } = require('./texture-import-limit');
 
 function unitySpriteImportData(text) {
   const border = /^\s*spriteBorder:\s*\{x:\s*([^,]+),\s*y:\s*([^,]+),\s*z:\s*([^,]+),\s*w:\s*([^}]+)\}/m.exec(text);
@@ -102,6 +102,32 @@ module.exports = function createAssetImportPorter(deps) {
     };
   }
 
+  /**
+   * Writes the Cocos bytes of a Unity texture (configured resize, PNG colour chunks
+   * dropped because Unity renders raw texels, alphaUsage). Every path that places or
+   * refreshes a Unity image must use this, or a re-port silently restores the raw
+   * source bytes. Returns 'created' | 'refreshed' | 'unchanged', or '' on failure.
+   */
+  function writePreparedUnityTexture(unityAsset, dest, options, reporter) {
+    const relative = toPosix(path.relative(options.cocosRoot, dest));
+    let result;
+    let maxSize = 0;
+    try {
+      maxSize = textureImportLimit(unityAsset.relativePath, options);
+      result = writeUnityTexture(unityAsset.path, dest, { maxSize, cocosRoot: options.cocosRoot });
+    } catch (error) {
+      reporter.add('high', 'TEXTURE_IMPORT_RESIZE_FAILED', unityAsset.relativePath, dest, String(error));
+      return '';
+    }
+    if (result.alphaError) reporter.add('high', 'TEXTURE_ALPHA_IMPORT_UNRESOLVED', unityAsset.relativePath, dest, result.alphaError);
+    if (result.status === 'unchanged') return result.status;
+    if (maxSize) reporter.low('TEXTURE_IMPORT_SIZE_LIMIT', unityAsset.relativePath, relative,
+      `Applied configured texture max size ${maxSize}; alpha/aspect ratio preserved`);
+    if (result.removedChunks.length) reporter.low('TEXTURE_COLOR_PROFILE_STRIPPED', unityAsset.relativePath, relative,
+      `Removed PNG colour chunks ${result.removedChunks.join(',')}: Unity ignores them and renders raw texels, browsers would colour-convert`);
+    return result.status;
+  }
+
   function copyUnityAssetToCocos(unityAsset, options, reporter, kind, severity = 'medium', config = {}) {
     const { deferNeedsImportReport = false } = config;
     const dest = path.join(options.cocosRoot, 'assets', 'unity_imported', unityAsset.relativePath);
@@ -116,17 +142,13 @@ module.exports = function createAssetImportPorter(deps) {
     if (options.keepExistingImports && fs.existsSync(dest) && fs.existsSync(`${dest}.meta`)) return dest;
     ensureDir(path.dirname(dest));
     ensureDirectoryMetas(path.dirname(dest), path.join(options.cocosRoot, 'assets'));
-    const maxSize = kind === 'image' ? textureImportLimit(unityAsset.relativePath, options) : 0;
     let copyResult;
-    try {
-      copyResult = maxSize ? copyTextureWithLimit(unityAsset.path, dest, maxSize, options.cocosRoot)
-        : copyAssetIfChanged(unityAsset.path, dest);
-    } catch (error) {
-      reporter.add('high', 'TEXTURE_IMPORT_RESIZE_FAILED', unityAsset.relativePath, dest, String(error));
-      return '';
+    if (kind === 'image') {
+      copyResult = writePreparedUnityTexture(unityAsset, dest, options, reporter);
+      if (!copyResult) return '';
+    } else {
+      copyResult = copyAssetIfChanged(unityAsset.path, dest);
     }
-    if (maxSize && copyResult !== 'unchanged') reporter.low('TEXTURE_IMPORT_SIZE_LIMIT', unityAsset.relativePath,
-      toPosix(path.relative(options.cocosRoot, dest)), `Applied configured texture max size ${maxSize}; alpha/aspect ratio preserved`);
     if (copyResult === 'refreshed') {
       // The .meta and its uuid are left alone so existing references keep resolving;
       // the editor re-imports on the changed file.
@@ -138,13 +160,6 @@ module.exports = function createAssetImportPorter(deps) {
       );
     }
     if (kind === 'model') recoverModelMetaFromLibrary(dest, options);
-    if (kind === 'image') {
-      try {
-        require('./texture-alpha.cjs').applyUnityTextureAlpha(unityAsset.path, dest);
-      } catch (error) {
-        reporter.add('high', 'TEXTURE_ALPHA_IMPORT_UNRESOLVED', unityAsset.relativePath, dest, String(error));
-      }
-    }
     const importConfig = kind === 'image'
       ? { ...unityTextureImporterConfig(unityAsset.path), ...config }
       : config;
@@ -284,6 +299,7 @@ module.exports = function createAssetImportPorter(deps) {
     importedUnityAssetPath,
     ensureAssetMeta,
     copyUnityAssetToCocos,
+    writePreparedUnityTexture,
     handleMissingModel,
   };
 };
