@@ -38,6 +38,17 @@ reuse is not isolation between cases. For fixed-frame Cocos sampling, pause
 still run. Native reference frame 0 follows the first tick; an extra bootstrap
 `tick(0)` still calls Update and incorrectly moves per-frame projectiles.
 Keep live controls/replay/collision tests in addition to diagnostic sampling.
+- Unity Batch Mode must render the requested viewport on every simulation
+  frame, even when no PNG is requested. Sparse camera renders paused native
+  `PauseAndCatchup` emitters and produced false port discrepancies. Require
+  `visibilityClock=continuous-request-viewport-v1` and `renderedFrames=last+1`;
+  log culling mode, visibility and renderer bounds. Begin a capture after the
+  MCP reply has returned: entering Play Mode inside the RPC aborts its thread.
+- Constant Birth distance targets keep their authored start delay relative to
+  each parent birth. A delay at least the maximum parent lifetime produces no
+  children, including Combat Magic's delayed beam targets. Do not bypass it
+  with direct `emit`. Zero delay and complete suppression are native measured;
+  intermediate delay quantization and random/curve delays remain blocking.
 
 For vendor catalogs loaded with `Resources.LoadAll`, inspect the preflight
 closure against the native catalog count. The scanner resolves literal folder

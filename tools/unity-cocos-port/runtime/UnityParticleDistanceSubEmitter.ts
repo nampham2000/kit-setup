@@ -13,6 +13,7 @@ export class UnityParticleDistanceSubEmitter {
     private readonly inverse = new Mat4();
     private readonly initialEmitter = new Vec3();
     private emitting = false;
+    private readonly suppressedByDelay: boolean;
     private readonly sourceProcessor: any;
     private readonly targetProcessor: any;
     private readonly sourceBefore: (particle: any) => void;
@@ -24,6 +25,17 @@ export class UnityParticleDistanceSubEmitter {
         private readonly rate: number, simulationSpace: number) {
         if (!(rate > 0) || !Number.isFinite(rate)) throw new Error('Invalid constant distance sub-emitter rate');
         if (!source.processor || !target.processor) throw new Error('Distance sub-emitter requires loaded CPU processors');
+        if (target.startDelay.mode !== 0) throw new Error('Unverified random/curve distance sub-emitter delay');
+        const delay=target.startDelay.evaluate(0,1);
+        if(delay>0){
+            if(![0,3].includes(source.startLifetime.mode))throw new Error('Unverified curved parent lifetime with sub-emitter delay');
+            const maximum=Math.max(source.startLifetime.evaluate(0,0),source.startLifetime.evaluate(0,1));
+            if(delay<maximum)throw new Error('Unverified partial distance sub-emitter start delay');
+        }
+        // A sub-emitter owns a delay relative to each parent birth. When that
+        // delay exceeds every parent's lifetime, native emits no children.
+        // Intermediate delay-boundary quantization remains an explicit gap.
+        this.suppressedByDelay=delay>0;
         installUnityParticleBirthTiming(source); installUnityParticleBirthTiming(target);
         this.tracks = Array.from({ length: source.capacity }, () => ({ particle: null, seed: 0, position: new Vec3(), remainder: 0 }));
         target.stop(); target.bursts.length = 0; target.simulationSpace = simulationSpace;
@@ -74,7 +86,7 @@ export class UnityParticleDistanceSubEmitter {
                 distance *= Math.abs(scale.x);
             }
             const units = distance * this.rate;
-            if (units > 0) {
+            if (units > 0 && !this.suppressedByDelay) {
                 let next = 1-track.remainder;
                 while (next <= units) {
                     const fraction = Math.min(1,next/units);

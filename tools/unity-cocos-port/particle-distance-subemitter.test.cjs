@@ -1,6 +1,7 @@
 'use strict';
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),test=require('node:test'),assert=require('node:assert/strict'),ts=require('typescript');
 const native=require('./fixtures/distance-subemitters-native.json');
+const delayNative=require('./fixtures/subemitter-delay-native.json');
 const {distanceSubEmitterContract}=require('./particle-distance-subemitter-contract.cjs');
 class Vec3 {
  constructor(x=0,y=0,z=0){this.x=x;this.y=y;this.z=z;}
@@ -23,7 +24,7 @@ function engine(space,node,velocity){
  const processor={_particles:pool,_runAnimateList:[],setNewParticle(){},enableModule(){},updateParticles(dt){
   for(const p of pool.data){p.remainingLifetime=Math.fround(p.remainingLifetime-dt);p.ultimateVelocity.set(p.velocity);for(const m of this._runAnimateList)m.animate(p,dt);p.position.z=Math.fround(p.position.z+Math.fround(p.ultimateVelocity.z*dt));}return pool.length;
  }};
- const s={capacity:1000,simulationSpace:space,node,processor,bursts:[],rateOverTime:{evaluate:()=>0},rateOverDistance:{},gravityModifier:{isZero:()=>true},startSize3D:false,trailModule:null,
+ const s={capacity:1000,simulationSpace:space,node,processor,bursts:[],startDelay:{mode:0,evaluate:()=>0},startLifetime:{mode:0,evaluate:()=>2},rateOverTime:{evaluate:()=>0},rateOverDistance:{},gravityModifier:{isZero:()=>true},startSize3D:false,trailModule:null,
  stop(){pool.data.length=0;},play(){},_emit(){},emit(count,dt=0){for(let i=0;i<count;i++){
   const p={position:new Vec3(),velocity:new Vec3(0,0,velocity),ultimateVelocity:new Vec3(0,0,velocity),startSize:new Vec3(1,1,1),size:new Vec3(1,1,1),startLifetime:2+dt,remainingLifetime:2+dt,randomSeed:321};
   if(space===0)p.position.set(node.worldPosition);pool.data.push(p);processor.setNewParticle(p);
@@ -39,6 +40,22 @@ function setup(row){
 test('native distance fixture binds exact producer and documents acceptance scope',()=>{
  const producer=fs.readFileSync(path.join(__dirname,'fixtures/capture-distance-subemitters.cs'),'utf8').replace(/\r\n/g,'\n');
  assert.equal(crypto.createHash('sha256').update(producer).digest('hex'),native.sourceProbeSha256);assert.equal(native.rows.length,24);
+});
+
+test('native start-delay fixture binds its producer and both simulation spaces',()=>{
+ const source=fs.readFileSync(path.join(__dirname,'fixtures/capture-subemitter-delay.cs'),'utf8').replace(/\r\n/g,'\n');
+ assert.equal(crypto.createHash('sha256').update(source).digest('hex'),delayNative.sourceProbeSha256);
+ assert.equal(delayNative.rows.length,8);
+});
+for(const row of delayNative.rows.filter(r=>r.delay>0))test(`native sub-emitter delay ${row.delay}, space ${row.targetSpace}`,()=>{
+ const pos=new Vec3(),node={worldPosition:pos,worldMatrix:pos,worldScale:new Vec3(1,1,1),getWorldPosition(out){out.set(pos);}};
+ const source=engine(0,node,3),target=engine(row.targetSpace===1?0:1,node,0);
+ target.startDelay={mode:0,evaluate:()=>row.delay};
+ const construct=()=>new (load('UnityParticleDistanceSubEmitter').UnityParticleDistanceSubEmitter)(source,target,20,target.simulationSpace);
+ if(row.delay<delayNative.sourceLifetime){assert.throws(construct,/partial.*start delay/);assert.ok(row.frames.some(f=>f.count>0));return;}
+ const adapter=construct();source.emit(1);
+ for(const sample of row.frames){if(sample.frame)source.processor.updateParticles(delayNative.deltaTime);assert.equal(target.processor._particles.length,sample.count);}
+ assert.equal(adapter.emitted,0);
 });
 for(const row of native.rows.filter(r=>!r.moving||r.sourceSpace===r.targetSpace))test(`native Birth distance ${row.rate}, source ${row.sourceSpace}, target ${row.targetSpace}, moving ${row.moving}: counts, positions and partial ages`,()=>{
  const f=setup(row);let last=0;
