@@ -17,8 +17,7 @@ function unsupportedNoiseReasons(spec, limitEnabled) {
   // Unity limits stored + Noise velocity and stores only the non-animated part; bind
   // only with the shared limit runtime that implements that measured composition.
   if (limitEnabled && LIMIT_VELOCITY_COMPOSITION !== 'animated-velocity-before-limit') reasons.push('velocity-limit-integration');
-  if (spec.sizeAmount?.minMaxState !== 0 || spec.sizeAmount?.scalar !== 0) reasons.push('sizeAmount');
-  const curves = ['strength', 'strengthY', 'strengthZ', 'scrollSpeed', 'positionAmount'];
+  const curves = ['strength', 'strengthY', 'strengthZ', 'scrollSpeed', 'positionAmount', 'sizeAmount'];
   if (noiseRotates(spec)) curves.push('rotationAmount');
   for (const name of curves) {
     const curve = spec[name];

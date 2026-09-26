@@ -10,9 +10,9 @@ export function installUnityParticleNoise(system: ParticleSystem, spec: UnityNoi
     const runtime = system as any, processor = runtime.processor;
     if (runtime.unityNoise) return;
     if (!spec.enabled || (spec.quality !== 0 && spec.quality !== 1 && spec.quality !== 2) || spec.remapEnabled) throw new Error('Native Noise adapter requires Low/Medium/High quality without remap');
-    if (spec.sizeAmount.minMaxState !== 0 || spec.sizeAmount.scalar !== 0) throw new Error('Noise size amount needs a measured adapter');
     const rotate = spec.rotationAmount.minMaxState !== 0 || spec.rotationAmount.scalar !== 0;
-    const curves = [spec.strength,spec.strengthY,spec.strengthZ,spec.scrollSpeed,spec.positionAmount];
+    const resize = spec.sizeAmount.minMaxState !== 0 || spec.sizeAmount.scalar !== 0;
+    const curves = [spec.strength,spec.strengthY,spec.strengthZ,spec.scrollSpeed,spec.positionAmount,spec.sizeAmount];
     if (rotate) curves.push(spec.rotationAmount);
     for (const curve of curves) {
         if (curve.minMaxState !== 0 && curve.minMaxState !== 1) throw new Error('Noise random curves need a native random-channel oracle');
@@ -55,6 +55,15 @@ export function installUnityParticleNoise(system: ParticleSystem, spec: UnityNoi
         const animated = particle.animatedVelocity, ultimate = particle.ultimateVelocity;
         animated.set(animated.x+x, animated.y+y, animated.z+z);
         ultimate.set(ultimate.x+x, ultimate.y+y, ultimate.z+z);
+        if (resize) {
+            // Native BakeMesh, not GetCurrentSize3D: Noise scales every axis even
+            // when startSize3D is off. It is an instantaneous factor, without dt.
+            // Size-over-lifetime has already refreshed p.size; otherwise rebase
+            // on startSize so the previous frame's Noise factor cannot accumulate.
+            const base = system.sizeOvertimeModule?.enable ? particle.size : particle.startSize;
+            const k = 0.5 * sampleNoiseCurve(spec.sizeAmount, age);
+            particle.size.set(base.x * (1 + field[0] * sx * k), base.y * (1 + field[1] * sy * k), base.z * (1 + field[2] * sz * k));
+        }
         if (rotate) {
             // rotation3D grows by 0.5 * field * strength * rotationAmount degrees per
             // second on each axis (positionAmount does not apply); 2D rotation is Z only.

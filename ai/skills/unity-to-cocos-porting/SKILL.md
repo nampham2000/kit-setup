@@ -126,8 +126,14 @@ test and acceptance gate to that registry. The AOE source project runs
   lattice slope +-2 by permutation parity). Rotation amount adds
   0.5 * field * strength * amount degrees per second to each rotation3D axis (Z only
   for 2D rotation), independent of position amount; the adapter writes it into the
-  Euler accumulator with the renderer's Z-reflection signs. Remap, random curves and
-  size amount remain explicit obligations.
+  Euler accumulator with the renderer's Z-reflection signs. Noise size multiplies
+  each current size axis by `1 + 0.5 * fieldAxis * strengthAxis * sizeAmount`,
+  without dt, including startSize2D. Rebase from startSize when size-over-lifetime
+  is disabled; otherwise compose after its current size. Validate rendered
+  extents with BakeMesh: GetCurrentSize3D does not include Noise size. The
+  `noise-size-native.json` fixture covers billboard/mesh, 2D/3D start sizes and
+  lifetime composition over multiple steps. Remap and random curves remain
+  explicit obligations; do not silently drop the entire Noise module.
 - Install Noise after velocity animation and before limit. After limiting,
   subtract the complete animated contribution from stored base velocity;
   otherwise Noise accumulates again in the following frame. Keep Z reflection
@@ -139,6 +145,12 @@ test and acceptance gate to that registry. The AOE source project runs
 - A finite motion recording is not an equivalent replacement for a looping
   emitter. Burst snapshots exactly on a boundary also require care: native
   float accumulation may cross the boundary while a clamped double does not.
+  Fixed-time Preview capture should use `Math.fround(1 / frameRate)` to match
+  native float deltaTime. In Cocos 3.8.8 the emission counter uses `> 1`;
+  exact double 1/60 incorrectly leaves 60-per-second emitters empty at frame zero.
+  ReferenceCapture spawns in Update: that frame simulates particles, but a spawned
+  fly.Update runs from the next frame. Keep this capture-only phase adjustment
+  separate from the live per-frame movement contract.
 
 ### Particle renderer frames and pivots
 
