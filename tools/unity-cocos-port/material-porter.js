@@ -2,6 +2,13 @@
 
 const fs = require('fs');
 const path = require('path');
+
+// --keep-existing-imports: converted materials that already exist (with their
+// .meta) belong to another binding pipeline, for example Hovl materials rebound
+// to a shader port; the porter keeps them instead of rewriting.
+function keepExistingImport(options, file) {
+  return !!options.keepExistingImports && fs.existsSync(file) && fs.existsSync(`${file}.meta`);
+}
 const {
   BUILTIN_STANDARD_EFFECT_UUID,
   BUILTIN_UNLIT_EFFECT_UUID,
@@ -540,6 +547,7 @@ module.exports = function createMaterialPorter(deps) {
     const previous = readJsonIfExists(dest);
     if (previous?._defines?.[0]?.UNITY_LINEAR_OUTPUT === true) materialData._defines[0].UNITY_LINEAR_OUTPUT = true;
     if (options.dryRun) return { file: fs.existsSync(dest) ? dest : '', textureUuid };
+    if (keepExistingImport(options, dest)) return { file: dest, textureUuid };
     ensureDir(path.dirname(dest));
     ensureDirectoryMetas(path.dirname(dest), path.join(options.cocosRoot, 'assets'));
     const serialized = `${JSON.stringify(materialData, null, 2)}\n`;
@@ -782,6 +790,7 @@ module.exports = function createMaterialPorter(deps) {
     };
 
     if (options.dryRun) return fs.existsSync(convertedDest) ? convertedDest : '';
+    if (keepExistingImport(options, convertedDest)) return convertedDest;
 
     ensureDir(path.dirname(convertedDest));
     ensureDirectoryMetas(path.dirname(convertedDest), path.join(options.cocosRoot, 'assets'));
@@ -1027,10 +1036,12 @@ module.exports = function createMaterialPorter(deps) {
 
     ensureDir(path.dirname(convertedDest));
     ensureDirectoryMetas(path.dirname(convertedDest), path.join(options.cocosRoot, 'assets'));
-    const serialized = `${JSON.stringify(materialData, null, 2)}\n`;
-    if (!fs.existsSync(convertedDest) || fs.readFileSync(convertedDest, 'utf8') !== serialized) fs.writeFileSync(convertedDest, serialized, 'utf8');
-    const meta = ensureMaterialAssetMeta(convertedDest, options);
-    syncImportedMaterialLibraryCache(materialData, meta, options);
+    if (!keepExistingImport(options, convertedDest)) {
+      const serialized = `${JSON.stringify(materialData, null, 2)}\n`;
+      if (!fs.existsSync(convertedDest) || fs.readFileSync(convertedDest, 'utf8') !== serialized) fs.writeFileSync(convertedDest, serialized, 'utf8');
+      const meta = ensureMaterialAssetMeta(convertedDest, options);
+      syncImportedMaterialLibraryCache(materialData, meta, options);
+    }
 
     const legacyDest = legacyUnityParticleMaterialAssetPath(materialAsset, options);
     if (!sourceAdapter && !spriteTextureAsset && legacyDest && legacyDest !== convertedDest && fs.existsSync(legacyDest)) {
@@ -1114,6 +1125,7 @@ module.exports = function createMaterialPorter(deps) {
     };
 
     if (options.dryRun) return fs.existsSync(convertedDest) ? convertedDest : '';
+    if (keepExistingImport(options, convertedDest)) return convertedDest;
 
     ensureDir(path.dirname(convertedDest));
     ensureDirectoryMetas(path.dirname(convertedDest), path.join(options.cocosRoot, 'assets'));

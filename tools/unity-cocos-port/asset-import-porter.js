@@ -111,6 +111,9 @@ module.exports = function createAssetImportPorter(deps) {
       reporter.add(severity, 'ASSET_COPY_SKIPPED_DRY_RUN', unityAsset.relativePath, toPosix(path.relative(options.cocosRoot, dest)), 'Unity asset would be copied to Cocos; dry-run left the filesystem unchanged');
       return '';
     }
+    // --keep-existing-imports: an imported copy (with .meta) may carry another
+    // pipeline's processing (raw PNG + sampler settings); leave it untouched.
+    if (options.keepExistingImports && fs.existsSync(dest) && fs.existsSync(`${dest}.meta`)) return dest;
     ensureDir(path.dirname(dest));
     ensureDirectoryMetas(path.dirname(dest), path.join(options.cocosRoot, 'assets'));
     const maxSize = kind === 'image' ? textureImportLimit(unityAsset.relativePath, options) : 0;

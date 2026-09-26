@@ -540,6 +540,12 @@ function parseArgs(argv) {
       options.engineFeatureRepair = false;
       continue;
     }
+    if (arg === '--keep-existing-imports') {
+      // Existing unity_imported copies/materials (with .meta) are owned by another
+      // binding pipeline; only missing dependencies are copied or converted.
+      options.keepExistingImports = true;
+      continue;
+    }
     if (arg === '--no-engine-feature-restart') {
       options.engineFeatureRestart = false;
       continue;
@@ -3659,8 +3665,17 @@ function inheritRootLayersFromDescendants(roots, gameObjects, transforms, report
   }
 }
 
-function inspectPrefabInstanceDependency(doc, unityDb, reporter, ownerFile, recursionDepth) {
+// Pre-2018.3 scenes serialize an instance as a `Prefab` (class 1001) with
+// m_ParentPrefab + m_Modification and m_IsPrefabParent: 0, instead of a
+// PrefabInstance with m_SourcePrefab. m_IsPrefabParent: 1 marks a prefab asset itself.
+function prefabInstanceSource(doc) {
   const source = getField(doc, 'm_SourcePrefab');
+  if (source) return source;
+  return Number(getField(doc, 'm_IsPrefabParent', 1)) === 0 ? getField(doc, 'm_ParentPrefab') : undefined;
+}
+
+function inspectPrefabInstanceDependency(doc, unityDb, reporter, ownerFile, recursionDepth) {
+  const source = prefabInstanceSource(doc);
   const guid = unityRefGuid(source);
   if (!guid) return;
   const asset = unityDb.get(guid);
@@ -4146,7 +4161,7 @@ function parsePrefabInstanceInfo(doc) {
   const info = {
     fileId: doc.fileId,
     parentTransformId: unityRefFileId(getField(doc, 'm_TransformParent')),
-    sourcePrefab: getField(doc, 'm_SourcePrefab'),
+    sourcePrefab: prefabInstanceSource(doc),
     overridesByTarget: new Map(),
     removedGameObjectSourceIds: parsePrefabInstanceReferenceList(doc, 'm_RemovedGameObjects'),
     removedComponentSourceIds: parsePrefabInstanceReferenceList(doc, 'm_RemovedComponents'),

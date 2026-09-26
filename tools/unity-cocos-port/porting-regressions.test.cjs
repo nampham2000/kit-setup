@@ -494,3 +494,67 @@ PrefabInstance:
   const mounted=instanceOf(holder).mountedChildren.map(ref=>objects[ref.__id__]).flatMap(info=>info.nodes.map(ref=>objects[ref.__id__]));
   assert.ok(mounted.includes(glow),'recorded as a mounted child of the parent instance');
 });
+
+test('a pre-2018.3 scene Prefab block (m_ParentPrefab, m_IsPrefabParent: 0) is ported as a prefab instance',()=>{
+  const {portPrefab,parseArgs}=require('../unity-cocos-port.cjs');
+  const root=path.join(temp,'legacy-prefab-instance'),unity=path.join(root,'Unity/Assets'),cocos=path.join(root,'Cocos');
+  fs.mkdirSync(path.join(unity,'Effects'),{recursive:true});fs.mkdirSync(path.join(cocos,'assets/ported/Effects'),{recursive:true});
+  const markerGuid='abcdefabcdefabcdefabcdefabcdef31';
+  fs.writeFileSync(path.join(unity,'Effects/Marker.prefab'),`%YAML 1.1
+--- !u!1001 &100100000
+Prefab:
+  m_Modification:
+    m_TransformParent: {fileID: 0}
+    m_Modifications: []
+    m_RemovedComponents: []
+  m_ParentPrefab: {fileID: 0}
+  m_RootGameObject: {fileID: 1}
+  m_IsPrefabParent: 1
+--- !u!1 &1
+GameObject:
+  m_Name: Marker
+  m_IsActive: 1
+  m_Component:
+  - component: {fileID: 2}
+--- !u!4 &2
+Transform:
+  m_GameObject: {fileID: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_Children: []
+  m_Father: {fileID: 0}
+`);
+  fs.writeFileSync(path.join(unity,'Effects/Marker.prefab.meta'),`fileFormatVersion: 2\nguid: ${markerGuid}\n`);
+  const mapped=path.join(cocos,'assets/ported/Effects/Marker.prefab');
+  fs.writeFileSync(mapped,'[]\n');
+  fs.writeFileSync(mapped+'.meta',JSON.stringify({ver:'1.1.50',importer:'prefab',imported:true,uuid:'11111111-2222-3333-4444-000000000031',files:['.json'],subMetas:{},userData:{syncNodeName:'Marker'}}));
+  // Hovl "Demo scene MTM": legacy instances carry no stripped Transform at all.
+  const scene=path.join(unity,'Demo.unity');
+  fs.writeFileSync(scene,`%YAML 1.1
+--- !u!1001 &40
+Prefab:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: 2, guid: ${markerGuid}, type: 2}
+      propertyPath: m_LocalPosition.x
+      value: -2.98
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+  m_ParentPrefab: {fileID: 100100000, guid: ${markerGuid}, type: 2}
+  m_IsPrefabParent: 0
+`);
+  const out=path.join(cocos,'assets/ported/scenes/Demo.prefab');
+  portPrefab(parseArgs(['port','--src',scene,'--out',out,'--unity-root',unity,'--cocos-root',cocos,'--overwrite','--no-cache','--recursive',
+    '--nested-prefab-map',`Effects=assets/ported/Effects`,'--report',path.join(root,'report.csv')]));
+  const objects=JSON.parse(fs.readFileSync(out));
+  const instances=objects.filter(o=>o.__type__==='cc.PrefabInfo'&&o.asset?.__uuid__==='11111111-2222-3333-4444-000000000031');
+  assert.equal(instances.length,1,'the legacy instance links the mapped Marker port');
+  const node=objects.find(o=>o.__type__==='cc.Node'&&o._prefab&&objects[o._prefab.__id__]===instances[0]);
+  const overrides=objects[instances[0].instance.__id__].propertyOverrides.map(ref=>objects[ref.__id__]);
+  assert.ok(node,'the instance node is emitted');
+  assert.equal(overrides.find(o=>o.propertyPath[0]==='_lpos').value.x,-2.98,'legacy m_Modification overrides are merged');
+});
