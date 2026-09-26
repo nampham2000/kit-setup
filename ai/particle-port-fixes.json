@@ -473,6 +473,18 @@
         "tools/unity-cocos-port/particle-fixed-force-native.test.cjs"
       ],
       "acceptance": "Bind the measured World-space two-constant contract with randomized:false. Native original and held-out high/wrapping seed XYZ trajectories, source Z reflection, pool-order independence and staggered births pass. Local/curve Force and full effect visual parity require separate native and Preview evidence."
+    },
+    {
+      "id": "native-planar-projectile-contact",
+      "origin": "f018406",
+      "applicability": "conditional",
+      "sharedPaths": [
+        "tools/unity-cocos-port/runtime/UnityPlanarMeshContactGate.ts"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/planar-floor-contact-native.test.cjs"
+      ],
+      "acceptance": "Native 1248 frozen-sphere interior contacts, original near-XZ mesh residuals, static axis-aligned uniform scales. Use backend Stay transitions, not timed impact injection. Off-plane/border handling is backend-owned; verify actual new source contact poses and expiry in Preview."
     }
   ]
 }
