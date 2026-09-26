@@ -98,11 +98,13 @@ namespace CcPlayable.UnityIntelligence.Capture
         /// </summary>
         [Serializable]
         internal sealed class ParticlePose {
+            public uint randomSeed;
             public float[] position; public float[] velocity; public float[] size;
             public float[] color; public float[] rotation; public float remainingLifetime; public float startLifetime;
         }
         [Serializable]
         internal sealed class SystemRecord {
+            public uint randomSeed; public bool useAutoRandomSeed; public int simulationSpace; public int scalingMode;
             public string path = ""; public int count; public int alive; public float simulationTime; public float simulationSpeed;
             public int cullingMode; public bool rendererVisible; public float[] boundsCenter; public float[] boundsSize;
             public int[] depth = Array.Empty<int>(); public int[] inView = Array.Empty<int>();
@@ -223,6 +225,8 @@ namespace CcPlayable.UnityIntelligence.Capture
                 if (buffer.Length < system.particleCount) buffer = new ParticleSystem.Particle[system.particleCount];
                 var n = system.GetParticles(buffer);
                 var main = system.main;
+                record.randomSeed=system.randomSeed;record.useAutoRandomSeed=system.useAutoRandomSeed;
+                record.simulationSpace=(int)main.simulationSpace;record.scalingMode=(int)main.scalingMode;
                 var renderer = system.GetComponent<ParticleSystemRenderer>();
                 record.cullingMode = (int)main.cullingMode;
                 record.rendererVisible = renderer != null && renderer.isVisible;
@@ -239,6 +243,7 @@ namespace CcPlayable.UnityIntelligence.Capture
                     var size = buffer[i].GetCurrentSize3D(system); Color color = buffer[i].GetCurrentColor(system);
                     meanPosition += world; meanSize += size; meanColor += color;
                     if (i < 8) record.particles.Add(new ParticlePose {
+                        randomSeed = buffer[i].randomSeed,
                         position = VectorValues(buffer[i].position), velocity = VectorValues(buffer[i].velocity), size = VectorValues(size),
                         color = new[] { color.r, color.g, color.b, color.a }, rotation = VectorValues(buffer[i].rotation3D),
                         remainingLifetime = buffer[i].remainingLifetime, startLifetime = buffer[i].startLifetime,
