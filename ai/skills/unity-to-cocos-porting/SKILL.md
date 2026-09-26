@@ -17,6 +17,18 @@ This skill provides step-by-step guidance and architectural rules for converting
 
 ### Reuse the measured VFX fixes
 
+Built-in Auto point-light selection is not a fixed pixel/vertex split. The
+UnityForwardAutoLights kernel covers pixelLightCount=4 with one main directional:
+rank authored gamma luminance (.3R+.59G+.11B)*intensity attenuated by
+1/(1+25*d2/range2) at renderer bounds center, then fade overlapping slots using
+neighboring score differences. GPU-linear RGB maximum is the wrong ranking.
+ParticleLightKernel sample channel7 preserves gamma luminance independently of
+linear RGB. 90 native uniform cases cover intensity, range, RGB, distance and
+ties (weighted RGB tolerance 1e-5). The kernel is a recipe, not automatic wiring:
+bind per-renderer bounds and material light textures; >8-light SH overflow,
+other quality budgets/modes and final rendered acceptance remain separate gates.
+
+
 Cocos reuses one birth random value for lifetime, speed, size, rotation and
 color. Unity does not. Use the shared InitialState adapter for measured constant
 or two-constant initial curves and constant/two-color starts. It shares the

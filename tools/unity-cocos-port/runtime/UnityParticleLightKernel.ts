@@ -12,5 +12,7 @@ export function writeUnityParticleLight(out:Float32Array,offset:number,spec:Unit
     out[offset+4]=linear(spec.useParticleColor?c.r/255:spec.color[0])*intensity;
     out[offset+5]=linear(spec.useParticleColor?c.g/255:spec.color[1])*intensity;
     out[offset+6]=linear(spec.useParticleColor?c.b/255:spec.color[2])*intensity;
-    out[offset+7]=0;
+    // Forward importance uses authored gamma luminance independently of GPU RGB.
+    const r=spec.useParticleColor?c.r/255:spec.color[0],g=spec.useParticleColor?c.g/255:spec.color[1],b=spec.useParticleColor?c.b/255:spec.color[2];
+    out[offset+7]=(.3*r+.59*g+.11*b)*intensity;
 }

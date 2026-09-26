@@ -547,6 +547,20 @@
         "tools/unity-cocos-port/particle-random-force-native.test.cjs"
       ],
       "acceptance": "816 native births (544 held-out automatic) verify independent lifetime, size, rotation, color and speed; 272 endpoint samples verify lifetime clamp. Preserve stock module seed and store full uint32 in unityNativeSeed. Replay, legacy delegation and live adapter-count gates required. Shape/continuous-batch RNG identity, unsupported initialization modes and full rendered parity remain separate gates."
+    },
+    {
+      "id": "native-forward-auto-light-selection",
+      "origin": "3de05b1",
+      "applicability": "recipe",
+      "sharedPaths": [
+        "tools/unity-cocos-port/runtime/UnityForwardAutoLights.ts",
+        "tools/unity-cocos-port/runtime/UnityParticleLightKernel.ts"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/forward-auto-lights.test.cjs",
+        "tools/unity-cocos-port/particle-lights-native.test.cjs"
+      ],
+      "acceptance": "90 native ForwardBase/ForwardAdd uniform cases cover Auto point lights at pixelLightCount=4. Importance uses gamma luminance .3R+.59G+.11B and attenuation 1/(1+25*d2/r2). Pixel/vertex overlap uses neighboring score differences, not a fixed 3+4 split. Weighted linear RGB tolerance 1e-5 for near ties. Per-renderer integration, SH overflow (>8 lights), other quality budgets/modes, spot lights and complete Standard BRDF visual acceptance remain unverified; this is a reusable kernel, not automatic project wiring."
     }
   ]
 }
