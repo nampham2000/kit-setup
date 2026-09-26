@@ -104,6 +104,7 @@ namespace CcPlayable.UnityIntelligence.Capture
         [Serializable]
         internal sealed class SystemRecord {
             public string path = ""; public int count; public int alive; public float simulationTime; public float simulationSpeed;
+            public int cullingMode; public bool rendererVisible; public float[] boundsCenter; public float[] boundsSize;
             public int[] depth = Array.Empty<int>(); public int[] inView = Array.Empty<int>();
             public float[] position; public float[] rotation; public float[] scale; public float[] matrix;
             public float[] meanWorldPosition; public float[] meanSize; public float[] meanColor;
@@ -117,6 +118,8 @@ namespace CcPlayable.UnityIntelligence.Capture
         [Serializable]
         internal sealed class Manifest
         {
+            public string visibilityClock = "";
+            public int renderedFrames;
             public string scenePath = "";
             public string camera = "";
             public int width;
@@ -140,13 +143,25 @@ namespace CcPlayable.UnityIntelligence.Capture
             var request = JsonUtility.FromJson<Request>(requestJson);
             if (request == null || string.IsNullOrEmpty(request.scenePath) || string.IsNullOrEmpty(request.outputDir))
                 return "invalid request";
-            if (EditorApplication.isPlayingOrWillChangePlaymode) return "editor is already in play mode";
+            if (EditorApplication.isPlayingOrWillChangePlaymode || !string.IsNullOrEmpty(SessionState.GetString(PendingKey, ""))) return "editor has an active or queued capture";
             if (request.frames == null || request.frames.Length == 0) return "no frames requested";
             Directory.CreateDirectory(request.outputDir);
             File.Delete(Path.Combine(request.outputDir, "manifest.json"));
             SessionState.SetString(PendingKey, JsonUtility.ToJson(request));
-            EditorApplication.EnterPlaymode();
+            // Return the MCP RPC before domain reload destroys its executing
+            // thread. EnterPlaymode inside this method caused ThreadAbort and
+            // ten bridge retries even though a capture had already run.
+            enterPlayModeAfter = EditorApplication.timeSinceStartup + 1;
+            EditorApplication.update += EnterQueuedCapture;
             return "capture queued";
+        }
+
+        static double enterPlayModeAfter;
+        static void EnterQueuedCapture()
+        {
+            if (EditorApplication.timeSinceStartup < enterPlayModeAfter || EditorApplication.isCompiling || EditorApplication.isUpdating) return;
+            EditorApplication.update -= EnterQueuedCapture;
+            if (!EditorApplication.isPlayingOrWillChangePlaymode && !string.IsNullOrEmpty(SessionState.GetString(PendingKey, ""))) EditorApplication.EnterPlaymode();
         }
 
         static void OnPlayModeChanged(PlayModeStateChange change)
@@ -208,6 +223,10 @@ namespace CcPlayable.UnityIntelligence.Capture
                 if (buffer.Length < system.particleCount) buffer = new ParticleSystem.Particle[system.particleCount];
                 var n = system.GetParticles(buffer);
                 var main = system.main;
+                var renderer = system.GetComponent<ParticleSystemRenderer>();
+                record.cullingMode = (int)main.cullingMode;
+                record.rendererVisible = renderer != null && renderer.isVisible;
+                if (renderer != null) { record.boundsCenter = VectorValues(renderer.bounds.center); record.boundsSize = VectorValues(renderer.bounds.size); }
                 record.simulationTime=system.time;record.simulationSpeed=main.simulationSpeed;
                 var toWorld = main.simulationSpace == ParticleSystemSimulationSpace.World ? Matrix4x4.identity
                     : main.simulationSpace == ParticleSystemSimulationSpace.Custom && main.customSimulationSpace != null ? main.customSimulationSpace.localToWorldMatrix
@@ -310,13 +329,18 @@ namespace CcPlayable.UnityIntelligence.Capture
             if (owner == null || owner.batchCaptureFrame < 0) return;
             var captured = owner.batchCaptureFrame;
             owner.batchCaptureFrame = -1;
-            owner.CaptureFrame(captured);
+            // Batch Mode has no continuously rendered Game View. Unity's
+            // Pause/PauseAndCatchup particles still need camera visibility on
+            // every frame, including frames with no requested PNG.
+            if (owner.batchWriteFrame) owner.CaptureFrame(captured);
+            else owner.RenderVisibilityFrame();
         }
 
         internal void Configure(ReferenceCapture.Request value)
         {
             request = value;
             manifest = ReferenceCapture.NewManifest(value);
+            manifest.visibilityClock = Application.isBatchMode ? "continuous-request-viewport-v1" : "game-view-and-request-viewport";
             foreach (var f in value.frames) { pending.Add(f); lastFrame = Math.Max(lastFrame, f); }
             SceneManager.sceneLoaded += OnSceneLoaded;
             if (Application.isBatchMode) { batchOwner = this; SetBatchHook(true); }
@@ -396,7 +420,13 @@ namespace CcPlayable.UnityIntelligence.Capture
                     var observer=body.GetComponent<ReferenceCollisionObserver>() ?? body.gameObject.AddComponent<ReferenceCollisionObserver>();observer.owner=this;
                 }
             }
-            if (pending.Remove(frame))
+            var writeFrame = pending.Remove(frame);
+            if (Application.isBatchMode && frame <= lastFrame)
+            {
+                batchCaptureFrame = frame;
+                batchWriteFrame = writeFrame;
+            }
+            else if (writeFrame)
             {
                 if (Application.isBatchMode) batchCaptureFrame = frame;
                 else StartCoroutine(CaptureAtEndOfFrame(frame));
@@ -430,6 +460,14 @@ namespace CcPlayable.UnityIntelligence.Capture
                 return;
             }
             if (pending.Count == 0) Done();
+        }
+
+        bool batchWriteFrame;
+        void RenderVisibilityFrame()
+        {
+            if (!sceneReady) return;
+            try { Capture(null); }
+            catch (Exception exception) { sceneReady = false; ReferenceCapture.Fail(request, manifest, exception.Message); }
         }
 
         internal void ObserveCollision(Transform actor, Collision collision) {
@@ -550,12 +588,16 @@ namespace CcPlayable.UnityIntelligence.Capture
                     captureCamera.targetTexture = target;
                     captureCamera.Render();
                 }
-                RenderTexture.active = target;
-                var texture = new Texture2D(request.width, request.height, TextureFormat.RGB24, false);
-                texture.ReadPixels(new Rect(0, 0, request.width, request.height), 0, 0);
-                texture.Apply();
-                File.WriteAllBytes(file, texture.EncodeToPNG());
-                Destroy(texture);
+                manifest.renderedFrames++;
+                if (file != null)
+                {
+                    RenderTexture.active = target;
+                    var texture = new Texture2D(request.width, request.height, TextureFormat.RGB24, false);
+                    texture.ReadPixels(new Rect(0, 0, request.width, request.height), 0, 0);
+                    texture.Apply();
+                    File.WriteAllBytes(file, texture.EncodeToPNG());
+                    Destroy(texture);
+                }
             }
             finally
             {

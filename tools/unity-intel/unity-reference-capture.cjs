@@ -116,7 +116,16 @@ async function captureUnityReference(options, dependencies = {}) {
   const manifest = await waitForManifest(manifestFile, options.timeoutMs, dependencies.sleep);
   if (!manifest.complete) throw Object.assign(new Error(`Unity capture failed: ${manifest.error}`), { code: 'UNITY_CAPTURE_FAILED' });
   validateManifestFrames(manifest, options.frames, outputDir, dependencies.readFile || fs.readFileSync);
+  validateCaptureClock(manifest, options.frames);
   return manifest;
+}
+
+function validateCaptureClock(manifest, requestedFrames) {
+  const last = Math.max(...requestedFrames);
+  if (manifest.visibilityClock === 'continuous-request-viewport-v1' && manifest.renderedFrames === last + 1) return;
+  if (manifest.visibilityClock === 'game-view-and-request-viewport') return;
+  throw Object.assign(new Error('Unity reference visibility clock is unverified. Update the Unity intelligence capture package and recapture; sparse Batch Mode rendering can pause particles.'),
+    { code: 'UNITY_CAPTURE_VISIBILITY_CLOCK_UNVERIFIED' });
 }
 
 function validateManifestFrames(manifest, requestedFrames, outputDir, readFile) {
@@ -147,4 +156,4 @@ async function main() {
 
 if (require.main === module) main();
 
-module.exports = { parseArgs, captureScript, captureUnityReference, validateManifestFrames };
+module.exports = { parseArgs, captureScript, captureUnityReference, validateManifestFrames, validateCaptureClock };

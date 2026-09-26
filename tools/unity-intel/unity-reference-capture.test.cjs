@@ -4,9 +4,17 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { parseArgs, captureScript, validateManifestFrames } = require('./unity-reference-capture.cjs');
+const { parseArgs, captureScript, validateManifestFrames, validateCaptureClock } = require('./unity-reference-capture.cjs');
 
 const base = ['--project', 'U', '--scene', 'Assets/Demo.unity', '--out', 'o', '--frames', '0,30'];
+
+test('Batch capture requires visibility rendering on skipped frames too', () => {
+  for (const manifest of [{}, { visibilityClock: 'continuous-request-viewport-v1', renderedFrames: 2 },
+    { visibilityClock: 'continuous-request-viewport-v1', renderedFrames: 30 }])
+    assert.throws(() => validateCaptureClock(manifest, [0, 30]), { code: 'UNITY_CAPTURE_VISIBILITY_CLOCK_UNVERIFIED' });
+  validateCaptureClock({ visibilityClock: 'continuous-request-viewport-v1', renderedFrames: 31 }, [30, 0]);
+  validateCaptureClock({ visibilityClock: 'game-view-and-request-viewport', renderedFrames: 2 }, [0, 30]);
+});
 function spawnsFile(t, value) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'capture-spawns-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
