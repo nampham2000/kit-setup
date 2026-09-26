@@ -232,7 +232,8 @@ namespace CcPlayable.UnityIntelligence.Capture
                     {
                         if (component == null || component.GetType().Name != entry.component) continue;
                         var field = component.GetType().GetField(entry.field, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
-                        // Not a field: a writable property such as Behaviour.enabled (input-driven demo scripts are switched off so capture spawns own the effect).
+                        // Not a field: a writable property such as Behaviour.enabled (input-driven demo scripts
+                        // are switched off so the capture spawns own the effect).
                         var property = field == null ? component.GetType().GetProperty(entry.field, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic) : null;
                         if (field == null && (property == null || !property.CanWrite)) continue;
                         var type = field != null ? field.FieldType : property.PropertyType;
