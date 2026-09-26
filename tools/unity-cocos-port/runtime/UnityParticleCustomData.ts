@@ -34,11 +34,16 @@ export function unityCustomRandom(seed: number, component: number): number {
     return (((seed + component * 0x9e3779b9) * 1664525 + 1013904223) >>> 0) / 4294967296;
 }
 
+/** Particle texel index plus the normalized texture-sheet frame, kept below the next index. */
+export function packUnityCustomIndex(index: number, frame: number): number {
+    return index + Math.min(Math.max(frame, 0), 0.999);
+}
+
 /**
  * Feeds Unity Custom1.xyzw to the particle material through a 1-row float texture.
- * The unused per-vertex frame index selects the particle's texel, so the material
- * must read `customDataTexture`/`customDataParameters` under UNITY_PARTICLE_CUSTOM_DATA
- * and cannot also use texture-sheet animation.
+ * The per-vertex frame index carries `particleIndex + frame` (Cocos frames are
+ * normalized to [0,1)), so the material must read `customDataTexture` at
+ * floor(index) and animate with fract(index) under UNITY_PARTICLE_CUSTOM_DATA.
  */
 export class UnityParticleCustomDataStream {
     private readonly texture = new Texture2D();
@@ -50,7 +55,6 @@ export class UnityParticleCustomDataStream {
     public uploads = 0;
 
     constructor(private readonly system: ParticleSystem, private readonly spec: UnityCustomDataSpec) {
-        if (system.textureAnimationModule.enable) throw new Error('Custom data stream conflicts with texture-sheet frame index');
         const width = system.capacity;
         this.data = new Float32Array(width * 4); this.buffers = [this.data];
         this.texture.reset({ width, height: 1, format: Texture2D.PixelFormat.RGBA32F, mipmapLevel: 1 });
@@ -68,12 +72,13 @@ export class UnityParticleCustomDataStream {
 
     private readonly fill = (): void => {
         const pool = this.processor._particles, curves = this.spec.curves;
+        const animated = this.system.textureAnimationModule.enable;
         for (let i = 0; i < pool.length; i++) {
             const p = pool.data[i], time = 1 - p.remainingLifetime / p.startLifetime;
             for (let channel = 0; channel < 4; channel++) {
                 this.data[i * 4 + channel] = channel < curves.length ? sampleUnityCustomCurve(curves[channel], time, unityCustomRandom(p.randomSeed, channel)) : 0;
             }
-            this.processor._fillDataFunc(p, i * 4, i);
+            this.processor._fillDataFunc(p, i * 4, packUnityCustomIndex(i, animated ? p.frameIndex : 0));
         }
         if (pool.length > 0) {
             director.root!.device.copyBuffersToTexture(this.buffers, this.texture.getGFXTexture()!, this.regions);

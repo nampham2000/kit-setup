@@ -59,7 +59,7 @@ function stageCustomDataRuntime(options) {
 function attachCustomDataRuntime(builder, reporter, options) {
   const particles = builder.objects.map((p, id) => ({ p, id }))
     .filter(({ p }) => p?.__type__ === 'cc.ParticleSystem' && p.unityCustomDataContract);
-  let bound = 0;
+  let bound = 0, staged = false;
   for (const { p, id } of particles) {
     const spec = p.unityCustomDataContract;
     const name = builder.objects[p.node.__id__]?._name || '';
@@ -71,13 +71,7 @@ function attachCustomDataRuntime(builder, reporter, options) {
       reporter.high('PARTICLE_CUSTOM_DATA_CURVE_INVALID', options.src || '', name, 'Custom1 curve has non-finite key values.');
       continue;
     }
-    const textureAnimation = builder.objects[p._textureAnimationModule?.__id__];
-    if (textureAnimation && (textureAnimation._enable ?? textureAnimation.enable)) {
-      reporter.high('PARTICLE_CUSTOM_DATA_FRAME_CONFLICT', options.src || '', name,
-        'Custom1 and texture-sheet animation both need the per-vertex frame index; Custom1 is not bound.');
-      continue;
-    }
-    if (!bound++) stageCustomDataRuntime(options);
+    if (!staged) { stageCustomDataRuntime(options); staged = true; }
     let classId = builder.cocosDb?.findScriptClass?.('UnityParticleCustomDataAdapter')?.classId;
     const meta = path.join(options.cocosRoot, 'assets/script/UnityParticleCustomDataAdapter.ts.meta');
     if (!classId && fs.existsSync(meta)) classId = compressUuid(JSON.parse(fs.readFileSync(meta, 'utf8')).uuid);
@@ -88,6 +82,7 @@ function attachCustomDataRuntime(builder, reporter, options) {
     }
     builder.addComponent(p.node.__id__, classId, { source: { __id__: id }, sourceContract: JSON.stringify({ curves: spec.curves }) },
       null, `cmp-unity-custom-data-${id}`);
+    bound++;
   }
   if (bound) {
     reporter.low('PARTICLE_CUSTOM_DATA_BOUND', options.src || '', `${bound} system(s)`,

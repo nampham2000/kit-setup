@@ -45,17 +45,17 @@ function builderWith(contract, textureAnimation = false) {
   return { builder, reporter, added, codes };
 }
 
-test('the adapter carries the curves and refuses a texture-sheet conflict', () => {
+test('the adapter carries the curves, with or without texture-sheet animation', () => {
   const contract = particleCustomDataContract(lightning, { m_VertexStreams: '000103040522' });
   const options = { cocosRoot: fs.mkdtempSync(path.join(os.tmpdir(), 'custom-')) };
   const ok = builderWith(contract);
   attachCustomDataRuntime(ok.builder, ok.reporter, options);
   assert.equal(JSON.parse(ok.added[0].sourceContract).curves.length, 4);
   assert.deepEqual(ok.codes, ['PARTICLE_CUSTOM_DATA_BOUND']);
-  const conflict = builderWith(contract, true);
-  attachCustomDataRuntime(conflict.builder, conflict.reporter, options);
-  assert.equal(conflict.added.length, 0);
-  assert.deepEqual(conflict.codes, ['PARTICLE_CUSTOM_DATA_FRAME_CONFLICT']);
+  // Texture-sheet frames share the index attribute: index + normalized frame.
+  const animated = builderWith(contract, true);
+  attachCustomDataRuntime(animated.builder, animated.reporter, options);
+  assert.equal(animated.added.length, 1);
 });
 
 test('runtime samples Unity MinMaxCurve modes per particle age', () => {
@@ -71,4 +71,9 @@ test('runtime samples Unity MinMaxCurve modes per particle age', () => {
   const r = [0, 1, 2, 3].map((c) => out.unityCustomRandom(12345, c));
   assert.equal(new Set(r).size, 4, 'components draw independent randoms');
   assert.ok(r.every((v) => v >= 0 && v < 1));
+  for (const [index, frame] of [[0, 0], [7, 0.5], [511, 0.9999], [3, 1]]) {
+    const packed = out.packUnityCustomIndex(index, frame);
+    assert.equal(Math.floor(Math.fround(packed)), index, 'float32 attribute keeps the texel index');
+    assert.ok(Math.abs(Math.fround(packed) - index - Math.min(frame, 0.999)) < 1e-3);
+  }
 });
