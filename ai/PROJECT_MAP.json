@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "generatedAt": "2026-09-25T09:19:49.289Z",
+    "generatedAt": "2026-09-26T00:01:44.651Z",
     "description": "Compact project manifest for AI Agents. Use this instead of scanning file trees.",
     "project": {
       "projectName": "cc_playable_framework",
@@ -20,243 +20,15 @@
   },
   "scenes": [
     {
-      "name": "AoeDemo",
-      "path": "assets/AoeDemo.scene",
-      "sizeKb": 15.9
-    },
-    {
       "name": "Gameplay",
       "path": "assets/Gameplay.scene",
       "sizeKb": 14.9
     }
   ],
-  "prefabs": [
-    {
-      "name": "Energy explosion",
-      "path": "assets/prefabs/aoe/Energy explosion.prefab",
-      "sizeKb": 392
-    },
-    {
-      "name": "Flower slash",
-      "path": "assets/prefabs/aoe/Flower slash.prefab",
-      "sizeKb": 510.5
-    },
-    {
-      "name": "Front spikes attack",
-      "path": "assets/prefabs/aoe/Front spikes attack.prefab",
-      "sizeKb": 477.2
-    },
-    {
-      "name": "Ise attack",
-      "path": "assets/prefabs/aoe/Ise attack.prefab",
-      "sizeKb": 334.7
-    },
-    {
-      "name": "Knife hit",
-      "path": "assets/prefabs/aoe/Knife hit.prefab",
-      "sizeKb": 123.4
-    },
-    {
-      "name": "Knives",
-      "path": "assets/prefabs/aoe/Knives.prefab",
-      "sizeKb": 53.5
-    },
-    {
-      "name": "Leaves buff",
-      "path": "assets/prefabs/aoe/Leaves buff.prefab",
-      "sizeKb": 777.5
-    },
-    {
-      "name": "Lightning hit",
-      "path": "assets/prefabs/aoe/Lightning hit.prefab",
-      "sizeKb": 26.2
-    },
-    {
-      "name": "Lightning strike",
-      "path": "assets/prefabs/aoe/Lightning strike.prefab",
-      "sizeKb": 394.1
-    },
-    {
-      "name": "Magic attack",
-      "path": "assets/prefabs/aoe/Magic attack.prefab",
-      "sizeKb": 102.2
-    },
-    {
-      "name": "Magic hit",
-      "path": "assets/prefabs/aoe/Magic hit.prefab",
-      "sizeKb": 180.5
-    },
-    {
-      "name": "Meteor 2",
-      "path": "assets/prefabs/aoe/Meteor 2.prefab",
-      "sizeKb": 416
-    },
-    {
-      "name": "Meteor hit 2",
-      "path": "assets/prefabs/aoe/Meteor hit 2.prefab",
-      "sizeKb": 172.1
-    },
-    {
-      "name": "Meteor hit",
-      "path": "assets/prefabs/aoe/Meteor hit.prefab",
-      "sizeKb": 245.1
-    },
-    {
-      "name": "Meteor shower 2",
-      "path": "assets/prefabs/aoe/Meteor shower 2.prefab",
-      "sizeKb": 105.2
-    },
-    {
-      "name": "Meteor shower",
-      "path": "assets/prefabs/aoe/Meteor shower.prefab",
-      "sizeKb": 103
-    },
-    {
-      "name": "Meteor",
-      "path": "assets/prefabs/aoe/Meteor.prefab",
-      "sizeKb": 497.4
-    },
-    {
-      "name": "Buff 1",
-      "path": "assets/prefabs/aoe-rpg/Buff 1.prefab",
-      "sizeKb": 590.9
-    },
-    {
-      "name": "Buff 2",
-      "path": "assets/prefabs/aoe-rpg/Buff 2.prefab",
-      "sizeKb": 280.4
-    },
-    {
-      "name": "Buff 3",
-      "path": "assets/prefabs/aoe-rpg/Buff 3.prefab",
-      "sizeKb": 299
-    },
-    {
-      "name": "Buff 4",
-      "path": "assets/prefabs/aoe-rpg/Buff 4.prefab",
-      "sizeKb": 122.4
-    },
-    {
-      "name": "Buff 5",
-      "path": "assets/prefabs/aoe-rpg/Buff 5.prefab",
-      "sizeKb": 91.7
-    },
-    {
-      "name": "Buff 6",
-      "path": "assets/prefabs/aoe-rpg/Buff 6.prefab",
-      "sizeKb": 175.1
-    },
-    {
-      "name": "Buff 7",
-      "path": "assets/prefabs/aoe-rpg/Buff 7.prefab",
-      "sizeKb": 63.2
-    },
-    {
-      "name": "Cute buff Yorai",
-      "path": "assets/prefabs/aoe-rpg/Cute buff Yorai.prefab",
-      "sizeKb": 111.4
-    },
-    {
-      "name": "Debuff 1",
-      "path": "assets/prefabs/aoe-rpg/Debuff 1.prefab",
-      "sizeKb": 284.8
-    },
-    {
-      "name": "Debuff 2",
-      "path": "assets/prefabs/aoe-rpg/Debuff 2.prefab",
-      "sizeKb": 477.5
-    },
-    {
-      "name": "Dragon punch",
-      "path": "assets/prefabs/aoe-rpg/Dragon punch.prefab",
-      "sizeKb": 301.1
-    },
-    {
-      "name": "Gold dot",
-      "path": "assets/prefabs/aoe-rpg/Gold dot.prefab",
-      "sizeKb": 112.7
-    },
-    {
-      "name": "Heal",
-      "path": "assets/prefabs/aoe-rpg/Heal.prefab",
-      "sizeKb": 284.7
-    },
-    {
-      "name": "Lvl up",
-      "path": "assets/prefabs/aoe-rpg/Lvl up.prefab",
-      "sizeKb": 369.8
-    },
-    {
-      "name": "Magic Sparks",
-      "path": "assets/prefabs/aoe-rpg/Magic Sparks.prefab",
-      "sizeKb": 28.5
-    },
-    {
-      "name": "Punch Hit",
-      "path": "assets/prefabs/aoe-rpg/Punch Hit.prefab",
-      "sizeKb": 42.4
-    },
-    {
-      "name": "Soft blue buff",
-      "path": "assets/prefabs/aoe-rpg/Soft blue buff.prefab",
-      "sizeKb": 394.5
-    },
-    {
-      "name": "Yellow Flash",
-      "path": "assets/prefabs/aoe-rpg/Yellow Flash.prefab",
-      "sizeKb": 109.8
-    }
-  ],
+  "prefabs": [],
   "scripts": {
-    "count": 63,
+    "count": 28,
     "byDir": [
-      {
-        "dir": "assets/script",
-        "names": [
-          "AoeAudio",
-          "AoeBakedLighting",
-          "AoeBirthBurst",
-          "AoeBurstEmission",
-          "AoeCustomStream",
-          "AoeDeathBurst",
-          "AoeDemoController",
-          "AoeDistanceSubEmitter",
-          "AoeEnvironment",
-          "AoeImpactPool",
-          "AoeLinearFrame",
-          "AoeParticleCollision",
-          "AoeParticleLights",
-          "AoeSimulationStep",
-          "UnityLinearTarget",
-          "UnityNoiseKernel",
-          "UnityParticleBirthState",
-          "UnityParticleBirthStateAdapter",
-          "UnityParticleHierarchyTransformSync",
-          "UnityParticleNestedEmission",
-          "UnityParticleNoise",
-          "UnityParticleNoiseAdapter",
-          "UnityParticleOrbit",
-          "UnityParticleRateOverDistanceEmitter",
-          "UnityParticleRendererVisibility",
-          "UnityParticleSorting",
-          "UnityParticleSubEmitterFollower",
-          "UnitySpriteRendererColorAdapter",
-          "UnitySrgbTexture"
-        ]
-      },
-      {
-        "dir": "assets/script/arpg",
-        "names": [
-          "ARPGFXCycler",
-          "ARPGFXLightFade",
-          "ARPGFXLightFlicker",
-          "ARPGFXLoopScript",
-          "ARPGFXPortalScript",
-          "ARPGFXRotation",
-          "ARPGSceneSelect",
-          "ArpgLightAccess"
-        ]
-      },
       {
         "dir": "assets/script/shared/core/audio",
         "names": [
@@ -275,6 +47,7 @@
           "PlayableTrackingController",
           "PlayableUIHUD",
           "StaticAssetCatalog",
+          "UnityUrpPostProcess",
           "index"
         ]
       },
@@ -297,7 +70,8 @@
       {
         "dir": "assets/script/shared/core/utils",
         "names": [
-          "GameUtils"
+          "GameUtils",
+          "MirroredRendererCulling"
         ]
       },
       {
@@ -336,73 +110,38 @@
     ]
   },
   "assetsSummary": {
-    "audioCount": 12,
+    "audioCount": 0,
     "audio": {
-      "count": 12,
-      "totalKb": 5226.4,
-      "sample": [
-        "assets/resources/aoe-audio/Hit Skill9.wav",
-        "assets/resources/aoe-audio/Skill 1.wav",
-        "assets/resources/aoe-audio/Skill 10.wav",
-        "assets/resources/aoe-audio/Skill 11.wav",
-        "assets/resources/aoe-audio/Skill 2.wav",
-        "assets/resources/aoe-audio/Skill 3.wav"
-      ],
-      "truncated": 6
+      "count": 0,
+      "totalKb": 0,
+      "sample": [],
+      "truncated": 0
     },
-    "modelCount": 20,
+    "modelCount": 0,
     "models": {
-      "count": 20,
-      "totalKb": 522.7,
-      "sample": [
-        "assets/unity_imported/Assets/ARPG Effects/Models/RPGFXCurvedCylinder2.FBX",
-        "assets/unity_imported/Assets/Hovl Studio/AAA Projectiles Vol 1/Models/BeamMesh.fbx",
-        "assets/unity_imported/Assets/Hovl Studio/AAA Projectiles Vol 1/Models/Conus.fbx",
-        "assets/unity_imported/Assets/Hovl Studio/AAA Projectiles Vol 1/Models/CylinderFromCenter2.fbx",
-        "assets/unity_imported/Assets/Hovl Studio/AAA Projectiles Vol 1/Models/CylinderFromGround.fbx",
-        "assets/unity_imported/Assets/Hovl Studio/AAA Projectiles Vol 1/Models/EGACrystalPiese.fbx"
-      ],
-      "truncated": 14
+      "count": 0,
+      "totalKb": 0,
+      "sample": [],
+      "truncated": 0
     },
-    "shaderCount": 7,
+    "shaderCount": 0,
     "shaders": {
-      "count": 7,
-      "totalKb": 61.2,
-      "sample": [
-        "assets/effects/aoe-floor.effect",
-        "assets/effects/aoe-particle-trail.effect",
-        "assets/effects/aoe-particle.effect",
-        "assets/effects/aoe-present.effect",
-        "assets/effects/unity-legacy-preview-particle.effect",
-        "assets/effects/unity-source-particle.effect"
-      ],
-      "truncated": 1
+      "count": 0,
+      "totalKb": 0,
+      "sample": [],
+      "truncated": 0
     },
     "materials": {
-      "count": 182,
-      "totalKb": 742.4,
-      "sample": [
-        "assets/materials/aoe-default-particle.mtl",
-        "assets/materials/aoe-floor.mtl",
-        "assets/materials/aoe-local-10-4388768745790252.mtl",
-        "assets/materials/aoe-local-10-4567003171582396.mtl",
-        "assets/materials/aoe-local-10-4755324015660310.mtl",
-        "assets/materials/aoe-local-13-4601147430084982.mtl"
-      ],
-      "truncated": 176
+      "count": 0,
+      "totalKb": 0,
+      "sample": [],
+      "truncated": 0
     },
     "textures": {
-      "count": 140,
-      "totalKb": 62013.2,
-      "sample": [
-        "assets/aoe/Default-Particle.png",
-        "assets/unity_imported/Assets/ARPG Effects/Demo/Textures/brick_ambient.png",
-        "assets/unity_imported/Assets/ARPG Effects/Demo/Textures/brick_base.png",
-        "assets/unity_imported/Assets/ARPG Effects/Demo/Textures/brick_normal.png",
-        "assets/unity_imported/Assets/ARPG Effects/Demo/Textures/gui_button2.png",
-        "assets/unity_imported/Assets/ARPG Effects/Textures/basicglow.png"
-      ],
-      "truncated": 134
+      "count": 0,
+      "totalKb": 0,
+      "sample": [],
+      "truncated": 0
     },
     "animations": {
       "count": 0,
@@ -411,32 +150,18 @@
       "truncated": 0
     },
     "prefabsInAssets": {
-      "count": 35,
-      "totalKb": 9050.5,
-      "sample": [
-        "assets/prefabs/aoe/Energy explosion.prefab",
-        "assets/prefabs/aoe/Flower slash.prefab",
-        "assets/prefabs/aoe/Front spikes attack.prefab",
-        "assets/prefabs/aoe/Ise attack.prefab",
-        "assets/prefabs/aoe/Knife hit.prefab",
-        "assets/prefabs/aoe/Knives.prefab"
-      ],
-      "truncated": 29
+      "count": 0,
+      "totalKb": 0,
+      "sample": [],
+      "truncated": 0
     },
     "unityImported": {
-      "exists": true,
+      "exists": false,
       "root": "assets/unity_imported",
-      "count": 290,
-      "totalKb": 63069,
-      "sample": [
-        "assets/unity_imported/Assets/ARPG Effects/Demo/Textures/brick_ambient.png",
-        "assets/unity_imported/Assets/ARPG Effects/Demo/Textures/brick_base.png",
-        "assets/unity_imported/Assets/ARPG Effects/Demo/Textures/brick_normal.png",
-        "assets/unity_imported/Assets/ARPG Effects/Demo/Textures/gui_button2.png",
-        "assets/unity_imported/Assets/ARPG Effects/Materials/Misc/beamglow.renderer-4-0_0_0_0.mtl",
-        "assets/unity_imported/Assets/ARPG Effects/Materials/Misc/sparkle_atlas.mtl"
-      ],
-      "truncated": 284
+      "count": 0,
+      "totalKb": 0,
+      "sample": [],
+      "truncated": 0
     }
   },
   "configSummary": {
@@ -471,9 +196,7 @@
       "fovLandscape",
       "presets"
     ],
-    "customKeys": [
-      "aoeDemo"
-    ],
+    "customKeys": [],
     "rawPreview": {
       "cta": {
         "googlePlayUrl": "https://play.google.com/store/apps/details?id=com.playable.ad",
@@ -492,130 +215,31 @@
         "successSoundPath": "",
         "winSoundPath": "",
         "system": {
-          "maxSfxVoices": 32,
+          "maxSfxVoices": 8,
           "sounds": {
-            "aoe-effect-0": {
-              "path": "aoe-audio/Skill 1",
-              "cooldownMs": 0,
-              "maxConcurrent": 1,
-              "priority": 128,
-              "volume": 0.5,
-              "loop": false,
-              "stealable": false
-            },
-            "aoe-effect-1": {
-              "path": "aoe-audio/Skill 2",
+            "ui-click": {
+              "path": "",
               "cooldownMs": 0,
               "maxConcurrent": 2,
-              "priority": 128,
-              "volume": 0.8,
-              "loop": false,
-              "stealable": false
-            },
-            "aoe-effect-2": {
-              "path": "aoe-audio/Skill 3",
-              "cooldownMs": 0,
-              "maxConcurrent": 1,
-              "priority": 128,
-              "volume": 0.6,
-              "loop": false,
-              "stealable": false
-            },
-            "aoe-effect-3": {
-              "path": "aoe-audio/Skill 4",
-              "cooldownMs": 0,
-              "maxConcurrent": 1,
-              "priority": 128,
-              "volume": 0.8,
-              "loop": false,
-              "stealable": false
-            },
-            "aoe-effect-4": {
-              "path": "aoe-audio/Skill 5",
-              "cooldownMs": 0,
-              "maxConcurrent": 1,
-              "priority": 128,
-              "volume": 0.3,
-              "loop": false,
-              "stealable": false
-            },
-            "aoe-effect-5": {
-              "path": "aoe-audio/Skill 6",
-              "cooldownMs": 0,
-              "maxConcurrent": 1,
-              "priority": 128,
-              "volume": 0.8,
-              "loop": false,
-              "stealable": false
-            },
-            "aoe-effect-6": {
-              "path": "aoe-audio/Skill 7",
-              "cooldownMs": 0,
-              "maxConcurrent": 2,
-              "priority": 128,
+              "priority": 100,
               "volume": 1,
               "loop": false,
-              "stealable": false
+              "stealable": true
             },
-            "aoe-effect-7": {
-              "path": "aoe-audio/Skill 8",
+            "success": {
+              "path": "",
+              "cooldownMs": 0,
+              "maxConcurrent": 3,
+              "priority": 80,
+              "volume": 1,
+              "loop": false,
+              "stealable": true
+            },
+            "win": {
+              "path": "",
               "cooldownMs": 0,
               "maxConcurrent": 1,
-              "priority": 128,
-              "volume": 1,
-              "loop": false,
-              "stealable": false
-            },
-            "aoe-effect-8": {
-              "path": "aoe-audio/Skill 9",
-              "cooldownMs": 0,
-              "maxConcurrent": 2,
-              "priority": 128,
-              "volume": 0.6,
-              "loop": false,
-              "stealable": false
-            },
-            "aoe-effect-9": {
-              "path": "aoe-audio/Skill 10",
-              "cooldownMs": 0,
-              "maxConcurrent": 1,
-              "priority": 128,
-              "volume": 1,
-              "loop": false,
-              "stealable": false
-            },
-            "aoe-effect-10": {
-              "path": "aoe-audio/Skill 11",
-              "cooldownMs": 0,
-              "maxConcurrent": 2,
-              "priority": 128,
-              "volume": 0.8,
-              "loop": false,
-              "stealable": false
-            },
-            "aoe-effect-14": {
-              "path": "aoe-audio/Skill 10",
-              "cooldownMs": 0,
-              "maxConcurrent": 1,
-              "priority": 128,
-              "volume": 1,
-              "loop": false,
-              "stealable": false
-            },
-            "aoe-impact-3": {
-              "path": "aoe-audio/Hit Skill9",
-              "cooldownMs": 0,
-              "maxConcurrent": 32,
-              "priority": 128,
-              "volume": 1,
-              "loop": false,
-              "stealable": false
-            },
-            "aoe-impact-4": {
-              "path": "aoe-audio/Hit Skill9",
-              "cooldownMs": 0,
-              "maxConcurrent": 32,
-              "priority": 128,
+              "priority": 100,
               "volume": 1,
               "loop": false,
               "stealable": false
