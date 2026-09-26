@@ -159,6 +159,15 @@ test and acceptance gate to that registry. The AOE source project runs
   custom shading still needs its adapter. The porter binds
   `UnityParticleEulerRotationAdapter` for Mesh/Local-billboard rotation over lifetime.
   Import success alone does not establish runtime or visual parity.
+- Preserve Legacy particle blend equations: Soft Additive uses One /
+  OneMinusSrcColor with RGB multiplied by fragment alpha; Premultiply uses
+  One / OneMinusSrcAlpha with the source vertex-alpha formula. SrcAlpha
+  factors double-multiply these shaders. Additive and Alpha Blended clamp
+  fragment alpha after the two-times vertex/tint/texture product.
+  Validate every generated vertex ABI separately through AssetDB. Particle
+  renderer properties cannot be copied to trail/static effects that lack
+  their uniforms. EFX3302 can subsequently cause an import-UUID download
+  failure for the same effect; identify the UUID before diagnosing networking.
 - Regression: `particle-renderer-contract.test.cjs`,
   `particle-renderer-native.test.cjs`, and `porting-regressions.test.cjs` under
   `tools/unity-cocos-port`. Check native geometry under a rotated parent,

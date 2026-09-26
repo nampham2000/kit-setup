@@ -22,6 +22,20 @@ CCEffect %{
         blendDst: one
         blendSrcAlpha: zero
         blendDstAlpha: dst_alpha
+    b4: &b4
+      targets:
+      - blend: true
+        blendSrc: one
+        blendDst: one_minus_src_color
+        blendSrcAlpha: zero
+        blendDstAlpha: one
+    b5: &b5
+      targets:
+      - blend: true
+        blendSrc: one
+        blendDst: one_minus_src_alpha
+        blendSrcAlpha: zero
+        blendDstAlpha: one
     d1: &d1 { depthTest: true, depthWrite: false }
     r1: &r1 { cullMode: none }
     p1: &p1
@@ -86,14 +100,14 @@ CCEffect %{
       frag: no-tint-fs:addSmooth
       rasterizerState: *r1
       depthStencilState: *d1
-      blendState: *b1
+      blendState: *b4
       properties: *p1
     - vert: source-particle-vs:lpvs_main
       frag: no-tint-fs:addSmooth
       phase: deferred-forward
       rasterizerState: *r1
       depthStencilState: *d1
-      blendState: *b1
+      blendState: *b4
       propertyIndex: 0
   - name: premultiply-blend
     passes:
@@ -101,14 +115,14 @@ CCEffect %{
       frag: no-tint-fs:premultiplied
       rasterizerState: *r1
       depthStencilState: *d1
-      blendState: *b2
+      blendState: *b5
       properties: *p1
     - vert: source-particle-vs:lpvs_main
       frag: no-tint-fs:premultiplied
       phase: deferred-forward
       rasterizerState: *r1
       depthStencilState: *d1
-      blendState: *b2
+      blendState: *b5
       propertyIndex: 0
 }%
 
@@ -129,6 +143,7 @@ CCProgram tinted-fs %{
 
   vec4 add () {
     vec4 col = 2.0 * color * tintColor * CCSampleWithAlphaSeparated(mainTexture, uv);
+    col.a = clamp(col.a, 0.0, 1.0);
     return CCFragOutput(col);
   }
 

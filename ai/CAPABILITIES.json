@@ -801,6 +801,10 @@
     {
       "id": "particle-port-fix-registry",
       "rule": "Trước mỗi Unity particle/VFX port, đọc playable-shared-kit/ai/particle-port-fixes.json và chạy particle-port-fix-audit --check. Registry phân biệt fix tự động với adapter cần source oracle và logic còn riêng project; file helper tồn tại không chứng minh prefab mới đã bind hay pixel parity. Cocos 3.8.8 dùng ma trận/rotation tạm toàn module trong ParticleSystem.emit: callback birth đồng bộ emit con có thể làm particle cha tiếp theo lệch vị trí. Với link birth đồng bộ, dùng UnityParticleNestedEmission trên source, kiểm tâm birth cha/con và phân bố trái/giữa/phải qua nhiều replay ở hai viewport. Kiểm first-frame rotation/size/color, source-derived impact capacity, orbital frame, Noise, trail/material slot, UV reflection, HDR/sRGB và console. Vendor shader, death terminal integration và burst catch-up phải có closure cùng acceptance riêng; không tự coi shared helper là semantic parity."
+    },
+    {
+      "id": "legacy-particle-blend-and-import",
+      "rule": "Preserve native Legacy particle equations: Soft Additive uses One/OneMinusSrcColor and Premultiply uses One/OneMinusSrcAlpha; SrcAlpha double-multiplies alpha. Clamp alpha after tinted two-times product. Validate every generated particle/trail/static effect through live AssetDB; a property must exist in its selected vertex ABI. EFX3302 can cause subsequent import-UUID download failure for that effect; identify the asset UUID before attributing networking or shared-kit failure. Blend unit tests and import success do not establish runtime or visual parity."
     }
   ],
   "capabilities": {
