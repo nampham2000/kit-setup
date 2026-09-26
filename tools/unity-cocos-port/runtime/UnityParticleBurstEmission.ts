@@ -39,15 +39,25 @@ export function installUnityParticleBurstEmission(system: ParticleSystem): void 
         b.update = (ps: ParticleSystem, dt: number): void => {
             const time = ps.time - ps.startDelay.evaluate(0, 1);
             if (time < 0) return;
-            const currentLoop = Math.floor(time / ps.duration);
+            let currentLoop = Math.floor(time / ps.duration);
+            let local = time - currentLoop * ps.duration;
+            // A step ending exactly on the duration still belongs to the current loop.
+            if (local === 0 && currentLoop > 0) { currentLoop--; local = ps.duration; }
             if (currentLoop !== loop) { loop = currentLoop; emitted = 0; }
-            const local = time - currentLoop * ps.duration;
-            while (emitted < burst.repeatCount) {
-                const at = burst.time + emitted * burst.repeatInterval;
+            let due = emitted;
+            while (due < burst.repeatCount) {
+                const at = burst.time + due * burst.repeatInterval;
                 if (at >= ps.duration || at >= local) break;
-                (ps as any).emit(burst.count.evaluate(at / ps.duration, 1), dt - (local - at));
-                emitted++;
+                due++;
             }
+            // Unity emits at most one cycle per 1/60 s of the step and drops the other
+            // due cycles; the burst still ends at its authored time (fixtures/burst-cycles.json).
+            const last = Math.min(due, emitted + Math.max(1, Math.floor(dt * 60 + 1e-4)));
+            for (let cycle = emitted; cycle < last; cycle++) {
+                const at = burst.time + cycle * burst.repeatInterval;
+                (ps as any).emit(burst.count.evaluate(at / ps.duration, 1), dt - (local - at));
+            }
+            emitted = due;
         };
     }
 }

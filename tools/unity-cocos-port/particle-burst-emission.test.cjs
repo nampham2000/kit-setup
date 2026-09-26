@@ -28,3 +28,19 @@ for(const sample of require('./fixtures/burst-spread.json'))test(`Unity burst sp
     for(let i=0;i<sample.count;i++)for(let axis=0;axis<3;axis++)assert.ok(Math.abs(positions[i][axis]-sample.positions[i][axis])<1e-6,`particle ${i} axis ${axis}`);
   }
 });
+for(const sample of require('./fixtures/burst-cycles.json').cases)test(`native burst cycles per step: ${sample.name}`,()=>{
+  let count=0;
+  const burst={time:0,repeatCount:sample.cycles,repeatInterval:sample.interval,count:{evaluate:()=>sample.count},reset(){}};
+  const ps={bursts:[burst],time:0,duration:sample.duration,startDelay:{evaluate:()=>0},emit(n){count+=n;}};
+  moduleResult.exports.installUnityParticleBurstEmission(ps);
+  burst.reset();
+  let mismatches=0;
+  for(let step=1;step<sample.particles.length;step++){
+    ps.time=Math.fround(step*sample.dt);
+    // A non-looping system stops emitting once its duration has elapsed.
+    if(ps.time<=sample.duration)burst.update(ps,sample.dt);
+    if(Math.abs(count-sample.particles[step])>sample.count)mismatches++;
+  }
+  assert.equal(mismatches,0,`${sample.name}: per-step counts drift from Unity`);
+  assert.equal(count,sample.particles[sample.particles.length-1],`${sample.name}: total`);
+});

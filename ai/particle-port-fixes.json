@@ -244,9 +244,10 @@
       ],
       "testPaths": [
         "tools/unity-cocos-port/particle-burst-emission.test.cjs",
-        "tools/unity-cocos-port/particle-burst-emission-binding.test.cjs"
+        "tools/unity-cocos-port/particle-burst-emission-binding.test.cjs",
+        "tools/unity-cocos-port/fixtures/burst-cycles.json"
       ],
-      "acceptance": "Porter binds the catch-up to every repeating burst; authored burst repetitions match Unity per-system counts (ReferenceCapture systems[]) under coarse frames, boundaries and loop replay."
+      "acceptance": "Repeating bursts follow native Unity per-step emission (fixtures/burst-cycles.json from fixtures/capture-burst-cycles.cs): at most one cycle per 1/60 s of the step, the other due cycles dropped, the burst still ending at its authored time; no Cocos stall when the interval is shorter than a frame. Sub-emitter instances apply the same rule. Per-system counts must match ReferenceCapture systems[] (Hovl Magic circle 3 Fire 164, not 271)."
     },
     {
       "id": "death-terminal-position",

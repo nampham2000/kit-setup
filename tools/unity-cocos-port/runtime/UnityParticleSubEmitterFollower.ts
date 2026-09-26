@@ -464,14 +464,14 @@ export class UnityParticleSubEmitterFollower extends Component {
         else instance.time += dt;
         if (instance.time >= schedule.duration) {
             if (!schedule.loop) {
-                this.emitDueBursts(instance, schedule.duration);
+                this.emitDueBursts(instance, schedule.duration, dt);
                 return false;
             }
-            this.emitDueBursts(instance, schedule.duration);
+            this.emitDueBursts(instance, schedule.duration, dt);
             instance.time -= schedule.duration;
             instance.cycles.fill(0);
         }
-        this.emitDueBursts(instance, instance.time);
+        this.emitDueBursts(instance, instance.time, dt);
         const rate = schedule.rate.evaluate(instance.time / schedule.duration, Math.random());
         if (rate > 0 && dt > 0) {
             instance.rateAccumulator += rate * dt;
@@ -482,17 +482,22 @@ export class UnityParticleSubEmitterFollower extends Component {
         return true;
     }
 
-    private emitDueBursts (instance: EmissionInstance, time: number): void {
+    private emitDueBursts (instance: EmissionInstance, time: number, dt: number): void {
         const { bursts, duration } = instance.schedule;
+        // Unity emits at most one cycle per 1/60 s of the step and drops the other due
+        // cycles (fixtures/burst-cycles.json, same rule as UnityParticleBurstEmission).
+        const cap = Math.max(1, Math.floor(dt * 60 + 1e-4));
         for (let b = 0; b < bursts.length; b += 1) {
             const burst = bursts[b];
             if (time < burst.time) continue;
             const interval = Math.max(1e-4, burst.repeatInterval);
             const due = Math.min(Math.max(1, burst.repeatCount), Math.floor((time - burst.time) / interval + 1e-6) + 1);
-            for (; instance.cycles[b] < due; instance.cycles[b] += 1) {
+            const last = Math.min(due, instance.cycles[b] + cap);
+            for (let cycle = instance.cycles[b]; cycle < last; cycle += 1) {
                 const count = Math.round(burst.count.evaluate(Math.min(1, time / duration), Math.random()));
                 if (count > 0) this.emitAtWorldPosition(instance.entry, instance.position, count);
             }
+            instance.cycles[b] = Math.max(instance.cycles[b], due);
         }
     }
 
