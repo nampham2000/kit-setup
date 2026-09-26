@@ -157,23 +157,31 @@ function findBuiltHtml(options) {
 
 /** Client CDP tối giản trên WebSocket có sẵn của Node. */
 class CdpSession {
-  constructor(wsUrl) {
+  constructor(wsUrl, commandTimeoutMs = 90000, connectTimeoutMs = 15000) {
     this.wsUrl = wsUrl;
     this.nextId = 1;
     this.pending = new Map();
     this.listeners = new Map();
+    this.commandTimeoutMs = commandTimeoutMs;
+    this.connectTimeoutMs = connectTimeoutMs;
   }
 
   connect() {
     return new Promise((resolve, reject) => {
       this.ws = new WebSocket(this.wsUrl);
-      this.ws.addEventListener('open', () => resolve());
-      this.ws.addEventListener('error', (e) => reject(new Error(`WebSocket lỗi: ${e.message || 'unknown'}`)));
+      const timer=setTimeout(()=>{reject(new Error('CDP connection timed out'));this.close();},this.connectTimeoutMs);
+      this.ws.addEventListener('open', () => {clearTimeout(timer);resolve();});
+      this.ws.addEventListener('error', (e) => {
+        clearTimeout(timer);
+        const error=new Error(`WebSocket lỗi: ${e.message || 'unknown'}`);this.rejectPending(error);reject(error);
+      });
+      this.ws.addEventListener('close',()=>{clearTimeout(timer);const error=new Error('CDP WebSocket closed');this.rejectPending(error);reject(error);});
       this.ws.addEventListener('message', (event) => {
         let msg;
         try { msg = JSON.parse(event.data); } catch (_) { return; }
         if (msg.id && this.pending.has(msg.id)) {
-          const { resolve: res, reject: rej } = this.pending.get(msg.id);
+          const { resolve: res, reject: rej, timer } = this.pending.get(msg.id);
+          clearTimeout(timer);
           this.pending.delete(msg.id);
           if (msg.error) rej(new Error(`${msg.error.message} (${msg.error.code})`));
           else res(msg.result);
@@ -191,8 +199,11 @@ class CdpSession {
     const payload = { id, method, params };
     if (sessionId) payload.sessionId = sessionId;
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
-      this.ws.send(JSON.stringify(payload));
+      if(this.ws?.readyState!==1){reject(new Error('CDP WebSocket is not open'));return;}
+      const timer=setTimeout(()=>{this.pending.delete(id);reject(new Error(`CDP command timed out: ${method}`));},this.commandTimeoutMs);
+      this.pending.set(id, { resolve, reject, timer });
+      try{this.ws.send(JSON.stringify(payload));}
+      catch(error){clearTimeout(timer);this.pending.delete(id);reject(error);}
     });
   }
 
@@ -202,7 +213,12 @@ class CdpSession {
   }
 
   close() {
+    this.rejectPending(new Error('CDP session closed'));
     try { this.ws.close(); } catch (_) { /* ignore */ }
+  }
+  rejectPending(error) {
+    for(const {reject,timer} of this.pending.values()){clearTimeout(timer);reject(error);}
+    this.pending.clear();
   }
 }
 
@@ -1020,4 +1036,5 @@ module.exports = {
   isNavigationEvaluationError, evaluatePageWithNavigationRetry,
   dispatchTouchGesture, dispatchTouchGestureSequence, selectCocosPreviewDevice,
   parseViewportSize,applyViewportSize,
+  CdpSession,
 };
