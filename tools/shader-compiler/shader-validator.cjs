@@ -13,6 +13,7 @@
  */
 
 const { analyzeEffect } = require('./glsl-static-analyzer.cjs');
+const { findReservedIdentifiers } = require('./glsl-reserved-identifiers.cjs');
 
 const SAMPLER_TYPES = /\b(?:sampler2DArray|samplerCubeShadow|sampler2DShadow|samplerCube|sampler2D|sampler3D)\b/;
 
@@ -106,6 +107,40 @@ function checkDefineShadowing(programs, errors) {
       const declRe = new RegExp(`^\\s*${DECL_TYPES}\\s+${symbol}\\s*[=;]`, 'm');
       if (!declRe.test(body)) continue;
       errors.push(`[GLSL_DEFINE_SHADOWS_LOCAL] ${name} -- '${symbol}' is both #define'd and declared as a variable; the macro expands the declaration into invalid GLSL. Rename the local.`);
+    }
+  }
+}
+
+/**
+ * GLSL ES reserves words such as `output`, `input` and `filter` that are ordinary HLSL names.
+ * Cocos compiles every effect for glsl1 too and refuses them (EFX2402 "using reserved keyword in
+ * glsl1"), after which every material/scene that references the effect fails to download.
+ */
+function checkReservedIdentifiers(programs, errors) {
+  for (const [name, body] of programs) {
+    for (const word of findReservedIdentifiers(body)) {
+      errors.push(`[EFX2402_RESERVED_IDENTIFIER] ${name} -- '${word}' is a GLSL ES reserved word; Cocos refuses the effect for glsl1. Rename it (the transpiler renames name-only words such as output/input automatically).`);
+    }
+  }
+}
+
+/**
+ * Cocos 3.8 declares CCVertInput per chunk: legacy/input has CCVertInput(inout vec4) and
+ * legacy/input-standard has CCVertInput(inout StandardVertInput) (and the struct). Calling the
+ * StandardVertInput overload with only legacy/input compiles to
+ * "'CCVertInput' : no matching overloaded function found" (EFX2406) in the editor, and the
+ * effect never imports -- a static PASS here used to hide that.
+ */
+function checkVertInputOverload(programs, errors) {
+  for (const [name, body] of programs) {
+    if (!/\bCCVertInput\s*\(/.test(body)) continue;
+    const includesStandard = /#\s*include\s*<legacy\/input-standard>/.test(body);
+    const includesVec4 = /#\s*include\s*<legacy\/input>/.test(body);
+    const usesStandard = /\bStandardVertInput\b/.test(body);
+    if (usesStandard && !includesStandard) {
+      errors.push(`[EFX2406_CCVERTINPUT_OVERLOAD] ${name} -- CCVertInput(StandardVertInput) is declared in legacy/input-standard, but the program includes ${includesVec4 ? 'only legacy/input (the vec4 overload)' : 'no legacy input chunk'}; Cocos fails with "no matching overloaded function". #include <legacy/input-standard>.`);
+    } else if (!usesStandard && !includesVec4 && includesStandard) {
+      errors.push(`[EFX2406_CCVERTINPUT_OVERLOAD] ${name} -- CCVertInput(vec4) is declared in legacy/input, but the program includes only legacy/input-standard. #include <legacy/input> or pass a StandardVertInput.`);
     }
   }
 }
@@ -231,6 +266,8 @@ function validateCceffectStructure(effectText, options = {}) {
 
   // 2d. A #define must not shadow a declared variable name.
   checkDefineShadowing(programs, errors);
+  checkReservedIdentifiers(programs, errors);
+  checkVertInputOverload(programs, errors);
 
   // 3. Stage IO Matching (Varyings)
   if (vsMatch && fsMatch) {

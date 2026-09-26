@@ -526,6 +526,19 @@ module.exports = function createMaterialPorter(deps) {
       shaderAsset = unityDb?.get(shaderGuid);
       shaderName = readUnityShaderName(shaderAsset) || shaderAsset?.relativePath || shaderGuid;
     }
+    // TextMeshPro SDF/bitmap shaders render TMP's runtime glyph mesh. Ported text is a cc.Label
+    // (font, colour and outline come from the TMP component/material values), and the transpiled
+    // TMP_SDF.shader is not a valid Cocos effect (reserved `output`, read-only attribute writes,
+    // unbound _EnvMatrix, ...). Never emit an effect/material for it.
+    if (/^TextMeshPro\//i.test(shaderName)) {
+      reporter.low(
+        'TMP_SHADER_NOT_TRANSPILED',
+        materialAsset.relativePath,
+        String(getField(materialDoc, 'm_Name', materialAsset.stem) || materialAsset.stem),
+        `"${shaderName}" draws TextMeshPro glyph meshes; the text is ported as cc.Label, so no Cocos effect/material is generated`,
+      );
+      return '';
+    }
     const invisibleShadowReceiver = /Invisible Shadow Receiver/i.test(shaderName);
     const tcp2HybridShader2 = TCP2_HYBRID_SHADER_2_GUIDS.has(shaderGuid)
       || /(?:Toony Colors Pro 2|TCP2).*Hybrid Shader 2/i.test(shaderName);

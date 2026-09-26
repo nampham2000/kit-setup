@@ -16,6 +16,7 @@ const path = require('path');
 const { buildStd140Ubo } = require('./ubo-layout-builder.cjs');
 const { lowerHlslToGlsl } = require('./unity-semantic-lowering.cjs');
 const { allocateBindings } = require('./binding-allocator.cjs');
+const { renameReservedInEffect } = require('./glsl-reserved-identifiers.cjs');
 const { extractSurfaceShaderIntent, detectPackedMaps } = require('./surface-shader-intent-extractor.cjs');
 const {
   SRGB_SAMPLE_HELPER,
@@ -1275,7 +1276,9 @@ function withoutUnusedHiddenProperties(docIR) {
 function emitCocosEffect(docIR, options = {}) {
   docIR = withoutUnusedHiddenProperties(docIR);
   if (options.mode === 'surface-pbr') {
-    return emitSurfaceShaderEffect(docIR, docIR.subShaders[0]?.passes[0] || { renderState: {} }, options);
+    return renameReservedInEffect(
+      emitSurfaceShaderEffect(docIR, docIR.subShaders[0]?.passes[0] || { renderState: {} }, options),
+    ).text;
   }
 
   const subShader = docIR.subShaders[0] || { passes: [{ renderState: {}, program: {} }] };
@@ -1284,7 +1287,9 @@ function emitCocosEffect(docIR, options = {}) {
   const { vsCode, fsCode, ubo } = generateCocosPrograms(docIR, pass, options);
   const yaml = buildCceffectYaml(docIR, pass, ubo, options);
 
-  return `${yaml}\n\n${vsCode}\n\n${fsCode}\n`;
+  // HLSL may name things `output`/`input`/`filter`/...; GLSL ES reserves them and Cocos refuses
+  // the effect (EFX2402), e.g. TextMeshPro TMP_SDF.shader `pixel_t output;`.
+  return renameReservedInEffect(`${yaml}\n\n${vsCode}\n\n${fsCode}\n`).text;
 }
 
 /**

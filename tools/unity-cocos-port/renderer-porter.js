@@ -150,7 +150,29 @@ module.exports = function createRendererPorter(deps) {
     reporter.medium('NESTED_MODEL_UNRESOLVED', modelAsset.relativePath, gameObject.name, 'Nested model node was preserved, but no Cocos mesh sub-asset is available yet');
   }
 
+  /** A TextMeshPro (3D) component on the same GameObject: it builds the MeshRenderer's mesh at runtime. */
+  function hasTextMeshProText(gameObject, model) {
+    return gameObject.components.some((id) => {
+      const component = model.componentDocs.get(id);
+      return component?.classId === 114
+        && getField(component, 'm_fontAsset', null) !== null
+        && getField(component, 'm_text', null) !== null;
+    });
+  }
+
   function emitMeshRenderer(gameObject, nodeId, componentId, doc, model, builder, reporter, options, unityDb, cocosDb) {
+    // TextMeshPro fills this renderer with a glyph mesh at runtime and draws it with its SDF font
+    // material. The text itself is ported as a cc.Label by the script porter; emitting the renderer
+    // would only add an empty mesh plus a transpiled TMP_SDF effect that Cocos cannot compile.
+    if (hasTextMeshProText(gameObject, model)) {
+      reporter.low(
+        'TMP_MESH_RENDERER_SKIPPED',
+        model.file,
+        gameObject.name,
+        'TextMeshPro builds this MeshRenderer at runtime; the text is ported as a cc.Label, so the renderer and its TMP SDF material are not emitted',
+      );
+      return;
+    }
     const meshFilterId = gameObject.components.find((id) => model.componentDocs.get(id)?.classId === 33);
     const meshFilter = meshFilterId ? model.componentDocs.get(meshFilterId) : null;
     const meshRef = meshFilter ? getField(meshFilter, 'm_Mesh') : null;

@@ -7883,6 +7883,8 @@ module.exports = {
   findPendingImporterStates,
   convertUnityPhysicsMaterialToCocos,
   resolveUnityPhysicsMaterialUuid,
+  convertUnityMaterialToCocos,
+  emitMeshRenderer,
   emitCanvas,
   resolveTransformLayout,
   resolveNestedPrefabEffectiveTransform,
