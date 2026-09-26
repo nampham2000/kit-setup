@@ -15,7 +15,7 @@ export class UnityStartRotationKernel {
     private count=0;
     constructor(capacity:number) {
         this.lanes=Array.from({length:4},()=>({a:0,b:0,c:0,d:0}));
-        this.values=new Float32Array(capacity*3);this.seeds=new Uint32Array(capacity);
+        this.values=new Float32Array(capacity*8);this.seeds=new Uint32Array(capacity);
     }
     reset(seed:number):void {
         this.count=0;
@@ -37,19 +37,26 @@ export class UnityStartRotationKernel {
         for(let group=0;group<Math.ceil(count/4);group++)for(let lane=0;lane<4;lane++){
             const l=this.lanes[lane],index=group*4+lane;
             const seed=this.next(l);
-            this.next(l); // Start speed.
-            this.next(l); // Start size X (also consumed for constant curves).
-            if(size3D){this.next(l);this.next(l);}
+            const lifetime=this.unit(l);
+            const sizeX=this.unit(l),sizeY=size3D?this.unit(l):sizeX,sizeZ=size3D?this.unit(l):sizeX;
             const z=this.unit(l),x=rotation3D?this.unit(l):0,y=rotation3D?this.unit(l):0;
-            this.next(l); // Start color.
-            if(index<count){this.seeds[index]=seed;const offset=index*3;this.values[offset]=x;this.values[offset+1]=y;this.values[offset+2]=z;}
+            const color=this.unit(l);
+            if(index<count){this.seeds[index]=seed;const offset=index*8;this.values[offset]=x;this.values[offset+1]=y;this.values[offset+2]=z;
+                this.values[offset+3]=lifetime;this.values[offset+4]=sizeX;this.values[offset+5]=sizeY;this.values[offset+6]=sizeZ;this.values[offset+7]=color;}
         }
     }
     value(index:number,axis:number):number {
         if(index<0||index>=this.count)throw new Error('Native start rotation birth index is outside its batch');
-        return this.values[index*3+axis];
+        return this.values[index*8+axis];
     }
     birthSeed(index:number):number {return this.seeds[index];}
+}
+
+/** Start speed has its own particle-seed channel, independent of size/lifetime. */
+export function unityStartSpeedRandom(seed:number):number {
+    const a=(seed+0x96aa4de3)>>>0,b=(Math.imul(a,1812433253)+1)>>>0,c=(Math.imul(b,1812433253)+1)>>>0,d=(Math.imul(c,1812433253)+1)>>>0;
+    const t=a^(a<<11),next=(d^(d>>>19)^t^(t>>>8))>>>0;
+    return Math.fround((next&8388607)/8388607);
 }
 
 function angle(curve:Curve,random:number):number {

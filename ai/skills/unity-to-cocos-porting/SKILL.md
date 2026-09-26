@@ -17,6 +17,23 @@ This skill provides step-by-step guidance and architectural rules for converting
 
 ### Reuse the measured VFX fixes
 
+Cocos reuses one birth random value for lifetime, speed, size, rotation and
+color. Unity does not. Use the shared InitialState adapter for measured constant
+or two-constant initial curves and constant/two-color starts. It shares the
+native four-lane initialization kernel with StartRotation; sizeXYZ, lifetime,
+rotationXYZ and color consume separate channels, while speed is a particle-seed
+channel with salt 0x96aa4de3. Tests include 544 held-out automatic PlayerLoop
+births, 272 plain births and 272 endpoint-clamp samples. Clamp lifetime endpoints
+to .0001 before interpolation. Install before legacy StartRotation and reuse its
+marker instead of installing duplicate kernels. Keep full uint32 native seeds
+in unityNativeSeed: overwriting Cocos randomSeed breaks signed-XOR stock module
+sampling for high-bit seeds. Noise/Force prefer the native field or shared system
+seed; clear/replay resets initialization and Noise together. Shape alignment,
+prewarm, flip, negative size and other curve/color modes remain explicit gaps.
+Native shape RNG, continuous birth batch identity and whole-pack visual fidelity
+are separate acceptance gates; these initial channel fixtures do not prove them.
+
+
 SingleSidedEdge (Unity shape 12) is an X segment with initial +Y direction,
 not a Cocos Box edge. The shared Edge adapter supports continuous constant-rate
 Loop emission: position = -radius + (2 * speed * birthTime) modulo (2 * radius).

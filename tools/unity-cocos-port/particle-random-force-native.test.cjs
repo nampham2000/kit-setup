@@ -35,6 +35,7 @@ test('production CPU adapter matches native traces with Z reflection and late bi
  const out={};new Function('exports','require',ts.transpileModule(fs.readFileSync(path.join(__dirname,'runtime/UnityParticleRandomForce.ts'),'utf8'),{compilerOptions:{module:1,target:7}}).outputText)(out,id=>id==='cc'?{Vec3}:mod);
  for(const c of fixture.cases.filter(c=>c.randomize)){
   const pool={data:[],get length(){return this.data.length;}},force={enable:true,needTransform:false},s={time:0,capacity:c.count,forceOvertimeModule:force,unityNoise:{seed:c.systemSeed},processor:{_particles:pool,updateParticles(dt){for(const p of pool.data){force.animate(p,dt);Vec3.scaleAndAdd(p.position,p.position,p.ultimateVelocity,dt);}return pool.length;}}};
+  if(c.systemSeed%2){s.unityInitialState={seed:c.systemSeed};delete s.unityNoise;}
   out.installUnityParticleRandomForce(s,{autoRandomSeed:false,randomSeed:c.systemSeed,x:[-10,10],y:[-10,10],z:[-10,10]});
   for(const f of c.frames){
    while(pool.length<f.particles.length)pool.data.push({position:new Vec3(),velocity:new Vec3(),ultimateVelocity:new Vec3()});

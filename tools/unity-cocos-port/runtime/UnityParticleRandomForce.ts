@@ -11,14 +11,14 @@ export function installUnityParticleRandomForce(system:ParticleSystem,spec:Unity
     runtime.unityRandomForce={kernel,spec};
     const update=processor.updateParticles;
     if(spec.randomized!==false)processor.updateParticles=function(dt:number):number{
-        if(system.time<lastTime){fallback=spec.autoRandomSeed?(Math.random()*4294967296)>>>0:spec.randomSeed;kernel.reset(runtime.unityNoise?.seed??fallback);}
-        const seed=runtime.unityNoise?.seed??fallback,pool=this._particles;
+        if(system.time<lastTime){fallback=spec.autoRandomSeed?(Math.random()*4294967296)>>>0:spec.randomSeed;kernel.reset(runtime.unityNoise?.seed??runtime.unityInitialState?.seed??fallback);}
+        const seed=runtime.unityNoise?.seed??runtime.unityInitialState?.seed??fallback,pool=this._particles;
         kernel.beginFrame(seed,pool.length);
         for(let i=0;i<pool.length;i++)pool.data[i].unityForcePoolIndex=i;
         lastTime=system.time;return update.call(this,dt);
     };
     module.animate=function(p:any,dt:number):void {
-        if(spec.randomized===false)unityFixedForceRandom(random,p.randomSeed);
+        if(spec.randomized===false)unityFixedForceRandom(random,p.unityNativeSeed??p.randomSeed);
         else kernel.sample(random,p.unityForcePoolIndex);
         // Reflect the sampled source Z value; reversing endpoints alone maps
         // to the opposite random draw and breaks correlation with Noise.

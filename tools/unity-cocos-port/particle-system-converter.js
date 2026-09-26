@@ -1,6 +1,7 @@
 'use strict';
 const { particleRendererContract } = require('./particle-renderer-contract');
 const { particleNoiseContract } = require('./particle-noise-contract');
+const { initialStateContract } = require('./particle-initial-state-binding.cjs');
 const { edgeShapeContract } = require('./particle-edge-shape-binding.cjs');
 const { startRotationContract } = require('./particle-start-rotation-binding.cjs');
 const { particleOrbitContract } = require('./particle-orbit-contract');
@@ -1397,6 +1398,7 @@ function applyUnityParticleDataToCocos(builder, particleId, data = {}, rendererD
   Object.defineProperty(particle, 'unityParticleScalingMode', { value: Number(data.scalingMode ?? 0), configurable: true });
   Object.defineProperty(particle, 'unityOrbitContract', { value: particleOrbitContract(data), configurable: true });
   Object.defineProperty(particle, 'unityNoiseContract', { value: particleNoiseContract(data), configurable: true });
+  Object.defineProperty(particle, 'unityInitialStateContract', { value: initialStateContract(data), configurable: true });
   Object.defineProperty(particle, 'unityEdgeShapeContract', { value: edgeShapeContract(data), configurable: true });
   Object.defineProperty(particle, 'unityStartRotationContract', { value: startRotationContract(data), configurable: true });
   Object.defineProperty(particle, 'unityLimitVelocityContract', { value: particleLimitVelocityContract(data), configurable: true });

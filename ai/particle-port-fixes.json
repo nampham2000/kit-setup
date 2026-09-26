@@ -530,6 +530,23 @@
         "tools/unity-cocos-port/particle-shape-distribution.test.cjs"
       ],
       "acceptance": "Continuous constant-rate Loop Edge restores native X extent, +Y direction and radius-independent speed. 8192 native jitter offsets cover sphere surface before scale. Exact float wrap endpoints, RNG identity, burst/distance/prewarm and full visual parity remain unaccepted; require live imported adapter gates."
+    },
+    {
+      "id": "native-independent-initial-particle-channels",
+      "origin": "67388e3",
+      "applicability": "conditional",
+      "sharedPaths": [
+        "tools/unity-cocos-port/particle-initial-state-binding.cjs",
+        "tools/unity-cocos-port/runtime/UnityParticleInitialState.ts",
+        "tools/unity-cocos-port/runtime/UnityParticleStartRotation.ts"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/particle-initial-state.test.cjs",
+        "tools/unity-cocos-port/particle-start-rotation-native.test.cjs",
+        "tools/unity-cocos-port/particle-noise-random.test.cjs",
+        "tools/unity-cocos-port/particle-random-force-native.test.cjs"
+      ],
+      "acceptance": "816 native births (544 held-out automatic) verify independent lifetime, size, rotation, color and speed; 272 endpoint samples verify lifetime clamp. Preserve stock module seed and store full uint32 in unityNativeSeed. Replay, legacy delegation and live adapter-count gates required. Shape/continuous-batch RNG identity, unsupported initialization modes and full rendered parity remain separate gates."
     }
   ]
 }

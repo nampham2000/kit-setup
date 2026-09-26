@@ -50,7 +50,7 @@ export function installUnityParticleNoise(system: ParticleSystem, spec: UnityNoi
         kernel.sample(field, position.x, position.y, -position.z, state.scroll, spec);
         const age = Math.max(0, Math.min(1, 1 - (particle.remainingLifetime + dt) / particle.startLifetime));
         const amount = sampleNoiseCurve(spec.positionAmount, age);
-        if (randomStrength) unityNoiseStrengthRandom(strengthRandom, particle.randomSeed);
+        if (randomStrength) unityNoiseStrengthRandom(strengthRandom, particle.unityNativeSeed ?? particle.randomSeed);
         const sx = sampleNoiseCurve(spec.strength, age, strengthRandom[0]);
         const sy = spec.separateAxes ? sampleNoiseCurve(spec.strengthY, age, strengthRandom[1]) : sx;
         const sz = spec.separateAxes ? sampleNoiseCurve(spec.strengthZ, age, strengthRandom[2]) : sx;

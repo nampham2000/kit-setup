@@ -15,6 +15,7 @@ for(const c of fixture.cases)test(`Noise random seed ${c.particleSeed}, axes=${c
  const module={},system={processor:{_runAnimateList:[module],_particles:{length:1},enableModule(){},updateParticles(){}},noiseModule:module,time:0,duration:5};
  noise.installUnityParticleNoise(system,spec,c.systemSeed);
  const p={position:vec(c.initialPosition[0],c.initialPosition[1],-c.initialPosition[2]),startSize:vec(1,1,1),size:vec(1,1,1),animatedVelocity:vec(),ultimateVelocity:vec(),remainingLifetime:10,startLifetime:10,randomSeed:c.particleSeed,startEuler:vec(),rotation:vec()};
+ if(c.particleSeed%2){p.unityNativeSeed=c.particleSeed;p.randomSeed=123;}
  for(const [i,s] of c.samples.entries()){
   p.remainingLifetime-=c.dt;p.animatedVelocity.set(0,0,0);p.ultimateVelocity.set(0,0,0);module.animate(p,c.dt);
   p.position.set(p.position.x+p.ultimateVelocity.x*c.dt,p.position.y+p.ultimateVelocity.y*c.dt,p.position.z+p.ultimateVelocity.z*c.dt);
