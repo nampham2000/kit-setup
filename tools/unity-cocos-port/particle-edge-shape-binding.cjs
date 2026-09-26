@@ -12,7 +12,7 @@ function edgeShapeContract(source){
 }
 function stageEdgeShapeRuntime(options){
  if(options.dryRun)return;
- for(const name of ['UnityParticleEdgeShape','UnityParticleEdgeShapeAdapter','UnityParticleShapeDistribution']){
+ for(const name of ['UnityParticleEdgeShape','UnityParticleEdgeShapeAdapter','UnityParticleShapeDistribution','UnityParticleBirthTiming']){
   const target=path.join(options.cocosRoot,'assets/script',name+'.ts'),text=fs.readFileSync(path.join(__dirname,'runtime',name+'.ts'),'utf8');
   fs.mkdirSync(path.dirname(target),{recursive:true});if(!fs.existsSync(target)||fs.readFileSync(target,'utf8')!==text)fs.writeFileSync(target,text);
  }

@@ -967,8 +967,14 @@ when startSize3D is false, and partial-step module/gravity/position integration.
 World-space constant-rate births interpolate a translating emitter between its
 previous and current positions. Bind gravityY from DynamicsManager.asset, and
 use float32 capture steps. Source-bound fixtures cover 12 static/moving cases
-and 9 rates across 32 frames. The rate-60 cadence matches exactly; other tested
-rates retain a documented tolerance of one particle at precision boundaries.
+and 9 rates across 32 frames with exact counts. Accumulate float32 particle
+fractions from differences of consecutive float32 system clocks: round both
+(deltaClock * rate) and (fraction + increment), then remove the integer count.
+Dividing total time by interval misses boundary births. Within each continuous
+batch, native lane zero receives the newest crossing; reverse the age order
+before assigning RNG lanes, preserving the full scheduled count when capacity
+clips births. 144 automatic PlayerLoop rows bind actual seed to age/position
+including capacity clipping. Never sort particles by age to prove seed identity.
 This gate does not prove rotating-emitter interpolation, random/curve-rate
 emission, nested birth timing, or whole-effect visual acceptance. Do not report
 those as verified from these fixtures. Await actual scene readiness before the

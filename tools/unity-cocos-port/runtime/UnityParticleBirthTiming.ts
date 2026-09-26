@@ -1,17 +1,23 @@
 import { ParticleSystem, pseudoRandom, Vec3 } from 'cc';
 
+/** Native assigns the newest crossing to lane zero, including capacity clipping. */
+export function unityContinuousBirthDelay(state:{first:number;interval:number;index:number;batchCount:number}):number {
+    return state.first+(state.batchCount-1-state.index)*state.interval;
+}
+
 /** Native continuous births occur at counter crossings inside the simulation step. */
 export function installUnityParticleBirthTiming(system:ParticleSystem,gravityY=-9.81):void {
     const runtime=system as any,processor=runtime.processor;
     if(runtime.unityBirthTiming)return;
     if(!processor?._particles||!Array.isArray(processor._runAnimateList)||!system.rateOverTime)return;
-    const state=runtime.unityBirthTiming={rate:0,interval:0,clock:0,scheduled:0,lastRate:-1,lastTime:-1,first:0,index:0,rateDispatch:false,emitting:false,delay:0,dt:0,gravityY};
+    const state=runtime.unityBirthTiming={rate:0,interval:0,clock:0,scheduled:0,fraction:0,lastRate:-1,lastTime:-1,first:0,index:0,batchCount:0,rateDispatch:false,emitting:false,delay:0,dt:0,gravityY};
     const previousPosition=new Vec3(),currentPosition=new Vec3();
     system.node.getWorldPosition(previousPosition);
     const born=processor.setNewParticle,emit=runtime.emit,emission=runtime._emit,update=processor.updateParticles,enable=processor.enableModule;
     processor.setNewParticle=function(p:any):void {
         if(state.emitting){
-            const delay=state.rateDispatch?state.first+state.index++*state.interval:state.delay;
+            const delay=state.rateDispatch?unityContinuousBirthDelay(state):state.delay;
+            if(state.rateDispatch)state.index++;
             // Engine emit adds its dt to startLifetime. Source lifetime is fixed;
             // only the remaining first-frame integration interval changes.
             if(!state.rateDispatch){p.startLifetime-=state.delay;p.remainingLifetime-=state.delay;}
@@ -29,6 +35,7 @@ export function installUnityParticleBirthTiming(system:ParticleSystem,gravityY=-
     runtime.emit=function(count:number,dt=0):void {
         const wasEmitting=state.emitting,delay=state.delay;
         state.emitting=true;state.delay=dt;
+        if(state.rateDispatch)state.batchCount=Math.ceil(count);
         try{emit.call(this,count,state.rateDispatch?0:dt);}
         finally{state.emitting=wasEmitting;state.delay=delay;state.rateDispatch=false;}
     };
@@ -40,17 +47,19 @@ export function installUnityParticleBirthTiming(system:ParticleSystem,gravityY=-
         state.rate=rate;state.interval=rate>0?1/rate:0;state.first=rate>0?(1-before)/rate:0;state.index=0;
         state.rateDispatch=rate>0&&before+rate*dt>1&&this._time>this.startDelay.evaluate(0,1)&&this._isEmitting;
         if(rate>0&&(this.rateOverTime.mode??0)===0&&this._time>this.startDelay.evaluate(0,1)&&this._isEmitting){
-            // Native constant-rate emission divides its float clock by a float
-            // interval. Multiplying a double counter by rate changes boundary
-            // frames (e.g. rate 60 emits 1,2,3,4,4,5 particles in six ticks).
+            // Native accumulates float particle fractions from differences of consecutive
+            // float clocks. Both multiply and add round to float; dividing the
+            // total clock by interval misses source boundary births.
             const interval=Math.fround(1/rate);
-            if(state.lastRate!==rate||this._time<=state.lastTime){state.clock=0;state.scheduled=0;previousPosition.set(currentPosition);}
+            if(state.lastRate!==rate||this._time<=state.lastTime){state.clock=0;state.scheduled=0;state.fraction=0;previousPosition.set(currentPosition);}
             const previous=state.clock;
             state.clock=Math.fround(previous+Math.fround(dt));
-            const total=Math.floor(state.clock/interval),count=total-state.scheduled;
+            const accumulated=Math.fround(state.fraction+Math.fround((state.clock-previous)*rate));
+            const count=Math.floor(accumulated),total=state.scheduled+count;
+            state.fraction=accumulated-count;
             state.interval=interval;state.first=(state.scheduled+1)*interval-previous;
             state.scheduled=total;state.lastRate=rate;state.lastTime=this._time;
-            const fraction=state.clock/interval-total;
+            const fraction=state.fraction;
             // Let engine dispatch its distance/burst paths normally. The tiny
             // guard only admits its strict >1 branch at a native exact boundary.
             this._emitRateTimeCounter=count+fraction+(count>0?1e-10:0)-rate*dt;

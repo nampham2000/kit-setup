@@ -3,6 +3,20 @@ const test=require('node:test'),assert=require('node:assert/strict'),fs=require(
 class Vec3{constructor(){this.x=this.y=this.z=0;}set(a){this.x=a.x;this.y=a.y;this.z=a.z;return this;}}
 const m={exports:{}};new Function('exports','module','require',ts.transpileModule(fs.readFileSync(path.join(__dirname,'runtime/UnityParticleBirthTiming.ts'),'utf8'),{compilerOptions:{module:1,target:7}}).outputText)(m.exports,m,()=>({pseudoRandom:()=>0,Vec3}));
 const install=m.exports.installUnityParticleBirthTiming,fixture=require('./fixtures/rate-birth-native.json');
+test('automatic rate births match native seed-to-age association, including capacity clipping',()=>{
+ const f=require('./fixtures/birth-order-native.json'),kernelModule={};assert.equal(f.isPlaying,true);assert.match(f.driver,/no Emit or Simulate/);
+ assert.equal(crypto.createHash('sha256').update(fs.readFileSync(path.join(__dirname,'fixtures/capture-birth-order.cs'),'utf8').replace(/\r\n/g,'\n')).digest('hex'),f.sourceProbeSha256);
+ new Function('exports','require',ts.transpileModule(fs.readFileSync(path.join(__dirname,'runtime/UnityParticleStartRotation.ts'),'utf8'),{compilerOptions:{module:1}}).outputText)(kernelModule,()=>({}));
+ for(const rate of [60,100,120,200,1000,2000])for(const capacity of [16,128]){
+  const c={rate,gravity:0,dt:Math.fround(1/60)},s=engine(c),k=new kernelModule.UnityStartRotationKernel(capacity);k.reset(f.systemSeed);let index=0;
+  const emit=s.emit;s.emit=function(count,dt){const n=Math.min(count,capacity-this.processor._particles.length);if(n){k.beginBatch(n,false,false);index=0;}emit.call(this,n,dt);};
+  s.processor.setNewParticle=p=>{p.nativeSeed=k.birthSeed(index++);};install(s);
+  for(const row of f.rows.filter(r=>r.rate===rate&&r.capacity===capacity)){
+   s.update(c.dt);const actual=s.processor._particles.data;assert.equal(actual.length,row.particles.length,`rate ${rate} cap ${capacity} frame ${row.frame} count`);
+   for(const p of row.particles){const q=actual.find(q=>q.nativeSeed===p.seed);assert.ok(q,`native seed ${p.seed}, rate ${rate}, frame ${row.frame}`);assert.ok(Math.abs(2-q.remainingLifetime-p.age)<2e-6,`seed-age rate ${rate} frame ${row.frame} seed ${p.seed}: ${2-q.remainingLifetime} vs ${p.age}`);assert.ok(Math.abs(-q.position.z-p.z)<2e-6);}
+  }
+ }
+});
 const vec=(x=0,y=0,z=0)=>({x,y,z,set(a,b,c){this.x=a;this.y=b;this.z=c;}});
 function engine(c){
   const size={animate(p){const f=1+1-p.remainingLifetime/p.startLifetime;p.size.set(p.startSize.x*f,p.startSize.y*f,p.startSize.z*f);}},color={animate(p){p.alpha=Math.round((1-p.remainingLifetime/p.startLifetime)*255);}};
@@ -33,14 +47,13 @@ for(const c of fixture.cases)test(`native rate ${c.rate}, gravity ${c.gravity}, 
   }
 });
 const clock=require('./fixtures/rate-clock-native.json');
-test('32-frame native clocks retain source rate-60 cadence; other rates differ by at most one boundary birth',()=>{
+test('32-frame native clocks match all nine source rates exactly',()=>{
   const producer=fs.readFileSync(path.join(__dirname,'fixtures/capture-rate-clock.cs'),'utf8').replace(/\r\n/g,'\n');
   assert.equal(crypto.createHash('sha256').update(producer).digest('hex'),clock.sourceProbeSha256);
   for(const c of clock.cases){
     const s=engine({...c,gravity:0});install(s);
     for(const f of c.frames){s.update(c.dt);const n=s.processor._particles.length;
-      if(c.rate===60)assert.equal(n,f.count,`rate ${c.rate}, frame ${f.frame}`);
-      else assert.ok(Math.abs(n-f.count)<=1,`rate ${c.rate}, frame ${f.frame}: ${n} vs ${f.count}`);
+      assert.equal(n,f.count,`rate ${c.rate}, frame ${f.frame}`);
     }
   }
 });

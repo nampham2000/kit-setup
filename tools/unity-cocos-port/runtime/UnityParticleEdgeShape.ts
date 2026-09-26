@@ -1,5 +1,6 @@
 import { ParticleSystem, Vec3 } from 'cc';
 import { addUnityShapeJitter } from './UnityParticleShapeDistribution';
+import { unityContinuousBirthDelay } from './UnityParticleBirthTiming';
 export interface UnityEdgeShapeSpec {radius:number;speed:number;}
 
 export function unityEdgeLoopPosition(radius:number,speed:number,time:number):number {
@@ -21,7 +22,7 @@ export function installUnityParticleEdgeShape(system:ParticleSystem,spec:UnityEd
         const timing=runtime.unityBirthTiming;
         if(!timing)throw new Error('Native edge requires sub-frame birth timing before emission');
         if(!timing.rateDispatch)throw new Error('Native edge burst/manual emission has no measured contract');
-        const birth=Math.max(0,Math.fround(timing.clock-timing.dt+timing.first+timing.index*timing.interval));
+        const birth=Math.max(0,Math.fround(timing.clock-timing.dt+unityContinuousBirthDelay(timing)));
         const x=unityEdgeLoopPosition(spec.radius,spec.speed,birth),pos=p.position,dir=p.velocity;
         Vec3.set(pos,x,0,0);Vec3.set(dir,0,1,0);
         const random=this.randomDirectionAmount,sphere=this.sphericalDirectionAmount;

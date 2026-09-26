@@ -24,7 +24,7 @@ test('native continuous Edge travels 2*speed units/sec independent of radius; wr
 test('native initial direction +Y and spherical blend precede jitter',()=>{
  for(const name of ['edge-direction','edge-direction-jitter'])for(const row of fixture(name).rows.filter(r=>r.random===0)){
   const shape={randomDirectionAmount:0,sphericalDirectionAmount:row.spherical,randomPositionAmount:name.endsWith('jitter')?.3:0};
-  const system={shapeModule:shape,unityBirthTiming:{rateDispatch:true,clock:0,dt:0,first:0,index:0,interval:0}};
+  const system={shapeModule:shape,unityBirthTiming:{rateDispatch:true,clock:0,dt:0,first:0,index:0,interval:0,batchCount:1}};
   runtime.installUnityParticleEdgeShape(system,{radius:1,speed:0});
   for(const sample of row.velocity){const v=sample.velocity||sample,p={position:new Vec3(),velocity:new Vec3()};shape.emit(p);assert.ok(Math.hypot(p.velocity.x-v[0],p.velocity.y-v[1],p.velocity.z-v[2])<2e-7);}
  }
