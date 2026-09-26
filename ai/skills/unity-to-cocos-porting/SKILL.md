@@ -1045,6 +1045,17 @@ axes are supported; flipRotation, shape alignment and curve modes remain gated.
 This fixes rotation only: other initial channels still use Cocos random values,
 and different emission schedules cannot claim bitwise or whole-effect parity.
 
+Creator 3.8.8 CPU renderer comments out particle-module `update`, leaving
+World/Local velocity, force and limit frame transforms stale. BirthState now
+refreshes those enabled modules before simulation; fetch a fresh world matrix
+for each because the engine may invert it in place. Fire tornado's rotated
+local system with world velocity demonstrates the former wrong-axis motion.
+The 72-case Play Mode module-frame fixture accepts 36 unit-scale or uniformly
+scaled local-system trajectories. Scaled world simulation and nonuniform scale
+expose additional native scale semantics; these remaining 36 cases are diagnostic,
+not accepted by the rotation-only frame repair. Prewarm before adapter start
+and general limit-space parity still require separate evidence.
+
 Unity SizeModule stores the X curve in `curve`, including separate-axis mode; Y/Z use `y`/`z`. Never leave a template X curve because `x` is absent. Compare every axis against the serialized source and actual particle size.
 
 Cocos 3.8.8 exposes an arc mode value corresponding to Unity BurstSpread but its emitter falls through to loop emission. Preserve per-burst distribution explicitly: a closed 360-degree arc has count intervals; an open arc includes both endpoints and has count-1 intervals. Validate count 3 and 7 against Unity, including replay and a frame spanning repeated bursts.

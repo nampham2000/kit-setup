@@ -5,7 +5,7 @@ const { compressUuid } = require('./core-utils');
 
 function attachBirthStateRuntime(builder, reporter, options) {
   const particles = builder.objects.map((p,id)=>({p,id})).filter(({p})=>p?.__type__==='cc.ParticleSystem' &&
-    ['_rotationOvertimeModule','_sizeOvertimeModule','_colorOverLifetimeModule'].some(key=>{
+    ['_rotationOvertimeModule','_sizeOvertimeModule','_colorOverLifetimeModule','_velocityOvertimeModule','_forceOvertimeModule','_limitVelocityOvertimeModule'].some(key=>{
       const module=builder.objects[p[key]?.__id__];return module?._enable ?? module?.enable;
     }));
   if (!particles.length) return;

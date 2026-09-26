@@ -1,7 +1,7 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),ts=require('typescript');
 const m={exports:{}};
-new Function('exports','module',ts.transpileModule(fs.readFileSync(path.join(__dirname,'runtime/UnityParticleBirthState.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText)(m.exports,m);
+new Function('exports','module','require',ts.transpileModule(fs.readFileSync(path.join(__dirname,'runtime/UnityParticleBirthState.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText)(m.exports,m,()=>({Mat4:class {}}));
 const {installUnityParticleBirthState}=m.exports;
 test('late sub-emitter births initialize appearance before render, without stepping simulation',()=>{
   const calls=[];
