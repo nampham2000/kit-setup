@@ -485,6 +485,23 @@
         "tools/unity-cocos-port/planar-floor-contact-native.test.cjs"
       ],
       "acceptance": "Native 1248 frozen-sphere interior contacts, original near-XZ mesh residuals, static axis-aligned uniform scales. Use backend Stay transitions, not timed impact injection. Off-plane/border handling is backend-owned; verify actual new source contact poses and expiry in Preview."
+    },
+    {
+      "id": "native-noise-random-strength-scalar-size",
+      "origin": "62ffeaa",
+      "applicability": "conditional",
+      "sharedPaths": [
+        "tools/unity-cocos-port/particle-noise-contract.js",
+        "tools/unity-cocos-port/particle-noise-binding.js",
+        "tools/unity-cocos-port/runtime/UnityNoiseKernel.ts",
+        "tools/unity-cocos-port/runtime/UnityParticleNoise.ts"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/particle-noise-random.test.cjs",
+        "tools/unity-cocos-port/particle-noise-binding.test.cjs",
+        "tools/unity-cocos-port/particle-noise-contract.test.cjs"
+      ],
+      "acceptance": "312 native cases bind the strength RNG and scalar/3D size flag across all qualities and held-out wrapping seeds. Random two-curve, amount/scroll and remap remain unsupported; verify source bindings and rendered Preview phases independently."
     }
   ]
 }
