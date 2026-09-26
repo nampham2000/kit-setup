@@ -97,7 +97,7 @@ export class UnityLineRenderer extends Component {
         this.child.layer = this.node.layer;
         this.node.scene.addChild(this.child);
         this.child.setWorldPosition(0, 0, 0);
-        this.mesh = utils.createDynamicMesh(0, { positions: this._positions, uvs: this._uvs, colors: this._colors, normals: this._normals, indices16: this._indices, primitiveMode: gfx.PrimitiveMode.TRIANGLE_LIST },
+        this.mesh = utils.MeshUtils.createDynamicMesh(0, { positions: this._positions, uvs: this._uvs, colors: this._colors, normals: this._normals, indices16: this._indices, primitiveMode: gfx.PrimitiveMode.TRIANGLE_LIST },
             undefined, { maxSubMeshes: 1, maxSubMeshVertices: MAX_POINTS * 2, maxSubMeshIndices: (MAX_POINTS - 1) * 6 });
         this.renderer = this.child.addComponent(MeshRenderer);
         this.renderer.mesh = this.mesh;
