@@ -33,8 +33,15 @@ For large reference catalogs, `runOne` in `tools/verify-runtime.cjs` accepts
 programmatic options. It reuses one isolated Preview target, records runtime
 evidence and PNG hashes, checks exact canvas/PNG dimensions, and fails closed
 on evaluation/import/runtime errors. Every expression must reset its own state;
-reuse is not isolation between cases. For fixed-frame Cocos sampling, pause
-`game`, then call `director.tick(1/frameRate)` so physics and component order
+reuse is not isolation between cases.
+For resumable catalogs, use `tools/runtime-capture-cache.cjs` to validate each
+isolated effect receipt before reuse. Require overall success, the current
+source/recipe digest, exact checkpoint coverage, viewport dimensions and PNG
+hashes in both checkpoint and aggregate receipts. A successful image from a
+failed run is not reusable evidence. Include runtime, shaders, materials,
+scene and capture producer in the binding; never mutate them during capture.
+
+For fixed-frame Cocos sampling, pause `game`, then call `director.tick(1/frameRate)` so physics and component order
 still run. Native reference frame 0 follows the first tick; an extra bootstrap
 `tick(0)` still calls Update and incorrectly moves per-frame projectiles.
 Keep live controls/replay/collision tests in addition to diagnostic sampling.
