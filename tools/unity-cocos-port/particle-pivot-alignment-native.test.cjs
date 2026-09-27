@@ -146,7 +146,9 @@ test('native View billboard pivot: pivot*size in the rotated camera plane, z tow
   }
   // Cocos rotates cornerOffset + pivot.xy by the particle quaternion (same rotation as the quad)
   // and camZ (cc_matViewInv column 2) points at the viewer.
-  assert.match(shader, /computeVertPos\(pos, cornerOffset \+ sourceRendererPivot\.xy, rot, compScale, cc_matViewInv\);\n\s*pos\.xyz \+= normalize\(cc_matViewInv\[2\]\.xyz\) \* \(sourceRendererPivot\.z \* compScale\.x\);/);
+  assert.match(shader, /vec3 offset=vec3\(\(cornerOffset\+sourceRendererPivot\.xy\)\*compScale\.xy,0\.0\);\s*rotateVecFromQuat\(offset,rot\);/);
+  assert.match(shader, /normalize\(cc_matViewInv\[0\]\.xyz\)\*offset\.x/);
+  assert.match(shader, /pos\.xyz \+= normalize\(cc_matViewInv\[2\]\.xyz\) \* \(sourceRendererPivot\.z \* compScale\.x\);/);
 });
 test('renderer contract binds the measured pivot/alignment adapters and keeps the rest blocking', () => {
   const contract = (renderer, particle = {}) => particleRendererContract(particle, renderer);
@@ -159,7 +161,9 @@ test('renderer contract binds the measured pivot/alignment adapters and keeps th
   const pickup = contract({ m_RenderMode: 0, m_RenderAlignment: 0, m_Pivot: { x: 0.15, y: 0, z: 0 } });
   assert.deepEqual(pickup.unsupported, []); assert.equal(pickup.requiresMaterialAdapter, true); assert.equal(pickup.meshFrame, null);
   assert.equal(contract({ m_RenderMode: 0, m_RenderAlignment: 0 }).requiresMaterialAdapter, false, 'plain View billboards keep the builtin effect');
-  for (const blocked of [{ m_RenderMode: 4, m_RenderAlignment: 3 }, { m_RenderMode: 0, m_RenderAlignment: 1 }, { m_RenderMode: 0, m_RenderAlignment: 4 }])
+  const world = contract({ m_RenderMode: 0, m_RenderAlignment: 1 });
+  assert.deepEqual(world.unsupported, []); assert.equal(world.sourceRendererPivot[3], 4);
+  for (const blocked of [{ m_RenderMode: 4, m_RenderAlignment: 3 }, { m_RenderMode: 0, m_RenderAlignment: 4 }])
     assert.ok(contract(blocked).unsupported.includes('alignment'), JSON.stringify(blocked));
   for (const blocked of [{ m_RenderMode: 0, m_RenderAlignment: 2, m_Pivot: { x: 0.1 } }, { m_RenderMode: 2, m_Pivot: { y: 0.1 } }, { m_RenderMode: 3, m_Pivot: { z: 0.1 } }, { m_RenderMode: 1, m_Pivot: { x: 0.1 } }])
     assert.ok(contract(blocked).unsupported.includes('pivot-axes'), JSON.stringify(blocked));
