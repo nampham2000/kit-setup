@@ -1,8 +1,10 @@
 import { _decorator, Component, ParticleSystem } from 'cc';
 import { installUnityParticleSimulationStep } from './UnityParticleSimulationStep';
 import { installUnityParticleRandomForce } from './UnityParticleRandomForce';
-const { ccclass, property, executionOrder } = _decorator;
+const { executeInEditMode, playOnFocus,  ccclass, property, executionOrder } = _decorator;
 @ccclass('UnityParticleSimulationStepAdapter')
+@executeInEditMode
+@playOnFocus
 @executionOrder(-110)
 export class UnityParticleSimulationStepAdapter extends Component {
     @property(ParticleSystem) source: ParticleSystem | null = null;

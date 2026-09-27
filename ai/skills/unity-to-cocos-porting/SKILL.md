@@ -23,9 +23,17 @@ before changing curves. World Y under a rotated local emitter must pass through
 the module-frame adapter and the measured scale adapter. Compare matched birth
 seeds in world coordinates at two late-life frames; screen displacement alone
 mixes motion with the camera. Also establish whether the report is from browser
-Preview or Scene/Prefab Editor. A Component without executeInEditMode does not
-provide its runtime patch in the editor; a passing browser capture cannot prove
-Scene/Prefab behavior. Check exact project and preview URL, and do not rewrite
+Preview or Scene/Prefab Editor. InitialState, StartRotation, SimulationStep,
+BirthState, Noise, ShapeDistribution and EulerRotation adapters must retain
+executeInEditMode and playOnFocus, with their existing execution order. Without
+these decorators the prefab has Components but the editor skips their lifecycle:
+native RandomForce/module frames remain inactive. Scene probes confirmed all
+three absent before the fix and present afterward. Randomized Unity Force is a
+new draw each frame; stock Cocos holds each particle's force, causing long runaway
+rays and trails. Verify actual installed runtime markers after AssetDB finishes
+compiling; its refresh acknowledgement can precede class replacement. A passing
+browser capture alone cannot prove Scene/Prefab behavior. Check exact project
+and preview URL, and do not rewrite
 world-space source curves to compensate for an inactive adapter. Record an
 unreproduced report explicitly instead of calling an unrelated patch its fix.
 

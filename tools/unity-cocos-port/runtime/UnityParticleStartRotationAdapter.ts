@@ -1,7 +1,9 @@
 import { _decorator, Component, ParticleSystem } from 'cc';
 import { installUnityParticleStartRotation } from './UnityParticleStartRotation';
-const {ccclass,property,executionOrder}=_decorator;
+const { executeInEditMode, playOnFocus, ccclass,property,executionOrder}=_decorator;
 @ccclass('UnityParticleStartRotationAdapter')
+@executeInEditMode
+@playOnFocus
 @executionOrder(-120)
 export class UnityParticleStartRotationAdapter extends Component {
     @property(ParticleSystem) source:ParticleSystem|null=null;

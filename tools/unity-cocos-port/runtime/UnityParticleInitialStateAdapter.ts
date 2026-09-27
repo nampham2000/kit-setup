@@ -1,7 +1,9 @@
 import { _decorator, Component, ParticleSystem } from 'cc';
 import { installUnityParticleInitialState } from './UnityParticleInitialState';
-const {ccclass,property,executionOrder}=_decorator;
+const { executeInEditMode, playOnFocus, ccclass,property,executionOrder}=_decorator;
 @ccclass('UnityParticleInitialStateAdapter')
+@executeInEditMode
+@playOnFocus
 @executionOrder(-121)
 export class UnityParticleInitialStateAdapter extends Component {
     @property(ParticleSystem) source:ParticleSystem|null=null;
