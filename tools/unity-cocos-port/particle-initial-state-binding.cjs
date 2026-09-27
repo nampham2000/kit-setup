@@ -42,7 +42,7 @@ function initialStateContract(source){
 }
 function stageInitialStateRuntime(options){
  if(options.dryRun)return;
- for(const name of ['UnityParticleShapeRandom','UnityParticleSizeRandom','UnityParticleInitialState','UnityParticleInitialStateAdapter','UnityParticleStartRotation','UnityParticleBurstRandom']){
+ for(const name of ['UnityParticleShapeRandom','UnityParticleNativeRadius','UnityParticleSizeRandom','UnityParticleInitialState','UnityParticleInitialStateAdapter','UnityParticleStartRotation','UnityParticleBurstRandom']){
   const target=path.join(options.cocosRoot,'assets/script',name+'.ts'),text=fs.readFileSync(path.join(__dirname,'runtime',name+'.ts'),'utf8');
   fs.mkdirSync(path.dirname(target),{recursive:true});if(!fs.existsSync(target)||fs.readFileSync(target,'utf8')!==text)fs.writeFileSync(target,text);
  }
@@ -50,6 +50,9 @@ function stageInitialStateRuntime(options){
 function attachInitialStateRuntime(builder,reporter,options){
  const particles=builder.objects.map((p,id)=>({p,id})).filter(({p})=>p?.unityInitialStateContract);
  if(!particles.length)return;stageInitialStateRuntime(options);
+ let unityRoot=path.resolve(options.unityRoot||'');if(path.basename(unityRoot).toLowerCase()==='assets')unityRoot=path.dirname(unityRoot);
+ const versionFile=path.join(unityRoot,'ProjectSettings/ProjectVersion.txt');
+ const version=fs.existsSync(versionFile)?/^m_EditorVersion:\s*(\S+)/m.exec(fs.readFileSync(versionFile,'utf8'))?.[1]:null;
  let classId=builder.cocosDb?.findScriptClass?.('UnityParticleInitialStateAdapter')?.classId;
  const meta=path.join(options.cocosRoot,'assets/script/UnityParticleInitialStateAdapter.ts.meta');
  if(!classId&&fs.existsSync(meta))classId=compressUuid(JSON.parse(fs.readFileSync(meta,'utf8')).uuid);
@@ -59,7 +62,7 @@ function attachInitialStateRuntime(builder,reporter,options){
    reporter.low('PARTICLE_INITIAL_STATE_CONSTANT_PREWARM',options.src||'',node,'Native-verified constant point billboard initialization; prewarm timing uses UnityParticlePrewarmAdapter. No initialization RNG claim.');continue;
   }
   if(reasons.length||!classId||signs?.length!==3){reporter.high('PARTICLE_INITIAL_STATE_ADAPTER_REQUIRED',options.src||'',node,reasons.join(', ')||(!classId?'Refresh AssetDB and rerun to import UnityParticleInitialStateAdapter':'Missing native renderer Euler signs'));continue;}
-  builder.addComponent(p.node.__id__,classId,{source:{__id__:id},sourceContract:JSON.stringify({...spec,signs,...(p.unityRendererContract?.meshScalarAxis?{meshScalarAxis:true}:{})})},null,`cmp-unity-initial-state-${id}`);
+  builder.addComponent(p.node.__id__,classId,{source:{__id__:id},sourceContract:JSON.stringify({...spec,...(version==='6000.3.1f1'?{nativeRadiusVersion:version}:{}),signs,...(p.unityRendererContract?.meshScalarAxis?{meshScalarAxis:true}:{})})},null,`cmp-unity-initial-state-${id}`);
  }
 }
 module.exports={nativeBurstCountContract,initialStateContract,constantPointPrewarm,stageInitialStateRuntime,attachInitialStateRuntime};
