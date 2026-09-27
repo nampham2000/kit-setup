@@ -398,19 +398,28 @@ namespace CcPlayable.UnityIntelligence.Capture
                     foreach (var component in root.GetComponentsInChildren<MonoBehaviour>(true))
                     {
                         if (component == null || component.GetType().Name != entry.component) continue;
-                        var field = component.GetType().GetField(entry.field, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
-                        // Not a field: a writable property such as Behaviour.enabled (input-driven demo scripts
-                        // are switched off so the capture spawns own the effect).
-                        var property = field == null ? component.GetType().GetProperty(entry.field, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic) : null;
-                        if (field == null && (property == null || !property.CanWrite)) continue;
-                        var type = field != null ? field.FieldType : property.PropertyType;
-                        object value = type == typeof(int) ? int.Parse(entry.value, System.Globalization.CultureInfo.InvariantCulture)
-                            : type == typeof(float) ? float.Parse(entry.value, System.Globalization.CultureInfo.InvariantCulture)
-                            : type == typeof(bool) ? (object)bool.Parse(entry.value)
-                            : type == typeof(string) ? entry.value : null;
-                        if (value == null) { ReferenceCapture.Fail(request, manifest, $"unsupported field type {type.Name} for {entry.component}.{entry.field}"); return; }
-                        if (field != null) field.SetValue(component, value); else property.SetValue(component, value);
-                        applied++;
+                        try
+                        {
+                            var field = component.GetType().GetField(entry.field, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
+                            // Not a field: a writable property such as Behaviour.enabled (input-driven demo scripts
+                            // are switched off so the capture spawns own the effect).
+                            var property = field == null ? component.GetType().GetProperty(entry.field, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic) : null;
+                            if (field == null && (property == null || !property.CanWrite)) continue;
+                            var type = field != null ? field.FieldType : property.PropertyType;
+                            object value = type == typeof(int) ? int.Parse(entry.value, System.Globalization.CultureInfo.InvariantCulture)
+                                : type == typeof(float) ? float.Parse(entry.value, System.Globalization.CultureInfo.InvariantCulture)
+                                : type == typeof(bool) ? (object)bool.Parse(entry.value)
+                                : type == typeof(string) ? entry.value : null;
+                            if (value == null) { ReferenceCapture.Fail(request, manifest, $"unsupported field type {type.Name} for {entry.component}.{entry.field}"); return; }
+                            if (field != null) field.SetValue(component, value); else property.SetValue(component, value);
+                            applied++;
+                        }
+                        catch (Exception error)
+                        {
+                            // Bad value text, an ambiguous property or a throwing setter fails this request, not the Editor loop.
+                            ReferenceCapture.Fail(request, manifest, $"cannot set {entry.component}.{entry.field}={entry.value}: {error.GetType().Name}: {error.Message}");
+                            return;
+                        }
                     }
                 if (applied == 0) { ReferenceCapture.Fail(request, manifest, $"no {entry.component}.{entry.field} in scene"); return; }
             }

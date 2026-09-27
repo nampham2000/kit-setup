@@ -487,6 +487,35 @@ test('an untracked engine profile is non-portable and a non-Git project stays un
   assert.match(portabilityNextAction(untracked), /untracked/);
 });
 
+test('a tracked engine profile Git cannot show fails closed instead of reading as untracked', (t) => {
+  const root = makeProject(SKINNED_PREFAB);
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  setAnimationModules(root, true);
+  const runner = (listed) => (command, args) => {
+    if (args[0] === 'show') return { ok: false, stdout: '', error: 'timed out' };
+    if (args[0] === 'rev-parse') return { ok: true, stdout: 'true\n' };
+    return listed;
+  };
+  const conflicted = auditCocosEngineFeatures(root, { gitRunner: runner({ ok: true, stdout: '100644 abc 1\tsettings/v2/packages/engine.json\n' }) });
+  assert.equal(conflicted.committedProfile.tracked, true);
+  assert.deepEqual(conflicted.committedProfile.missing, ['engine-profile:unreadable']);
+  assert.equal(conflicted.portable, false);
+  const unlisted = auditCocosEngineFeatures(root, { gitRunner: runner({ ok: true, stdout: '' }) });
+  assert.equal(unlisted.committedProfile.tracked, false);
+  assert.deepEqual(unlisted.committedProfile.missing, ['engine-profile:untracked']);
+  const broken = auditCocosEngineFeatures(root, { gitRunner: runner({ ok: false, stdout: '', error: 'index.lock' }) });
+  assert.deepEqual(broken.committedProfile.missing, ['engine-profile:unreadable']);
+});
+
+test('the MCP project identity check sees through a junction to the same project', async (t) => {
+  const real = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-real-'));
+  const link = `${real}-link`;
+  t.after(() => { fs.rmSync(link, { force: true, recursive: true }); fs.rmSync(real, { recursive: true, force: true }); });
+  try { fs.symlinkSync(real, link, 'junction'); } catch (error) { t.skip(`junction unsupported: ${error.code}`); return; }
+  const client = { call: async () => ({ content: [{ type: 'text', text: JSON.stringify({ success: true, data: { path: link } }) }] }) };
+  await assertMcpProjectIdentity(client, real);
+});
+
 test('profile drift compares effective modules, not Cocos include normalization or key order', () => {
   const tracked = engineDocument('physics-cannon').modules.configs.defaultConfig;
   const normalized = JSON.parse(JSON.stringify(tracked));

@@ -242,7 +242,7 @@ test('engine profile portability flags module drift that Git does not carry', (t
   fs.writeFileSync(engineFile, JSON.stringify(profile(true), null, 2));
   const drifted = inspectEngineProfilePortability(root);
   assert.equal(drifted.ok, false);
-  assert.equal(drifted.severity, 'high');
+  assert.equal(drifted.severity, 'medium');
   assert.deepEqual(drifted.details.drift, ['+marionette']);
   assert.match(drifted.nextAction, /Commit settings\/v2\/packages\/engine\.json/);
 });

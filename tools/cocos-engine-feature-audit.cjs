@@ -458,6 +458,15 @@ function readTrackedEngineProfile(projectRoot, options = {}) {
   if (!inside.ok || inside.stdout.trim() !== 'true') {
     return { available: false, tracked: false, source: 'git-index', file: relative, reason: 'not-a-git-work-tree' };
   }
+  // `git show` also fails on a timeout or a conflicted (multi-stage) entry: only an
+  // empty index listing proves the profile is untracked.
+  const listed = runner('git', ['ls-files', '--stage', '--', relative], projectRoot, 10_000);
+  if (!listed.ok) {
+    return { available: true, tracked: true, unreadable: true, source: 'git-index', file: relative, reason: 'git-index-unreadable', error: listed.error || null };
+  }
+  if (listed.stdout.trim()) {
+    return { available: true, tracked: true, unreadable: true, source: 'git-index', file: relative, reason: 'engine-profile-index-unreadable', error: shown.error || null };
+  }
   return { available: true, tracked: false, source: 'git-index', file: relative, reason: 'engine-profile-untracked' };
 }
 
@@ -680,6 +689,13 @@ function auditTrackedEngineProfile(root, workingProfile, plan, options = {}) {
     return {
       available: true, tracked: true, source: 'git-index', reason: error.code || 'ENGINE_FEATURE_PROFILE_JSON_INVALID',
       error: error.message, missing: ['engine-profile:unreadable'], unexpected: [], complete: false, driftFromWorkingCopy: [],
+    };
+  }
+  if (tracked.unreadable) {
+    // Fail closed: a timeout or conflicted index entry proves nothing about the commit.
+    return {
+      available: true, tracked: true, source: tracked.source, file: tracked.file, reason: tracked.reason, error: tracked.error,
+      missing: ['engine-profile:unreadable'], unexpected: [], complete: false, driftFromWorkingCopy: [],
     };
   }
   if (!tracked.available || !tracked.tracked) {
@@ -948,9 +964,14 @@ async function createMcpClient(projectRoot, options = {}) {
 
 function sameProjectPath(left, right) {
   const normalize = value => path.resolve(String(value || '')).replace(/[\\/]+$/, '');
-  const a = normalize(left);
-  const b = normalize(right);
-  return process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b;
+  const equal = (a, b) => (process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b);
+  if (equal(normalize(left), normalize(right))) return true;
+  // A junction, symlink or subst drive names the same project under another path.
+  try {
+    return equal(normalize(fs.realpathSync.native(normalize(left))), normalize(fs.realpathSync.native(normalize(right))));
+  } catch (_) {
+    return false;
+  }
 }
 
 // Sibling checkouts/worktrees copy settings/mcp-server.json and therefore share

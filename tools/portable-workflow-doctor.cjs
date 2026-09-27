@@ -247,13 +247,22 @@ function inspectEngineProfilePortability(projectRoot, runner = command) {
         nextAction: `Stage and commit ${relative} so every checkout enables the same engine modules.`,
       };
     }
+    if (tracked.unreadable) {
+      return {
+        ok: false, severity: 'high', summary: 'Git tracks the engine profile but it cannot be read from the index.', details: { file: relative, reason: tracked.reason },
+        nextAction: `Resolve the Git index state of ${relative} (conflict, lock or timeout), then re-run the doctor.`,
+      };
+    }
+    // A local drift is a pending decision (commit or revert); ai:verify's engine
+    // audit is what fails when the committed profile misses a required module.
     const drift = engineProfileDrift(tracked.config, working.config);
     return drift.length
       ? {
-        ok: false, severity: 'high', summary: 'Engine profile enables/disables modules that Git does not carry.', details: { file: relative, drift },
+        ok: false, severity: 'medium', summary: 'Working-copy engine profile differs from the Git-tracked one (+ enabled only locally, - disabled only locally).',
+        details: { file: relative, drift },
         nextAction: `Commit ${relative} (or revert the local drift), then re-run npm run ai:verify.`,
       }
-      : { ok: true, severity: 'high', summary: 'Engine Feature Cropping matches the Git-tracked profile.', details: null, nextAction: null };
+      : { ok: true, severity: 'info', summary: 'Engine Feature Cropping matches the Git-tracked profile.', details: null, nextAction: null };
   } catch (error) {
     return {
       ok: false, severity: 'high', summary: 'Engine profile cannot be compared with Git.', details: { error: error.message },
