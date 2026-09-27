@@ -34,7 +34,7 @@ export function installUnityParticleBirthTiming(system:ParticleSystem,gravityY=-
     const runtime=system as any,processor=runtime.processor;
     if(runtime.unityBirthTiming)return;
     if(!processor?._particles||!Array.isArray(processor._runAnimateList)||!system.rateOverTime)return;
-    const state=runtime.unityBirthTiming={rate:0,interval:0,clock:0,scheduled:0,fraction:0,lastRate:-1,lastTime:-1,first:0,index:0,batchCount:0,rateDispatch:false,emitting:false,delay:0,dt:0,gravityY};
+    const state=runtime.unityBirthTiming={rate:0,interval:0,clock:0,cycles:0,scheduled:0,fraction:0,lastRate:-1,lastTime:-1,first:0,index:0,batchCount:0,rateDispatch:false,emitting:false,delay:0,dt:0,gravityY};
     const previousPosition=new Vec3(),currentPosition=new Vec3();
     system.node.getWorldPosition(previousPosition);
     const born=processor.setNewParticle,emit=runtime.emit,emission=runtime._emit,update=processor.updateParticles,enable=processor.enableModule;
@@ -75,13 +75,18 @@ export function installUnityParticleBirthTiming(system:ParticleSystem,gravityY=-
             // float clocks. Both multiply and add round to float; dividing the
             // total clock by interval misses source boundary births.
             const interval=Math.fround(1/rate);
-            if(state.lastRate!==rate||this._time<=state.lastTime){state.clock=0;state.scheduled=0;state.fraction=0;previousPosition.set(currentPosition);}
-            const previous=state.clock;
-            state.clock=Math.fround(previous+Math.fround(dt));
-            const accumulated=Math.fround(state.fraction+Math.fround((state.clock-previous)*rate));
+            if(state.lastRate!==rate||this._time<=state.lastTime){state.clock=0;state.cycles=0;state.scheduled=0;state.fraction=0;previousPosition.set(currentPosition);}
+            const previous=state.clock,previousCycles=state.cycles;
+            const next=Math.fround(previous+Math.fround(dt));
+            state.clock=next;
+            // Native float simulation time wraps; a growing float clock changes
+            // exact rate crossings after several loops (native frame-263 trace).
+            const duration=Math.fround(this.duration);
+            if(this.loop&&duration>0)while(state.clock>=duration){state.clock=Math.fround(state.clock-duration);state.cycles++;}
+            const accumulated=Math.fround(state.fraction+Math.fround((next-previous)*rate));
             const count=Math.floor(accumulated),total=state.scheduled+count;
             state.fraction=accumulated-count;
-            state.interval=interval;state.first=(state.scheduled+1)*interval-previous;
+            state.interval=interval;state.first=(state.scheduled+1)*interval-(previous+previousCycles*duration);
             state.scheduled=total;state.lastRate=rate;state.lastTime=this._time;
             const fraction=state.fraction;
             // Let engine dispatch its distance/burst paths normally. The tiny

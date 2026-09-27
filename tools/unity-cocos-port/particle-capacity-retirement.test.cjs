@@ -26,7 +26,7 @@ function simulate(row,retire){
  const kernel=new UnityStartRotationKernel(row.capacity);kernel.reset(row.seed);
  const processor={_particles:pool,_runAnimateList:[],enableModule(){},setNewParticle(){},updateParticles(dt){for(let i=pool.length-1;i>=0;i--){const p=pool.data[i];p.remainingLifetime-=dt;if(p.remainingLifetime<0)pool.removeAt(i);else for(const m of this._runAnimateList)m.animate(p,dt);}return pool.length;}};
  const vec=()=>({x:0,y:0,z:0,set(x,y,z){Object.assign(this,{x,y,z});}});
- const s={processor,capacity:row.capacity,node:{getWorldPosition(out){out.set({x:0,y:0,z:0});}},simulationSpace:1,startSize3D:false,gravityModifier:{isZero:()=>true},rateOverTime:{mode:0,evaluate:()=>row.rate},startDelay:{evaluate:()=>0},duration:4,_time:0,_isEmitting:true,_emitRateTimeCounter:0,
+ const s={processor,capacity:row.capacity,node:{getWorldPosition(out){out.set({x:0,y:0,z:0});}},simulationSpace:1,startSize3D:false,gravityModifier:{isZero:()=>true},rateOverTime:{mode:0,evaluate:()=>row.rate},startDelay:{evaluate:()=>0},loop:row.loop,duration:row.duration,_time:0,_isEmitting:true,_emitRateTimeCounter:0,
   emit(count,dt=0){const n=Math.max(0,Math.min(Math.ceil(count),row.capacity-pool.length));if(!n)return;kernel.beginBatch(n,false,false);
    for(let i=0;i<n;i++){const c=row.lifetime,life=c.minMaxState===0?c.scalar:Math.fround(c.minScalar+Math.fround(Math.fround(c.scalar-c.minScalar)*kernel.value(i,3)));
     const p={seed:kernel.birthSeed(i),startLifetime:life+dt,remainingLifetime:life+dt,startSize:vec(),size:vec(),position:vec(),ultimateVelocity:vec()};pool.data.push(p);processor.setNewParticle(p);}},
