@@ -409,6 +409,7 @@ test('a hand-ported effect marked "// unity-port: manual" survives re-porting wi
   assert.equal(fs.readFileSync(effect, 'utf8'), handPort, 'the hand port must not be overwritten');
   assert.ok(report.entries.some(entry => entry.args[0] === 'CUSTOM_SHADER_MANUAL_PORT_KEPT'));
   assert.ok(!report.entries.some(entry => entry.level === 'high'));
+});
 
 test('a scene keeps every root and links root-level prefab instances to the mapped port output',()=>{
   const {portPrefab,parseArgs}=require('../unity-cocos-port.cjs');
