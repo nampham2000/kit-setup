@@ -10,7 +10,11 @@ const CACHE_SCHEMA_VERSION = 2;
 // contract and content-bound stamps for every textual/serialized asset plus
 // its .meta. Coarse-timestamp filesystems such as exFAT must not reuse stale
 // evidence after same-size content replacement.
-const INDEXER_VERSION = 6;
+// Version 6 stores referenceEvidence grouped per GUID + field path with
+// occurrence counts instead of one entry per occurrence.
+// Version 7: games-port grouped referenceEvidence merged with main's version-6 record
+// (Resources LoadAll catalogs, animator-controller shape); both version-6 shapes are stale.
+const INDEXER_VERSION = 7;
 
 const EXTRACTOR_FILES = [
   'schema.cjs',

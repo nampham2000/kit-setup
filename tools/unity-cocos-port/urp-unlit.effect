@@ -71,20 +71,33 @@ CCProgram urp-unlit-vs %{
 
 CCProgram urp-unlit-fs %{
   precision highp float;
-  #include <legacy/output>
-  #include <common/color/gamma>
+  #include <legacy/output-standard>
   #include <urp-unlit-shared>
 
   in vec2 v_uv;
   uniform sampler2D mainTexture;
 
+  // Unity (linear color space) decodes the sRGB _BaseMap on sampling and encodes the result into
+  // the 8-bit sRGB target, both with the exact piecewise curves. `legacy/output` never encodes, so
+  // linearizing there left the frame dark and oversaturated (texture^2). Cocos' SRGBToLinear /
+  // LinearToSRGB are x^2 / sqrt approximations; do Unity's math exactly and round-trip the encoded
+  // value through output-standard (SRGBToLinear, then its LinearToSRGB) so 8-bit output is exact.
+  vec3 unityDecodeSRGB (vec3 c) {
+    return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), c));
+  }
+
+  vec3 unityEncodeSRGB (vec3 c) {
+    c = clamp(c, 0.0, 1.0);
+    return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), c));
+  }
+
   vec4 frag () {
     vec4 color = texture(mainTexture, v_uv);
-    color.rgb = SRGBToLinear(color.rgb);
-    color *= mainColor;
+    color.rgb = unityDecodeSRGB(color.rgb);
+    color *= mainColor; // `linear: true` uploads mainColor linearized, like Unity's _BaseColor.
     #if USE_ALPHA_TEST
       if (color.a < unlitParams.x) discard;
     #endif
-    return CCFragOutput(color);
+    return CCFragOutput(vec4(SRGBToLinear(unityEncodeSRGB(color.rgb)), color.a));
   }
 }%

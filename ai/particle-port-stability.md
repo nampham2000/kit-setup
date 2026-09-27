@@ -83,6 +83,21 @@ catalog regression suites. Do not fabricate passing suites to clear this gate.
 
 # Large-project scan diagnostics
 
+Electro_Particles exposed a missing binding, not a missing RNG kernel: View
+billboards with 2D TwoConstants rotation over lifetime used Cocos randomness.
+The old gate selected Mesh/Local/3D renderers only. The native retained rotation
+channel already matched 217 native deltas, but was never installed here. Bind
+UnityParticleEulerRotationAdapter for View billboard TwoConstants as well; check
+both converter attachment and late-cycle images. Do not extend this evidence to
+TwoCurves or other renderer modes without native validation.
+
+Seeded Sphere/Hemisphere positions are intentionally approximate in
+UnityParticleShapeRandom. Existing native fixtures bound each source-axis error
+by radius * 0.007 plus float tolerance. Carry that limitation into pack reports;
+transform the bound conservatively with shape/world scale. A visual score does
+not make that radius implementation bit-identical. Other shapes/motion errors
+must not inherit a blanket loosened position threshold.
+
 Electricity adds a native-verified constant prewarm subset: billboard, looping,
 zero-size Box shape, constant initial values, no motion, random inputs or other
 enabled modules. Only this invariant may resolve the generic initialization RNG

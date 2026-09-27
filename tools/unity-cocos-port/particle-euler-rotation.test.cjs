@@ -107,6 +107,19 @@ test('unimported adapter is a high obligation instead of an invented UUID',()=>{
   attachEulerRotationRuntime({objects,cocosDb:{findScriptClass:()=>null},addComponent(){bound.push(1);}},{high:(code,a,b,message)=>issues.push({code,message}),low(){}},{dryRun:true,cocosRoot:path.join(__dirname,'fixtures/not-a-cocos-project')});
   assert.equal(bound.length,0);assert.equal(issues[0].code,'PARTICLE_EULER_ROTATION_ADAPTER_REQUIRED');assert.match(issues[0].message,/AssetDB/);
 });
+
+test('View billboard TwoConstants binds the native retained RNG even without 3D start rotation',()=>{
+ const objects=graph(particleRendererContract(withRotation,{m_RenderMode:0,m_RenderAlignment:0}),true);
+ const particle=objects[1],rotation=objects[particle._rotationOvertimeModule.__id__];
+ rotation.z={__id__:objects.length};objects.push({mode:3});
+ particle.startRotation3D=false;
+ assert.equal(eulerRotationRequired(particle,objects),true);
+ const bound=[];attachEulerRotationRuntime({objects,cocosDb:{findScriptClass:()=>({classId:'euler'})},addComponent:(...args)=>bound.push(args)},
+  {high:()=>assert.fail('Imported native adapter should bind'),low(){}},{dryRun:true,cocosRoot:path.join(__dirname,'fixtures/not-a-cocos-project')});
+ assert.equal(bound.length,1);assert.equal(JSON.parse(bound[0][2].sourceContract).renderer,'view-billboard');
+ objects[rotation.z.__id__].mode=2;assert.equal(eulerRotationRequired(particle,objects),false,'TwoCurves remains outside this measured extension');
+ rotation._enable=false;assert.equal(eulerRotationRequired(particle,objects),false);
+});
 test('porter hands Euler rotation to the binding instead of a generic alignment high',()=>{
   const createParticlePorter=require('./particle-porter');
   const reports=[];const reporter=Object.fromEntries(['high','medium','low'].map(level=>[level,(...args)=>reports.push({level,args})]));

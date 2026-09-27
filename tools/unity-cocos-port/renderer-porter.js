@@ -12,10 +12,7 @@ module.exports = function createRendererPorter(deps) {
     resolveUnityMaterialUuids,
     resolveUnityMaterialUuid,
     resolveUnityBuiltinMeshUuid,
-    importedUnityAssetPath,
-    copyUnityAssetToCocos,
     handleMissingModel,
-    resolveLibraryAssetUuid,
     recordPendingMeshRepair,
     getField,
     getNestedList,
@@ -163,7 +160,29 @@ module.exports = function createRendererPorter(deps) {
     reporter.medium('NESTED_MODEL_UNRESOLVED', modelAsset.relativePath, gameObject.name, 'Nested model node was preserved, but no Cocos mesh sub-asset is available yet');
   }
 
+  /** A TextMeshPro (3D) component on the same GameObject: it builds the MeshRenderer's mesh at runtime. */
+  function hasTextMeshProText(gameObject, model) {
+    return gameObject.components.some((id) => {
+      const component = model.componentDocs.get(id);
+      return component?.classId === 114
+        && getField(component, 'm_fontAsset', null) !== null
+        && getField(component, 'm_text', null) !== null;
+    });
+  }
+
   function emitMeshRenderer(gameObject, nodeId, componentId, doc, model, builder, reporter, options, unityDb, cocosDb) {
+    // TextMeshPro fills this renderer with a glyph mesh at runtime and draws it with its SDF font
+    // material. The text itself is ported as a cc.Label by the script porter; emitting the renderer
+    // would only add an empty mesh plus a transpiled TMP_SDF effect that Cocos cannot compile.
+    if (hasTextMeshProText(gameObject, model)) {
+      reporter.low(
+        'TMP_MESH_RENDERER_SKIPPED',
+        model.file,
+        gameObject.name,
+        'TextMeshPro builds this MeshRenderer at runtime; the text is ported as a cc.Label, so the renderer and its TMP SDF material are not emitted',
+      );
+      return;
+    }
     const meshFilterId = gameObject.components.find((id) => model.componentDocs.get(id)?.classId === 33);
     const meshFilter = meshFilterId ? model.componentDocs.get(meshFilterId) : null;
     const meshRef = meshFilter ? getField(meshFilter, 'm_Mesh') : null;
@@ -195,7 +214,7 @@ module.exports = function createRendererPorter(deps) {
     const unityMeshName = meshAsset && !builtinMeshUuid ? unityModelMeshName(meshAsset, deps.unityRefFileId(meshRef)) : '';
     if (meshAsset && !meshUuid) {
       const requiredExt = meshAsset.ext === '.asset' ? '.fbx' : meshAsset.ext;
-      const resolved = cocosDb.resolveModelMeshByStem(meshAsset.stem, unityMeshName || gameObject.name, requiredExt);
+      const resolved = cocosDb.resolveModelMeshByStem(meshAsset.stem, unityMeshName || gameObject.name, requiredExt, deps.unityRefFileId(meshRef));
       if (resolved) {
         meshUuid = resolved.meshUuid;
         if (hasExplicitMaterialSlots) {
@@ -206,36 +225,21 @@ module.exports = function createRendererPorter(deps) {
           reporter.low('MODEL_FALLBACK_USED', meshAsset.relativePath, resolved.source, `Model was resolved through ${resolved.fallbackExt} fallback`);
         }
       } else {
-        if (meshAsset.ext === '.asset') {
-          const importedDest = importedUnityAssetPath(meshAsset, options);
-          if (importedDest && fs.existsSync(importedDest)) {
-            meshUuid = resolveLibraryAssetUuid(importedDest, options, 'cc.Mesh', { forceReload: true });
-          }
-          if (!meshUuid) {
-            const copiedDest = copyUnityAssetToCocos(meshAsset, options, reporter, 'model', 'medium', { deferNeedsImportReport: true, meshNameHint: gameObject.name });
-            if (copiedDest) {
-              meshUuid = resolveLibraryAssetUuid(copiedDest, options, 'cc.Mesh', { forceReload: true });
-              if (meshUuid) {
-                reporter.low('MODEL_LIBRARY_ASSET_USED', meshAsset.relativePath, toPosix(path.relative(options.cocosRoot, copiedDest)), 'Model asset was resolved from the current Cocos library import');
-              }
-            }
-          }
-          if (!meshUuid) {
-            meshUuid = deps.resolveBuiltinPrimitiveMeshUuid(gameObject.name, meshAsset.stem);
-            if (meshUuid) {
-              reporter.low('MODEL_PRIMITIVE_FALLBACK_USED', meshAsset.relativePath, gameObject.name, 'Unity primitive mesh was mapped to a Cocos built-in primitive mesh');
-            }
+        // A Unity Mesh .asset is serialized YAML that no Cocos importer reads: handleMissingModel
+        // exports it straight to FBX (FBX-only model pipeline) instead of copying the raw file.
+        const missing = handleMissingModel(meshAsset, reporter, options, { autoCopy: true, meshNameHint: unityMeshName || gameObject.name });
+        meshPendingImport = Boolean(missing.pendingImport);
+        if (missing.resolved?.meshUuid) {
+          meshUuid = missing.resolved.meshUuid;
+          if (hasExplicitMaterialSlots) {
+            materialUuids = missing.resolved.materialUuids || (missing.resolved.materialUuid ? [missing.resolved.materialUuid] : materialUuids);
           }
         }
-        if (!meshUuid) {
-          const missing = handleMissingModel(meshAsset, reporter, options, { autoCopy: true, meshNameHint: unityMeshName || gameObject.name });
-          meshPendingImport = Boolean(missing.pendingImport);
-          if (missing.resolved?.meshUuid) {
-            meshUuid = missing.resolved.meshUuid;
-            meshPendingImport = Boolean(missing.pendingImport);
-            if (hasExplicitMaterialSlots) {
-              materialUuids = missing.resolved.materialUuids || (missing.resolved.materialUuid ? [missing.resolved.materialUuid] : materialUuids);
-            }
+        // A name-matched built-in primitive only approximates the mesh; use it when export failed.
+        if (!meshUuid && !meshPendingImport && meshAsset.ext === '.asset') {
+          meshUuid = deps.resolveBuiltinPrimitiveMeshUuid(gameObject.name, meshAsset.stem);
+          if (meshUuid) {
+            reporter.low('MODEL_PRIMITIVE_FALLBACK_USED', meshAsset.relativePath, gameObject.name, 'Unity Mesh .asset could not be exported to FBX; a name-matched Cocos built-in primitive mesh was used');
           }
         }
       }

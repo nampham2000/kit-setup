@@ -25,6 +25,61 @@ type Physics2dBackend = typeof PHYSICS_2D_BACKENDS[number];
 
 const OPTION_PARENT_FEATURES = new Set(['spine', 'physics-2d']);
 const IMPORT_MAP_SILENT_FEATURES = new Set(['marionette']);
+const SHARED_ENGINE_SOURCE = 'cocos-install:bin/.cache/dev/preview/import-map.json';
+
+function moduleSuffix(file: string): string {
+    return `/${String(file).replace(/\\/g, '/').replace(/^\/+/, '').replace(/\.ts$/, '.js')}`;
+}
+
+function overrideApplied(imports: Record<string, unknown>, from: string, to: string): boolean {
+    const suffix = moduleSuffix(from);
+    for (const [key, value] of Object.entries(imports)) {
+        if (key.endsWith(suffix)) return typeof value === 'string' && value.endsWith(moduleSuffix(to));
+    }
+    return false;
+}
+
+/**
+ * Cocos 3.8.x resolves intrinsic-flag features (marionette -> MARIONETTE, procedural-animation,
+ * spine-3.8/4.2, vendor-google) through cc.config.json moduleOverrides baked into ONE preview
+ * import map inside the editor install. Every project opened from the same install rewrites it
+ * on startup/engine rebuild, so it is the only evidence of what this preview actually loads.
+ */
+export function evaluateIntrinsicFeatures(ccConfig: any, importMap: any): Record<string, boolean> {
+    const imports: Record<string, unknown> = importMap?.imports && typeof importMap.imports === 'object' ? importMap.imports : {};
+    const overrides: any[] = Array.isArray(ccConfig?.moduleOverrides) ? ccConfig.moduleOverrides : [];
+    const features: Record<string, boolean> = {};
+    for (const [feature, definition] of Object.entries<any>(ccConfig?.features || {})) {
+        const intrinsic = definition?.intrinsicFlags;
+        if (!intrinsic || typeof intrinsic !== 'object') continue;
+        let active: boolean | undefined;
+        for (const flag of Object.keys(intrinsic)) {
+            for (const entry of overrides) {
+                const test = String(entry?.test || '').replace(/\s+/g, '');
+                const negative = test === `!context.buildTimeConstants.${flag}`;
+                const positive = test === `context.buildTimeConstants.${flag}`;
+                if (!negative && !positive) continue;
+                const pairs = Object.entries<string>(entry?.overrides || {});
+                if (!pairs.length) continue;
+                const flagActive = negative
+                    ? pairs.every(([from, to]) => !overrideApplied(imports, from, to))
+                    : pairs.every(([from, to]) => overrideApplied(imports, from, to));
+                active = active === undefined ? flagActive : active && flagActive;
+            }
+        }
+        if (active !== undefined) features[feature] = active;
+    }
+    return features;
+}
+
+function sharedKnows(receipt: AppliedFeatureReceipt, moduleName: string): boolean {
+    return Boolean(receipt.sharedEngine?.available)
+        && Object.prototype.hasOwnProperty.call(receipt.sharedEngine!.features, moduleName);
+}
+
+function sharedMissing(receipt: AppliedFeatureReceipt, modules: string[]): string[] {
+    return modules.filter((name) => sharedKnows(receipt, name) && receipt.sharedEngine!.features[name] !== true);
+}
 
 function sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
@@ -100,6 +155,7 @@ function appliedFeaturePresent(
     previewFresh: boolean,
     spineBackend?: SpineBackend
 ): boolean {
+    if (sharedKnows(receipt, moduleName)) return receipt.sharedEngine!.features[moduleName] === true;
     if (receipt.features.includes(moduleName)) return true;
     if (IMPORT_MAP_SILENT_FEATURES.has(moduleName)) return previewFresh;
     if (moduleName === 'physics-2d') {
@@ -111,6 +167,15 @@ function appliedFeaturePresent(
         && receipt.features.includes('spine');
 }
 
+interface SharedEngineReceipt {
+    available: boolean;
+    source: string;
+    features: Record<string, boolean>;
+    importMapSha256: string | null;
+    importMapModifiedMs: number | null;
+    error?: string;
+}
+
 interface AppliedFeatureReceipt {
     available: boolean;
     features: string[];
@@ -118,6 +183,7 @@ interface AppliedFeatureReceipt {
     importMapModifiedMs: number | null;
     source: string;
     error?: string;
+    sharedEngine?: SharedEngineReceipt;
 }
 
 function appliedSatisfies(
@@ -221,8 +287,50 @@ export class EngineFeatureTools implements ToolExecutor {
         }
     }
 
+    private async readSharedEngineIntrinsics(): Promise<SharedEngineReceipt> {
+        const unavailable = (error: string): SharedEngineReceipt => ({
+            available: false,
+            source: SHARED_ENGINE_SOURCE,
+            features: {},
+            importMapSha256: null,
+            importMapModifiedMs: null,
+            error
+        });
+        const messageApi: any = (Editor as any).Message;
+        if (!messageApi?.request) return unavailable('Editor.Message is unavailable');
+        let enginePath: unknown;
+        try {
+            const info: any = await withTimeout(messageApi.request('engine', 'query-info'), 10000, 'engine info query');
+            enginePath = info?.path;
+        } catch (error: any) {
+            return unavailable(error?.message || String(error));
+        }
+        if (typeof enginePath !== 'string' || !enginePath) return unavailable('engine query-info returned no path');
+        try {
+            const importMapPath = path.join(enginePath, 'bin', '.cache', 'dev', 'preview', 'import-map.json');
+            const [configRaw, raw, stat] = await Promise.all([
+                fs.readFile(path.join(enginePath, 'cc.config.json'), 'utf8'),
+                fs.readFile(importMapPath, 'utf8'),
+                fs.stat(importMapPath)
+            ]);
+            const features = evaluateIntrinsicFeatures(JSON.parse(configRaw), JSON.parse(raw));
+            const evaluable = Object.keys(features).length > 0;
+            return {
+                available: evaluable,
+                source: SHARED_ENGINE_SOURCE,
+                features,
+                importMapSha256: createHash('sha256').update(raw).digest('hex'),
+                importMapModifiedMs: stat.mtimeMs,
+                ...(evaluable ? {} : { error: 'cc.config.json declares no evaluable intrinsic-flag overrides' })
+            };
+        } catch (error: any) {
+            return unavailable(error?.message || String(error));
+        }
+    }
+
     private async readAppliedPreviewFeatures(): Promise<AppliedFeatureReceipt> {
         const source = 'temp/programming/packer-driver/targets/preview/import-map.json';
+        const sharedEngine = await this.readSharedEngineIntrinsics();
         const projectTmpDir = (Editor as any).Project?.tmpDir;
         if (!projectTmpDir) {
             return {
@@ -231,7 +339,8 @@ export class EngineFeatureTools implements ToolExecutor {
                 importMapSha256: null,
                 importMapModifiedMs: null,
                 source,
-                error: 'Editor.Project.tmpDir is unavailable'
+                error: 'Editor.Project.tmpDir is unavailable',
+                sharedEngine
             };
         }
 
@@ -256,7 +365,8 @@ export class EngineFeatureTools implements ToolExecutor {
                 features: [...features].sort(),
                 importMapSha256: createHash('sha256').update(raw).digest('hex'),
                 importMapModifiedMs: stat.mtimeMs,
-                source
+                source,
+                sharedEngine
             };
         } catch (error: any) {
             return {
@@ -265,7 +375,8 @@ export class EngineFeatureTools implements ToolExecutor {
                 importMapSha256: null,
                 importMapModifiedMs: null,
                 source,
-                error: error?.message || String(error)
+                error: error?.message || String(error),
+                sharedEngine
             };
         }
     }
@@ -676,7 +787,11 @@ export class EngineFeatureTools implements ToolExecutor {
             // and then prove that the regenerated preview import map is current.
             const matchingPending = pending?.signature === signature
                 && (pending?.status === 'restart-required' || pending?.status === 'editor-relaunch-scheduled');
-            if (matchingPending) {
+            // Another project opened from the same Cocos install may have rewritten the shared
+            // engine preview map since the pending restart was recorded. The in-place rebuild
+            // below re-emits it for this project, so a pending restart must not short-circuit it.
+            const sharedGapBefore = sharedMissing(appliedBefore, modules);
+            if (matchingPending && sharedGapBefore.length === 0) {
                 return {
                     success: true,
                     message: 'Feature Cropping is persisted and rebuilt, but the active preview import map is still stale. Restart this exact Cocos project externally, then call get_features again.',
@@ -731,6 +846,38 @@ export class EngineFeatureTools implements ToolExecutor {
                         before,
                         after,
                         appliedBefore,
+                        engineRebuildMs: Date.now() - rebuildStartedAt
+                    }
+                };
+            }
+
+            // Quick Compile re-emits the install-wide preview map from this project's profile.
+            // When that closes every gap (typically a map rewritten by another open project),
+            // the preview is verified without relaunching the Editor.
+            const appliedAfterRebuild = await this.readAppliedPreviewFeatures();
+            if (appliedSatisfies(
+                appliedAfterRebuild,
+                modules,
+                disabledModules,
+                physicsBackend,
+                spineBackend,
+                physics2dBackend,
+                profileModifiedMs
+            )) {
+                await this.clearTransaction();
+                return {
+                    success: true,
+                    message: 'The engine rebuild re-applied this project\'s features to the active preview import map.',
+                    data: {
+                        complete: true,
+                        status: 'verified-after-rebuild',
+                        changed,
+                        before,
+                        after,
+                        appliedBefore,
+                        appliedAfter: appliedAfterRebuild,
+                        sharedGapBefore,
+                        engineRebuild,
                         engineRebuildMs: Date.now() - rebuildStartedAt
                     }
                 };

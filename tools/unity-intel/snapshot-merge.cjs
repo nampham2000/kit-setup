@@ -5,8 +5,7 @@ const {
   assertUnityLiveSnapshotPatch,
   computeStaticProjectFingerprint,
   diagnosticKey,
-  stableStringify,
-  sha256Hex,
+  stableHashHex,
 } = require('./live-schema.cjs');
 
 const SEVERITY_ORDER = new Map([['high', 3], ['medium', 2], ['low', 1]]);
@@ -217,8 +216,16 @@ function classificationCounts(items) {
   return Object.fromEntries(Object.entries(counts).sort(([a], [b]) => a.localeCompare(b)));
 }
 
+function shallowCopy(value) {
+  if (Array.isArray(value)) return [...value];
+  return value && typeof value === 'object' ? { ...value } : value;
+}
+
 function fingerprintHybridSnapshot(snapshot) {
-  const copy = cloneValue(snapshot);
+  // Only the containers that lose volatile fields are copied; the records and
+  // edges are streamed into the hash. Deep-cloning the whole snapshot twice
+  // (clone + canonical copy) plus its JSON text tripled peak scan memory.
+  const copy = shallowCopy(snapshot);
   delete copy.generatedAt;
   delete copy.cache;
   delete copy.metrics;
@@ -228,17 +235,24 @@ function fingerprintHybridSnapshot(snapshot) {
   delete copy.stateFingerprint;
   delete copy.projectFingerprint;
   if (copy.project) {
+    copy.project = shallowCopy(copy.project);
     delete copy.project.root;
     delete copy.project.layout;
   }
   if (copy.source) {
+    copy.source = shallowCopy(copy.source);
     delete copy.source.root;
     delete copy.source.assetsRoot;
   }
   if (copy.live) {
+    copy.live = shallowCopy(copy.live);
     delete copy.live.generatedAt;
     delete copy.live.scanId;
-    if (copy.live.facts && copy.live.facts.metrics) delete copy.live.facts.metrics.durationMs;
+    if (copy.live.facts && copy.live.facts.metrics) {
+      copy.live.facts = shallowCopy(copy.live.facts);
+      copy.live.facts.metrics = shallowCopy(copy.live.facts.metrics);
+      delete copy.live.facts.metrics.durationMs;
+    }
   }
   if (Array.isArray(copy.providers)) {
     copy.providers = copy.providers.map(provider => {
@@ -248,7 +262,7 @@ function fingerprintHybridSnapshot(snapshot) {
       return stable;
     });
   }
-  return sha256Hex(stableStringify(copy));
+  return stableHashHex(copy);
 }
 
 function mergeUnityProjectSnapshots(staticSnapshot, livePatch, options = {}) {

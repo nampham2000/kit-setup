@@ -103,6 +103,9 @@ function fbxArray(values) {
   }).join(',');
 }
 
+// The FBX SDK's ASCII reader (Cocos FBX-glTF-conv) ignores single-line blocks such as
+// `ObjectType: "Model" { Count: 1 }`: with no object definitions it drops every Geometry/Model and
+// the import yields an empty scene. Every block must open and close on its own lines.
 function writeUnityMeshAssetAsFbx(mesh, destFile) {
   const geometryId = 100000;
   const modelId = 100001;
@@ -143,8 +146,12 @@ References:  {
 Definitions:  {
   Version: 100
   Count: 2
-  ObjectType: "Geometry" { Count: 1 }
-  ObjectType: "Model" { Count: 1 }
+  ObjectType: "Geometry" {
+    Count: 1
+  }
+  ObjectType: "Model" {
+    Count: 1
+  }
 }
 Objects:  {
   Geometry: ${geometryId}, "Geometry::${name}", "Mesh" {
@@ -220,4 +227,5 @@ function exportUnityMeshAssetToFbx(meshFile, destFile) {
 module.exports = {
   exportUnityMeshAssetToFbx,
   parseUnityMeshAsset,
+  writeUnityMeshAssetAsFbx,
 };

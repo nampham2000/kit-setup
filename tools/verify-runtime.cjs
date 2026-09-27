@@ -857,17 +857,29 @@ async function runOne(target, options) {
     if (!result.profileCleanup.ok) result.consoleWarnings.push(`[verify-runtime] ${result.profileCleanup.error}; retained ${userDataDir}`);
   }
 
-  result.ok = result.exceptions.length === 0
+  result.ok = runtimeVerdict(result, options);
+  return result;
+}
+
+/**
+ * The pass/fail verdict of one target. Only what the page did counts: exceptions, eval errors, failed
+ * runtime checkpoints, console errors, preview-device errors, frames/FPS and a monochrome frame.
+ * Temp-profile cleanup (`profileCleanup`) is housekeeping after the session closed: on a loaded
+ * Windows machine Chrome's helper processes can still hold `first_party_sets.db` (EBUSY) for a while
+ * and the directory is retained with a warning. That used to fail otherwise-green regression cases
+ * (Screw glass-hold / tap-raycast) and does not change any runtime evidence, so it is reported but
+ * never decides the verdict.
+ */
+function runtimeVerdict(result, options) {
+  return result.exceptions.length === 0
     && !result.evalError && !result.evalBeforeError
     && result.checkpoints?.ok !== false
-    && result.profileCleanup?.ok !== false
     && result.consoleErrors.length === 0
     && !result.previewDeviceError
     && !result.previewDeviceRestoreError
     && result.frames > 0
     && result.fps >= options.minFps
     && !result.uniformFrame;
-  return result;
 }
 
 // ────────────────────────────────────────────────────────────── runner ──
@@ -1035,7 +1047,7 @@ if (require.main === module) {
 }
 
 module.exports = {
-  runOne, findBuiltHtml, findBrowser, ensureWebSocketRuntime,
+  runOne, runtimeVerdict, findBuiltHtml, findBrowser, ensureWebSocketRuntime,
   parseArgs, parseGesture, resolveGestureFromEvalBefore,
   isNavigationEvaluationError, evaluatePageWithNavigationRetry,
   dispatchTouchGesture, dispatchTouchGestureSequence, selectCocosPreviewDevice,
