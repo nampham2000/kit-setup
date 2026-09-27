@@ -539,6 +539,79 @@ test and acceptance gate to that registry. The AOE source project runs
   Keep project layout overrides config-driven; existing approved overrides need a separate runtime
   comparison before removal. Re-port only after the normal Unity source gate passes.
 
+### Removed or deferred controls: re-balance the sibling group
+
+- Dropping a deferred meta control (rule `interactive-affordance-parity`) changes the layout of
+  the group it belonged to. Survivors must not keep the anchoredPositions that Unity authored for
+  the whole group. Real case (ScrewOut PopupLose): HomeBtn x=-243 and TryAgainButton x=191 form a
+  pair centred near x=1. The playable removed HomeBtn, but TryAgain kept x=191 and rendered
+  190 px off-centre. The tap regression still passed because it tapped the runtime position.
+- The same fault appears whenever a row, pair or group member is removed, deferred or hidden. It
+  also appears when a LayoutGroup would have re-flowed the survivors and the port used pre-layout
+  anchoredPositions instead.
+- Fix:
+  - If the source group has a Horizontal/VerticalLayoutGroup, port it (`UnityFixedLayoutGroup`)
+    so the survivors re-flow.
+  - Otherwise add an explicit adapter layout (re-centre or re-flow) in `playable-config.json`.
+    Record the reason and the source values: the original x/y and size of every group member.
+  - Never hard-code a new offset read from a screenshot.
+- Static audit on the Unity prefab, before writing the Cocos layout:
+
+  ```bash
+  node playable-shared-kit/tools/unity-cocos-port/ui-sibling-removal-audit.cjs \
+    --prefab "<Unity>/Assets/_Game/Prefabs/UI/PopupLose.prefab" --removed Content/HomeBtn
+  # portable form, committed with the port:
+  node playable-shared-kit/tools/unity-cocos-port/ui-sibling-removal-audit.cjs \
+    --config tools/ui-sibling-removal.json --unity-project <UnityProjectRoot> --check
+  ```
+
+  The manifest (`kind: "ui-sibling-removal-audit"`) lists each prefab (`Assets/...`), its
+  `removed` nodes and `adapters[]`. Each adapter declares `removed` or `group`, a `strategy`
+  (`source-layout|recenter|reflow|explicit-position`), a `reason`, `sourceValues` and optionally a
+  `configPath`. The audit reports these codes:
+  - high `UI_SIBLING_REMOVED_UNBALANCED`: the survivor is off the original group centre;
+  - high `UI_SIBLING_REMOVED_LAYOUT_REFLOW`: a LayoutGroup lost a child (the report includes
+    `expectedReflow` positions);
+  - medium `UI_SIBLING_REMOVED_GAP`: an interior member was removed;
+  - low `UI_SIBLING_REMOVED_RESOLVED`: a valid adapter covers the group.
+
+  A serialized `m_LocalScale` of 0 (Animator pop-in) is treated as 1 and listed in
+  `zeroScaleAssumedOne`.
+- Runtime acceptance: add a matrix case tagged `ui-layout` for each affected group. Load the shared
+  probe with `evalHelpers` and bound its metrics:
+
+  ```json
+  {
+    "name": "lose popup source viewport",
+    "windowSize": "720x1280",
+    "evalHelpers": ["playable-shared-kit/tools/qa/ui-layout-balance.js"],
+    "eval": "__ccUiLayoutBalance({ nodes: ['Canvas/PopupLose/Content/TryAgainButton'], container: 'Canvas/PopupLose/Content' })",
+    "requireEvalOk": true,
+    "requiredEvalMetrics": {
+      "centerOffsetPx": { "max": 4 },
+      "insideSafeRect": { "min": 1 },
+      "overlapCount": { "max": 0 }
+    },
+    "regressionTags": ["ui-layout"]
+  }
+  ```
+
+  Duplicate the case at a short/wide viewport, for example `"windowSize": "1280x600"` or a
+  `previewDevice`. The regression gate fails a matrix with `REGRESSION_UI_LAYOUT_BALANCE_MISSING`
+  when a tagged case lacks a `centerOffsetPx|centerOffsetXPx|centerOffsetYPx` max of 32 design px
+  or less. It fails with `REGRESSION_UI_LAYOUT_VIEWPORTS_MISSING` when fewer than 2 distinct
+  explicit viewports run.
+- The probe returns numeric metrics measured in world design px:
+  - `centerOffsetPx` (per `axis`, default `x`), plus signed `centerOffsetXPx`/`centerOffsetYPx`;
+  - `insideSafeRect` (1 or 0) and `outsideSafePx`, measured against the Canvas unless `safeArea`
+    or `safeInsetPx` is given;
+  - `overlapCount` and `overlapMaxRatio` between the listed controls.
+
+  An inactive or missing control returns `ok:false`, so list only the survivors that must be
+  visible. Only the helpers are prepended; the eval's last expression remains its result.
+- Tests: `node --test playable-shared-kit/tools/unity-cocos-port/ui-sibling-removal-audit.test.cjs
+  playable-shared-kit/tools/qa/ui-layout-balance.test.cjs`.
+
 ### UI must come from the game's own assets (no Graphics placeholders)
 
 - Build every popup, HUD element, button, ribbon, badge and frame from the source game's assets:
@@ -1334,4 +1407,4 @@ those fixtures to unmeasured shapes, spaces or rotation modules.
 
 Treat container extension, Unity importer output and shader sampling as three different contracts. Before claiming texture parity, record active build target, Unity texture/graphics format, sRGB/data role, dimensions, complete mip chain, filter/wrap/aniso/mip bias, alpha handling and the shader property/UV/channel using the texture. A PNG made from a BMP is not proof of equivalence; ASTC selected in a platform override is not proof that the current Editor GPU is sampling ASTC.
 
-Use `tools/unity-intel/IMPORTED_TEXTURE_MIPS.md` for the measured sRGB Texture2D route, including BMP inputs mapped to Cocos-imported PNG UUIDs. The producer must reject unsupported GPU sampling and linear/HDR/normal-map cases outside its measured scope. Do not replace unsupported ASTC with raw source PNG and call it equivalent; integrate a validated decoder or capture on a matching reference device. Preserve any future ASTC decoder from shared main and run native sampler/shader regressions before adoption. Do not apply an sRGB texture wrapper to linear masks/normals. Texture-byte equality alone cannot certify toon lighting, crystal refraction, channel swizzles, procedural UVs, premultiplied blend or double gamma conversion. Validate those in the actual effect. A 98–100% target requires measured image and semantic acceptance on named cases, not an importer success code.
+Use `tools/unity-intel/IMPORTED_TEXTURE_MIPS.md` for the measured sRGB Texture2D route, including BMP inputs mapped to Cocos-imported PNG UUIDs. For ASTC where `SystemInfo.SupportsTextureFormat` is false, use the accepted SmashFest ToyBlock route: sample the active imported texture with `Graphics.Blit` and `ReadPixels`, preserving Unity's ASTC decode and `alphaIsTransparency` edge RGB. If those decoded pixels are flattened to PNG, disable Cocos `fixAlphaTransparencyArtifacts` so it does not pad them again. Do not enable this exception for unsupported non-ASTC, linear/HDR/normal-map or cubemap cases, and do not replace the imported readback with the raw source PNG. Texture-byte equality alone cannot certify toon lighting, crystal refraction, channel swizzles, procedural UVs, premultiplied blend or double gamma conversion. Validate each new asset in the actual effect and Preview. A 98–100% target requires measured image and semantic acceptance on named cases, not an importer success code.

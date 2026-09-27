@@ -515,6 +515,36 @@ const CAPABILITIES = [
     ],
   },
   {
+    id: 'port.ui-sibling-audit',
+    group: 'port',
+    title: 'Tìm sibling group UI mất control (removed/deferred) mà survivor còn giữ offset của cả nhóm',
+    npm: null,
+    cmd: `node ${TOOLS}/unity-cocos-port/ui-sibling-removal-audit.cjs`,
+    args: ['--config <audit.json>', '--unity-project <UnityProjectRoot>'],
+    optional: [
+      '--prefab <file.prefab>', '--removed <nodePath>', '--shown <nodePath>', '--adapters <adapters.json>', '--tolerance <px>',
+      '--row-tolerance <px>', '--reference-resolution <WxH>', '--check', '--out <report.json>', '--json',
+    ],
+    when: 'Ngay khi playable bỏ/defer một control UI (Home, Shop, Settings, IAP...) của popup/HUD Unity, trước khi viết layout Cocos cho các control còn lại; chạy lại với --check trước core verify.',
+    outputs: [
+      'stdout: decision pass/fail, từng sibling group với removed, survivors, originalGroupCenter, survivorCenterOffsetPx, expectedReflow (LayoutGroup)',
+      '<report.json> khi có --out (bỏ qua ghi khi bytes không đổi); commit manifest audit.json cùng adapter declaration',
+    ],
+    limits: [
+      'Phân tích tĩnh RectTransform: group = cùng parent + cùng hàng/cột (--row-tolerance) hoặc parent có Horizontal/Vertical/GridLayoutGroup. Không chạy UGUI layout thật; childControl/forceExpand/Grid chỉ báo cần re-flow, không tính vị trí.',
+      'Chỉ đọc trạng thái active serialized; control mà variant playable bật lúc runtime (ví dụ CoinBtnFree của revive miễn phí) phải khai báo qua --shown/shown[]. m_LocalScale 0 (pop-in Animator) được coi là 1 và ghi zeroScaleAssumedOne. Nested PrefabInstance chỉ dùng override trong prefab đang audit; size không override được coi là điểm.',
+      'Adapter declaration (removed|group + strategy source-layout|recenter|reflow|explicit-position + reason + sourceValues) chỉ chứng minh port có chủ đích; acceptance vẫn cần runtime centerOffsetPx bounded ở >=2 viewport qua tag ui-layout.',
+      '--help chỉ in usage; argument lạ/xung đột fail trước khi đọc/ghi; --check read-only và fail khi còn high hoặc --out stale.',
+    ],
+    status: 'partial',
+    probe: 'help',
+    probeCmd: `node ${TOOLS}/unity-cocos-port/ui-sibling-removal-audit.cjs`,
+    expect: [
+      '--config', '--unity-project', '--prefab', '--removed', '--shown', '--adapters', '--tolerance', '--row-tolerance',
+      '--reference-resolution', '--check', '--out', '--json',
+    ],
+  },
+  {
     id: 'port.report',
     group: 'port',
     title: 'Nén port-report.csv thành digest có hành động',
@@ -1741,7 +1771,7 @@ const CORE_RULES = [
   },
   {
     id: 'portable-regression-registry',
-    rule: 'Mọi port phải có `tools/port-regressions.json` được commit, khai báo requiredRisks từ Unity preflight/bug history và mandatory suite cho từng risk. Matrix, eval/oracle, ảnh Unity reference và watchFiles phải cùng nằm trong Git. Sau mỗi fix hoặc thay đổi watched target, chạy `npm run ai:verify:regressions`; không reuse PASS cũ vì receipt bị khóa SHA-256. Risk input dùng gesture thật + semantic oracle; input-concurrency dùng `gestures[]` + pre/post overlap/reservation metrics; hold-drag dùng `gestureHoldBeforeMoveMs`; raycast có ca positive/negative; callback flow có `requiredTrace`; first-use-performance dùng cold-start real gesture, probe trước input, ordered trace, bounded long-task/frame-gap/feedback delay và ít nhất 2 runs; VFX có bounded visible-pixel screenshot metrics; runtime mesh có linear+curved cases cùng bounded metrics; lifecycle chạy ít nhất 2 rounds.',
+    rule: 'Mọi port phải có `tools/port-regressions.json` được commit, khai báo requiredRisks từ Unity preflight/bug history và mandatory suite cho từng risk. Matrix, eval/oracle, ảnh Unity reference và watchFiles phải cùng nằm trong Git. Sau mỗi fix hoặc thay đổi watched target, chạy `npm run ai:verify:regressions`; không reuse PASS cũ vì receipt bị khóa SHA-256. Risk input dùng gesture thật + semantic oracle; input-concurrency dùng `gestures[]` + pre/post overlap/reservation metrics; hold-drag dùng `gestureHoldBeforeMoveMs`; raycast có ca positive/negative; callback flow có `requiredTrace`; first-use-performance dùng cold-start real gesture, probe trước input, ordered trace, bounded long-task/frame-gap/feedback delay và ít nhất 2 runs; VFX có bounded visible-pixel screenshot metrics; runtime mesh có linear+curved cases cùng bounded metrics; UI group bị bỏ/defer sibling dùng tag `ui-layout` với `centerOffsetPx` bounded ở >=2 viewport; lifecycle chạy ít nhất 2 rounds.',
   },
   {
     id: 'first-use-runtime-warmup',
@@ -1749,7 +1779,11 @@ const CORE_RULES = [
   },
   {
     id: 'interactive-affordance-parity',
-    rule: 'Mọi control nhìn có thể bấm/vuốt trong Cocos phải truy được về handler và state outcome của Unity source, rồi kiểm bằng gesture thật với `requireEvalOk: true`. Không được dựng button/icon visual-only. Nếu closure của control bị defer/replace trong playable-core (settings, shop, meta...), phải bỏ control khỏi HUD; chỉ cho xuất hiện lại sau khi port đủ hành vi.',
+    rule: 'Mọi control nhìn có thể bấm/vuốt trong Cocos phải truy được về handler và state outcome của Unity source, rồi kiểm bằng gesture thật với `requireEvalOk: true`. Không được dựng button/icon visual-only. Nếu closure của control bị defer/replace trong playable-core (settings, shop, meta...), phải bỏ control khỏi HUD; chỉ cho xuất hiện lại sau khi port đủ hành vi. Bỏ control nào thì phải tính lại layout của sibling group chứa nó theo rule `ui-sibling-removal-rebalance`.',
+  },
+  {
+    id: 'ui-sibling-removal-rebalance',
+    rule: 'Khi một control UI bị bỏ, defer hoặc ẩn trong playable (ví dụ HomeBtn của cặp Home/TryAgain trong popup Lose), các control còn lại KHÔNG được giữ anchoredPosition authored cho cả nhóm: một survivor đơn lẻ giữ x của cặp (TryAgain x=191 trong khi cặp cân quanh x≈0) sẽ lệch tâm, và tap regression vẫn PASS vì bấm theo vị trí runtime. Phải tính lại layout của sibling group: nếu source có LayoutGroup thì port đúng LayoutGroup đó (UnityFixedLayoutGroup) để survivors re-flow, không lấy anchoredPosition pre-layout/pre-removal; nếu không có LayoutGroup thì thêm adapter layout tường minh (re-centre hoặc re-flow) với reason + source values (vị trí/size gốc của cả nhóm) trong playable-config. Chạy `port.ui-sibling-audit` trên prefab nguồn với danh sách control removed/deferred; `UI_SIBLING_REMOVED_UNBALANCED`/`UI_SIBLING_REMOVED_LAYOUT_REFLOW` là high cho tới khi group có adapter declaration hợp lệ. Nghiệm thu bằng layout-balance metric runtime: case regression gắn tag `ui-layout`, eval dùng `evalHelpers` `playable-shared-kit/tools/qa/ui-layout-balance.js`, `requiredEvalMetrics` khóa `centerOffsetPx` (max <= 32 design px, thường <= 4) cùng `insideSafeRect` và `overlapCount`, chạy ở >=2 viewport (nguồn + thấp/rộng); ảnh đẹp hoặc tap PASS không thay thế metric này.',
   },
   {
     id: 'raycast-first-hit-parity',
@@ -1845,6 +1879,10 @@ const CORE_RULES = [
   {
     id: 'ui-source-asset-fidelity',
     rule: 'Mọi popup/HUD/button/banner/badge trong port phải dựng từ asset nguồn của game: Unity prefab/RectTransform, Sprite (Simple/Sliced đúng spriteBorder), TMP font asset/TTF và material/outline của chính game. Không được vẽ frame, nền, nút, ribbon, viền chữ hay icon bằng `cc.Graphics`, solid-color Sprite hoặc primitive để "cho có"; đó là naive implementation. Graphics chỉ hợp lệ khi source cũng vẽ procedural (LineRenderer/mask có trong playable-core) hoặc cho overlay kỹ thuật vô hình như hit area/stencil. Khi UI là adapter tự thiết kế (source nằm ngoài playable-core, ví dụ revive/continue thay IAP), phải ghép từ sprite, font và style sẵn có của cùng game (frame, ribbon, button, icon), ghi reason + source asset path vào config, và không phát minh style mới. Text phải readable: font nguồn, size theo TMP effective size (không nhỏ hơn source), wrap/overflow theo rect nguồn, không ngắt giữa từ; kiểm ở viewport nguồn lẫn viewport thấp/rộng. Nghiệm thu bằng runtime assertion không có Graphics component trong cây UI (trừ allowlist có lý do), sprite/font UUID khớp oracle nguồn, tight screenshot ROI của từng popup và đo text không bị cắt/ngắt từ.',
+  },
+  {
+    id: 'astc-imported-texture-readback',
+    rule: 'Khi Unity texture sRGB dùng ASTC, không copy PNG nguồn rồi coi là parity và không tự bật Cocos alpha-padding lần hai. Dùng `tools/unity-intel/capture-imported-texture-mips.cs` để đọc active imported texture qua `Graphics.Blit` + `ReadPixels`; route này được phép cho ASTC ngay cả khi `SystemInfo.SupportsTextureFormat` trả false, vì SmashFest ToyBlock `RGBA_ASTC6X6_SRGB` đã được user chấp nhận visual Unity parity với đúng đường đọc này. Nếu flatten pixel đã decode ra PNG, đặt Cocos `fixAlphaTransparencyArtifacts=false` để không pad lần hai. Khóa source/importer hash, active build target, graphics device, mip/sampler và runtime UUID; asset mới vẫn phải Preview so với Unity. Không mở route cho unsupported non-ASTC, linear mask, normal, HDR hoặc cubemap khi chưa có oracle riêng.',
   },
   {
     id: 'unity-preflight',
