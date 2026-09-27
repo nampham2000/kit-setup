@@ -5036,6 +5036,8 @@ function applyNestedParticlePrefabOverrides(builder, nestedPrefab, reporter, opt
     const renderer = builder.objects[builder.objects[particleId]?.renderer?.__id__];
     const resolvedMesh = renderer?._mesh || null;
     applyUnityParticleDataToCocos(builder, particleId, particleData, rendererData);
+    // The runtime adapters were attached while the nested prefab was built from its source data.
+    require('./unity-cocos-port/particle-initial-state-binding.cjs').refreshInitialStateContract(builder, particleId, reporter, options);
     if (renderer && Number(rendererData?.m_RenderMode) === 4) {
       const meshOverride = Object.entries(rendererProps).find(([propertyPath]) => /^m_Mesh\d?$/.test(propertyPath));
       if (!meshOverride) {
