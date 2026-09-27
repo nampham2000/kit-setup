@@ -539,6 +539,27 @@ test and acceptance gate to that registry. The AOE source project runs
   Keep project layout overrides config-driven; existing approved overrides need a separate runtime
   comparison before removal. Re-port only after the normal Unity source gate passes.
 
+### UI must come from the game's own assets (no Graphics placeholders)
+
+- Build every popup, HUD element, button, ribbon, badge and frame from the source game's assets:
+  the Unity prefab/RectTransform, its Sprites (Simple or Sliced with the importer spriteBorder),
+  the TMP font asset or TTF, and the outline/shadow values from the TMP material keywords.
+- Do not draw frames, panels, buttons, ribbons, text outlines or icons with `cc.Graphics`,
+  solid-colour sprites or primitives to fill a gap. That is a placeholder, not a port. Graphics is
+  only valid when the source is procedural too (a LineRenderer or mask inside playable-core), or
+  for an invisible technical overlay such as a hit area or stencil.
+- When a popup is an adapter with no source equivalent (for example revive or continue replacing
+  IAP), assemble it from the same game's existing frames, ribbons, buttons, icons and fonts.
+  Record the reason and each source asset path in config. Do not invent a new visual style.
+- Text must be readable. Use the source font and its TMP effective size (never smaller), wrap
+  inside the source rect and never break inside a word; a heading such as "CONTINUE?" should not
+  split into "CONTIN / UE?". Check the source viewport and a short/wide viewport.
+- Acceptance:
+  - a runtime assertion that the UI tree has no `cc.Graphics` outside an allowlist with reasons;
+  - sprite and font UUIDs match a source oracle;
+  - a tight screenshot ROI per popup;
+  - a text-fit metric showing no clipped or mid-word-wrapped labels.
+
 ### Portable checkout / cross-PC bootstrap
 
 Shared kit chỉ portable khi source of truth đã được commit và checkout đúng exact submodule pointer. Trên một PC
