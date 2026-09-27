@@ -1,4 +1,5 @@
 'use strict';
+const {unityProceduralSortCenter}=require('./particle-procedural-sort-center.cjs');
 
 // Geometry contracts measured with Unity ParticleSystemRenderer.BakeMesh.
 // Local billboard rotations are clockwise; mesh rotations are not. Both are
@@ -37,6 +38,8 @@ function particleRendererContract(particle = {}, renderer = {}) {
   const unsupported = [];
   // Sorting is bound for every transparent renderer by particle-sorting-binding.
   const sorting = { fudge: Number(renderer.m_SortingFudge || 0), order: Number(renderer.m_SortingOrder || 0), layer: Number(renderer.m_SortingLayerID || 0), sortMode: Number(renderer.m_SortMode || 0) };
+  const proceduralCenter=unityProceduralSortCenter(particle);
+  if(proceduralCenter)sorting.proceduralCenter=proceduralCenter;
   // Local/axial billboard pivots, stretched X/Z pivots, Facing and billboard Velocity are unmeasured.
   if (pivotSet && !(mesh || viewBillboard || (mode === 1 && pivotValues[0] === 0 && pivotValues[2] === 0))) unsupported.push('pivot-axes');
   if (alignment !== 0 && alignment !== 2 && !worldBillboard && !straightBoxVelocity && mode !== 1 && !axialBillboard && !meshWorldFrame && !meshVelocityFrame) unsupported.push('alignment');

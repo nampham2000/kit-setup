@@ -17,6 +17,19 @@ This skill provides step-by-step guidance and architectural rules for converting
 
 ### Reuse the measured VFX fixes
 
+Transparent sorting must use the same bounds ownership as Unity. Procedurally
+simulated emitters can have analytic bounds independent of the current random
+particle distribution. Using the live-particle AABB can move black streaks or
+flashes across a distortion GrabPass even with matching particle positions.
+particle-procedural-sort-center.cjs gates a measured Local/Hierarchy subset:
+full random arcs, unrotated Sphere/Circle/Cone shapes and stationary Hemisphere,
+without Noise, gravity or the other excluded motion modules. Bind its native
+local center through both the sorting adapter and GrabPass classification;
+reflect Z once when transforming into the Cocos emitter matrix. Native automatic
+fixtures cover204 emitters and2484 phase samples, error below2e-6. Unsupported
+procedural contracts still need separate evidence; the dynamic fallback is not
+proof of native sorting fidelity. Empty emitters must not contribute a sort point.
+
 Circle and Cone Base use an independent system-owned four-lane shape RNG (same
 xorshift initialization as initial state, no salt; two draws per emitted lane,
 pad the last automatic batch). UnityParticleShapeRandom is installed through

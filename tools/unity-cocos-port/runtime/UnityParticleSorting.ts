@@ -8,8 +8,9 @@ import { Camera, Director, director, ParticleSystem } from 'cc';
 //   distance runs along the view axis (TransparencySortMode.Default).
 // - The point is the renderer bounds center: the simulation-space AABB of the
 //   particle positions (stretched tails included) through the emitter matrix.
-//   Pivot, particle size and mesh offset do not move it. Unity's precomputed
-//   procedural-mode bounds are not reproduced.
+//   Pivot, particle size and mesh offset do not move it. A source-gated Local/
+//   Hierarchy subset instead uses Unity's analytic procedural bounds center;
+//   these are independent of the live random particle distribution.
 // - sortMode only orders particles inside one renderer.
 // Cocos compares Model.priority first, then the pass hash, then the view-Z of
 // the node pivot (particle models carry no world bounds), so the whole Unity
@@ -27,6 +28,8 @@ export interface UnityParticleSortSpec {
     /** Stretched billboards: the tail is lengthScale * size + velocityScale * speed. */
     lengthScale?: number;
     velocityScale?: number;
+    /** Native analytic Local-space bounds center, for the measured procedural subset. */
+    proceduralCenter?: number[];
 }
 
 interface Point { x: number; y: number; z: number; }
@@ -81,6 +84,14 @@ function cameraDistance(cam: SortCamera, x: number, y: number, z: number): numbe
 /** Unity renderer bounds center of a CPU particle system, in world space. */
 export function unityParticleSortPoint(system: any, spec: UnityParticleSortSpec, out: Point): boolean {
     const processor = system.processor;
+    if(spec.proceduralCenter&&system.simulationSpace!==WORLD){
+        if(!processor?._particles?.length)return false;
+        const p=spec.proceduralCenter,m=system.node.worldMatrix,x=p[0],y=p[1],z=-p[2];
+        out.x=m.m00*x+m.m04*y+m.m08*z+m.m12;
+        out.y=m.m01*x+m.m05*y+m.m09*z+m.m13;
+        out.z=m.m02*x+m.m06*y+m.m10*z+m.m14;
+        return true;
+    }
     const bounds = processor?._model?.worldBounds;
     if (bounds) { out.x = bounds.center.x; out.y = bounds.center.y; out.z = bounds.center.z; return true; }
     const pool = processor?._particles;
