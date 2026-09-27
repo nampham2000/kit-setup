@@ -4,7 +4,7 @@ AOE's good observed result is not evidence that the shared kit implements every
 Unity particle combination. Source inventories in the consuming project show
 AOE has 30 primary prefabs plus 5 dependencies / 299 systems; Combat Magic has
 62 / 521. Noise appears in 10 versus 92 systems; flipbook UV in 33 versus 197.
-AOE actually has more distinct signatures under the current inventory (61 vs44),
+AOE actually has more distinct signatures under the current inventory (63 vs46),
 so raw complexity is not a sufficient explanation. These numbers describe the
 captured source snapshots, not a controlled model-performance comparison.
 
@@ -80,3 +80,4 @@ Combat Magic is deliberately not accepted by the new gate: 9 binding obligations
 unresolved reference choice and 186 uncovered prefab/phase cells remain. Existing
 individual diagnostic captures are valuable but have not been promoted to full
 catalog regression suites. Do not fabricate passing suites to clear this gate.
+
