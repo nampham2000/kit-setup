@@ -194,13 +194,13 @@ class CdpSession {
     });
   }
 
-  send(method, params = {}, sessionId = undefined) {
+  send(method, params = {}, sessionId = undefined, timeoutMs = undefined) {
     const id = this.nextId++;
     const payload = { id, method, params };
     if (sessionId) payload.sessionId = sessionId;
     return new Promise((resolve, reject) => {
       if(this.ws?.readyState!==1){reject(new Error('CDP WebSocket is not open'));return;}
-      const timer=setTimeout(()=>{this.pending.delete(id);reject(new Error(`CDP command timed out: ${method}`));},this.commandTimeoutMs);
+      const timer=setTimeout(()=>{this.pending.delete(id);reject(new Error(`CDP command timed out: ${method}`));},timeoutMs||this.commandTimeoutMs);
       this.pending.set(id, { resolve, reject, timer });
       try{this.ws.send(JSON.stringify(payload));}
       catch(error){clearTimeout(timer);this.pending.delete(id);reject(error);}
@@ -352,12 +352,16 @@ function resolveGestureFromEvalBefore(spec, evalBeforeResult) {
   return { x1, y1, x2, y2, durationMs, steps, normalized };
 }
 
-async function evaluatePage(session, sessionId, expression) {
+// User eval/evalBefore scripts may await gameplay readiness or long async flows (a slow preview under memory pressure
+// can need minutes to preload); they get their own CDP deadline instead of the 90 s protocol-command default.
+const USER_EVAL_TIMEOUT_MS = Math.max(90000, Number(process.env.PLAYABLE_EVAL_TIMEOUT_MS) || 300000);
+
+async function evaluatePage(session, sessionId, expression, timeoutMs = undefined) {
   const evaluated = await session.send('Runtime.evaluate', {
     expression,
     returnByValue: true,
     awaitPromise: true,
-  }, sessionId);
+  }, sessionId, timeoutMs);
   if (evaluated && evaluated.exceptionDetails) {
     const detail = evaluated.exceptionDetails;
     throw new Error(detail.exception
@@ -376,7 +380,7 @@ async function evaluatePageWithNavigationRetry(session, sessionId, expression, t
   const evaluator = timing.evaluate || evaluatePage;
   const waitFor = timing.wait || wait;
   try {
-    return { value: await evaluator(session, sessionId, expression), retriedAfterNavigation: false };
+    return { value: await evaluator(session, sessionId, expression, timing.timeoutMs), retriedAfterNavigation: false };
   } catch (error) {
     if (!isNavigationEvaluationError(error)) throw error;
     // AssetDB refresh can trigger one preview navigation after the CDP target
@@ -384,7 +388,7 @@ async function evaluatePageWithNavigationRetry(session, sessionId, expression, t
     // evalBefore once in the new document instead of dispatching gestures
     // against a missing baseline.
     await waitFor(Math.max(0, Number(timing.retryDelayMs ?? 1000)));
-    return { value: await evaluator(session, sessionId, expression), retriedAfterNavigation: true };
+    return { value: await evaluator(session, sessionId, expression, timing.timeoutMs), retriedAfterNavigation: true };
   }
 }
 
@@ -765,6 +769,7 @@ async function runOne(target, options) {
           session,
           sessionId,
           options.evalBeforeExpression,
+          { timeoutMs: USER_EVAL_TIMEOUT_MS },
         );
         result.evalBeforeResult = evaluatedBefore.value;
         result.evalBeforeRetriedAfterNavigation = evaluatedBefore.retriedAfterNavigation;
@@ -871,7 +876,7 @@ async function runOne(target, options) {
     // trình duyệt hiển thị.
     if (options.evalExpression) {
       try {
-        result.evalResult = await evaluatePage(session, sessionId, options.evalExpression);
+        result.evalResult = await evaluatePage(session, sessionId, options.evalExpression, USER_EVAL_TIMEOUT_MS);
       } catch (err) {
         result.evalError = String(err && err.message ? err.message : err);
       }
