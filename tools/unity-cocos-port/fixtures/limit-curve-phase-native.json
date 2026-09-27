@@ -1,0 +1,304 @@
+{
+  "scope": "Native Electro fixed-60Hz Play Mode particles with age > .5s, in the clamped phase; source curve, gravity and no other velocity modules.",
+  "dt": 0.01666666753590107,
+  "dampen": 1,
+  "keys": [
+    {
+      "serializedVersion": "3",
+      "time": 0,
+      "value": 1,
+      "inSlope": 0,
+      "outSlope": 0,
+      "tangentMode": 0,
+      "weightedMode": 0,
+      "inWeight": 0.3333333432674408,
+      "outWeight": 0.3333333432674408
+    },
+    {
+      "serializedVersion": "3",
+      "time": 1,
+      "value": 0.1702127456665039,
+      "inSlope": 0,
+      "outSlope": 0,
+      "tangentMode": 0,
+      "weightedMode": 0,
+      "inWeight": 0.3333333432674408,
+      "outWeight": 0.3333333432674408
+    }
+  ],
+  "rows": [
+    {
+      "viewport": "1280x720",
+      "frame": 59,
+      "seed": 2472875706,
+      "life": 0.8535875678062439,
+      "remaining": 0.05358707532286644,
+      "velocity": [
+        0,
+        -0.18615037202835083,
+        0
+      ],
+      "manifestSha256": "09147db42e2c669f3f67b20c8830ce25fdfb0ca10ea73876c98cedb8a8771c26"
+    },
+    {
+      "viewport": "1280x720",
+      "frame": 59,
+      "seed": 63795208,
+      "life": 0.8851691484451294,
+      "remaining": 0.2851687967777252,
+      "velocity": [
+        0,
+        -0.3938639760017395,
+        0
+      ],
+      "manifestSha256": "09147db42e2c669f3f67b20c8830ce25fdfb0ca10ea73876c98cedb8a8771c26"
+    },
+    {
+      "viewport": "1280x720",
+      "frame": 60,
+      "seed": 2472875706,
+      "life": 0.8535875678062439,
+      "remaining": 0.03692037984728813,
+      "velocity": [
+        0,
+        -0.1796131134033203,
+        0
+      ],
+      "manifestSha256": "09147db42e2c669f3f67b20c8830ce25fdfb0ca10ea73876c98cedb8a8771c26"
+    },
+    {
+      "viewport": "1280x720",
+      "frame": 60,
+      "seed": 63795208,
+      "life": 0.8851691484451294,
+      "remaining": 0.2685021162033081,
+      "velocity": [
+        0,
+        -0.3730900287628174,
+        0
+      ],
+      "manifestSha256": "09147db42e2c669f3f67b20c8830ce25fdfb0ca10ea73876c98cedb8a8771c26"
+    },
+    {
+      "viewport": "1280x720",
+      "frame": 61,
+      "seed": 2472875706,
+      "life": 0.8535875678062439,
+      "remaining": 0.020253682509064674,
+      "velocity": [
+        0,
+        -0.1747356653213501,
+        0
+      ],
+      "manifestSha256": "09147db42e2c669f3f67b20c8830ce25fdfb0ca10ea73876c98cedb8a8771c26"
+    },
+    {
+      "viewport": "1280x720",
+      "frame": 61,
+      "seed": 63795208,
+      "life": 0.8851691484451294,
+      "remaining": 0.251835435628891,
+      "velocity": [
+        0,
+        -0.3529438376426697,
+        0
+      ],
+      "manifestSha256": "09147db42e2c669f3f67b20c8830ce25fdfb0ca10ea73876c98cedb8a8771c26"
+    },
+    {
+      "viewport": "1280x720",
+      "frame": 120,
+      "seed": 1534278076,
+      "life": 0.9140154719352722,
+      "remaining": 0.2973494827747345,
+      "velocity": [
+        0,
+        -0.3967387080192566,
+        0
+      ],
+      "manifestSha256": "09147db42e2c669f3f67b20c8830ce25fdfb0ca10ea73876c98cedb8a8771c26"
+    },
+    {
+      "viewport": "1280x720",
+      "frame": 240,
+      "seed": 1738962956,
+      "life": 0.9909262657165527,
+      "remaining": 0.37426164746284485,
+      "velocity": [
+        0,
+        -0.4557507634162903,
+        0
+      ],
+      "manifestSha256": "09147db42e2c669f3f67b20c8830ce25fdfb0ca10ea73876c98cedb8a8771c26"
+    },
+    {
+      "viewport": "1280x720",
+      "frame": 300,
+      "seed": 350213878,
+      "life": 0.9310840368270874,
+      "remaining": 0.31441986560821533,
+      "velocity": [
+        0,
+        -0.4103628993034363,
+        0
+      ],
+      "manifestSha256": "09147db42e2c669f3f67b20c8830ce25fdfb0ca10ea73876c98cedb8a8771c26"
+    },
+    {
+      "viewport": "720x1280",
+      "frame": 59,
+      "seed": 2606957682,
+      "life": 0.909054160118103,
+      "remaining": 0.1090543195605278,
+      "velocity": [
+        0,
+        -0.21343576908111572,
+        0
+      ],
+      "manifestSha256": "ad39672570c3510f007dd8c3d7b261f49b8a930dd5aea7477cb54308f2b5e167"
+    },
+    {
+      "viewport": "720x1280",
+      "frame": 59,
+      "seed": 3599307804,
+      "life": 0.8728640079498291,
+      "remaining": 0.2728637456893921,
+      "velocity": [
+        0,
+        -0.3835397958755493,
+        0
+      ],
+      "manifestSha256": "ad39672570c3510f007dd8c3d7b261f49b8a930dd5aea7477cb54308f2b5e167"
+    },
+    {
+      "viewport": "720x1280",
+      "frame": 60,
+      "seed": 2606957682,
+      "life": 0.909054160118103,
+      "remaining": 0.09238769114017487,
+      "velocity": [
+        0,
+        -0.20317316055297852,
+        0
+      ],
+      "manifestSha256": "ad39672570c3510f007dd8c3d7b261f49b8a930dd5aea7477cb54308f2b5e167"
+    },
+    {
+      "viewport": "720x1280",
+      "frame": 60,
+      "seed": 3599307804,
+      "life": 0.8728640079498291,
+      "remaining": 0.25619709491729736,
+      "velocity": [
+        0,
+        -0.36278319358825684,
+        0
+      ],
+      "manifestSha256": "ad39672570c3510f007dd8c3d7b261f49b8a930dd5aea7477cb54308f2b5e167"
+    },
+    {
+      "viewport": "720x1280",
+      "frame": 61,
+      "seed": 2606957682,
+      "life": 0.909054160118103,
+      "remaining": 0.07572106271982193,
+      "velocity": [
+        0,
+        -0.19418269395828247,
+        0
+      ],
+      "manifestSha256": "ad39672570c3510f007dd8c3d7b261f49b8a930dd5aea7477cb54308f2b5e167"
+    },
+    {
+      "viewport": "720x1280",
+      "frame": 61,
+      "seed": 3599307804,
+      "life": 0.8728640079498291,
+      "remaining": 0.23953042924404144,
+      "velocity": [
+        0,
+        -0.34270691871643066,
+        0
+      ],
+      "manifestSha256": "ad39672570c3510f007dd8c3d7b261f49b8a930dd5aea7477cb54308f2b5e167"
+    },
+    {
+      "viewport": "720x1280",
+      "frame": 120,
+      "seed": 3346280607,
+      "life": 0.9103795886039734,
+      "remaining": 0.29371359944343567,
+      "velocity": [
+        0,
+        -0.3938003182411194,
+        0
+      ],
+      "manifestSha256": "ad39672570c3510f007dd8c3d7b261f49b8a930dd5aea7477cb54308f2b5e167"
+    },
+    {
+      "viewport": "720x1280",
+      "frame": 120,
+      "seed": 2935028708,
+      "life": 0.970628023147583,
+      "remaining": 0.15396159887313843,
+      "velocity": [
+        0,
+        -0.23812520503997803,
+        0
+      ],
+      "manifestSha256": "ad39672570c3510f007dd8c3d7b261f49b8a930dd5aea7477cb54308f2b5e167"
+    },
+    {
+      "viewport": "720x1280",
+      "frame": 240,
+      "seed": 612545879,
+      "life": 0.8461227416992188,
+      "remaining": 0.2294580489397049,
+      "velocity": [
+        0,
+        -0.3400011658668518,
+        0
+      ],
+      "manifestSha256": "ad39672570c3510f007dd8c3d7b261f49b8a930dd5aea7477cb54308f2b5e167"
+    },
+    {
+      "viewport": "720x1280",
+      "frame": 240,
+      "seed": 4244222640,
+      "life": 0.945127546787262,
+      "remaining": 0.1284627914428711,
+      "velocity": [
+        0,
+        -0.22290122509002686,
+        0
+      ],
+      "manifestSha256": "ad39672570c3510f007dd8c3d7b261f49b8a930dd5aea7477cb54308f2b5e167"
+    },
+    {
+      "viewport": "720x1280",
+      "frame": 300,
+      "seed": 4252099773,
+      "life": 0.826554000377655,
+      "remaining": 0.20988988876342773,
+      "velocity": [
+        0,
+        -0.32306206226348877,
+        0
+      ],
+      "manifestSha256": "ad39672570c3510f007dd8c3d7b261f49b8a930dd5aea7477cb54308f2b5e167"
+    },
+    {
+      "viewport": "720x1280",
+      "frame": 300,
+      "seed": 3886976752,
+      "life": 0.8547699451446533,
+      "remaining": 0.03810527175664902,
+      "velocity": [
+        0,
+        -0.17999736964702606,
+        0
+      ],
+      "manifestSha256": "ad39672570c3510f007dd8c3d7b261f49b8a930dd5aea7477cb54308f2b5e167"
+    }
+  ]
+}
