@@ -65,7 +65,12 @@ export function installUnityParticleOrbit(system: ParticleSystem,spec: UnityOrbi
         // applies its full transform (including scale) to the resulting delta.
         if(worldSpace)Vec3.transformMat4(local,p.position,inverse);
         const position=worldSpace?local:p.position;
-        orbitalDelta(delta,position.x,position.y,-position.z,sampleNoiseCurve(curves.orbitalX,age,random),sampleNoiseCurve(curves.orbitalY,age,random),sampleNoiseCurve(curves.orbitalZ,age,random),sampleNoiseCurve(curves.radial,age,random),dt);
+        const speed=sampleNoiseCurve(curves.speedModifier,age,random);
+        // fixtures/particle-orbit-speed-modifier-native.json: the speed modifier scales the orbital rotation angle
+        // and the radial step, applied as an exact rotation. Solving the step over dt*speed keeps the later
+        // (velocity+delta)*speed*dt integration on that rotation instead of overshooting the chord.
+        if(speed!==0)orbitalDelta(delta,position.x,position.y,-position.z,sampleNoiseCurve(curves.orbitalX,age,random),sampleNoiseCurve(curves.orbitalY,age,random),sampleNoiseCurve(curves.orbitalZ,age,random),sampleNoiseCurve(curves.radial,age,random),dt*speed);
+        else delta.fill(0);
         let x=delta[0]+sampleNoiseCurve(curves.x,age,random),y=delta[1]+sampleNoiseCurve(curves.y,age,random),z=-(delta[2]+sampleNoiseCurve(curves.z,age,random));
         if(worldSpace){
             const lx=x,ly=y,lz=z;
@@ -73,7 +78,6 @@ export function installUnityParticleOrbit(system: ParticleSystem,spec: UnityOrbi
             y=world.m01*lx+world.m05*ly+world.m09*lz;
             z=world.m02*lx+world.m06*ly+world.m10*lz;
         }
-        const speed=sampleNoiseCurve(curves.speedModifier,age,random);
         p.animatedVelocity.set(x,y,z);
         p.ultimateVelocity.set((p.velocity.x+x)*speed,(p.velocity.y+y)*speed,(p.velocity.z+z)*speed);
         state.samples++;

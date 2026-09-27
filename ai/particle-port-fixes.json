@@ -86,6 +86,7 @@
       "testPaths": [
         "tools/unity-cocos-port/particle-orbit-native.test.cjs",
         "tools/unity-cocos-port/particle-orbit-binding.test.cjs",
+        "tools/unity-cocos-port/particle-orbit-speed-modifier.test.cjs",
         "tools/unity-cocos-port/particle-limit-composition.test.cjs"
       ],
       "acceptance": "Source frame, native paths and repeated loop/viewport occupancy. With a source Limit Velocity: native composition cases and matched-birth trajectories of the ported emitter."
