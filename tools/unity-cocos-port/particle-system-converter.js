@@ -1022,16 +1022,26 @@ function applyRotationModule(builder, particle, data, rendererContract = null) {
   const module = refObject(builder.objects, particle?._rotationOvertimeModule);
   if (!module || !data || typeof data !== 'object') return false;
   const separateAxes = bool(data.separateAxes, false);
+  const axis = (target, source, sign = 1) => {
+    const range = refObject(builder.objects, target);
+    applyCurveRange(builder, range, source, sign);
+    // Preserve which native random endpoint owns u=0 and u=1. Sorting reflected
+    // negative ranges keeps the distribution but can reverse individual spins.
+    if (range && Number(source?.minMaxState) === 3) {
+      range.constantMin = num(source.minScalar, 0) * sign;
+      range.constantMax = num(source.scalar, num(source.minScalar, 0)) * sign;
+    }
+  };
   setKnown(module, ['_enable', 'enable'], bool(data.enabled, false));
   setKnown(module, ['_separateAxes', 'separateAxes'], separateAxes);
   if (separateAxes) {
-    applyCurveRange(builder, refObject(builder.objects, module.x), data.x, rendererContract?.eulerSigns[0] ?? -1);
-    applyCurveRange(builder, refObject(builder.objects, module.y), data.y, rendererContract?.eulerSigns[1] ?? 1);
-    applyCurveRange(builder, refObject(builder.objects, module.z), data.z || data.curve, rendererContract?.eulerSigns[2] ?? -1);
+    axis(module.x, data.x, rendererContract?.eulerSigns[0] ?? -1);
+    axis(module.y, data.y, rendererContract?.eulerSigns[1] ?? 1);
+    axis(module.z, data.z || data.curve, rendererContract?.eulerSigns[2] ?? -1);
   } else {
-    applyCurveRange(builder, refObject(builder.objects, module.x), data.x, -1);
-    applyCurveRange(builder, refObject(builder.objects, module.y), data.y);
-    applyCurveRange(builder, refObject(builder.objects, module.z), data.curve || data.z, rendererContract?.eulerSigns[2] ?? 1);
+    axis(module.x, data.x, -1);
+    axis(module.y, data.y);
+    axis(module.z, data.curve || data.z, rendererContract?.eulerSigns[2] ?? 1);
   }
   return true;
 }
@@ -1424,6 +1434,7 @@ function restoreOrbitalSourceModules(builder, particleId, data) {
 }
 
 module.exports = {
+  applyRotationModule,
   applyParticleStartRotation,
   applyTrailModule,
   restoreOrbitalSourceModules,

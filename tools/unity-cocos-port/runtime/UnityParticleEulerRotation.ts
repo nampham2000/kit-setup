@@ -19,6 +19,16 @@ function pseudoRandom(seed: number): number {
     return ((seed * 9301 + 49297) % 233280) / 233280;
 }
 
+/** Native retained rotation channel; one draw shared by all Euler axes. */
+export function unityRotationRandom(seed: number): number {
+    const a=(seed+0x6aed452e)>>>0;
+    const b=(Math.imul(a,1812433253)+1)>>>0;
+    const c=(Math.imul(b,1812433253)+1)>>>0;
+    const d=(Math.imul(c,1812433253)+1)>>>0;
+    const t=a^(a<<11);
+    return Math.fround(((d^(d>>>19)^t^(t>>>8))&8388607)/8388607);
+}
+
 /** Packs Unity Z-X-Y Euler radians into the Cocos rotation-over-time vertex ABI. */
 export function packUnityEulerRotation(out: Settable, ex: number, ey: number, ez: number): void {
     const sx = Math.sin(ex * 0.5), cx = Math.cos(ex * 0.5);
@@ -41,7 +51,10 @@ export function installUnityParticleEulerRotation(system: ParticleSystem): boole
         const life = p.startLifetime > 0 ? p.startLifetime : 1;
         // Cocos subtracts dt before its modules run.
         const age = Math.min(1, Math.max(0, 1 - (p.remainingLifetime + dt) / life));
-        const random = pseudoRandom(p.randomSeed + ROTATION_SEED);
+        // InitialState owns the native birth seed. Retain the legacy fallback
+        // for unbound engine particles; it does not establish native RNG parity.
+        const nativeBound = typeof p.unityNativeSeed==='number' && this.z.mode!==2 && (!this.separateAxes || this.x.mode!==2 && this.y.mode!==2);
+        const random = nativeBound ? unityRotationRandom(p.unityNativeSeed) : pseudoRandom(p.randomSeed + ROTATION_SEED);
         // ParticleSystem.emit resets startEuler for every birth; here it carries rotation3D.
         const e = p.startEuler;
         if (this.separateAxes) {

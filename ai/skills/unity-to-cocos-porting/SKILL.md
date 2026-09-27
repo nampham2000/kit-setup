@@ -1164,6 +1164,20 @@ For Unity mesh particles in a Z-reflected port, axial start angles map to (-X, -
 
 Rotation over lifetime is Euler integration, not a body-frame spin: Unity adds the angular velocity, sampled at the start-of-step age with one random draw for X/Y/Z, to each `rotation3D` component and then applies Z-X-Y. A Y spin on a mesh started at X=270 therefore turns about the emitter's vertical axis. Cocos 3.8.8 right-multiplies Y-Z-X delta quaternions, so it only matches single-axis cases whose start rotation commutes (Z-only with X0 or Z0 zero, X-only with Z0 zero, Y-only with X0 and Z0 zero). The porter binds `UnityParticleEulerRotationAdapter` (`particle-euler-rotation-binding.js`) and reports `PARTICLE_EULER_ROTATION_ADAPTER_REQUIRED` until AssetDB imports it.
 
+For TwoConstants rotation-over-lifetime, preserve authored endpoint identity when
+reflecting angles: multiply each endpoint by its renderer sign without sorting.
+Sorting swaps which native draw owns each endpoint and can reverse matched-seed
+spins. `UnityParticleEulerRotation` uses the retained native rotation channel
+from `unityNativeSeed` (salt `0x6aed452e`, uint32 initialization and xorshift),
+validated by `rotation-random-channel-native.json`: 217 automatic angular deltas,
+84 birth seeds across four tornado effects. Do not substitute Cocos pseudoRandom.
+TwoCurves and unbound engine particles still use an explicitly unverified fallback;
+this evidence does not establish their RNG parity. Reapply RotationModule and
+stage the runtime when regenerating already-ported prefabs. Compare matched birth
+seeds over two frames after birth, then verify emitter pose, upward travel, size
+growth and the actual rendered funnel separately. Matching spin alone does not
+prove the silhouette. Reject flat/blank screenshots even when runtime checks pass.
+
 Random 3D START rotation is a separate contract: native axes are independent,
 while Cocos reuses one random factor for XYZ and biases ring orientations.
 `particle-start-rotation-binding.cjs` binds the CPU start adapter before birth
