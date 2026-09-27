@@ -192,6 +192,18 @@ module.exports = function createMaterialPorter(deps) {
     return fallback;
   }
 
+  // The first texture slot of `keys` that references a texture. Unity keeps every slot a shader
+  // ever exposed in m_TexEnvs, so a built-in particle material switched from URP can list an empty
+  // _BaseMap (fileID 0) before its real _MainTex (JellyCubeRun2048 cloud_2x2_hard_softshadow,
+  // feather, slash_circle02). Falls back to the first defined slot for tiling-only reads.
+  function boundTextureEnv(texEnvs, keys) {
+    for (const key of keys || []) {
+      const env = texEnvs && texEnvs[key];
+      if (env && unityRefGuid(env.m_Texture)) return env;
+    }
+    return firstDefinedMaterialValue(texEnvs, keys, null);
+  }
+
   function getUnityMaterialKeywords(materialDoc) {
     const block = deps.getIndentedBlock(materialDoc, 'm_ValidKeywords');
     const keywords = new Set();
@@ -310,13 +322,13 @@ module.exports = function createMaterialPorter(deps) {
   }
 
   function resolveUnityMaterialTextureUuid(texEnvs, keys, unityDb, options, reporter, importConfig = {}) {
-    const env = firstDefinedMaterialValue(texEnvs, keys, null);
+    const env = boundTextureEnv(texEnvs, keys);
     const textureGuid = unityRefGuid(env?.m_Texture);
     return textureGuid ? resolveUnityTextureUuid(unityDb.get(textureGuid), options, reporter, importConfig) : '';
   }
 
   function unityMaterialTilingOffset(texEnvs, keys) {
-    const env = firstDefinedMaterialValue(texEnvs, keys, null);
+    const env = boundTextureEnv(texEnvs, keys);
     if (!env) return null;
     const scale = env.m_Scale || { x: 1, y: 1 };
     const offset = env.m_Offset || { x: 0, y: 0 };
@@ -930,7 +942,7 @@ module.exports = function createMaterialPorter(deps) {
     const floats = parseUnitySerializedScalarMap(materialDoc, 'm_Floats');
     const colors = parseUnitySerializedScalarMap(materialDoc, 'm_Colors');
     const texEnvs = parseUnityTextureEnvMap(materialDoc);
-    const env = firstDefinedMaterialValue(texEnvs, UNITY_PARTICLE_MATERIAL_TEXTURE_KEYS, null);
+    const env = boundTextureEnv(texEnvs, UNITY_PARTICLE_MATERIAL_TEXTURE_KEYS);
     const mainTextureUuid = spriteTextureAsset
       ? resolveUnityTextureUuid(spriteTextureAsset, options, reporter, { particleTexture: true })
       : resolveUnityMaterialTextureUuid(

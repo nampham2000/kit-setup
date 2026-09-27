@@ -114,6 +114,41 @@ Material:
   porter.convertUnityParticleMaterialToCocos({path:source,relativePath:'uv-mask.mat',stem:'Mask'},{cocosRoot:temp},new Map(),reports(),null,'particle',local);
   assert.equal(fs.statSync(second.file).mtimeMs,stamp,'unchanged generation is idempotent');
 });
+// Unity keeps every slot a shader ever exposed in m_TexEnvs: JellyCubeRun2048 built-in particle
+// materials (cloud_2x2_hard_softshadow, feather) list an empty _BaseMap before the real _MainTex,
+// and the port bound no texture at all, so the smoke drew as flat squares.
+test('particle materials bind the first texture slot that references a texture',()=>{
+  const source=path.join(temp,'cloud.mat');
+  fs.writeFileSync(source,`%YAML 1.1
+--- !u!21 &2100000
+Material:
+  m_Name: Cloud
+  m_TexEnvs:
+  - _BaseMap:
+      m_Texture: {fileID: 0}
+      m_Scale: {x: 1, y: 1}
+      m_Offset: {x: 0, y: 0}
+  - _MainTex:
+      m_Texture: {fileID: 2800000, guid: cloudtexture, type: 3}
+      m_Scale: {x: 1, y: 0.5}
+      m_Offset: {x: 0, y: 0.5}
+`);
+  const porter=createMaterialPorter({
+    parseUnityScalar:yaml.parseScalar,
+    parseUnityYaml:file=>[{classId:21,lines:fs.readFileSync(file,'utf8').split(/\r?\n/)}],
+    getField:(doc,key,fallback)=>{const line=doc.lines.find(l=>l.trim().startsWith(key+':'));return line?yaml.parseScalar(line.slice(line.indexOf(':')+1)):fallback;},
+    getIndentedBlock:(doc,key)=>key==='m_TexEnvs'?doc.lines.slice(doc.lines.findIndex(l=>l.trim()==='m_TexEnvs:')+1).filter(Boolean):[],
+    unityRefGuid:r=>r?.guid||'',
+    importedUnityAssetPath:()=>path.join(temp,'assets','cloud.mat'),
+    ensureDirectoryMetas:()=>{},ensureMaterialAssetMeta:()=>null,
+  });
+  const requested=[];
+  const unityDb={get:guid=>{requested.push(guid);return undefined;}};
+  const result=porter.convertUnityParticleMaterialToCocos({path:source,relativePath:'cloud.mat',stem:'Cloud'},{cocosRoot:temp},unityDb,reports());
+  assert.deepEqual(requested.filter(Boolean),['cloudtexture'],'the _MainTex texture is resolved, not the empty _BaseMap (the fixture has no m_Shader)');
+  const output=JSON.parse(fs.readFileSync(result.file,'utf8'));
+  assert.deepEqual(output._props[0].mainTiling_Offset,{__type__:'cc.Vec4',x:1,y:.5,z:0,w:.5},'tiling comes from the bound slot');
+});
 const animation = createAnimationPorter({
   parseUnityYaml: file => [{classId:74,lines:fs.readFileSync(file,'utf8').split(/\r?\n/)}],
   getField: (doc,key,fallback) => {const line=doc.lines.find(l=>new RegExp(`^\\s*${key}:`).test(l));return line ? yaml.parseScalar(line.slice(line.indexOf(':')+1)) : fallback;},
