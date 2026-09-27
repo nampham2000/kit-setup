@@ -1,0 +1,8 @@
+[
+  {
+    "scope": "global", "category": "porting-note", "pinned": true,
+    "title": "Electricity pack: first-birth visibility and linear alpha pipeline",
+    "content": "Symptom: correct particle count/lifetime but frame-zero image blank; later alpha sprites dark. Creator 3.8.8 detaches the empty model and delays reattachment. UnityParticleSimulationStep now attaches a live enabled non-culled model after update without advancing time; 64 timestep regressions passed. Dark RGB was a separate pipeline issue: Linear Unity requires sRGB decode before filtering, linear floating-point blending, then one sRGB presentation transfer. Reuse UnitySrgbTexture and UnityLinearTarget with the measured AOE frame pipeline, never compensate with tint. Electricity project recorded 180 native/Cocos pairs for 15 effects/two viewports: minimum foreground IoU .9552479 and RGB similarity .9944959, exact counts/positions. This validates those controlled frames, not every source shader, pipeline or entire project. Thin sprites can miss default smoke probes; add native-image-derived contentProbePoints while retaining defaults and blank detection.",
+    "tags": ["particles", "linear", "first-birth", "native-oracle"], "importance": 0.95
+  }
+]
