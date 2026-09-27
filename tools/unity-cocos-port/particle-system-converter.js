@@ -1,6 +1,9 @@
 'use strict';
 const { particleRendererContract } = require('./particle-renderer-contract');
 const { particleNoiseContract } = require('./particle-noise-contract');
+const { initialStateContract } = require('./particle-initial-state-binding.cjs');
+const { edgeShapeContract } = require('./particle-edge-shape-binding.cjs');
+const { startRotationContract } = require('./particle-start-rotation-binding.cjs');
 const { particleOrbitContract } = require('./particle-orbit-contract');
 const { particleLimitVelocityContract } = require('./particle-limit-velocity-binding');
 const { particleCollisionContract } = require('./particle-collision-binding');
@@ -540,6 +543,19 @@ function applyCurveByRef(builder, particle, prop, data, multiplier = 1) {
   return applyCurveRange(builder, refObject(builder.objects, particle?.[prop]), data, multiplier);
 }
 
+function applyParticleStartRotation(builder, particle, data, rendererData) {
+  const initial=data.InitialModule||{},contract=particleRendererContract(data,rendererData);
+  const source3D=bool(initial.rotation3D,false),mesh=contract.mode===4;
+  particle.startRotation3D=mesh||source3D;
+  let applied=0;
+  if(particle.startRotation3D){
+    applied+=Number(applyCurveByRef(builder,particle,'startRotationX',source3D?initial.startRotationX:constantCurveRange(0),contract.eulerSigns[0]));
+    applied+=Number(applyCurveByRef(builder,particle,'startRotationY',source3D?initial.startRotationY:constantCurveRange(0),contract.eulerSigns[1]));
+    applied+=Number(applyCurveByRef(builder,particle,'startRotationZ',initial.startRotation||constantCurveRange(0),contract.eulerSigns[2]));
+  }else applied+=Number(applyCurveByRef(builder,particle,'startRotationZ',initial.startRotation,-1));
+  return applied;
+}
+
 function addCurveRange(builder, data, multiplier = 1) {
   const id = addObject(builder, { __type__: 'cc.CurveRange' });
   if (id < 0) return null;
@@ -1009,16 +1025,26 @@ function applyRotationModule(builder, particle, data, rendererContract = null) {
   const module = refObject(builder.objects, particle?._rotationOvertimeModule);
   if (!module || !data || typeof data !== 'object') return false;
   const separateAxes = bool(data.separateAxes, false);
+  const axis = (target, source, sign = 1) => {
+    const range = refObject(builder.objects, target);
+    applyCurveRange(builder, range, source, sign);
+    // Preserve which native random endpoint owns u=0 and u=1. Sorting reflected
+    // negative ranges keeps the distribution but can reverse individual spins.
+    if (range && Number(source?.minMaxState) === 3) {
+      range.constantMin = num(source.minScalar, 0) * sign;
+      range.constantMax = num(source.scalar, num(source.minScalar, 0)) * sign;
+    }
+  };
   setKnown(module, ['_enable', 'enable'], bool(data.enabled, false));
   setKnown(module, ['_separateAxes', 'separateAxes'], separateAxes);
   if (separateAxes) {
-    applyCurveRange(builder, refObject(builder.objects, module.x), data.x, rendererContract?.eulerSigns[0] ?? -1);
-    applyCurveRange(builder, refObject(builder.objects, module.y), data.y, rendererContract?.eulerSigns[1] ?? 1);
-    applyCurveRange(builder, refObject(builder.objects, module.z), data.z || data.curve, rendererContract?.eulerSigns[2] ?? -1);
+    axis(module.x, data.x, rendererContract?.eulerSigns[0] ?? -1);
+    axis(module.y, data.y, rendererContract?.eulerSigns[1] ?? 1);
+    axis(module.z, data.z || data.curve, rendererContract?.eulerSigns[2] ?? -1);
   } else {
-    applyCurveRange(builder, refObject(builder.objects, module.x), data.x, -1);
-    applyCurveRange(builder, refObject(builder.objects, module.y), data.y);
-    applyCurveRange(builder, refObject(builder.objects, module.z), data.curve || data.z, rendererContract?.eulerSigns[2] ?? 1);
+    axis(module.x, data.x, -1);
+    axis(module.y, data.y);
+    axis(module.z, data.curve || data.z, rendererContract?.eulerSigns[2] ?? 1);
   }
   return true;
 }
@@ -1359,17 +1385,7 @@ function applyUnityParticleDataToCocos(builder, particleId, data = {}, rendererD
   }
 
   count(applyCurveByRef(builder, particle, 'startSpeed', initial.startSpeed));
-  const unityStartRotation3D = bool(initial.rotation3D, false);
-  particle.startRotation3D = forceMeshCommon3D || unityStartRotation3D;
-  if (particle.startRotation3D) {
-    count(applyCurveByRef(builder, particle, 'startRotationX', unityStartRotation3D ? initial.startRotationX : constantCurveRange(0), particleRendererContract(data, rendererData).eulerSigns[0]));
-    // Mesh coordinates are reflected in Z. Axial rotations consequently map
-    // (-X,-Y,+Z), unlike the camera-facing billboard convention.
-    count(applyCurveByRef(builder, particle, 'startRotationY', unityStartRotation3D ? initial.startRotationY : constantCurveRange(0), forceMeshCommon3D ? -1 : 1));
-    count(applyCurveByRef(builder, particle, 'startRotationZ', initial.startRotation || constantCurveRange(0), forceMeshCommon3D ? 1 : -1));
-  } else {
-    count(applyCurveByRef(builder, particle, 'startRotationZ', initial.startRotation, -1));
-  }
+  applied+=applyParticleStartRotation(builder,particle,data,rendererData);
   count(applyCurveByRef(builder, particle, 'gravityModifier', gravityData));
 
   count(applyShapeModule(builder, particle, data.ShapeModule));
@@ -1381,6 +1397,10 @@ function applyUnityParticleDataToCocos(builder, particleId, data = {}, rendererD
   count(applyNoiseModule(builder, particle, data.NoiseModule));
   count(applyVelocityModule(builder, particle, velocityData));
   count(applyForceModule(builder, particle, forceData));
+  let unityForceContract;
+  try{unityForceContract=require('./particle-random-force-contract.cjs').randomForceContract(data);}
+  catch(error){unityForceContract={unsupported:error.message};}
+  Object.defineProperty(particle,'unityForceContract',{value:unityForceContract,configurable:true});
   count(applyLimitVelocityModule(builder, particle, data.ClampVelocityModule));
   count(applyTrailModule(builder, particle, data.TrailModule));
   count(applyRenderer(builder, particle, rendererData));
@@ -1388,8 +1408,12 @@ function applyUnityParticleDataToCocos(builder, particleId, data = {}, rendererD
   const targetRenderer = refObject(builder.objects, particle.renderer);
   if (targetRenderer) targetRenderer._alignSpace = rendererContract.cocosAlignment;
   Object.defineProperty(particle, 'unityRendererContract', { value: rendererContract, configurable: true });
+  Object.defineProperty(particle, 'unityParticleScalingMode', { value: Number(data.scalingMode ?? 0), configurable: true });
   Object.defineProperty(particle, 'unityOrbitContract', { value: particleOrbitContract(data), configurable: true });
   Object.defineProperty(particle, 'unityNoiseContract', { value: particleNoiseContract(data), configurable: true });
+  Object.defineProperty(particle, 'unityInitialStateContract', { value: initialStateContract(data), configurable: true });
+  Object.defineProperty(particle, 'unityEdgeShapeContract', { value: edgeShapeContract(data), configurable: true });
+  Object.defineProperty(particle, 'unityStartRotationContract', { value: startRotationContract(data), configurable: true });
   Object.defineProperty(particle, 'unityLimitVelocityContract', { value: particleLimitVelocityContract(data), configurable: true });
   Object.defineProperty(particle, 'unityCollisionContract', { value: particleCollisionContract(data), configurable: true });
   Object.defineProperty(particle, 'unityCustomDataContract', { value: particleCustomDataContract(data, rendererData || {}), configurable: true });
@@ -1415,6 +1439,8 @@ function restoreOrbitalSourceModules(builder, particleId, data) {
 }
 
 module.exports = {
+  applyRotationModule,
+  applyParticleStartRotation,
   applyTrailModule,
   restoreOrbitalSourceModules,
   applyUnityParticleDataToCocos,

@@ -1,7 +1,7 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),ts=require('typescript');
 const m={exports:{}};
-new Function('exports','module',ts.transpileModule(fs.readFileSync(path.join(__dirname,'runtime/UnityParticleBirthState.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText)(m.exports,m);
+new Function('exports','module','require',ts.transpileModule(fs.readFileSync(path.join(__dirname,'runtime/UnityParticleBirthState.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText)(m.exports,m,()=>({Mat4:class {}}));
 const {installUnityParticleBirthState}=m.exports;
 test('late sub-emitter births initialize appearance before render, without stepping simulation',()=>{
   const calls=[];
@@ -22,6 +22,13 @@ test('late sub-emitter births initialize appearance before render, without stepp
   calls.length=0;system.processor.setNewParticle({});assert.deepEqual(calls,['born']);
 });
 const {attachBirthStateRuntime}=require('./particle-birth-state-binding');
+test('Local and Shape velocity or force scaling cannot silently inherit Hierarchy acceptance',()=>{
+ for(const mode of [0,1,2])for(const enabled of [true,false]){
+  const issues=[],objects=[{_name:'scaled'},{__type__:'cc.ParticleSystem',node:{__id__:0},unityParticleScalingMode:mode,_velocityOvertimeModule:{__id__:2}},{_enable:enabled}];
+  attachBirthStateRuntime({objects,cocosDb:{findScriptClass:()=>({classId:'registered'})},addComponent(){}},{high:code=>issues.push(code)},{dryRun:true,cocosRoot:__dirname});
+  assert.deepEqual(issues,mode!==0&&enabled?['PARTICLE_MODULE_SCALE_ADAPTER_REQUIRED']:[]);
+ }
+});
 test('staging preserves unchanged bytes and mtime and never invents AssetDB metadata',()=>{
   const base=path.resolve(__dirname,'../../.ai/birth-state-tests');fs.mkdirSync(base,{recursive:true});
   const root=fs.mkdtempSync(path.join(base,'project-'));

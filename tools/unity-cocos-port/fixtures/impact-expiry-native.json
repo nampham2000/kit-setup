@@ -1,0 +1,93 @@
+{
+  "unityVersion": "6000.3.1f1",
+  "producerCommit": "fb3f82c",
+  "fixedDeltaTime": 0.019999992102384567,
+  "step": 0.01666666753590107,
+  "lifetime": 3,
+  "collisions": [
+    {
+      "fixedTime": 0.019999992102384567,
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "collider": "Plane"
+    },
+    {
+      "fixedTime": 0.119999960064888,
+      "position": [
+        -2.4000003337860107,
+        0,
+        3.5762786865234375e-7
+      ],
+      "collider": "Plane"
+    },
+    {
+      "fixedTime": 0.6199997663497925,
+      "position": [
+        -14.399994850158691,
+        0,
+        0.0000021457672119140625
+      ],
+      "collider": "Cube (1)"
+    }
+  ],
+  "frames": [
+    {
+      "frame": 0,
+      "time": 0.01666666753590107,
+      "impactCount": 0
+    },
+    {
+      "frame": 6,
+      "time": 0.11666666716337204,
+      "impactCount": 1
+    },
+    {
+      "frame": 18,
+      "time": 0.3166666626930237,
+      "impactCount": 2
+    },
+    {
+      "frame": 36,
+      "time": 0.6166666746139526,
+      "impactCount": 2
+    },
+    {
+      "frame": 60,
+      "time": 1.0166666507720947,
+      "impactCount": 3
+    },
+    {
+      "frame": 120,
+      "time": 2.0166666507720947,
+      "impactCount": 3
+    },
+    {
+      "frame": 180,
+      "time": 3.0166666507720947,
+      "impactCount": 3
+    },
+    {
+      "frame": 181,
+      "time": 3.0333333015441895,
+      "impactCount": 2
+    },
+    {
+      "frame": 187,
+      "time": 3.133333444595337,
+      "impactCount": 1
+    },
+    {
+      "frame": 217,
+      "time": 3.633333444595337,
+      "impactCount": 0
+    },
+    {
+      "frame": 218,
+      "time": 3.6500000953674316,
+      "impactCount": 0
+    }
+  ]
+}

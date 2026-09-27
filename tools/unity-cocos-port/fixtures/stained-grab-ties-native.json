@@ -1,0 +1,3272 @@
+{
+  "unityVersion": "6000.3.1f1",
+  "rows": [
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Additive",
+      "additiveOrderOffset": -1,
+      "reverseCreation": false,
+      "reverseMaterials": false,
+      "reverseSiblings": false,
+      "redRendererId": -10608,
+      "greenRendererId": -10616,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Additive",
+      "additiveOrderOffset": -1,
+      "reverseCreation": false,
+      "reverseMaterials": false,
+      "reverseSiblings": true,
+      "redRendererId": -10630,
+      "greenRendererId": -10638,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Additive",
+      "additiveOrderOffset": -1,
+      "reverseCreation": false,
+      "reverseMaterials": true,
+      "reverseSiblings": false,
+      "redRendererId": -10650,
+      "greenRendererId": -10658,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Additive",
+      "additiveOrderOffset": -1,
+      "reverseCreation": false,
+      "reverseMaterials": true,
+      "reverseSiblings": true,
+      "redRendererId": -10670,
+      "greenRendererId": -10678,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Additive",
+      "additiveOrderOffset": -1,
+      "reverseCreation": true,
+      "reverseMaterials": false,
+      "reverseSiblings": false,
+      "redRendererId": -10698,
+      "greenRendererId": -10690,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Additive",
+      "additiveOrderOffset": -1,
+      "reverseCreation": true,
+      "reverseMaterials": false,
+      "reverseSiblings": true,
+      "redRendererId": -10718,
+      "greenRendererId": -10710,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Additive",
+      "additiveOrderOffset": -1,
+      "reverseCreation": true,
+      "reverseMaterials": true,
+      "reverseSiblings": false,
+      "redRendererId": -10738,
+      "greenRendererId": -10730,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Additive",
+      "additiveOrderOffset": -1,
+      "reverseCreation": true,
+      "reverseMaterials": true,
+      "reverseSiblings": true,
+      "redRendererId": -10758,
+      "greenRendererId": -10750,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Additive",
+      "additiveOrderOffset": 0,
+      "reverseCreation": false,
+      "reverseMaterials": false,
+      "reverseSiblings": false,
+      "redRendererId": -10770,
+      "greenRendererId": -10778,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Additive",
+      "additiveOrderOffset": 0,
+      "reverseCreation": false,
+      "reverseMaterials": false,
+      "reverseSiblings": true,
+      "redRendererId": -10790,
+      "greenRendererId": -10798,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Additive",
+      "additiveOrderOffset": 0,
+      "reverseCreation": false,
+      "reverseMaterials": true,
+      "reverseSiblings": false,
+      "redRendererId": -10810,
+      "greenRendererId": -10818,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Additive",
+      "additiveOrderOffset": 0,
+      "reverseCreation": false,
+      "reverseMaterials": true,
+      "reverseSiblings": true,
+      "redRendererId": -10830,
+      "greenRendererId": -10838,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Additive",
+      "additiveOrderOffset": 0,
+      "reverseCreation": true,
+      "reverseMaterials": false,
+      "reverseSiblings": false,
+      "redRendererId": -10858,
+      "greenRendererId": -10850,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Additive",
+      "additiveOrderOffset": 0,
+      "reverseCreation": true,
+      "reverseMaterials": false,
+      "reverseSiblings": true,
+      "redRendererId": -10878,
+      "greenRendererId": -10870,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Additive",
+      "additiveOrderOffset": 0,
+      "reverseCreation": true,
+      "reverseMaterials": true,
+      "reverseSiblings": false,
+      "redRendererId": -10898,
+      "greenRendererId": -10890,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Additive",
+      "additiveOrderOffset": 0,
+      "reverseCreation": true,
+      "reverseMaterials": true,
+      "reverseSiblings": true,
+      "redRendererId": -10918,
+      "greenRendererId": -10910,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Additive",
+      "additiveOrderOffset": 1,
+      "reverseCreation": false,
+      "reverseMaterials": false,
+      "reverseSiblings": false,
+      "redRendererId": -10930,
+      "greenRendererId": -10938,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Additive",
+      "additiveOrderOffset": 1,
+      "reverseCreation": false,
+      "reverseMaterials": false,
+      "reverseSiblings": true,
+      "redRendererId": -10950,
+      "greenRendererId": -10958,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Additive",
+      "additiveOrderOffset": 1,
+      "reverseCreation": false,
+      "reverseMaterials": true,
+      "reverseSiblings": false,
+      "redRendererId": -10970,
+      "greenRendererId": -10978,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Additive",
+      "additiveOrderOffset": 1,
+      "reverseCreation": false,
+      "reverseMaterials": true,
+      "reverseSiblings": true,
+      "redRendererId": -10990,
+      "greenRendererId": -10998,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Additive",
+      "additiveOrderOffset": 1,
+      "reverseCreation": true,
+      "reverseMaterials": false,
+      "reverseSiblings": false,
+      "redRendererId": -11018,
+      "greenRendererId": -11010,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Additive",
+      "additiveOrderOffset": 1,
+      "reverseCreation": true,
+      "reverseMaterials": false,
+      "reverseSiblings": true,
+      "redRendererId": -11038,
+      "greenRendererId": -11030,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Additive",
+      "additiveOrderOffset": 1,
+      "reverseCreation": true,
+      "reverseMaterials": true,
+      "reverseSiblings": false,
+      "redRendererId": -11058,
+      "greenRendererId": -11050,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Additive",
+      "additiveOrderOffset": 1,
+      "reverseCreation": true,
+      "reverseMaterials": true,
+      "reverseSiblings": true,
+      "redRendererId": -11078,
+      "greenRendererId": -11070,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended",
+      "additiveOrderOffset": -1,
+      "reverseCreation": false,
+      "reverseMaterials": false,
+      "reverseSiblings": false,
+      "redRendererId": -11090,
+      "greenRendererId": -11098,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended",
+      "additiveOrderOffset": -1,
+      "reverseCreation": false,
+      "reverseMaterials": false,
+      "reverseSiblings": true,
+      "redRendererId": -11110,
+      "greenRendererId": -11118,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended",
+      "additiveOrderOffset": -1,
+      "reverseCreation": false,
+      "reverseMaterials": true,
+      "reverseSiblings": false,
+      "redRendererId": -11130,
+      "greenRendererId": -11138,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended",
+      "additiveOrderOffset": -1,
+      "reverseCreation": false,
+      "reverseMaterials": true,
+      "reverseSiblings": true,
+      "redRendererId": -11150,
+      "greenRendererId": -11158,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended",
+      "additiveOrderOffset": -1,
+      "reverseCreation": true,
+      "reverseMaterials": false,
+      "reverseSiblings": false,
+      "redRendererId": -11178,
+      "greenRendererId": -11170,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended",
+      "additiveOrderOffset": -1,
+      "reverseCreation": true,
+      "reverseMaterials": false,
+      "reverseSiblings": true,
+      "redRendererId": -11198,
+      "greenRendererId": -11190,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended",
+      "additiveOrderOffset": -1,
+      "reverseCreation": true,
+      "reverseMaterials": true,
+      "reverseSiblings": false,
+      "redRendererId": -11218,
+      "greenRendererId": -11210,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended",
+      "additiveOrderOffset": -1,
+      "reverseCreation": true,
+      "reverseMaterials": true,
+      "reverseSiblings": true,
+      "redRendererId": -11238,
+      "greenRendererId": -11230,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended",
+      "additiveOrderOffset": 0,
+      "reverseCreation": false,
+      "reverseMaterials": false,
+      "reverseSiblings": false,
+      "redRendererId": -11250,
+      "greenRendererId": -11258,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended",
+      "additiveOrderOffset": 0,
+      "reverseCreation": false,
+      "reverseMaterials": false,
+      "reverseSiblings": true,
+      "redRendererId": -11270,
+      "greenRendererId": -11278,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended",
+      "additiveOrderOffset": 0,
+      "reverseCreation": false,
+      "reverseMaterials": true,
+      "reverseSiblings": false,
+      "redRendererId": -11290,
+      "greenRendererId": -11298,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended",
+      "additiveOrderOffset": 0,
+      "reverseCreation": false,
+      "reverseMaterials": true,
+      "reverseSiblings": true,
+      "redRendererId": -11310,
+      "greenRendererId": -11318,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended",
+      "additiveOrderOffset": 0,
+      "reverseCreation": true,
+      "reverseMaterials": false,
+      "reverseSiblings": false,
+      "redRendererId": -11338,
+      "greenRendererId": -11330,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended",
+      "additiveOrderOffset": 0,
+      "reverseCreation": true,
+      "reverseMaterials": false,
+      "reverseSiblings": true,
+      "redRendererId": -11358,
+      "greenRendererId": -11350,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended",
+      "additiveOrderOffset": 0,
+      "reverseCreation": true,
+      "reverseMaterials": true,
+      "reverseSiblings": false,
+      "redRendererId": -11378,
+      "greenRendererId": -11370,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended",
+      "additiveOrderOffset": 0,
+      "reverseCreation": true,
+      "reverseMaterials": true,
+      "reverseSiblings": true,
+      "redRendererId": -11398,
+      "greenRendererId": -11390,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended",
+      "additiveOrderOffset": 1,
+      "reverseCreation": false,
+      "reverseMaterials": false,
+      "reverseSiblings": false,
+      "redRendererId": -11410,
+      "greenRendererId": -11418,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended",
+      "additiveOrderOffset": 1,
+      "reverseCreation": false,
+      "reverseMaterials": false,
+      "reverseSiblings": true,
+      "redRendererId": -11430,
+      "greenRendererId": -11438,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended",
+      "additiveOrderOffset": 1,
+      "reverseCreation": false,
+      "reverseMaterials": true,
+      "reverseSiblings": false,
+      "redRendererId": -11450,
+      "greenRendererId": -11458,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended",
+      "additiveOrderOffset": 1,
+      "reverseCreation": false,
+      "reverseMaterials": true,
+      "reverseSiblings": true,
+      "redRendererId": -11470,
+      "greenRendererId": -11478,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended",
+      "additiveOrderOffset": 1,
+      "reverseCreation": true,
+      "reverseMaterials": false,
+      "reverseSiblings": false,
+      "redRendererId": -11498,
+      "greenRendererId": -11490,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended",
+      "additiveOrderOffset": 1,
+      "reverseCreation": true,
+      "reverseMaterials": false,
+      "reverseSiblings": true,
+      "redRendererId": -11518,
+      "greenRendererId": -11510,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended",
+      "additiveOrderOffset": 1,
+      "reverseCreation": true,
+      "reverseMaterials": true,
+      "reverseSiblings": false,
+      "redRendererId": -11538,
+      "greenRendererId": -11530,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended",
+      "additiveOrderOffset": 1,
+      "reverseCreation": true,
+      "reverseMaterials": true,
+      "reverseSiblings": true,
+      "redRendererId": -11558,
+      "greenRendererId": -11550,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Additive (Soft)",
+      "additiveOrderOffset": -1,
+      "reverseCreation": false,
+      "reverseMaterials": false,
+      "reverseSiblings": false,
+      "redRendererId": -11570,
+      "greenRendererId": -11578,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Additive (Soft)",
+      "additiveOrderOffset": -1,
+      "reverseCreation": false,
+      "reverseMaterials": false,
+      "reverseSiblings": true,
+      "redRendererId": -11590,
+      "greenRendererId": -11598,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Additive (Soft)",
+      "additiveOrderOffset": -1,
+      "reverseCreation": false,
+      "reverseMaterials": true,
+      "reverseSiblings": false,
+      "redRendererId": -11610,
+      "greenRendererId": -11618,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Additive (Soft)",
+      "additiveOrderOffset": -1,
+      "reverseCreation": false,
+      "reverseMaterials": true,
+      "reverseSiblings": true,
+      "redRendererId": -11630,
+      "greenRendererId": -11638,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Additive (Soft)",
+      "additiveOrderOffset": -1,
+      "reverseCreation": true,
+      "reverseMaterials": false,
+      "reverseSiblings": false,
+      "redRendererId": -11658,
+      "greenRendererId": -11650,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Additive (Soft)",
+      "additiveOrderOffset": -1,
+      "reverseCreation": true,
+      "reverseMaterials": false,
+      "reverseSiblings": true,
+      "redRendererId": -11678,
+      "greenRendererId": -11670,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Additive (Soft)",
+      "additiveOrderOffset": -1,
+      "reverseCreation": true,
+      "reverseMaterials": true,
+      "reverseSiblings": false,
+      "redRendererId": -11698,
+      "greenRendererId": -11690,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Additive (Soft)",
+      "additiveOrderOffset": -1,
+      "reverseCreation": true,
+      "reverseMaterials": true,
+      "reverseSiblings": true,
+      "redRendererId": -11718,
+      "greenRendererId": -11710,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Additive (Soft)",
+      "additiveOrderOffset": 0,
+      "reverseCreation": false,
+      "reverseMaterials": false,
+      "reverseSiblings": false,
+      "redRendererId": -11730,
+      "greenRendererId": -11738,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Additive (Soft)",
+      "additiveOrderOffset": 0,
+      "reverseCreation": false,
+      "reverseMaterials": false,
+      "reverseSiblings": true,
+      "redRendererId": -11750,
+      "greenRendererId": -11758,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Additive (Soft)",
+      "additiveOrderOffset": 0,
+      "reverseCreation": false,
+      "reverseMaterials": true,
+      "reverseSiblings": false,
+      "redRendererId": -11770,
+      "greenRendererId": -11778,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Additive (Soft)",
+      "additiveOrderOffset": 0,
+      "reverseCreation": false,
+      "reverseMaterials": true,
+      "reverseSiblings": true,
+      "redRendererId": -11790,
+      "greenRendererId": -11798,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Additive (Soft)",
+      "additiveOrderOffset": 0,
+      "reverseCreation": true,
+      "reverseMaterials": false,
+      "reverseSiblings": false,
+      "redRendererId": -11818,
+      "greenRendererId": -11810,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Additive (Soft)",
+      "additiveOrderOffset": 0,
+      "reverseCreation": true,
+      "reverseMaterials": false,
+      "reverseSiblings": true,
+      "redRendererId": -11838,
+      "greenRendererId": -11830,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Additive (Soft)",
+      "additiveOrderOffset": 0,
+      "reverseCreation": true,
+      "reverseMaterials": true,
+      "reverseSiblings": false,
+      "redRendererId": -11858,
+      "greenRendererId": -11850,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Additive (Soft)",
+      "additiveOrderOffset": 0,
+      "reverseCreation": true,
+      "reverseMaterials": true,
+      "reverseSiblings": true,
+      "redRendererId": -11878,
+      "greenRendererId": -11870,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Additive (Soft)",
+      "additiveOrderOffset": 1,
+      "reverseCreation": false,
+      "reverseMaterials": false,
+      "reverseSiblings": false,
+      "redRendererId": -11890,
+      "greenRendererId": -11898,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Additive (Soft)",
+      "additiveOrderOffset": 1,
+      "reverseCreation": false,
+      "reverseMaterials": false,
+      "reverseSiblings": true,
+      "redRendererId": -11910,
+      "greenRendererId": -11918,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Additive (Soft)",
+      "additiveOrderOffset": 1,
+      "reverseCreation": false,
+      "reverseMaterials": true,
+      "reverseSiblings": false,
+      "redRendererId": -11930,
+      "greenRendererId": -11938,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Additive (Soft)",
+      "additiveOrderOffset": 1,
+      "reverseCreation": false,
+      "reverseMaterials": true,
+      "reverseSiblings": true,
+      "redRendererId": -11950,
+      "greenRendererId": -11958,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Additive (Soft)",
+      "additiveOrderOffset": 1,
+      "reverseCreation": true,
+      "reverseMaterials": false,
+      "reverseSiblings": false,
+      "redRendererId": -11978,
+      "greenRendererId": -11970,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Additive (Soft)",
+      "additiveOrderOffset": 1,
+      "reverseCreation": true,
+      "reverseMaterials": false,
+      "reverseSiblings": true,
+      "redRendererId": -11998,
+      "greenRendererId": -11990,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Additive (Soft)",
+      "additiveOrderOffset": 1,
+      "reverseCreation": true,
+      "reverseMaterials": true,
+      "reverseSiblings": false,
+      "redRendererId": -12018,
+      "greenRendererId": -12010,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Additive (Soft)",
+      "additiveOrderOffset": 1,
+      "reverseCreation": true,
+      "reverseMaterials": true,
+      "reverseSiblings": true,
+      "redRendererId": -12038,
+      "greenRendererId": -12030,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended Premultiply",
+      "additiveOrderOffset": -1,
+      "reverseCreation": false,
+      "reverseMaterials": false,
+      "reverseSiblings": false,
+      "redRendererId": -12050,
+      "greenRendererId": -12058,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended Premultiply",
+      "additiveOrderOffset": -1,
+      "reverseCreation": false,
+      "reverseMaterials": false,
+      "reverseSiblings": true,
+      "redRendererId": -12070,
+      "greenRendererId": -12078,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended Premultiply",
+      "additiveOrderOffset": -1,
+      "reverseCreation": false,
+      "reverseMaterials": true,
+      "reverseSiblings": false,
+      "redRendererId": -12090,
+      "greenRendererId": -12098,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended Premultiply",
+      "additiveOrderOffset": -1,
+      "reverseCreation": false,
+      "reverseMaterials": true,
+      "reverseSiblings": true,
+      "redRendererId": -12110,
+      "greenRendererId": -12118,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended Premultiply",
+      "additiveOrderOffset": -1,
+      "reverseCreation": true,
+      "reverseMaterials": false,
+      "reverseSiblings": false,
+      "redRendererId": -12138,
+      "greenRendererId": -12130,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended Premultiply",
+      "additiveOrderOffset": -1,
+      "reverseCreation": true,
+      "reverseMaterials": false,
+      "reverseSiblings": true,
+      "redRendererId": -12158,
+      "greenRendererId": -12150,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended Premultiply",
+      "additiveOrderOffset": -1,
+      "reverseCreation": true,
+      "reverseMaterials": true,
+      "reverseSiblings": false,
+      "redRendererId": -12178,
+      "greenRendererId": -12170,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended Premultiply",
+      "additiveOrderOffset": -1,
+      "reverseCreation": true,
+      "reverseMaterials": true,
+      "reverseSiblings": true,
+      "redRendererId": -12198,
+      "greenRendererId": -12190,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended Premultiply",
+      "additiveOrderOffset": 0,
+      "reverseCreation": false,
+      "reverseMaterials": false,
+      "reverseSiblings": false,
+      "redRendererId": -12210,
+      "greenRendererId": -12218,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended Premultiply",
+      "additiveOrderOffset": 0,
+      "reverseCreation": false,
+      "reverseMaterials": false,
+      "reverseSiblings": true,
+      "redRendererId": -12230,
+      "greenRendererId": -12238,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended Premultiply",
+      "additiveOrderOffset": 0,
+      "reverseCreation": false,
+      "reverseMaterials": true,
+      "reverseSiblings": false,
+      "redRendererId": -12250,
+      "greenRendererId": -12258,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended Premultiply",
+      "additiveOrderOffset": 0,
+      "reverseCreation": false,
+      "reverseMaterials": true,
+      "reverseSiblings": true,
+      "redRendererId": -12270,
+      "greenRendererId": -12278,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended Premultiply",
+      "additiveOrderOffset": 0,
+      "reverseCreation": true,
+      "reverseMaterials": false,
+      "reverseSiblings": false,
+      "redRendererId": -12298,
+      "greenRendererId": -12290,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended Premultiply",
+      "additiveOrderOffset": 0,
+      "reverseCreation": true,
+      "reverseMaterials": false,
+      "reverseSiblings": true,
+      "redRendererId": -12318,
+      "greenRendererId": -12310,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended Premultiply",
+      "additiveOrderOffset": 0,
+      "reverseCreation": true,
+      "reverseMaterials": true,
+      "reverseSiblings": false,
+      "redRendererId": -12338,
+      "greenRendererId": -12330,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended Premultiply",
+      "additiveOrderOffset": 0,
+      "reverseCreation": true,
+      "reverseMaterials": true,
+      "reverseSiblings": true,
+      "redRendererId": -12358,
+      "greenRendererId": -12350,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended Premultiply",
+      "additiveOrderOffset": 1,
+      "reverseCreation": false,
+      "reverseMaterials": false,
+      "reverseSiblings": false,
+      "redRendererId": -12370,
+      "greenRendererId": -12378,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended Premultiply",
+      "additiveOrderOffset": 1,
+      "reverseCreation": false,
+      "reverseMaterials": false,
+      "reverseSiblings": true,
+      "redRendererId": -12390,
+      "greenRendererId": -12398,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended Premultiply",
+      "additiveOrderOffset": 1,
+      "reverseCreation": false,
+      "reverseMaterials": true,
+      "reverseSiblings": false,
+      "redRendererId": -12410,
+      "greenRendererId": -12418,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended Premultiply",
+      "additiveOrderOffset": 1,
+      "reverseCreation": false,
+      "reverseMaterials": true,
+      "reverseSiblings": true,
+      "redRendererId": -12430,
+      "greenRendererId": -12438,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended Premultiply",
+      "additiveOrderOffset": 1,
+      "reverseCreation": true,
+      "reverseMaterials": false,
+      "reverseSiblings": false,
+      "redRendererId": -12458,
+      "greenRendererId": -12450,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended Premultiply",
+      "additiveOrderOffset": 1,
+      "reverseCreation": true,
+      "reverseMaterials": false,
+      "reverseSiblings": true,
+      "redRendererId": -12478,
+      "greenRendererId": -12470,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended Premultiply",
+      "additiveOrderOffset": 1,
+      "reverseCreation": true,
+      "reverseMaterials": true,
+      "reverseSiblings": false,
+      "redRendererId": -12498,
+      "greenRendererId": -12490,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": false,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended Premultiply",
+      "additiveOrderOffset": 1,
+      "reverseCreation": true,
+      "reverseMaterials": true,
+      "reverseSiblings": true,
+      "redRendererId": -12518,
+      "greenRendererId": -12510,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Additive",
+      "additiveOrderOffset": -1,
+      "reverseCreation": false,
+      "reverseMaterials": false,
+      "reverseSiblings": false,
+      "redRendererId": -12530,
+      "greenRendererId": -12538,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Additive",
+      "additiveOrderOffset": -1,
+      "reverseCreation": false,
+      "reverseMaterials": false,
+      "reverseSiblings": true,
+      "redRendererId": -12550,
+      "greenRendererId": -12558,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Additive",
+      "additiveOrderOffset": -1,
+      "reverseCreation": false,
+      "reverseMaterials": true,
+      "reverseSiblings": false,
+      "redRendererId": -12570,
+      "greenRendererId": -12578,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Additive",
+      "additiveOrderOffset": -1,
+      "reverseCreation": false,
+      "reverseMaterials": true,
+      "reverseSiblings": true,
+      "redRendererId": -12590,
+      "greenRendererId": -12598,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Additive",
+      "additiveOrderOffset": -1,
+      "reverseCreation": true,
+      "reverseMaterials": false,
+      "reverseSiblings": false,
+      "redRendererId": -12618,
+      "greenRendererId": -12610,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Additive",
+      "additiveOrderOffset": -1,
+      "reverseCreation": true,
+      "reverseMaterials": false,
+      "reverseSiblings": true,
+      "redRendererId": -12638,
+      "greenRendererId": -12630,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Additive",
+      "additiveOrderOffset": -1,
+      "reverseCreation": true,
+      "reverseMaterials": true,
+      "reverseSiblings": false,
+      "redRendererId": -12658,
+      "greenRendererId": -12650,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Additive",
+      "additiveOrderOffset": -1,
+      "reverseCreation": true,
+      "reverseMaterials": true,
+      "reverseSiblings": true,
+      "redRendererId": -12678,
+      "greenRendererId": -12670,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Additive",
+      "additiveOrderOffset": 0,
+      "reverseCreation": false,
+      "reverseMaterials": false,
+      "reverseSiblings": false,
+      "redRendererId": -12690,
+      "greenRendererId": -12698,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Additive",
+      "additiveOrderOffset": 0,
+      "reverseCreation": false,
+      "reverseMaterials": false,
+      "reverseSiblings": true,
+      "redRendererId": -12710,
+      "greenRendererId": -12718,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Additive",
+      "additiveOrderOffset": 0,
+      "reverseCreation": false,
+      "reverseMaterials": true,
+      "reverseSiblings": false,
+      "redRendererId": -12730,
+      "greenRendererId": -12738,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Additive",
+      "additiveOrderOffset": 0,
+      "reverseCreation": false,
+      "reverseMaterials": true,
+      "reverseSiblings": true,
+      "redRendererId": -12750,
+      "greenRendererId": -12758,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Additive",
+      "additiveOrderOffset": 0,
+      "reverseCreation": true,
+      "reverseMaterials": false,
+      "reverseSiblings": false,
+      "redRendererId": -12778,
+      "greenRendererId": -12770,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Additive",
+      "additiveOrderOffset": 0,
+      "reverseCreation": true,
+      "reverseMaterials": false,
+      "reverseSiblings": true,
+      "redRendererId": -12798,
+      "greenRendererId": -12790,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Additive",
+      "additiveOrderOffset": 0,
+      "reverseCreation": true,
+      "reverseMaterials": true,
+      "reverseSiblings": false,
+      "redRendererId": -12818,
+      "greenRendererId": -12810,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Additive",
+      "additiveOrderOffset": 0,
+      "reverseCreation": true,
+      "reverseMaterials": true,
+      "reverseSiblings": true,
+      "redRendererId": -12838,
+      "greenRendererId": -12830,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Additive",
+      "additiveOrderOffset": 1,
+      "reverseCreation": false,
+      "reverseMaterials": false,
+      "reverseSiblings": false,
+      "redRendererId": -12850,
+      "greenRendererId": -12858,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Additive",
+      "additiveOrderOffset": 1,
+      "reverseCreation": false,
+      "reverseMaterials": false,
+      "reverseSiblings": true,
+      "redRendererId": -12870,
+      "greenRendererId": -12878,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Additive",
+      "additiveOrderOffset": 1,
+      "reverseCreation": false,
+      "reverseMaterials": true,
+      "reverseSiblings": false,
+      "redRendererId": -12890,
+      "greenRendererId": -12898,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Additive",
+      "additiveOrderOffset": 1,
+      "reverseCreation": false,
+      "reverseMaterials": true,
+      "reverseSiblings": true,
+      "redRendererId": -12910,
+      "greenRendererId": -12918,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Additive",
+      "additiveOrderOffset": 1,
+      "reverseCreation": true,
+      "reverseMaterials": false,
+      "reverseSiblings": false,
+      "redRendererId": -12938,
+      "greenRendererId": -12930,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Additive",
+      "additiveOrderOffset": 1,
+      "reverseCreation": true,
+      "reverseMaterials": false,
+      "reverseSiblings": true,
+      "redRendererId": -12958,
+      "greenRendererId": -12950,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Additive",
+      "additiveOrderOffset": 1,
+      "reverseCreation": true,
+      "reverseMaterials": true,
+      "reverseSiblings": false,
+      "redRendererId": -12978,
+      "greenRendererId": -12970,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Additive",
+      "additiveOrderOffset": 1,
+      "reverseCreation": true,
+      "reverseMaterials": true,
+      "reverseSiblings": true,
+      "redRendererId": -12998,
+      "greenRendererId": -12990,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended",
+      "additiveOrderOffset": -1,
+      "reverseCreation": false,
+      "reverseMaterials": false,
+      "reverseSiblings": false,
+      "redRendererId": -13010,
+      "greenRendererId": -13018,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended",
+      "additiveOrderOffset": -1,
+      "reverseCreation": false,
+      "reverseMaterials": false,
+      "reverseSiblings": true,
+      "redRendererId": -13030,
+      "greenRendererId": -13038,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended",
+      "additiveOrderOffset": -1,
+      "reverseCreation": false,
+      "reverseMaterials": true,
+      "reverseSiblings": false,
+      "redRendererId": -13050,
+      "greenRendererId": -13058,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended",
+      "additiveOrderOffset": -1,
+      "reverseCreation": false,
+      "reverseMaterials": true,
+      "reverseSiblings": true,
+      "redRendererId": -13070,
+      "greenRendererId": -13078,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended",
+      "additiveOrderOffset": -1,
+      "reverseCreation": true,
+      "reverseMaterials": false,
+      "reverseSiblings": false,
+      "redRendererId": -13098,
+      "greenRendererId": -13090,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended",
+      "additiveOrderOffset": -1,
+      "reverseCreation": true,
+      "reverseMaterials": false,
+      "reverseSiblings": true,
+      "redRendererId": -13118,
+      "greenRendererId": -13110,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended",
+      "additiveOrderOffset": -1,
+      "reverseCreation": true,
+      "reverseMaterials": true,
+      "reverseSiblings": false,
+      "redRendererId": -13138,
+      "greenRendererId": -13130,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended",
+      "additiveOrderOffset": -1,
+      "reverseCreation": true,
+      "reverseMaterials": true,
+      "reverseSiblings": true,
+      "redRendererId": -13158,
+      "greenRendererId": -13150,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended",
+      "additiveOrderOffset": 0,
+      "reverseCreation": false,
+      "reverseMaterials": false,
+      "reverseSiblings": false,
+      "redRendererId": -13170,
+      "greenRendererId": -13178,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended",
+      "additiveOrderOffset": 0,
+      "reverseCreation": false,
+      "reverseMaterials": false,
+      "reverseSiblings": true,
+      "redRendererId": -13190,
+      "greenRendererId": -13198,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended",
+      "additiveOrderOffset": 0,
+      "reverseCreation": false,
+      "reverseMaterials": true,
+      "reverseSiblings": false,
+      "redRendererId": -13210,
+      "greenRendererId": -13218,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended",
+      "additiveOrderOffset": 0,
+      "reverseCreation": false,
+      "reverseMaterials": true,
+      "reverseSiblings": true,
+      "redRendererId": -13230,
+      "greenRendererId": -13238,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended",
+      "additiveOrderOffset": 0,
+      "reverseCreation": true,
+      "reverseMaterials": false,
+      "reverseSiblings": false,
+      "redRendererId": -13258,
+      "greenRendererId": -13250,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended",
+      "additiveOrderOffset": 0,
+      "reverseCreation": true,
+      "reverseMaterials": false,
+      "reverseSiblings": true,
+      "redRendererId": -13278,
+      "greenRendererId": -13270,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended",
+      "additiveOrderOffset": 0,
+      "reverseCreation": true,
+      "reverseMaterials": true,
+      "reverseSiblings": false,
+      "redRendererId": -13298,
+      "greenRendererId": -13290,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended",
+      "additiveOrderOffset": 0,
+      "reverseCreation": true,
+      "reverseMaterials": true,
+      "reverseSiblings": true,
+      "redRendererId": -13318,
+      "greenRendererId": -13310,
+      "rgb": [
+        0,
+        2,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended",
+      "additiveOrderOffset": 1,
+      "reverseCreation": false,
+      "reverseMaterials": false,
+      "reverseSiblings": false,
+      "redRendererId": -13330,
+      "greenRendererId": -13338,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended",
+      "additiveOrderOffset": 1,
+      "reverseCreation": false,
+      "reverseMaterials": false,
+      "reverseSiblings": true,
+      "redRendererId": -13350,
+      "greenRendererId": -13358,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended",
+      "additiveOrderOffset": 1,
+      "reverseCreation": false,
+      "reverseMaterials": true,
+      "reverseSiblings": false,
+      "redRendererId": -13370,
+      "greenRendererId": -13378,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended",
+      "additiveOrderOffset": 1,
+      "reverseCreation": false,
+      "reverseMaterials": true,
+      "reverseSiblings": true,
+      "redRendererId": -13390,
+      "greenRendererId": -13398,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended",
+      "additiveOrderOffset": 1,
+      "reverseCreation": true,
+      "reverseMaterials": false,
+      "reverseSiblings": false,
+      "redRendererId": -13418,
+      "greenRendererId": -13410,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended",
+      "additiveOrderOffset": 1,
+      "reverseCreation": true,
+      "reverseMaterials": false,
+      "reverseSiblings": true,
+      "redRendererId": -13438,
+      "greenRendererId": -13430,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended",
+      "additiveOrderOffset": 1,
+      "reverseCreation": true,
+      "reverseMaterials": true,
+      "reverseSiblings": false,
+      "redRendererId": -13458,
+      "greenRendererId": -13450,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended",
+      "additiveOrderOffset": 1,
+      "reverseCreation": true,
+      "reverseMaterials": true,
+      "reverseSiblings": true,
+      "redRendererId": -13478,
+      "greenRendererId": -13470,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Additive (Soft)",
+      "additiveOrderOffset": -1,
+      "reverseCreation": false,
+      "reverseMaterials": false,
+      "reverseSiblings": false,
+      "redRendererId": -13490,
+      "greenRendererId": -13498,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Additive (Soft)",
+      "additiveOrderOffset": -1,
+      "reverseCreation": false,
+      "reverseMaterials": false,
+      "reverseSiblings": true,
+      "redRendererId": -13510,
+      "greenRendererId": -13518,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Additive (Soft)",
+      "additiveOrderOffset": -1,
+      "reverseCreation": false,
+      "reverseMaterials": true,
+      "reverseSiblings": false,
+      "redRendererId": -13530,
+      "greenRendererId": -13538,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Additive (Soft)",
+      "additiveOrderOffset": -1,
+      "reverseCreation": false,
+      "reverseMaterials": true,
+      "reverseSiblings": true,
+      "redRendererId": -13550,
+      "greenRendererId": -13558,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Additive (Soft)",
+      "additiveOrderOffset": -1,
+      "reverseCreation": true,
+      "reverseMaterials": false,
+      "reverseSiblings": false,
+      "redRendererId": -13578,
+      "greenRendererId": -13570,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Additive (Soft)",
+      "additiveOrderOffset": -1,
+      "reverseCreation": true,
+      "reverseMaterials": false,
+      "reverseSiblings": true,
+      "redRendererId": -13598,
+      "greenRendererId": -13590,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Additive (Soft)",
+      "additiveOrderOffset": -1,
+      "reverseCreation": true,
+      "reverseMaterials": true,
+      "reverseSiblings": false,
+      "redRendererId": -13618,
+      "greenRendererId": -13610,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Additive (Soft)",
+      "additiveOrderOffset": -1,
+      "reverseCreation": true,
+      "reverseMaterials": true,
+      "reverseSiblings": true,
+      "redRendererId": -13638,
+      "greenRendererId": -13630,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Additive (Soft)",
+      "additiveOrderOffset": 0,
+      "reverseCreation": false,
+      "reverseMaterials": false,
+      "reverseSiblings": false,
+      "redRendererId": -13650,
+      "greenRendererId": -13658,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Additive (Soft)",
+      "additiveOrderOffset": 0,
+      "reverseCreation": false,
+      "reverseMaterials": false,
+      "reverseSiblings": true,
+      "redRendererId": -13670,
+      "greenRendererId": -13678,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Additive (Soft)",
+      "additiveOrderOffset": 0,
+      "reverseCreation": false,
+      "reverseMaterials": true,
+      "reverseSiblings": false,
+      "redRendererId": -13690,
+      "greenRendererId": -13698,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Additive (Soft)",
+      "additiveOrderOffset": 0,
+      "reverseCreation": false,
+      "reverseMaterials": true,
+      "reverseSiblings": true,
+      "redRendererId": -13710,
+      "greenRendererId": -13718,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Additive (Soft)",
+      "additiveOrderOffset": 0,
+      "reverseCreation": true,
+      "reverseMaterials": false,
+      "reverseSiblings": false,
+      "redRendererId": -13738,
+      "greenRendererId": -13730,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Additive (Soft)",
+      "additiveOrderOffset": 0,
+      "reverseCreation": true,
+      "reverseMaterials": false,
+      "reverseSiblings": true,
+      "redRendererId": -13758,
+      "greenRendererId": -13750,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Additive (Soft)",
+      "additiveOrderOffset": 0,
+      "reverseCreation": true,
+      "reverseMaterials": true,
+      "reverseSiblings": false,
+      "redRendererId": -13778,
+      "greenRendererId": -13770,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Additive (Soft)",
+      "additiveOrderOffset": 0,
+      "reverseCreation": true,
+      "reverseMaterials": true,
+      "reverseSiblings": true,
+      "redRendererId": -13798,
+      "greenRendererId": -13790,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Additive (Soft)",
+      "additiveOrderOffset": 1,
+      "reverseCreation": false,
+      "reverseMaterials": false,
+      "reverseSiblings": false,
+      "redRendererId": -13810,
+      "greenRendererId": -13818,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Additive (Soft)",
+      "additiveOrderOffset": 1,
+      "reverseCreation": false,
+      "reverseMaterials": false,
+      "reverseSiblings": true,
+      "redRendererId": -13830,
+      "greenRendererId": -13838,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Additive (Soft)",
+      "additiveOrderOffset": 1,
+      "reverseCreation": false,
+      "reverseMaterials": true,
+      "reverseSiblings": false,
+      "redRendererId": -13850,
+      "greenRendererId": -13858,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Additive (Soft)",
+      "additiveOrderOffset": 1,
+      "reverseCreation": false,
+      "reverseMaterials": true,
+      "reverseSiblings": true,
+      "redRendererId": -13870,
+      "greenRendererId": -13878,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Additive (Soft)",
+      "additiveOrderOffset": 1,
+      "reverseCreation": true,
+      "reverseMaterials": false,
+      "reverseSiblings": false,
+      "redRendererId": -13898,
+      "greenRendererId": -13890,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Additive (Soft)",
+      "additiveOrderOffset": 1,
+      "reverseCreation": true,
+      "reverseMaterials": false,
+      "reverseSiblings": true,
+      "redRendererId": -13918,
+      "greenRendererId": -13910,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Additive (Soft)",
+      "additiveOrderOffset": 1,
+      "reverseCreation": true,
+      "reverseMaterials": true,
+      "reverseSiblings": false,
+      "redRendererId": -13938,
+      "greenRendererId": -13930,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Additive (Soft)",
+      "additiveOrderOffset": 1,
+      "reverseCreation": true,
+      "reverseMaterials": true,
+      "reverseSiblings": true,
+      "redRendererId": -13958,
+      "greenRendererId": -13950,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended Premultiply",
+      "additiveOrderOffset": -1,
+      "reverseCreation": false,
+      "reverseMaterials": false,
+      "reverseSiblings": false,
+      "redRendererId": -13970,
+      "greenRendererId": -13978,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended Premultiply",
+      "additiveOrderOffset": -1,
+      "reverseCreation": false,
+      "reverseMaterials": false,
+      "reverseSiblings": true,
+      "redRendererId": -13990,
+      "greenRendererId": -13998,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended Premultiply",
+      "additiveOrderOffset": -1,
+      "reverseCreation": false,
+      "reverseMaterials": true,
+      "reverseSiblings": false,
+      "redRendererId": -14010,
+      "greenRendererId": -14018,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended Premultiply",
+      "additiveOrderOffset": -1,
+      "reverseCreation": false,
+      "reverseMaterials": true,
+      "reverseSiblings": true,
+      "redRendererId": -14030,
+      "greenRendererId": -14038,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended Premultiply",
+      "additiveOrderOffset": -1,
+      "reverseCreation": true,
+      "reverseMaterials": false,
+      "reverseSiblings": false,
+      "redRendererId": -14058,
+      "greenRendererId": -14050,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended Premultiply",
+      "additiveOrderOffset": -1,
+      "reverseCreation": true,
+      "reverseMaterials": false,
+      "reverseSiblings": true,
+      "redRendererId": -14078,
+      "greenRendererId": -14070,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended Premultiply",
+      "additiveOrderOffset": -1,
+      "reverseCreation": true,
+      "reverseMaterials": true,
+      "reverseSiblings": false,
+      "redRendererId": -14098,
+      "greenRendererId": -14090,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended Premultiply",
+      "additiveOrderOffset": -1,
+      "reverseCreation": true,
+      "reverseMaterials": true,
+      "reverseSiblings": true,
+      "redRendererId": -14118,
+      "greenRendererId": -14110,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended Premultiply",
+      "additiveOrderOffset": 0,
+      "reverseCreation": false,
+      "reverseMaterials": false,
+      "reverseSiblings": false,
+      "redRendererId": -14130,
+      "greenRendererId": -14138,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended Premultiply",
+      "additiveOrderOffset": 0,
+      "reverseCreation": false,
+      "reverseMaterials": false,
+      "reverseSiblings": true,
+      "redRendererId": -14150,
+      "greenRendererId": -14158,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended Premultiply",
+      "additiveOrderOffset": 0,
+      "reverseCreation": false,
+      "reverseMaterials": true,
+      "reverseSiblings": false,
+      "redRendererId": -14170,
+      "greenRendererId": -14178,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended Premultiply",
+      "additiveOrderOffset": 0,
+      "reverseCreation": false,
+      "reverseMaterials": true,
+      "reverseSiblings": true,
+      "redRendererId": -14190,
+      "greenRendererId": -14198,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended Premultiply",
+      "additiveOrderOffset": 0,
+      "reverseCreation": true,
+      "reverseMaterials": false,
+      "reverseSiblings": false,
+      "redRendererId": -14218,
+      "greenRendererId": -14210,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended Premultiply",
+      "additiveOrderOffset": 0,
+      "reverseCreation": true,
+      "reverseMaterials": false,
+      "reverseSiblings": true,
+      "redRendererId": -14238,
+      "greenRendererId": -14230,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended Premultiply",
+      "additiveOrderOffset": 0,
+      "reverseCreation": true,
+      "reverseMaterials": true,
+      "reverseSiblings": false,
+      "redRendererId": -14258,
+      "greenRendererId": -14250,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended Premultiply",
+      "additiveOrderOffset": 0,
+      "reverseCreation": true,
+      "reverseMaterials": true,
+      "reverseSiblings": true,
+      "redRendererId": -14278,
+      "greenRendererId": -14270,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended Premultiply",
+      "additiveOrderOffset": 1,
+      "reverseCreation": false,
+      "reverseMaterials": false,
+      "reverseSiblings": false,
+      "redRendererId": -14290,
+      "greenRendererId": -14298,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended Premultiply",
+      "additiveOrderOffset": 1,
+      "reverseCreation": false,
+      "reverseMaterials": false,
+      "reverseSiblings": true,
+      "redRendererId": -14310,
+      "greenRendererId": -14318,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended Premultiply",
+      "additiveOrderOffset": 1,
+      "reverseCreation": false,
+      "reverseMaterials": true,
+      "reverseSiblings": false,
+      "redRendererId": -14330,
+      "greenRendererId": -14338,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended Premultiply",
+      "additiveOrderOffset": 1,
+      "reverseCreation": false,
+      "reverseMaterials": true,
+      "reverseSiblings": true,
+      "redRendererId": -14350,
+      "greenRendererId": -14358,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended Premultiply",
+      "additiveOrderOffset": 1,
+      "reverseCreation": true,
+      "reverseMaterials": false,
+      "reverseSiblings": false,
+      "redRendererId": -14378,
+      "greenRendererId": -14370,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended Premultiply",
+      "additiveOrderOffset": 1,
+      "reverseCreation": true,
+      "reverseMaterials": false,
+      "reverseSiblings": true,
+      "redRendererId": -14398,
+      "greenRendererId": -14390,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended Premultiply",
+      "additiveOrderOffset": 1,
+      "reverseCreation": true,
+      "reverseMaterials": true,
+      "reverseSiblings": false,
+      "redRendererId": -14418,
+      "greenRendererId": -14410,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    },
+    {
+      "perspective": true,
+      "particleShader": "Legacy Shaders/Particles/Alpha Blended Premultiply",
+      "additiveOrderOffset": 1,
+      "reverseCreation": true,
+      "reverseMaterials": true,
+      "reverseSiblings": true,
+      "redRendererId": -14438,
+      "greenRendererId": -14430,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "redBounds": "(1000.00, 0.00, 0.00)",
+      "greenBounds": "(1000.00, 0.00, 0.00)"
+    }
+  ],
+  "producerSha256": "e50dcd2852cbab0d7da32a4a73c49a61370d5b83800d1dfb0d215d8ed4dc4621",
+  "sourceShaderSha256": "5ef8bbe4ef6e4d8dda1ea49d783e17993f10561ec9c667ed476e9f3943e32895",
+  "acceptedScope": "Built-in Stained BumpDistort and four named legacy particle shaders; coincident bounds, orthographic/perspective cameras, sorting orders -1/0/+1 relative to glass; creation/material/sibling permutations"
+}

@@ -34,6 +34,7 @@ export interface UnityNoiseSpec {
     remapEnabled: boolean;
     // Rotation noise: Unity start rotation mode and the renderer's Unity->Cocos Euler signs.
     rotation3D?: boolean; rotationSigns?: number[];
+    size3D?: boolean;
 }
 
 export function sampleNoiseKeys(keys: UnityNoiseKey[] | undefined, time: number): number {
@@ -57,6 +58,20 @@ export function sampleNoiseCurve(curve: UnityNoiseCurve, time: number, random = 
     if (curve.minMaxState === 1) return maximum * curve.scalar;
     const minimum = sampleNoiseKeys(curve.minCurve?.m_Curve, time);
     return (minimum + (maximum - minimum) * random) * curve.scalar;
+}
+
+// Native two-constant strength uses a stable, independent XYZ channel per particle.
+export function unityNoiseStrengthRandom(out: Float64Array, seed: number): void {
+    let a = (seed + 0x3edcba94) >>> 0;
+    let b = (Math.imul(a, 1812433253) + 1) >>> 0;
+    let c = (Math.imul(b, 1812433253) + 1) >>> 0;
+    let d = (Math.imul(c, 1812433253) + 1) >>> 0;
+    for (let i = 0; i < 3; i++) {
+        const t = a ^ (a << 11);
+        a = b; b = c; c = d;
+        d = (d ^ (d >>> 19) ^ t ^ (t >>> 8)) >>> 0;
+        out[i] = Math.fround((d & 8388607) / 8388607);
+    }
 }
 
 export class UnityNoiseKernel {

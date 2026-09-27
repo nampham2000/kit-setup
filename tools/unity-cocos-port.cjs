@@ -89,6 +89,7 @@ const {
   importedUnityAssetPath: importedUnityAssetPathImpl,
   ensureAssetMeta: ensureAssetMetaImpl,
   copyUnityAssetToCocos: copyUnityAssetToCocosImpl,
+  writePreparedUnityTexture: writePreparedUnityTextureImpl,
   handleMissingModel: handleMissingModelImpl,
 } = createAssetImportPorter({
   ensureDirectoryMetas,
@@ -112,6 +113,7 @@ const {
   resolveCurrentStandaloneMaterialUuid,
   firstSubMetaRecord,
   copyUnityAssetToCocos: copyUnityAssetToCocosImpl,
+  writePreparedUnityTexture: writePreparedUnityTextureImpl,
   ensureDirectoryMetas,
   ensureMaterialAssetMeta,
   libraryJsonPathForUuid,
@@ -5686,7 +5688,8 @@ class CocosPrefabBuilder {
     else if (unityClearFlags === 3) cocosClearFlags = 2; // Depth only
     else if (unityClearFlags === 4) cocosClearFlags = 0; // Nothing
 
-    const cullingMask = Number(getField(doc, 'm_CullingMask.m_Bits', 0xffffffff) ?? 0xffffffff);
+    const unityCullingMask = getField(doc, 'm_CullingMask', null);
+    const cullingMask = Number(unityCullingMask?.m_Bits ?? 0xffffffff);
 
     return this.addComponent(nodeId, 'cc.Camera', {
       _projection: projection,
@@ -6158,11 +6161,15 @@ function buildCocosPrefabBuilder(model, outputFile, options, reporter, unityDb, 
   require('./unity-cocos-port/particle-sorting-binding').attachSortingRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-orbit-binding').attachOrbitRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-noise-binding').attachNoiseRuntime(builder, reporter, options);
+  require('./unity-cocos-port/particle-start-rotation-binding.cjs').attachStartRotationRuntime(builder, reporter, options);
+  require('./unity-cocos-port/particle-initial-state-binding.cjs').attachInitialStateRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-custom-data-binding').attachCustomDataRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-align-to-direction-binding').attachAlignToDirectionRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-birth-state-binding').attachBirthStateRuntime(builder, reporter, options);
+  require('./unity-cocos-port/particle-simulation-step-binding').attachSimulationStepRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-burst-spread-binding').attachBurstSpreadRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-shape-distribution-binding').attachShapeDistributionRuntime(builder, reporter, options);
+  require('./unity-cocos-port/particle-edge-shape-binding.cjs').attachEdgeShapeRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-burst-emission-binding').attachBurstEmissionRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-limit-velocity-binding').attachLimitVelocityRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-prewarm-binding').attachPrewarmRuntime(builder, reporter, options);
@@ -7180,17 +7187,10 @@ function emitNodeRecursive(transform, parentNodeId, model, builder, layerResolve
     }
   }
 
-  const nodeTransform = gameObjectHasWorldScaledParticleSystem(gameObject, model)
-    ? compensateParentScale(transform, resolvedTransform, model)
-    : resolvedTransform;
-  if (nodeTransform !== resolvedTransform) {
-    reporter.low(
-      'PARTICLE_WORLD_SCALE_PARENT_COMPENSATED',
-      model.file,
-      gameObject.name,
-      'Unity ParticleSystem scale is represented as Cocos Scale Space World; Cocos node scale was parent-compensated so world scale matches Unity without baking particle size or speed'
-    );
-  }
+  // scalingMode=1 is Unity Local, mapped to Cocos scaleSpace=Local. The
+  // renderer already reads node.getScale(); changing the hierarchy scale
+  // divides the local particle size twice and changes child world poses.
+  const nodeTransform = resolvedTransform;
 
   const nodeId = builder.addNode(
     gameObject.name,
@@ -7243,56 +7243,6 @@ function gameObjectHasParticleSystem(gameObject, model) {
     const classId = Number(doc?.classId || 0);
     return classId === 198 || classId === 223;
   });
-}
-
-function gameObjectHasWorldScaledParticleSystem(gameObject, model) {
-  return (gameObject.components || []).some((componentId) => {
-    const doc = model.componentDocs.get(componentId);
-    const classId = Number(doc?.classId || 0);
-    return (classId === 198 || classId === 223) && Number(getField(doc, 'scalingMode', 0) || 0) === 1;
-  });
-}
-
-function transformParentWorldScale(transform, transforms) {
-  const scale = { x: 1, y: 1, z: 1 };
-  let parent = transform?.parentId ? transforms.get(transform.parentId) : null;
-  const visited = new Set();
-  while (parent && !visited.has(parent.fileId)) {
-    visited.add(parent.fileId);
-    const localScale = parent.localScale || { x: 1, y: 1, z: 1 };
-    scale.x *= Number(localScale.x == null ? 1 : localScale.x);
-    scale.y *= Number(localScale.y == null ? 1 : localScale.y);
-    scale.z *= Number(localScale.z == null ? 1 : localScale.z);
-    parent = parent.parentId ? transforms.get(parent.parentId) : null;
-  }
-  return scale;
-}
-
-function compensateParentScale(transform, resolvedTransform, model) {
-  const parentScale = transformParentWorldScale(transform, model.transforms);
-  if (
-    Math.abs(parentScale.x - 1) <= 1e-6
-    && Math.abs(parentScale.y - 1) <= 1e-6
-    && Math.abs(parentScale.z - 1) <= 1e-6
-  ) {
-    return resolvedTransform;
-  }
-
-  const localScale = resolvedTransform.localScale || transform?.localScale || { x: 1, y: 1, z: 1 };
-  const divide = (value, divisor) => {
-    const n = Number(value == null ? 1 : value);
-    const d = Number(divisor == null ? 1 : divisor);
-    return Math.abs(d) > 1e-6 ? n / d : n;
-  };
-
-  return {
-    ...resolvedTransform,
-    localScale: {
-      x: divide(localScale.x, parentScale.x),
-      y: divide(localScale.y, parentScale.y),
-      z: divide(localScale.z, parentScale.z),
-    },
-  };
 }
 
 function emitComponents(model, builder, reporter, options, unityDb, cocosDb) {

@@ -10,7 +10,7 @@ const names = ['UnityParticleEulerRotation', 'UnityParticleEulerRotationAdapter'
 // matches. See fixtures/particle-rotation-over-lifetime-native.json.
 function eulerRotationRequired(particle, objects) {
   const contract = particle?.unityRendererContract;
-  if (!contract || !(contract.localBillboard || contract.mode === 4)) return false;
+  if (!contract || !(contract.localBillboard || contract.worldBillboard || contract.mode === 4 || contract.mode===0&&contract.alignment===0&&particle.startRotation3D)) return false;
   const rotation = objects[particle._rotationOvertimeModule?.__id__];
   return !!(rotation?._enable ?? rotation?.enable);
 }
@@ -42,9 +42,14 @@ function attachEulerRotationRuntime(builder, reporter, options) {
       continue;
     }
     const contract = p.unityRendererContract;
+    const shape = builder.objects[p._shapeModule?.__id__];
+    const aligned = !!shape?.alignToDirection;
+    const shapeAlignment = aligned && contract.mode === 4 && p._simulationSpace === 1 && (shape._shapeType ?? shape.shapeType) === 3;
+    if (aligned && !shapeAlignment) reporter.high('PARTICLE_SHAPE_ALIGNMENT_UNMEASURED', options.src || '', name,
+      'Align to Direction is measured only for Local Sphere Mesh with Euler rotation enabled.');
     builder.addComponent(p.node.__id__, classId, {
       source: { __id__: id },
-      sourceContract: JSON.stringify({ renderer: contract.localBillboard ? 'local-billboard' : 'mesh', eulerSigns: contract.eulerSigns }),
+      sourceContract: JSON.stringify({ renderer: contract.localBillboard ? 'local-billboard' : contract.worldBillboard ? 'world-billboard' : contract.mode===0 ? 'view-billboard-3d' : 'mesh', eulerSigns: contract.eulerSigns, ...(shapeAlignment ? {shapeAlignment:true} : {}) }),
     }, null, `cmp-unity-euler-rotation-${id}`);
     reporter.low('PARTICLE_EULER_ROTATION_ADAPTER_BOUND', options.src || '', name,
       'Unity Euler rotation-over-lifetime adapter attached; live preview acceptance still required.');

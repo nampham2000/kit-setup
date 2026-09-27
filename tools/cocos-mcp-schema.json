@@ -58,7 +58,7 @@
     "name": "assetAdvanced_batch_import_assets"
   },
   {
-    "description": "Apply the portable PlayableTransparent compressed-texture preset to PNG/JPG/JPEG assets",
+    "description": "Apply the portable project texture policy (or PlayableTransparent fallback) to PNG/JPG/JPEG assets",
     "inputSchema": {
       "properties": {
         "directory": {
@@ -121,7 +121,7 @@
     "name": "assetAdvanced_enforce_fbx_import_policy"
   },
   {
-    "description": "Ensure PlayableTransparent WebP preset exists and assign it to every PNG/JPG/JPEG through Cocos Asset DB",
+    "description": "Apply tools/texture-compression-policy.json, or the PlayableTransparent fallback, through Cocos Asset DB",
     "inputSchema": {
       "properties": {
         "directory": {

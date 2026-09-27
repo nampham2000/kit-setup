@@ -17,6 +17,38 @@ const GUIDS = {
   editor: 'dddddddddddddddddddddddddddddddd',
 };
 
+test('LoadAll literal catalogs resolve vendor demo folders without single-load prefix leakage', () => {
+  const script = { assetPath: 'Assets/demo.cs', scope: 'runtime', text: `
+    class demo : MonoBehaviour {
+      void Start() {
+        string[] effectFolders = { "black-arc", "fire-fx" };
+        foreach (string folder in effectFolders)
+          effects.AddRange(Resources.LoadAll<GameObject>(folder));
+        Resources.Load<GameObject>("only");
+        // Resources.LoadAll<GameObject>("decoy");
+      }
+    }` };
+  const records = [script, ...['black-arc/a.prefab', 'fire-fx/b.prefab', 'fire-fx/sub/c.prefab', 'fire-fx-other/d.prefab', 'only.prefab', 'only/child.prefab', 'decoy/x.prefab'].map((key, i) => ({ assetPath: 'Assets/Resources/' + key, scope: 'runtime', guid: String(i + 1).repeat(32) }))];
+  const index = buildScriptIndex(records);
+  assert.deepEqual(index.scripts[0].resourceLoadAllPaths, ['black-arc', 'fire-fx']);
+  const graph = buildDependencyGraph(records, { byGuid: new Map() }, { scriptIndex: index }).toJSON();
+  assert.deepEqual(graph.edges.filter(e => e.kind === 'resource-load').map(e => e.to), [
+    'Assets/Resources/black-arc/a.prefab', 'Assets/Resources/fire-fx/b.prefab', 'Assets/Resources/fire-fx/sub/c.prefab', 'Assets/Resources/only.prefab']);
+});
+
+test('LoadAll direct folders and braced foreach are bounded; expired loop and expressions are excluded', () => {
+  const e = analyzeCSharpSource(`class Demo {
+    void Start() {
+      var names = new[] { "blood-fx", "hex-fx" };
+      foreach (var name in names) { Resources.LoadAll<GameObject>(name); }
+      Resources.LoadAll<GameObject>(name);
+      Resources.LoadAll<GameObject>("missiles");
+      Resources.LoadAll<GameObject>("fire" + suffix);
+    }
+  }`);
+  assert.deepEqual(e.resourceLoadAllPaths, ['blood-fx', 'hex-fx', 'missiles']);
+});
+
 test('analyzeCSharpSource emits compact evidence and ignores strings/comments/BCL names', () => {
   const source = [
     '// FakeType should not become evidence',

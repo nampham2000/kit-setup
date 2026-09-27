@@ -4,8 +4,8 @@ const fs=require('node:fs'),path=require('node:path');
 const SOURCE=path.join(__dirname,'runtime');
 const FEATURES={
   burst:['UnityParticleBurstEmission'],
-  birth:['UnityParticleNestedEmission','UnityParticleBirthBurst','UnityParticleSubEmitterFollower'],
-  death:['UnityParticleDeathBurst','UnityParticleSubEmitterFollower'],
+  birth:['UnityParticleNestedEmission','UnityParticleBirthBurst','UnityParticleSubEmitterFollower','UnityParticleDistanceSubEmitter','UnityParticleBirthTiming'],
+  death:['UnityParticleDeathBurst','UnityParticleSubEmitterFollower','UnityParticleDistanceSubEmitter','UnityParticleBirthTiming'],
 };
 const USAGE='Usage: node playable-shared-kit/tools/unity-cocos-port/particle-runtime-stage.cjs --cocos-root <path> --feature <birth|death|burst|all> [--check] | --help';
 function parse(args){

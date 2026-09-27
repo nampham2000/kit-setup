@@ -6,6 +6,12 @@ const identityMat = new Mat4();
 const identityQuat = new Quat();
 const spherical = new Vec3();
 
+/** Native randomPositionAmount is a fixed-radius sphere offset, before shape scale. */
+export function addUnityShapeJitter(position:Vec3,amount:number,u:number,v:number):void {
+    const z=2*u-1,angle=2*Math.PI*v,r=Math.sqrt(Math.max(0,1-z*z))*amount;
+    position.x+=r*Math.cos(angle);position.y+=r*Math.sin(angle);position.z+=z*amount;
+}
+
 // Unity birth radius for a Cocos linear radius sample r = R * (inner + (1 - inner) * u),
 // inner = 1 - radiusThickness (fixtures/shape-distribution-native.json):
 //   Circle      r^2 uniform on [(R * inner)^2, R^2]   (uniform over the annulus area)
@@ -35,14 +41,16 @@ export function installUnityShapeDistribution(system: ParticleSystem): void {
     shape.unityShapeDistribution = true;
     const originalEmit = shape.emit;
     shape.emit = function (p: any): void {
+        if(this.unityEdgeShape||this.unityShapeRandom){originalEmit.call(this,p);return;}
         const type = this.shapeType, from = this.emitFrom;
-        if (!unityShapeDistributionApplies(type, from) || this.radiusThickness <= 0) { originalEmit.call(this, p); return; }
+        const adjustRadius=unityShapeDistributionApplies(type,from)&&this.radiusThickness>0;
+        if (!adjustRadius && this.randomPositionAmount<=0) { originalEmit.call(this, p); return; }
         const mat = this.mat, quat = this.quat, jitter = this.randomPositionAmount, sphere = this.sphericalDirectionAmount;
         this.mat = identityMat; this.quat = identityQuat; this.randomPositionAmount = 0; this.sphericalDirectionAmount = 0;
         try { originalEmit.call(this, p); }
         finally { this.mat = mat; this.quat = quat; this.randomPositionAmount = jitter; this.sphericalDirectionAmount = sphere; }
         const pos: Vec3 = p.position, dir: Vec3 = p.velocity, radius = this.radius, thickness = this.radiusThickness;
-        if (type === CONE) {
+        if (adjustRadius && type === CONE) {
             // Cocos Volume points sit on the base ray at height pos.z = -length * u:
             // base = pos - dir * (pos.z / dir.z). Unity instead travels length * u along
             // the ray, so tilted rays end lower (fixture cone-volume height quantiles).
@@ -55,14 +63,12 @@ export function installUnityShapeDistribution(system: ParticleSystem): void {
             Vec3.set(dir, bx * k * sin, by * k * sin, -Math.cos(this._angle) * radius);
             Vec3.normalize(dir, dir);
             Vec3.set(pos, bx * k + dir.x * travel, by * k + dir.y * travel, dir.z * travel);
-        } else {
+        } else if(adjustRadius) {
             const r = type === CIRCLE ? Math.hypot(pos.x, pos.y) : pos.length();
             if (r > 0) Vec3.multiplyScalar(pos, pos, unityShapeRadius(type, r, radius, thickness) / r);
         }
         if (jitter > 0) {
-            pos.x += (Math.random() * 2 - 1) * jitter;
-            pos.y += (Math.random() * 2 - 1) * jitter;
-            pos.z += (Math.random() * 2 - 1) * jitter;
+            addUnityShapeJitter(pos,jitter,Math.random(),Math.random());
         }
         Vec3.transformQuat(dir, dir, quat);
         Vec3.transformMat4(pos, pos, mat);

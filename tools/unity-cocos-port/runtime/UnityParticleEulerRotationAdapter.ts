@@ -1,11 +1,13 @@
 import { _decorator, Component, ParticleSystem } from 'cc';
-import { installUnityParticleEulerRotation } from './UnityParticleEulerRotation';
+import { installUnityParticleEulerRotation, installUnityParticleShapeAlignment } from './UnityParticleEulerRotation';
 
-const { ccclass, property, executionOrder } = _decorator;
+const { executeInEditMode, playOnFocus,  ccclass, property, executionOrder } = _decorator;
 
 // Generated prefab binding for Mesh and Local-billboard rotation over lifetime.
 // Installed in onLoad so prewarm and first births already use Unity's order.
 @ccclass('UnityParticleEulerRotationAdapter')
+@executeInEditMode
+@playOnFocus
 @executionOrder(-100)
 export class UnityParticleEulerRotationAdapter extends Component {
     @property(ParticleSystem) source: ParticleSystem | null = null;
@@ -14,5 +16,11 @@ export class UnityParticleEulerRotationAdapter extends Component {
     protected onLoad(): void {
         if (!this.source) throw new Error('Missing Unity Euler rotation particle system');
         if (!installUnityParticleEulerRotation(this.source)) throw new Error('Unity Euler rotation requires a rotation-over-lifetime module');
+    }
+    protected start(): void {
+        const spec = this.sourceContract ? JSON.parse(this.sourceContract) : {};
+        if (spec.shapeAlignment && this.source && !installUnityParticleShapeAlignment(this.source, spec.eulerSigns)) {
+            throw new Error('Unity shape alignment requires the measured local Sphere mesh contract');
+        }
     }
 }

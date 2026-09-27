@@ -6,7 +6,7 @@ test('all new birth/death/burst runtime modules stage without meta and remain id
   try{
     const options={root,feature:'all',check:false};
     assert.equal(stage({...options,check:true}).ok,false);assert.equal(fs.existsSync(path.join(root,'assets')),false);
-    const written=stage(options);assert.equal(written.ok,true);assert.equal(written.files.length,5);
+    const written=stage(options);assert.equal(written.ok,true);assert.equal(written.files.length,7);
     const hashes=written.files.map(f=>fs.statSync(path.join(root,'assets/script',f.name+'.ts')).mtimeMs);
     assert.ok(stage(options).files.every(f=>f.status==='unchanged'));
     assert.deepEqual(written.files.map(f=>fs.statSync(path.join(root,'assets/script',f.name+'.ts')).mtimeMs),hashes);

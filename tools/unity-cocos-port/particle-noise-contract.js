@@ -17,6 +17,7 @@ function particleNoiseContract(particle = {}) {
     scrollSpeed: copy(source.scrollSpeed), positionAmount: copy(source.positionAmount),
     rotationAmount: copy(source.rotationAmount), sizeAmount: copy(source.sizeAmount),
     rotation3D: Number(particle.InitialModule?.rotation3D) === 1,
+    size3D: Number(particle.InitialModule?.size3D) === 1,
     remapEnabled: !!source.remapEnabled, remap: copy(source.remap), remapY: copy(source.remapY), remapZ: copy(source.remapZ),
     integration: 'animated-velocity-before-limit',
     // A data contract is not evidence that an adapter is installed or accepted.

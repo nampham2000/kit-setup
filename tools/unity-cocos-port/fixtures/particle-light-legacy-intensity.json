@@ -1,0 +1,1593 @@
+{
+  "unityVersion": "6000.3.1f1",
+  "colorSpace": "Linear",
+  "lightsUseLinearIntensity": false,
+  "scope": "Native POINT shader _LightColor0 from one generated particle light",
+  "rows": [
+    {
+      "templateColor": [
+        1,
+        1,
+        1
+      ],
+      "mode": 1,
+      "color": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "alphaAffects": false,
+      "useColor": false,
+      "linearLightColor": [
+        0.214041144,
+        0.214041144,
+        0.214041144
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        1,
+        1,
+        1
+      ],
+      "mode": 1,
+      "color": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "alphaAffects": false,
+      "useColor": true,
+      "linearLightColor": [
+        0.214041144,
+        0.214041144,
+        0.214041144
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        1,
+        1,
+        1
+      ],
+      "mode": 1,
+      "color": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "alphaAffects": true,
+      "useColor": false,
+      "linearLightColor": [
+        0.214041144,
+        0.214041144,
+        0.214041144
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        1,
+        1,
+        1
+      ],
+      "mode": 1,
+      "color": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "alphaAffects": true,
+      "useColor": true,
+      "linearLightColor": [
+        0.214041144,
+        0.214041144,
+        0.214041144
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        1,
+        1,
+        1
+      ],
+      "mode": 1,
+      "color": [
+        128,
+        64,
+        255,
+        255
+      ],
+      "alphaAffects": false,
+      "useColor": false,
+      "linearLightColor": [
+        0.214041144,
+        0.214041144,
+        0.214041144
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        1,
+        1,
+        1
+      ],
+      "mode": 1,
+      "color": [
+        128,
+        64,
+        255,
+        255
+      ],
+      "alphaAffects": false,
+      "useColor": true,
+      "linearLightColor": [
+        0.0512694679,
+        0.0144438436,
+        0.214041144
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        1,
+        1,
+        1
+      ],
+      "mode": 1,
+      "color": [
+        128,
+        64,
+        255,
+        255
+      ],
+      "alphaAffects": true,
+      "useColor": false,
+      "linearLightColor": [
+        0.214041144,
+        0.214041144,
+        0.214041144
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        1,
+        1,
+        1
+      ],
+      "mode": 1,
+      "color": [
+        128,
+        64,
+        255,
+        255
+      ],
+      "alphaAffects": true,
+      "useColor": true,
+      "linearLightColor": [
+        0.0512694679,
+        0.0144438436,
+        0.214041144
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        1,
+        1,
+        1
+      ],
+      "mode": 1,
+      "color": [
+        128,
+        64,
+        255,
+        128
+      ],
+      "alphaAffects": false,
+      "useColor": false,
+      "linearLightColor": [
+        0.214041144,
+        0.214041144,
+        0.214041144
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        1,
+        1,
+        1
+      ],
+      "mode": 1,
+      "color": [
+        128,
+        64,
+        255,
+        128
+      ],
+      "alphaAffects": false,
+      "useColor": true,
+      "linearLightColor": [
+        0.0512694679,
+        0.0144438436,
+        0.214041144
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        1,
+        1,
+        1
+      ],
+      "mode": 1,
+      "color": [
+        128,
+        64,
+        255,
+        128
+      ],
+      "alphaAffects": true,
+      "useColor": false,
+      "linearLightColor": [
+        0.0512694679,
+        0.0512694679,
+        0.0512694679
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        1,
+        1,
+        1
+      ],
+      "mode": 1,
+      "color": [
+        128,
+        64,
+        255,
+        128
+      ],
+      "alphaAffects": true,
+      "useColor": true,
+      "linearLightColor": [
+        0.0145385424,
+        0.0052075428,
+        0.0512694679
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        1,
+        1,
+        1
+      ],
+      "mode": 2,
+      "color": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "alphaAffects": false,
+      "useColor": false,
+      "linearLightColor": [
+        0,
+        0,
+        0
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        1,
+        1,
+        1
+      ],
+      "mode": 2,
+      "color": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "alphaAffects": false,
+      "useColor": true,
+      "linearLightColor": [
+        0,
+        0,
+        0
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        1,
+        1,
+        1
+      ],
+      "mode": 2,
+      "color": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "alphaAffects": true,
+      "useColor": false,
+      "linearLightColor": [
+        0,
+        0,
+        0
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        1,
+        1,
+        1
+      ],
+      "mode": 2,
+      "color": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "alphaAffects": true,
+      "useColor": true,
+      "linearLightColor": [
+        0,
+        0,
+        0
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        1,
+        1,
+        1
+      ],
+      "mode": 2,
+      "color": [
+        128,
+        64,
+        255,
+        255
+      ],
+      "alphaAffects": false,
+      "useColor": false,
+      "linearLightColor": [
+        0,
+        0,
+        0
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        1,
+        1,
+        1
+      ],
+      "mode": 2,
+      "color": [
+        128,
+        64,
+        255,
+        255
+      ],
+      "alphaAffects": false,
+      "useColor": true,
+      "linearLightColor": [
+        0,
+        0,
+        0
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        1,
+        1,
+        1
+      ],
+      "mode": 2,
+      "color": [
+        128,
+        64,
+        255,
+        255
+      ],
+      "alphaAffects": true,
+      "useColor": false,
+      "linearLightColor": [
+        0,
+        0,
+        0
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        1,
+        1,
+        1
+      ],
+      "mode": 2,
+      "color": [
+        128,
+        64,
+        255,
+        255
+      ],
+      "alphaAffects": true,
+      "useColor": true,
+      "linearLightColor": [
+        0,
+        0,
+        0
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        1,
+        1,
+        1
+      ],
+      "mode": 2,
+      "color": [
+        128,
+        64,
+        255,
+        128
+      ],
+      "alphaAffects": false,
+      "useColor": false,
+      "linearLightColor": [
+        0,
+        0,
+        0
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        1,
+        1,
+        1
+      ],
+      "mode": 2,
+      "color": [
+        128,
+        64,
+        255,
+        128
+      ],
+      "alphaAffects": false,
+      "useColor": true,
+      "linearLightColor": [
+        0,
+        0,
+        0
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        1,
+        1,
+        1
+      ],
+      "mode": 2,
+      "color": [
+        128,
+        64,
+        255,
+        128
+      ],
+      "alphaAffects": true,
+      "useColor": false,
+      "linearLightColor": [
+        0,
+        0,
+        0
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        1,
+        1,
+        1
+      ],
+      "mode": 2,
+      "color": [
+        128,
+        64,
+        255,
+        128
+      ],
+      "alphaAffects": true,
+      "useColor": true,
+      "linearLightColor": [
+        0,
+        0,
+        0
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        0.696551323,
+        0,
+        1
+      ],
+      "mode": 1,
+      "color": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "alphaAffects": false,
+      "useColor": false,
+      "linearLightColor": [
+        0.0994578227,
+        0,
+        0.214041144
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        0.696551323,
+        0,
+        1
+      ],
+      "mode": 1,
+      "color": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "alphaAffects": false,
+      "useColor": true,
+      "linearLightColor": [
+        0.214041144,
+        0.214041144,
+        0.214041144
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        0.696551323,
+        0,
+        1
+      ],
+      "mode": 1,
+      "color": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "alphaAffects": true,
+      "useColor": false,
+      "linearLightColor": [
+        0.0994578227,
+        0,
+        0.214041144
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        0.696551323,
+        0,
+        1
+      ],
+      "mode": 1,
+      "color": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "alphaAffects": true,
+      "useColor": true,
+      "linearLightColor": [
+        0.214041144,
+        0.214041144,
+        0.214041144
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        0.696551323,
+        0,
+        1
+      ],
+      "mode": 1,
+      "color": [
+        128,
+        64,
+        255,
+        255
+      ],
+      "alphaAffects": false,
+      "useColor": false,
+      "linearLightColor": [
+        0.0994578227,
+        0,
+        0.214041144
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        0.696551323,
+        0,
+        1
+      ],
+      "mode": 1,
+      "color": [
+        128,
+        64,
+        255,
+        255
+      ],
+      "alphaAffects": false,
+      "useColor": true,
+      "linearLightColor": [
+        0.0512694679,
+        0.0144438436,
+        0.214041144
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        0.696551323,
+        0,
+        1
+      ],
+      "mode": 1,
+      "color": [
+        128,
+        64,
+        255,
+        255
+      ],
+      "alphaAffects": true,
+      "useColor": false,
+      "linearLightColor": [
+        0.0994578227,
+        0,
+        0.214041144
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        0.696551323,
+        0,
+        1
+      ],
+      "mode": 1,
+      "color": [
+        128,
+        64,
+        255,
+        255
+      ],
+      "alphaAffects": true,
+      "useColor": true,
+      "linearLightColor": [
+        0.0512694679,
+        0.0144438436,
+        0.214041144
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        0.696551323,
+        0,
+        1
+      ],
+      "mode": 1,
+      "color": [
+        128,
+        64,
+        255,
+        128
+      ],
+      "alphaAffects": false,
+      "useColor": false,
+      "linearLightColor": [
+        0.0994578227,
+        0,
+        0.214041144
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        0.696551323,
+        0,
+        1
+      ],
+      "mode": 1,
+      "color": [
+        128,
+        64,
+        255,
+        128
+      ],
+      "alphaAffects": false,
+      "useColor": true,
+      "linearLightColor": [
+        0.0512694679,
+        0.0144438436,
+        0.214041144
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        0.696551323,
+        0,
+        1
+      ],
+      "mode": 1,
+      "color": [
+        128,
+        64,
+        255,
+        128
+      ],
+      "alphaAffects": true,
+      "useColor": false,
+      "linearLightColor": [
+        0.0257945638,
+        0,
+        0.0512694679
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        0.696551323,
+        0,
+        1
+      ],
+      "mode": 1,
+      "color": [
+        128,
+        64,
+        255,
+        128
+      ],
+      "alphaAffects": true,
+      "useColor": true,
+      "linearLightColor": [
+        0.0145385424,
+        0.0052075428,
+        0.0512694679
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        0.696551323,
+        0,
+        1
+      ],
+      "mode": 2,
+      "color": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "alphaAffects": false,
+      "useColor": false,
+      "linearLightColor": [
+        0,
+        0,
+        0
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        0.696551323,
+        0,
+        1
+      ],
+      "mode": 2,
+      "color": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "alphaAffects": false,
+      "useColor": true,
+      "linearLightColor": [
+        0,
+        0,
+        0
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        0.696551323,
+        0,
+        1
+      ],
+      "mode": 2,
+      "color": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "alphaAffects": true,
+      "useColor": false,
+      "linearLightColor": [
+        0,
+        0,
+        0
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        0.696551323,
+        0,
+        1
+      ],
+      "mode": 2,
+      "color": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "alphaAffects": true,
+      "useColor": true,
+      "linearLightColor": [
+        0,
+        0,
+        0
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        0.696551323,
+        0,
+        1
+      ],
+      "mode": 2,
+      "color": [
+        128,
+        64,
+        255,
+        255
+      ],
+      "alphaAffects": false,
+      "useColor": false,
+      "linearLightColor": [
+        0,
+        0,
+        0
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        0.696551323,
+        0,
+        1
+      ],
+      "mode": 2,
+      "color": [
+        128,
+        64,
+        255,
+        255
+      ],
+      "alphaAffects": false,
+      "useColor": true,
+      "linearLightColor": [
+        0,
+        0,
+        0
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        0.696551323,
+        0,
+        1
+      ],
+      "mode": 2,
+      "color": [
+        128,
+        64,
+        255,
+        255
+      ],
+      "alphaAffects": true,
+      "useColor": false,
+      "linearLightColor": [
+        0,
+        0,
+        0
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        0.696551323,
+        0,
+        1
+      ],
+      "mode": 2,
+      "color": [
+        128,
+        64,
+        255,
+        255
+      ],
+      "alphaAffects": true,
+      "useColor": true,
+      "linearLightColor": [
+        0,
+        0,
+        0
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        0.696551323,
+        0,
+        1
+      ],
+      "mode": 2,
+      "color": [
+        128,
+        64,
+        255,
+        128
+      ],
+      "alphaAffects": false,
+      "useColor": false,
+      "linearLightColor": [
+        0,
+        0,
+        0
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        0.696551323,
+        0,
+        1
+      ],
+      "mode": 2,
+      "color": [
+        128,
+        64,
+        255,
+        128
+      ],
+      "alphaAffects": false,
+      "useColor": true,
+      "linearLightColor": [
+        0,
+        0,
+        0
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        0.696551323,
+        0,
+        1
+      ],
+      "mode": 2,
+      "color": [
+        128,
+        64,
+        255,
+        128
+      ],
+      "alphaAffects": true,
+      "useColor": false,
+      "linearLightColor": [
+        0,
+        0,
+        0
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        0.696551323,
+        0,
+        1
+      ],
+      "mode": 2,
+      "color": [
+        128,
+        64,
+        255,
+        128
+      ],
+      "alphaAffects": true,
+      "useColor": true,
+      "linearLightColor": [
+        0,
+        0,
+        0
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        0,
+        0.83448267,
+        1
+      ],
+      "mode": 1,
+      "color": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "alphaAffects": false,
+      "useColor": false,
+      "linearLightColor": [
+        0,
+        0.145273939,
+        0.214041144
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        0,
+        0.83448267,
+        1
+      ],
+      "mode": 1,
+      "color": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "alphaAffects": false,
+      "useColor": true,
+      "linearLightColor": [
+        0.214041144,
+        0.214041144,
+        0.214041144
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        0,
+        0.83448267,
+        1
+      ],
+      "mode": 1,
+      "color": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "alphaAffects": true,
+      "useColor": false,
+      "linearLightColor": [
+        0,
+        0.145273939,
+        0.214041144
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        0,
+        0.83448267,
+        1
+      ],
+      "mode": 1,
+      "color": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "alphaAffects": true,
+      "useColor": true,
+      "linearLightColor": [
+        0.214041144,
+        0.214041144,
+        0.214041144
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        0,
+        0.83448267,
+        1
+      ],
+      "mode": 1,
+      "color": [
+        128,
+        64,
+        255,
+        255
+      ],
+      "alphaAffects": false,
+      "useColor": false,
+      "linearLightColor": [
+        0,
+        0.145273939,
+        0.214041144
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        0,
+        0.83448267,
+        1
+      ],
+      "mode": 1,
+      "color": [
+        128,
+        64,
+        255,
+        255
+      ],
+      "alphaAffects": false,
+      "useColor": true,
+      "linearLightColor": [
+        0.0512694679,
+        0.0144438436,
+        0.214041144
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        0,
+        0.83448267,
+        1
+      ],
+      "mode": 1,
+      "color": [
+        128,
+        64,
+        255,
+        255
+      ],
+      "alphaAffects": true,
+      "useColor": false,
+      "linearLightColor": [
+        0,
+        0.145273939,
+        0.214041144
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        0,
+        0.83448267,
+        1
+      ],
+      "mode": 1,
+      "color": [
+        128,
+        64,
+        255,
+        255
+      ],
+      "alphaAffects": true,
+      "useColor": true,
+      "linearLightColor": [
+        0.0512694679,
+        0.0144438436,
+        0.214041144
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        0,
+        0.83448267,
+        1
+      ],
+      "mode": 1,
+      "color": [
+        128,
+        64,
+        255,
+        128
+      ],
+      "alphaAffects": false,
+      "useColor": false,
+      "linearLightColor": [
+        0,
+        0.145273939,
+        0.214041144
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        0,
+        0.83448267,
+        1
+      ],
+      "mode": 1,
+      "color": [
+        128,
+        64,
+        255,
+        128
+      ],
+      "alphaAffects": false,
+      "useColor": true,
+      "linearLightColor": [
+        0.0512694679,
+        0.0144438436,
+        0.214041144
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        0,
+        0.83448267,
+        1
+      ],
+      "mode": 1,
+      "color": [
+        128,
+        64,
+        255,
+        128
+      ],
+      "alphaAffects": true,
+      "useColor": false,
+      "linearLightColor": [
+        0,
+        0.036122229,
+        0.0512694679
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        0,
+        0.83448267,
+        1
+      ],
+      "mode": 1,
+      "color": [
+        128,
+        64,
+        255,
+        128
+      ],
+      "alphaAffects": true,
+      "useColor": true,
+      "linearLightColor": [
+        0.0145385424,
+        0.0052075428,
+        0.0512694679
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        0,
+        0.83448267,
+        1
+      ],
+      "mode": 2,
+      "color": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "alphaAffects": false,
+      "useColor": false,
+      "linearLightColor": [
+        0,
+        0,
+        0
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        0,
+        0.83448267,
+        1
+      ],
+      "mode": 2,
+      "color": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "alphaAffects": false,
+      "useColor": true,
+      "linearLightColor": [
+        0,
+        0,
+        0
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        0,
+        0.83448267,
+        1
+      ],
+      "mode": 2,
+      "color": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "alphaAffects": true,
+      "useColor": false,
+      "linearLightColor": [
+        0,
+        0,
+        0
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        0,
+        0.83448267,
+        1
+      ],
+      "mode": 2,
+      "color": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "alphaAffects": true,
+      "useColor": true,
+      "linearLightColor": [
+        0,
+        0,
+        0
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        0,
+        0.83448267,
+        1
+      ],
+      "mode": 2,
+      "color": [
+        128,
+        64,
+        255,
+        255
+      ],
+      "alphaAffects": false,
+      "useColor": false,
+      "linearLightColor": [
+        0,
+        0,
+        0
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        0,
+        0.83448267,
+        1
+      ],
+      "mode": 2,
+      "color": [
+        128,
+        64,
+        255,
+        255
+      ],
+      "alphaAffects": false,
+      "useColor": true,
+      "linearLightColor": [
+        0,
+        0,
+        0
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        0,
+        0.83448267,
+        1
+      ],
+      "mode": 2,
+      "color": [
+        128,
+        64,
+        255,
+        255
+      ],
+      "alphaAffects": true,
+      "useColor": false,
+      "linearLightColor": [
+        0,
+        0,
+        0
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        0,
+        0.83448267,
+        1
+      ],
+      "mode": 2,
+      "color": [
+        128,
+        64,
+        255,
+        255
+      ],
+      "alphaAffects": true,
+      "useColor": true,
+      "linearLightColor": [
+        0,
+        0,
+        0
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        0,
+        0.83448267,
+        1
+      ],
+      "mode": 2,
+      "color": [
+        128,
+        64,
+        255,
+        128
+      ],
+      "alphaAffects": false,
+      "useColor": false,
+      "linearLightColor": [
+        0,
+        0,
+        0
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        0,
+        0.83448267,
+        1
+      ],
+      "mode": 2,
+      "color": [
+        128,
+        64,
+        255,
+        128
+      ],
+      "alphaAffects": false,
+      "useColor": true,
+      "linearLightColor": [
+        0,
+        0,
+        0
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        0,
+        0.83448267,
+        1
+      ],
+      "mode": 2,
+      "color": [
+        128,
+        64,
+        255,
+        128
+      ],
+      "alphaAffects": true,
+      "useColor": false,
+      "linearLightColor": [
+        0,
+        0,
+        0
+      ],
+      "vertexAttenuation": 0
+    },
+    {
+      "templateColor": [
+        0,
+        0.83448267,
+        1
+      ],
+      "mode": 2,
+      "color": [
+        128,
+        64,
+        255,
+        128
+      ],
+      "alphaAffects": true,
+      "useColor": true,
+      "linearLightColor": [
+        0,
+        0,
+        0
+      ],
+      "vertexAttenuation": 0
+    }
+  ],
+  "sourceProbeSha256": "b7e9026a90ae162a5a27737c8a4c0bb2cfea5524a01e2373a797c3950b04bfcf"
+}

@@ -21,6 +21,56 @@ const reports = () => {
   const entries = [];
   return { entries, ...Object.fromEntries(['high','medium','low'].map(level => [level, (...args) => entries.push({level,args})])) };
 };
+test('Local particle scaling preserves authored node scale beneath a scaled parent',()=>{
+  const {portPrefab,parseArgs}=require('../unity-cocos-port.cjs');
+  const root=path.join(temp,'particle-local-scale'),unity=path.join(root,'unity'),cocos=path.join(root,'cocos');
+  fs.mkdirSync(path.join(unity,'Assets'),{recursive:true});fs.mkdirSync(path.join(cocos,'assets'),{recursive:true});
+  const source=path.join(unity,'Assets/Local.prefab'),out=path.join(cocos,'assets/Local.prefab');
+  fs.writeFileSync(source,`%YAML 1.1
+--- !u!1 &1
+GameObject:
+  m_Name: Parent
+  m_IsActive: 1
+  m_Component:
+  - component: {fileID: 2}
+--- !u!4 &2
+Transform:
+  m_GameObject: {fileID: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalScale: {x: 1.2, y: 1.2, z: 1.2}
+  m_Children:
+  - {fileID: 4}
+  m_Father: {fileID: 0}
+--- !u!1 &3
+GameObject:
+  m_Name: LocalParticle
+  m_IsActive: 1
+  m_Component:
+  - component: {fileID: 4}
+  - component: {fileID: 5}
+--- !u!4 &4
+Transform:
+  m_GameObject: {fileID: 3}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalScale: {x: 0.5, y: 0.5, z: 0.5}
+  m_Children: []
+  m_Father: {fileID: 2}
+--- !u!198 &5
+ParticleSystem:
+  m_GameObject: {fileID: 3}
+  scalingMode: 1
+  moveWithTransform: 0
+  lengthInSec: 1
+`);
+  portPrefab(parseArgs(['port','--src',source,'--out',out,'--unity-root',unity,'--cocos-root',cocos,'--overwrite','--no-cache','--report',path.join(root,'report.csv')]));
+  const objects=JSON.parse(fs.readFileSync(out));
+  const child=objects.find(o=>o.__type__==='cc.Node'&&o._name==='LocalParticle');
+  assert.deepEqual([child._lscale.x,child._lscale.y,child._lscale.z],[.5,.5,.5]);
+  const particleBuilder={objects:[{},{}]};applyUnityParticleDataToCocos(particleBuilder,1,{scalingMode:1});
+  assert.equal(particleBuilder.objects[1].scaleSpace,1);
+});
 test('particle UV tiling emits a typed Vec4 for a single FLOAT4 uniform',()=>{
   const source=path.join(temp,'uv-mask.mat');
   fs.writeFileSync(source,`%YAML 1.1

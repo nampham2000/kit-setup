@@ -27,7 +27,9 @@ Options:
   --help                Show this help
 
 The tool only changes PNG/JPG/JPEG metadata through Cocos Asset DB and the
-builder preset through Editor.Profile. It never edits image .meta files directly.`;
+builder preset through Editor.Profile. When tools/texture-compression-policy.json
+exists, its default and longest matching pathPrefix override are authoritative.
+It never edits image .meta files directly.`;
 }
 
 function parseArgs(argv) {
@@ -140,7 +142,8 @@ function evaluateResult(payload, options) {
     return { ok: false, code: 'TEXTURE_POLICY_APPLY_FAILED', payload };
   }
   const report = payload.data;
-  if (options.verify && (report.updated !== 0 || report.preset?.changed)) {
+  const presetDrift = (report.presets || [report.preset]).some((preset) => preset?.changed);
+  if (options.verify && (report.updated !== 0 || presetDrift)) {
     return { ok: false, code: 'TEXTURE_POLICY_DRIFT', payload };
   }
   return { ok: true, code: 'TEXTURE_POLICY_OK', payload };
@@ -169,7 +172,9 @@ function printResult(result, options) {
   }
   const report = result.payload?.data || {};
   process.stdout.write(`[texture-policy] ${result.code}\n`);
-  process.stdout.write(`  preset: ${report.preset?.name || '?'} (${report.preset?.id || '?'}) WebP ${report.preset?.webpQuality ?? '?'}\n`);
+  for (const preset of report.presets || [report.preset]) {
+    process.stdout.write(`  preset: ${preset?.name || '?'} (${preset?.id || '?'}) WebP ${preset?.webpQuality ?? '?'}\n`);
+  }
   process.stdout.write(`  eligible=${report.eligible ?? 0} updated=${report.updated ?? 0} unchanged=${report.unchanged ?? 0} failed=${report.failed ?? 0}\n`);
   if (!result.ok && result.payload?.error) process.stderr.write(`  error: ${result.payload.error}\n`);
 }

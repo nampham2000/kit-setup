@@ -1,0 +1,6 @@
+using System;using System.IO;using System.Collections.Generic;using UnityEngine;
+public class Script {
+ public static string Main(){var rows=new List<object>();foreach(var euler in new[]{Vector3.zero,new Vector3(0,90,0),new Vector3(15,75,30),new Vector3(90,0,0),new Vector3(0,0,90)})foreach(var step in new[]{new Vector3(0,0,-.4f),new Vector3(.1f,.2f,.3f)}){
+  var go=new GameObject("native translate float");try{go.transform.rotation=Quaternion.Euler(euler);var q=go.transform.rotation;var operatorValue=q*step;var direction=go.transform.TransformDirection(step);var frames=new List<object>();for(int frame=1;frame<=180;frame++){go.transform.Translate(step,Space.Self);var p=go.transform.position;frames.Add(new{frame,position=new[]{p.x,p.y,p.z}});}rows.Add(new{euler=new[]{euler.x,euler.y,euler.z},step=new[]{step.x,step.y,step.z},rotation=new[]{q.x,q.y,q.z,q.w},operatorValue=new[]{operatorValue.x,operatorValue.y,operatorValue.z},direction=new[]{direction.x,direction.y,direction.z},frames});}finally{UnityEngine.Object.DestroyImmediate(go);}
+ }File.WriteAllText("OUTPUT_FILE",System.Text.Json.JsonSerializer.Serialize(new{unityVersion=Application.unityVersion,rows}));return "translate cases="+rows.Count;}
+}

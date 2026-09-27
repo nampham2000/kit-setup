@@ -17,10 +17,15 @@ Before building, always run the automated asset optimization tools:
    npm run ai:texture:compress -- --verify
    ```
    The shared Cocos extension also listens to `asset-db:asset-add` and
-   `asset-db:asset-change`. Every `.png`, `.jpg`, and `.jpeg` is assigned the
-   existing `PlayableTransparent` / `Playable Transparent` preset. If neither
-   exists, the extension creates a WebP quality 50 preset. If an existing alias
-   is not exactly WebP 50, it is normalized instead of being trusted by name.
+   `asset-db:asset-change`. A project may commit
+   `tools/texture-compression-policy.json` with one `default` preset and
+   `overrides[].pathPrefix`; the longest matching prefix wins. This supports,
+   for example, `PlayableOpaque` for UI while map backgrounds retain
+   `PlayableTransparent`. Without that file every `.png`, `.jpg`, and `.jpeg`
+   uses the existing `PlayableTransparent` / `Playable Transparent` preset. If
+   neither exists, the extension creates a WebP quality 50 preset. Each declared
+   preset is normalized to its configured WebP quality instead of being trusted
+   by name.
    The policy persists
    `useCompressTexture=true` plus its `presetId` through the Cocos Profile and
    Asset DB APIs. Never patch image `.meta` files directly.
@@ -181,8 +186,9 @@ keys are Unity paths relative to `Assets/`, values are maximum dimensions.
 keeps UUID metadata, and caches by source/output hashes plus the cap. Prefab cache
 also observes these settings, so subsequent ports cannot restore oversized copies.
 Do not apply this to sliced/UI sprites without remapping sprite rectangles and
-logical dimensions. Unconfigured images remain byte-identical; import caps are
-not inferred globally from one project's settings.
+logical dimensions. Unconfigured images keep their pixel bytes; import caps are
+not inferred globally from one project's settings. Resizes decode raw texels
+(`ignoreIcc`) because Unity ignores embedded colour profiles.
 
 Load independent prefab, audio and background groups concurrently. Keep one
 readiness barrier when immediate taps, popups and transitions need all assets;

@@ -1,5 +1,6 @@
 import { _decorator, Component, CurveRange, Enum, Mat4, Node, ParticleSystem, Vec3 } from 'cc';
 import { EDITOR_NOT_IN_PREVIEW } from 'cc/env';
+import { UnityParticleDistanceSubEmitter } from './UnityParticleDistanceSubEmitter';
 
 const { ccclass, executeInEditMode, executionOrder, playOnFocus, property } = _decorator;
 
@@ -79,6 +80,9 @@ export class UnityParticleSubEmitterEntry {
     @property({ visible: isBirthEntry, displayName: 'Emit Rate Per Particle', min: 0 })
     public emitRatePerParticle = 30;
 
+    @property({ visible: false }) public sourceDistanceRate = -1;
+    @property({ visible: false }) public sourceSimulationSpace = 0;
+
     @property({ visible: isBirthEntry, displayName: 'Particles Per Sample', min: 1 })
     public particlesPerSample = 1;
 
@@ -133,6 +137,19 @@ export class UnityParticleSubEmitterFollower extends Component {
     private readonly _worldPosition = new Vec3();
     private readonly _sourceWorldMatrix = new Mat4();
     private _sourceHadParticles = false;
+    private readonly _distanceBindings: UnityParticleDistanceSubEmitter[] = [];
+
+    protected start(): void {
+        if (!this.source) return;
+        for (const entry of this.entries) if (entry.sourceDistanceRate > 0 && entry.subEmitter) {
+            this._distanceBindings.push(new UnityParticleDistanceSubEmitter(this.source,entry.subEmitter,entry.sourceDistanceRate,entry.sourceSimulationSpace));
+        }
+    }
+
+    protected onDestroy(): void {
+        for (let i=this._distanceBindings.length-1;i>=0;i--) this._distanceBindings[i].destroy();
+        this._distanceBindings.length=0;
+    }
     private readonly _instances: EmissionInstance[] = [];
     private readonly _freeInstances: EmissionInstance[] = [];
     private readonly _tracked = new Map<ParticleLike, TrackedParticle>();
@@ -152,6 +169,7 @@ export class UnityParticleSubEmitterFollower extends Component {
     }
 
     protected onDisable (): void {
+        for (const binding of this._distanceBindings) binding.reset();
         this._birthAccumulators.clear();
         this._lastParticleWorldPositions.clear();
         this._currentParticles.clear();
@@ -167,11 +185,14 @@ export class UnityParticleSubEmitterFollower extends Component {
 
         const entries = this.getRuntimeEntries();
         if (!entries.length) return;
+        let approximated=false;
+        for (const entry of entries) if (!(entry.sourceDistanceRate > 0)) { approximated=true;break; }
+        if (!approximated) return;
 
         const pool = this.getSourceParticlePool(this.source);
         if (!pool) return;
 
-        if (!EDITOR_NOT_IN_PREVIEW && entries.some((entry) => entry.unityInstances && entry.subEmitter)) {
+        if (!EDITOR_NOT_IN_PREVIEW && entries.some((entry) => entry.unityInstances && !(entry.sourceDistanceRate > 0) && entry.subEmitter)) {
             this.updateInstances(pool, this.source, entries, dt);
         }
 
@@ -212,7 +233,7 @@ export class UnityParticleSubEmitterFollower extends Component {
 
     private prepareSubEmitters (entries: UnityParticleSubEmitterEntry[], resetDeathEmitters: boolean): void {
         for (const entry of entries) {
-            if (!entry.subEmitter || entry.unityInstances) continue;
+            if (!entry.subEmitter || entry.unityInstances || entry.sourceDistanceRate > 0) continue;
 
             const emitterNode = entry.subEmitterNode || entry.subEmitter.node;
             entry.subEmitterNode = emitterNode;
@@ -271,7 +292,7 @@ export class UnityParticleSubEmitterFollower extends Component {
         if (this._currentParticles.size <= 0) return;
 
         for (const entry of entries) {
-            if (entry.type !== UnityParticleSubEmitterType.Birth || !entry.subEmitter || entry.unityInstances) continue;
+            if (entry.type !== UnityParticleSubEmitterType.Birth || !entry.subEmitter || entry.unityInstances || entry.sourceDistanceRate > 0) continue;
 
             const emitRate = Math.max(0, entry.emitRatePerParticle);
             const accumulated = (this._birthAccumulators.get(entry) || 0) + dt * emitRate;
@@ -432,7 +453,7 @@ export class UnityParticleSubEmitterFollower extends Component {
 
     private startInstances (entries: UnityParticleSubEmitterEntry[], type: UnityParticleSubEmitterType, particle: ParticleLike | null, position: Vec3): void {
         for (const entry of entries) {
-            if (!entry.unityInstances || entry.type !== type || !entry.subEmitter) continue;
+            if (!entry.unityInstances || entry.sourceDistanceRate > 0 || entry.type !== type || !entry.subEmitter) continue;
             if (!this.shouldEmit(entry.emitProbability)) continue;
             const schedule = this.captureSchedule(entry);
             const instance = this._freeInstances.pop() || {

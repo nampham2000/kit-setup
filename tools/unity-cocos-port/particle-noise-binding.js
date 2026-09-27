@@ -17,12 +17,12 @@ function unsupportedNoiseReasons(spec, limitEnabled) {
   // Unity limits stored + Noise velocity and stores only the non-animated part; bind
   // only with the shared limit runtime that implements that measured composition.
   if (limitEnabled && LIMIT_VELOCITY_COMPOSITION !== 'animated-velocity-before-limit') reasons.push('velocity-limit-integration');
-  if (spec.sizeAmount?.minMaxState !== 0 || spec.sizeAmount?.scalar !== 0) reasons.push('sizeAmount');
-  const curves = ['strength', 'strengthY', 'strengthZ', 'scrollSpeed', 'positionAmount'];
+  const curves = ['strength', 'strengthY', 'strengthZ', 'scrollSpeed', 'positionAmount', 'sizeAmount'];
   if (noiseRotates(spec)) curves.push('rotationAmount');
   for (const name of curves) {
     const curve = spec[name];
-    if (!curve || ![0, 1].includes(curve.minMaxState)) reasons.push(`${name}-random-or-missing`);
+    const modes = name === 'strength' || name === 'strengthY' || name === 'strengthZ' ? [0, 1, 3] : [0, 1];
+    if (!curve || !modes.includes(curve.minMaxState)) reasons.push(`${name}-random-or-missing`);
     if (curve?.maxCurve?.m_Curve?.some(key => key.weightedMode)) reasons.push(`${name}-weighted`);
   }
   return reasons;
@@ -55,7 +55,7 @@ function attachNoiseRuntime(builder, reporter, options) {
     if (noiseRotates(spec) && !renderer?.eulerSigns) reasons.push('rotationAmount-renderer-signs');
     // Rotation noise feeds the Unity Euler accumulator: packed by the Euler adapter for
     // Mesh/Local billboards, or read directly when rotation over lifetime is off.
-    if (noiseRotates(spec) && !!(rotation?._enable ?? rotation?.enable) && !(renderer?.localBillboard || renderer?.mode === 4)) reasons.push('rotationAmount-with-builtin-rotation-over-lifetime');
+    if (noiseRotates(spec) && !!(rotation?._enable ?? rotation?.enable) && !(renderer?.localBillboard || renderer?.worldBillboard || renderer?.mode === 4 || renderer?.mode===0&&renderer?.alignment===0&&p.startRotation3D)) reasons.push('rotationAmount-with-builtin-rotation-over-lifetime');
     if (reasons.length || !classId) {
       reporter.high('PARTICLE_NOISE_ADAPTER_REQUIRED', options.src || '', builder.objects[p.node.__id__]?._name || '',
         `Native Noise not accepted: ${reasons.length ? reasons.join(', ') : 'AssetDB must import assets/script/UnityParticleNoiseAdapter.ts; refresh and rerun porter'}`);

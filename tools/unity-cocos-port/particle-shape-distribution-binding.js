@@ -20,7 +20,7 @@ function shapeDistributionSystems(builder) {
     const from = Number(shape.emitFrom ?? 0);
     const applies = type === CIRCLE || (type === CONE && (from === BASE || from === VOLUME))
       || ((type === SPHERE || type === HEMISPHERE) && from === VOLUME);
-    return applies && Number(shape.radius ?? 0) > 0 && Number(shape.radiusThickness ?? 1) > 0;
+    return Number(shape.randomPositionAmount ?? 0)>0 || (applies && Number(shape.radius ?? 0) > 0 && Number(shape.radiusThickness ?? 1) > 0);
   });
 }
 
