@@ -345,3 +345,13 @@ test('evalBefore-resolved gesture sequences accept per-gesture delays', () => {
       gestureFromEvalBefore: tap('target'), gestureDelaysMs: [0] }],
   }), /gestureDelaysMs must match/);
 });
+
+// A narrow VFX frame on a flat backdrop (JellyCubeRun2048 ParHitEffect: dark core at the screen
+// centre) reads as uniform at the three default probes; cases may add source-derived probe points.
+test('contentProbePoints are validated and passed as normalized [x,y] pairs', () => {
+  const base = { url: 'http://127.0.0.1:7456/', outputDir: '.unity/preview-checkpoints/test' };
+  const value = validateConfig({ ...base, cases: [{ name: 'vfx', contentProbePoints: [[0.55, 0.47], [0.45, 0.5]] }] });
+  assert.deepEqual(value.cases[0].contentProbePoints, [[0.55, 0.47], [0.45, 0.5]]);
+  assert.throws(() => validateConfig({ ...base, cases: [{ name: 'bad', contentProbePoints: [[1.5, 0.5]] }] }), /normalized/);
+  assert.throws(() => validateConfig({ ...base, cases: [{ name: 'bad', contentProbePoints: [0.5, 0.5] }] }), /normalized/);
+});
