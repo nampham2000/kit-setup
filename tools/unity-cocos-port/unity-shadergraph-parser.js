@@ -764,7 +764,7 @@ ${fragmentCode}
         const texExpr = getInputExpr(nodeId, 1, 'mainTexture');
         const uvExpr = getInputExpr(nodeId, 2, 'uv');
         const outVar = getVarName('texColor');
-        codeLines.push(`    vec4 ${outVar} = texture(${texExpr}, ${uvExpr});`);
+        codeLines.push(`    vec4 ${outVar} = texture(${texExpr}, vec2(${uvExpr}));`);
         evaluatedNodes.set(`${nodeId}_0`, `${outVar}.rgba`);
         evaluatedNodes.set(`${nodeId}_4`, `${outVar}.r`);
         evaluatedNodes.set(`${nodeId}_5`, `${outVar}.g`);
@@ -779,7 +779,9 @@ ${fragmentCode}
         const tiling = getInputExpr(nodeId, 1, 'vec2(1.0, 1.0)');
         const offset = getInputExpr(nodeId, 2, 'vec2(0.0, 0.0)');
         const outVar = getVarName('tilingOffset');
-        codeLines.push(`    vec2 ${outVar} = unity_tiling_offset(${inUv}, ${tiling}, ${offset});`);
+        // ShaderGraph broadcasts a Vector1 into a Vector2 slot and truncates wider vectors;
+        // GLSL's vec2(...) constructor does both, so every Vector2 input is wrapped.
+        codeLines.push(`    vec2 ${outVar} = unity_tiling_offset(vec2(${inUv}), vec2(${tiling}), vec2(${offset}));`);
         evaluatedNodes.set(`${nodeId}_3`, outVar);
         continue;
       }

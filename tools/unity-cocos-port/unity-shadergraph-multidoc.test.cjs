@@ -80,7 +80,9 @@ test('Sample Texture 2D reads its Texture/UV inputs and publishes RGBA on slot 0
   ];
   const parser = new ShaderGraphParser(docs.map(doc => JSON.stringify(doc, null, 4)).join('\n\n'), {});
   const glsl = String(parser._transpileGraphToGLSL());
-  assert.match(glsl, /texture\(Pattern, _sg_tilingOffset_\d+\)/, 'samples the texture property with the tiling UV');
+  assert.match(glsl, /texture\(Pattern, vec2\(_sg_tilingOffset_\d+\)\)/, 'samples the texture property with the tiling UV');
+  // A Vector1 wired into a Vector2 slot is broadcast (ShaderGraph) through vec2(...).
+  assert.match(glsl, /unity_tiling_offset\(vec2\(.+\), vec2\(.+\), vec2\(.+\)\)/);
   assert.doesNotMatch(glsl, /texture\(mainTexture/);
 });
 
