@@ -516,7 +516,13 @@ namespace CcPlayable.UnityIntelligence.Capture
         }
 
         internal void ObserveCollision(Transform actor, Collision collision, string phase) {
-            var body=actor.GetComponent<Rigidbody>();var position=actor.position;var velocity=body!=null?body.velocity:Vector3.zero;
+            var body=actor.GetComponent<Rigidbody>();var position=actor.position;
+            // Unity 6 renamed Rigidbody.velocity; the obsolete name triggers the API updater consent dialog.
+#if UNITY_6000_0_OR_NEWER
+            var velocity=body!=null?body.linearVelocity:Vector3.zero;
+#else
+            var velocity=body!=null?body.velocity:Vector3.zero;
+#endif
             var contact=collision.contactCount>0?collision.GetContact(0):default(ContactPoint);
             var record=new ReferenceCapture.CollisionRecord {actor=ReferenceCapture.HierarchyPath(actor),collider=ReferenceCapture.HierarchyPath(collision.collider.transform),phase=phase,time=Time.time,fixedTime=Time.fixedTime,position=ReferenceCapture.VectorValues(position),velocity=ReferenceCapture.VectorValues(velocity),contacts=collision.contactCount,sleeping=body!=null&&body.IsSleeping(),contactPoint=ReferenceCapture.VectorValues(contact.point),contactNormal=ReferenceCapture.VectorValues(contact.normal),separation=contact.separation};
             if(phase=="enter")collisionEvents.Add(record);
