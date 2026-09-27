@@ -8,7 +8,9 @@ function inventory(source){
    const s=JSON.parse(component.json).ParticleSystem;if(!s)throw Error('Missing ParticleSystem source');count++;systems++;
    for(const [key,value]of Object.entries(s))if(key.endsWith('Module')&&value?.enabled){counts[key]=(counts[key]||0)+1;features.add('module:'+key);}
    const renderer=(node.components||[]).find(c=>c.type==='UnityEngine.ParticleSystemRenderer'),r=renderer?JSON.parse(renderer.json).ParticleSystemRenderer:null;
-   const mode=r?.m_RenderMode;features.add('renderer:'+mode);features.add('space-scale:'+s.simulationSpace+':'+s.scalingMode);
+   const mode=r?.m_RenderMode;features.add('renderer:'+(mode??'unknown'));
+   // Unity serialized moveWithTransform: 0 Local, 1 World, 2 Custom.
+   features.add('source-space-scale:'+(s.moveWithTransform??s.simulationSpace??'unknown')+':'+(s.scalingMode??'unknown'));
    for(const material of renderer?.materials||[])if(material)features.add('shader-renderer:'+materials.get(material)+':'+mode);
    if(s.NoiseModule?.enabled){features.add('noise-quality:'+s.NoiseModule.quality);features.add('noise-strength-mode:'+s.NoiseModule.strength?.minMaxState);if(s.NoiseModule.sizeAmount?.scalar)features.add('interaction:noise-size');}
    if(s.ForceModule?.enabled)features.add('force:'+s.ForceModule.randomizePerFrame+':'+s.ForceModule.inWorldSpace);
