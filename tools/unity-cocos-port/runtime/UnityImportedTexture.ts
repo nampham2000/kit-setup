@@ -48,7 +48,7 @@ export class UnityImportedTexture {
             if (value === 'Mirror') return gfx.Address.MIRROR;
             throw new Error(`Unsupported native texture wrap: ${value}`);
         };
-        if (native && (native.mipMapBias !== 0 || !['Point', 'Bilinear', 'Trilinear'].includes(native.filterMode)))
+        if (native && (native.mipMapBias !== 0 || ['Point', 'Bilinear', 'Trilinear'].indexOf(native.filterMode) < 0))
             throw new Error('Native texture sampler needs a measured shader adapter');
         const minFilter = native ? (native.filterMode === 'Point' ? gfx.Filter.POINT : gfx.Filter.LINEAR) : sampler.minFilter;
         const mipFilter = native ? (pixels.length === 1 ? gfx.Filter.NONE : native.filterMode === 'Trilinear' ? gfx.Filter.LINEAR : gfx.Filter.POINT) : sampler.mipFilter;
