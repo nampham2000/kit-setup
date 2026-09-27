@@ -81,3 +81,15 @@ unresolved reference choice and 186 uncovered prefab/phase cells remain. Existin
 individual diagnostic captures are valuable but have not been promoted to full
 catalog regression suites. Do not fabricate passing suites to clear this gate.
 
+# Large-project scan diagnostics
+
+Before treating a silent porter as an import or shader failure, establish its
+active phase. Unity GUID indexing includes Assets and PackageCache. Directory
+entry filtering now excludes irrelevant files before expensive filesystem
+probes; accepted files and traversed directories still pass lstat/realpath
+containment checks. Do not bypass those checks or omit packages to accelerate a
+port. Prefer one sequential catalog batch to repeated one-prefab invocations,
+which repeat the source index. On a busy multi-project machine, avoid starting
+duplicate scans while an earlier scan is still active. The scan-cost and
+port-path-boundaries tests cover the filter and retained path safeguards.
+
