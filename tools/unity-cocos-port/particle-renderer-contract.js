@@ -1,6 +1,34 @@
 'use strict';
 const {unityProceduralSortCenter}=require('./particle-procedural-sort-center.cjs');
 
+// World width (m) of the narrowest view in which a Min/Max Particle Size clamp is expected to bind.
+const CLAMP_REFERENCE_VIEW_WIDTH = 2;
+
+// Largest value a serialized MinMaxCurve can take (constants, two constants, curve keys x scalar).
+function minMaxCurveUpperBound(curve) {
+  if (!curve) return 0;
+  const state = Number(curve.minMaxState ?? 0);
+  const scalar = Number(curve.scalar ?? 0);
+  if (state === 0) return Math.abs(scalar);
+  if (state === 3) return Math.max(Math.abs(scalar), Math.abs(Number(curve.minScalar ?? 0)));
+  const keys = [curve.maxCurve, state === 2 ? curve.minCurve : null]
+    .flatMap(c => (c && Array.isArray(c.m_Curve) ? c.m_Curve : []))
+    .map(key => Math.abs(Number(key.value))).filter(Number.isFinite);
+  return Math.abs(scalar) * (keys.length ? Math.max(...keys) : 1);
+}
+
+// Upper bound of a particle's rendered world size: start size (largest axis) x Size over Lifetime.
+function particleWorldSizeUpperBound(particle = {}) {
+  const initial = particle.InitialModule;
+  if (!initial) return 0;
+  const axes = [initial.startSize];
+  if (Number(initial.size3D) === 1) axes.push(initial.startSizeY, initial.startSizeZ);
+  let size = Math.max(0, ...axes.map(minMaxCurveUpperBound));
+  const module = particle.SizeModule;
+  if (module && Number(module.enabled) === 1) size *= minMaxCurveUpperBound(module.curve);
+  return size;
+}
+
 // Geometry contracts measured with Unity ParticleSystemRenderer.BakeMesh.
 // Local billboard rotations are clockwise; mesh rotations are not. Both are
 // reflected through Z when crossing into Cocos. Never infer a ground plane
@@ -52,13 +80,23 @@ function particleRendererContract(particle = {}, renderer = {}) {
   const sizeValue = (value, fallback) => (value === undefined || value === null || value === '' || !Number.isFinite(Number(value)) ? fallback : Number(value));
   const sizeClamp = { min: sizeValue(renderer.m_MinParticleSize, 0), max: sizeValue(renderer.m_MaxParticleSize, 0.5) };
   if (mode === 1 && sizeClamp.min > 0) unsupported.push('stretched-min-particle-size');
+  // The clamp binds wherever a particle is wider than max x the viewport width at its depth,
+  // which the port cannot bound statically. View/Facing billboards and stretched particles
+  // that exceed max x CLAMP_REFERENCE_VIEW_WIDTH are routed through the source effect (its
+  // default View billboard path matches the builtin one and adds the measured clamp), e.g.
+  // JellyCubeRun2048 ParHitEffect: Blast size 25 / circle 10 with max 0.3, which the builtin
+  // effect drew over the whole screen. Small particles keep the builtin effect.
+  const sizeBound = particleWorldSizeUpperBound(particle);
+  const clampReachable = (mode === 0 && (alignment === 0 || alignment === 3) || mode === 1)
+    && sizeBound > sizeClamp.max * CLAMP_REFERENCE_VIEW_WIDTH;
   return {
     version: 4, sorting, mode, alignment, localBillboard, worldBillboard, straightBoxVelocity,
     cocosAlignment: localBillboard || straightBoxVelocity || alignment === 2 ? 0 : alignment === 0 ? 2 : 1,
     eulerSigns: mesh ? [-1, -1, 1] : localBillboard || worldBillboard ? [1, 1, -1] : viewBillboard ? [-1, -1, -1] : [-1, 1, -1],
     // Horizontal/Vertical billboards need the source vertex program for Unity's
     // size/sqrt(2) corner geometry; builtin particle effects draw them at size.
-    requiresMaterialAdapter: localBillboard || worldBillboard || stretchedPivot || mesh || mode === 2 || mode === 3 || (viewBillboard && pivotSet),
+    requiresMaterialAdapter: localBillboard || worldBillboard || stretchedPivot || mesh || mode === 2 || mode === 3 || (viewBillboard && pivotSet) || clampReachable,
+    clampReachable,
     // w: 2 Local billboard; 3 Mesh rotation already in world space (World alignment,
     // or the Velocity frame written by UnityParticleMeshFrameAdapter).
     sourceRendererPivot: [...pivotValues, localBillboard ? 2 : worldBillboard ? 4 : meshWorldFrame || meshVelocityFrame ? 3 : 0],

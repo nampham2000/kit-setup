@@ -38,3 +38,19 @@ test('Min/Max Particle Size keep Unity defaults and only the measured stretched 
   assert.ok(contract({}, {m_RenderMode:1,m_MinParticleSize:0.2}).unsupported.includes('stretched-min-particle-size'));
   assert.deepEqual(contract({}, {m_RenderMode:0,m_MinParticleSize:0.2}).unsupported,[]);
 });
+// JellyCubeRun2048 ParHitEffect: Blast (Facing, start size 25, Size over Lifetime curve peaking at 1,
+// max particle size 0.3) is clamped by Unity to 0.3 viewport widths; the builtin effect cannot clamp.
+test('particles large enough to reach the Min/Max Particle Size clamp use the source effect', () => {
+  const blast = { InitialModule: { startSize: { minMaxState: 0, scalar: 25 } }, SizeModule: { enabled: 1, curve: { minMaxState: 1, scalar: 1, maxCurve: { m_Curve: [{ value: 0 }, { value: 1 }] } } } };
+  const spark = { InitialModule: { startSize: { minMaxState: 3, scalar: 0.5, minScalar: 0.2 } }, SizeModule: { enabled: 1, curve: { minMaxState: 1, scalar: 0.5, maxCurve: { m_Curve: [{ value: 1 }, { value: 0 }] } } } };
+  for (const alignment of [0, 3]) {
+    const c = contract(blast, { m_RenderMode: 0, m_RenderAlignment: alignment, m_MaxParticleSize: 0.3 });
+    assert.equal(c.clampReachable, true);
+    assert.equal(c.requiresMaterialAdapter, true);
+    assert.deepEqual(c.sourceRendererSize, [0, 0.3, 0, 1]);
+  }
+  assert.equal(contract(blast, { m_RenderMode: 1, m_MaxParticleSize: 0.3 }).requiresMaterialAdapter, true, 'stretched widths are clamped too');
+  assert.equal(contract(spark, { m_RenderMode: 1, m_RenderAlignment: 0, m_MaxParticleSize: 0.3 }).requiresMaterialAdapter, false, '0.25 m sparks keep the builtin effect');
+  assert.equal(contract(blast, { m_RenderMode: 4, m_MaxParticleSize: 0.3 }).clampReachable, false, 'mesh particles are never clamped');
+  assert.equal(contract({ InitialModule: { startSize: { minMaxState: 0, scalar: 0.8 } } }, { m_RenderMode: 0 }).requiresMaterialAdapter, false, 'default 0.5 clamp needs over 1 m');
+});
