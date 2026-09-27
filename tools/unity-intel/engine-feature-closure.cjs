@@ -80,6 +80,18 @@ const UNITY_PHYSICS_2D_FACTS = Object.freeze([
   ['Physics2DSimulation', /\bRigidbody2D\b|\bAddForce\s*\(/],
 ]);
 
+/**
+ * Physics body dimension referenced by a C# script body. `\bRigidbody\b` never matches `Rigidbody2D` (the digit is a
+ * word character), and `ForceMode.` / `ForceMode2D` are the dimension-specific enums passed to AddForce.
+ */
+function csharpPhysicsDimension(runtimeText) {
+  const source = String(runtimeText || '');
+  return {
+    has3d: /\b(?:Rigidbody|ConstantForce|ArticulationBody)\b|\bForceMode\s*\./.test(source),
+    has2d: /\b(?:Rigidbody2D|ForceMode2D|ConstantForce2D)\b/.test(source),
+  };
+}
+
 function normalizeLogicalPath(value) {
   const normalized = String(value || '').replace(/\\/g, '/').replace(/^\.\//, '');
   return /^(?:Assets|Packages)\//.test(normalized) ? normalized : null;
@@ -167,6 +179,37 @@ function hasActiveBuiltinPrimitiveMesh(text) {
 }
 
 /**
+ * C# evidence for Unity's terrain types must be a *type* usage. A gameplay field
+ * or member that merely shares the name (`public TerrainDataSave TerrainData;`,
+ * `data.TerrainData`) is not terrain evidence, and a project type that declares
+ * its own `TerrainData` shadows UnityEngine.TerrainData inside that file.
+ */
+function referencesUnityTerrainType(runtimeText, declarationText) {
+  const source = String(runtimeText || '');
+  const declarations = maskCommentsAndStrings(declarationText == null ? source : declarationText);
+  const shadowed = new Set();
+  for (const match of declarations.matchAll(/\b(?:class|struct|interface|enum|record)\s+(TerrainData|TerrainCollider)\b/g)) {
+    shadowed.add(match[1]);
+  }
+  const names = ['TerrainData', 'TerrainCollider'].filter(name => !shadowed.has(name));
+  if (!names.length) return false;
+  const type = `(?:${names.join('|')})`;
+  const patterns = [
+    // Fully-qualified reference.
+    new RegExp(`\\bUnityEngine\\s*\\.\\s*${type}\\b`),
+    // Declaration: `TerrainData foo;`, `TerrainData[] foo =`, `TerrainCollider? c)`.
+    new RegExp(`(?<![.\\w])${type}(?:\\s*\\[\\s*\\]|\\s*\\?)?\\s+@?[A-Za-z_]\\w*\\s*(?:[;=,){]|=>)`),
+    // Construction, generic argument, typeof, pattern and cast usages.
+    new RegExp(`\\bnew\\s+${type}\\s*[({]`),
+    new RegExp(`<\\s*${type}\\s*(?:\\[\\s*\\])?\\s*>`),
+    new RegExp(`\\btypeof\\s*\\(\\s*${type}\\s*\\)`),
+    new RegExp(`\\b(?:is|as)\\s+${type}\\b`),
+    new RegExp(`\\(\\s*${type}\\s*\\)\\s*[A-Za-z_(]`),
+  ];
+  return patterns.some(pattern => pattern.test(source));
+}
+
+/**
  * Extract only bounded, decision-changing engine feature facts. Raw Unity text
  * never leaves the static index record, so the preflight projection stays
  * portable and cannot become a source dump.
@@ -220,7 +263,7 @@ function detectUnityEngineFeatureEvidence(input = {}) {
     addMarker(markers, 'debug-renderer', 'unity-runtime-debug-draw');
   }
   if (/(?:^|\n)(?:Terrain|TerrainCollider):/m.test(text) ||
-      /\b(?:TerrainData|TerrainCollider)\b/.test(runtimeText)) {
+      (extension === '.cs' ? referencesUnityTerrainType(runtimeText, text) : /\b(?:TerrainData|TerrainCollider)\b/.test(runtimeText))) {
     addMarker(markers, 'terrain', 'unity-terrain-runtime');
   }
   if (/(?:^|\n)(?:LightProbeGroup|LightProbeProxyVolume):/m.test(text) ||
@@ -232,10 +275,16 @@ function detectUnityEngineFeatureEvidence(input = {}) {
     addMarker(markers, 'graphics', 'unity-runtime-vector-geometry');
   }
 
+  // AddForce/MovePosition/MoveRotation exist on both Rigidbody and Rigidbody2D. In C# the receiver type decides the
+  // physics dimension: a script that only references Rigidbody2D/ForceMode2D drives 2D bodies and must not force the
+  // Cocos 3d + 3D physics backend (Lost Crypt CharacterController2D), and vice versa for 3D-only scripts.
+  const dimension = extension === '.cs' ? csharpPhysicsDimension(runtimeText) : null;
   for (const [fact, pattern] of UNITY_PHYSICS_FACTS) {
+    if (dimension && fact === 'PhysicsSimulation' && dimension.has2d && !dimension.has3d) continue;
     if (pattern.test(extension === '.cs' ? runtimeText : text)) addMarker(markers, 'physics-3d', `unity-${fact}`, { fact });
   }
   for (const [fact, pattern] of UNITY_PHYSICS_2D_FACTS) {
+    if (dimension && fact === 'Physics2DSimulation' && dimension.has3d && !dimension.has2d) continue;
     if (pattern.test(extension === '.cs' ? runtimeText : text)) addMarker(markers, 'physics-2d', `unity-${fact}`, { fact });
   }
 

@@ -68,6 +68,9 @@ const FEATURE_COMPONENTS = Object.freeze({
   'skeletal-animation': new Set(['SkeletalAnimation']),
   terrain: new Set(['Terrain']),
   'tiled-map': new Set(['TiledMap', 'TiledLayer', 'TiledObjectGroup']),
+  // Sorting2D only sorts when the USE_SORTING_2D intrinsic comes from the sorting-2d module;
+  // without it the class is missing and UIRenderer.priority is silently ignored by Batcher2D.
+  'sorting-2d': new Set(['Sorting2D']),
 });
 const SCANNED_EXTENSIONS = new Set(['.ts', '.js', '.scene', '.prefab', '.anim', '.animgraph']);
 const MAX_SCAN_FILES = 20_000;
