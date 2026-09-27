@@ -108,6 +108,10 @@ test('CLI is explicit about refresh and rejects unknown options', () => {
   assert.deepEqual(parseArgs(['init', '--risk', 'input-response', '--risk=level-lifecycle']).risks,
     ['input-response', 'level-lifecycle']);
   assert.throws(() => parseArgs(['run', '--maybe']), error => error.code === 'REGRESSION_OPTION_INVALID');
+  // --preview-url must reach the camelCase option that executeMatrix reads (was stored as options['preview-url']).
+  assert.equal(parseArgs(['run', '--preview-url', 'http://localhost:7457']).previewUrl, 'http://localhost:7457');
+  assert.equal(parseArgs(['run', '--preview-url=http://127.0.0.1:7460/']).previewUrl, 'http://127.0.0.1:7460/');
+  assert.equal(parseArgs(['run', '--preview-url', 'http://localhost:7457'])['preview-url'], undefined);
 });
 
 test('a win-less demo can verify lifecycle through two measured gesture restarts', t => {

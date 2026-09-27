@@ -193,6 +193,8 @@ function parseArgs(argv) {
       }
       options.suiteTimeoutMs = validateSuiteTimeoutMs(value, '--suite-timeout-ms');
     }
+    // CLI names are kebab-case; run/executeMatrix read camelCase (options.previewUrl).
+    else if (name === 'preview-url') options.previewUrl = value;
     else options[name] = value;
   }
   return options;
