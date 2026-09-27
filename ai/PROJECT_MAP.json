@@ -1576,6 +1576,7 @@
     "port.core.init": "npm run ai:port:core:init -- --unity-project <UnityProjectRoot> --cocos-project <CocosProjectRoot>",
     "port.core.scaffold": "npm run ai:port:core:scaffold -- --unity-project <UnityProjectRoot> --cocos-project <CocosProjectRoot>",
     "port.core.resume": "npm run ai:port:core:resume -- --unity-project <UnityProjectRoot> --cocos-project <CocosProjectRoot>",
+    "unity.intel.reference.capture": "node playable-shared-kit/tools/unity-intel/unity-reference-capture.cjs --project <UnityProjectRoot> --scene <Assets/...unity> --out <dir> --frames <n,n,...>",
     "unity.intel.scan": "npm run ai:unity:scan -- --project <UnityProjectRoot>",
     "unity.intel.query": "npm run ai:unity:query -- --project <UnityProjectRoot> --section <name>",
     "port.plan": "npm run ai:port:plan -- --project <UnityProjectRoot>",

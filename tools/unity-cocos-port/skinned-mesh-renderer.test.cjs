@@ -1,0 +1,88 @@
+'use strict';
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const createRendererPorter = require('./renderer-porter');
+
+// Hovl "Demo Toon VFX 2" hero: an unpacked Character.fbx instance whose
+// SkinnedMeshRenderers sit next to the Alpha:Hips bone chain under "Hero".
+function hierarchy() {
+  const objects = [];
+  const node = (name, parent) => {
+    const id = objects.push({ __type__: 'cc.Node', _name: name, _children: [], _parent: parent == null ? null : { __id__: parent } }) - 1;
+    if (parent != null) objects[parent]._children.push({ __id__: id });
+    return id;
+  };
+  const scene = node('Scene');
+  const hero = node('Hero', scene);
+  const hips = node('Alpha:Hips', hero);
+  node('Alpha:Spine', hips);
+  const geo = node('Alpha_HighTorsoGeo', hero);
+  return { objects, hero, geo };
+}
+
+function run(skin, extra = {}, materials = [{ guid: 'material' }]) {
+  const { objects, hero, geo } = hierarchy();
+  const added = [], codes = [];
+  const builder = { objects, addSkinnedMeshRenderer: (...args) => added.push(args) };
+  const reporter = Object.fromEntries(['high', 'medium', 'low'].map((level) => [level, (code) => codes.push(code)]));
+  const meshAsset = { ext: '.fbx', stem: 'Character', relativePath: 'Assets/Character.fbx' };
+  const porter = createRendererPorter({
+    getField: (doc, key, fallback) => doc[key] ?? fallback,
+    getNestedList: (doc, key) => doc[key] || [],
+    unityRefGuid: (ref) => ref?.guid || '',
+    unityRefFileId: (ref) => ref?.fileID || '',
+    resolveUnityMaterialUuid: () => 'gray-material',
+    handleMissingModel: () => ({ resolved: null }),
+    ...extra,
+  });
+  const cocosDb = {
+    resolveModelMeshByStem: () => ({ meshUuid: 'fbx@torso', materialUuids: ['fbx@mat', 'fbx@mat2'] }),
+    resolveModelSkinByMesh: () => skin,
+  };
+  const unityDb = { get: (guid) => ({ material: {}, mesh: meshAsset })[guid] };
+  porter.emitSkinnedMeshRenderer({ name: 'Alpha_HighTorsoGeo' }, geo, '137',
+    { m_Mesh: { guid: 'mesh', fileID: 4300000 }, m_Materials: materials }, { file: 'scene' }, builder, reporter, {}, unityDb, cocosDb);
+  return { added, codes, hero };
+}
+
+test('skinning root is the ancestor that resolves every joint path', () => {
+  const { added, codes, hero } = run({ skeletonUuid: 'fbx@skeleton', joints: ['Alpha:Hips', 'Alpha:Hips/Alpha:Spine'] });
+  assert.deepEqual(codes, ['SKINNED_MESH_BOUND']);
+  const [, , meshUuid, materials, skeletonUuid, skinningRoot] = added[0];
+  assert.deepEqual([meshUuid, materials, skeletonUuid, skinningRoot], ['fbx@torso', ['gray-material'], 'fbx@skeleton', hero]);
+});
+
+test('a bone hierarchy that differs from the model is reported, not bound', () => {
+  const { added, codes } = run({ skeletonUuid: 'fbx@skeleton', joints: ['Alpha:Hips/Alpha:Neck'] });
+  assert.equal(added.length, 0);
+  assert.deepEqual(codes, ['SKINNED_MESH_ROOT_UNRESOLVED']);
+  assert.deepEqual(run(null).codes, ['SKINNED_MESH_SKELETON_UNRESOLVED']);
+});
+
+test('skinning roots get real-time skinning: the ported Animation becomes a SkeletalAnimation', () => {
+  const objects = [
+    { __type__: 'cc.Node', _name: 'Hero', _components: [{ __id__: 1 }] },
+    { __type__: 'cc.Animation', node: { __id__: 0 }, _clips: [], playOnLoad: false },
+    { __type__: 'cc.SkinnedMeshRenderer', node: { __id__: 0 }, _skinningRoot: { __id__: 0 } },
+    { __type__: 'cc.Node', _name: 'Other', _components: [] },
+    { __type__: 'cc.SkinnedMeshRenderer', node: { __id__: 3 }, _skinningRoot: { __id__: 3 } },
+  ];
+  const added = [], codes = [];
+  const builder = { objects, addComponent: (node, type, body) => added.push({ node, type, body }) };
+  createRendererPorter({}).attachRealtimeSkinning(builder, { low: (code) => codes.push(code) });
+  assert.equal(objects[1].__type__, 'cc.SkeletalAnimation');
+  assert.equal(objects[1]._useBakedAnimation, false);
+  assert.deepEqual(added.map((a) => [a.node, a.type, a.body._useBakedAnimation]), [[3, 'cc.SkeletalAnimation', false]]);
+  assert.deepEqual(codes, ['SKINNED_MESH_REALTIME_SKINNING', 'SKINNED_MESH_REALTIME_SKINNING']);
+});
+
+test('an unresolved Unity slot keeps its index with the model material of that slot', () => {
+  const joints = { skeletonUuid: 'fbx@skeleton', joints: ['Alpha:Hips'] };
+  const { added } = run(joints, {}, [{ guid: 'missing' }, { guid: 'material' }]);
+  assert.deepEqual(added[0][3], ['fbx@mat', 'gray-material']);
+  const none = run(joints, {}, []);
+  assert.deepEqual(none.added[0][3], ['fbx@mat', 'fbx@mat2']);
+  const empty = run(joints, { resolveUnityMaterialUuid: () => '' }, [{ guid: 'material' }, { guid: 'material' }, { guid: 'material' }]);
+  assert.deepEqual(empty.added[0][3], ['fbx@mat', 'fbx@mat2', '']);
+  assert.ok(empty.codes.includes('SKINNED_MESH_MATERIAL_SLOT_EMPTY'));
+});

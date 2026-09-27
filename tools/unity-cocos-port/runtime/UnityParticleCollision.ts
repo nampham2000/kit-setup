@@ -80,6 +80,12 @@ export class UnityParticleCollision {
     private readonly sinks: SubEmitterSink[];
     private shapes: Shape[] | null = null;
     public collisions = 0;
+    /**
+     * Unity sendCollisionMessages: called per collision with the surface point and
+     * normal (ParticleCollisionEvent.intersection/normal, Cocos world space). Both
+     * vectors are reused; copy them.
+     */
+    public onCollision: ((intersection: Vec3, normal: Vec3) => void) | null = null;
 
     constructor(private readonly source: ParticleSystem, private readonly spec: UnityCollisionSpec, subEmitters: UnityCollisionSubEmitter[]) {
         this.processor = source.processor;
@@ -117,6 +123,7 @@ export class UnityParticleCollision {
             Vec3.scaleAndAdd(contact, hitPoint, normal, radius);
             this.collisions++;
             for (const sink of this.sinks) sink.fire(contact, p.color);
+            this.onCollision?.(hitPoint, normal);
             // Velocity response in simulation space (rotation only for local space).
             if (localSpace) Vec3.transformMat4Normal(local, normal, inverse); else local.set(normal);
             local.normalize();

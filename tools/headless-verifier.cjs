@@ -213,10 +213,10 @@ function checkAssetImport() {
   };
 }
 
-function checkEngineFeatureCropping() {
+function checkEngineFeatureCropping(auditFeatures = auditCocosEngineFeatures, root = ROOT_DIR) {
   const result = { name: 'Engine Feature Cropping', status: 'PASS', errors: [], warnings: [], details: '' };
   try {
-    const audit = auditCocosEngineFeatures(ROOT_DIR);
+    const audit = auditFeatures(root);
     const backend = audit.physicsDecision.backend
       ? `${audit.physicsDecision.label} (${audit.physicsDecision.backend})`
       : 'none';
@@ -246,8 +246,24 @@ function checkEngineFeatureCropping() {
       result.warnings.push(`Install-wide preview import map also enables disabled ${sharedExtras.join(', ')} ` +
         '(written by another open project); unused by this project, so it cannot affect its preview.');
     }
+    // A preview that only works from an uncommitted engine.json is not portable:
+    // every other checkout fails with "Can not find class 'cc.SkeletalAnimation'".
+    const committed = audit.committedProfile || { available: false, reason: 'not-audited' };
+    if (!committed.available) {
+      result.warnings.push(`Git-tracked engine profile is unreadable (${committed.reason}); cross-PC Feature Cropping is unverified.`);
+    } else if (!committed.tracked) {
+      result.status = 'FAIL';
+      result.errors.push('settings/v2/packages/engine.json is not tracked by Git; other checkouts get Cocos default modules. Stage and commit it.');
+    } else if (!committed.complete) {
+      result.status = 'FAIL';
+      result.errors.push(`Git-tracked settings/v2/packages/engine.json lacks ${committed.missing.concat(committed.unexpected).join(', ')}; ` +
+        'this preview works only from the uncommitted profile. Stage and commit settings/v2/packages/engine.json.');
+    } else if (committed.driftFromWorkingCopy.length) {
+      result.warnings.push(`Working-copy engine profile differs from Git (${committed.driftFromWorkingCopy.join(', ')}); commit or revert it.`);
+    }
+    const committedState = !committed.available ? 'unverified' : committed.complete ? 'ready' : 'missing';
     result.details = `Required: ${audit.requiredModules.join(', ') || 'none'}; physics decision: ${backend}; ` +
-      `profile=${audit.profile.complete ? 'ready' : 'missing'}, preview=${audit.appliedPreview.complete ? 'ready' : 'pending'}.`;
+      `profile=${audit.profile.complete ? 'ready' : 'missing'}, git=${committedState}, preview=${audit.appliedPreview.complete ? 'ready' : 'pending'}.`;
   } catch (error) {
     result.status = 'FAIL';
     result.errors.push(`[${error.code || 'ENGINE_FEATURE_ERROR'}] ${error.message}`);

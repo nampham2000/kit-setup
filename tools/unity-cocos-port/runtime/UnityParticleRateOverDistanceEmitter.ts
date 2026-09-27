@@ -29,7 +29,6 @@ export class UnityParticleRateOverDistanceEmitter extends Component {
     private readonly _positionOffset = new Vec3();
     private readonly _inverseWorldMatrix = new Mat4();
     private _distanceRemainder = 0;
-    private _wasPlaying = false;
 
     protected onLoad(): void {
         this.disableNativeRateOverDistance();
@@ -41,9 +40,20 @@ export class UnityParticleRateOverDistanceEmitter extends Component {
         this.resetTracking();
     }
 
+    /**
+     * Unity measures the first move from where Instantiate(prefab, pos, rot) placed the
+     * emitter. The Cocos spawn pattern (instantiate, addChild -> onEnable, then set the world
+     * pose) only reaches that pose after onEnable, so the start position is taken again here,
+     * before the first update: same-frame spawner positioning is absorbed, while a move made
+     * by an owner's first update (Hovl_Laser parking its HitEffect at the raycast hit) still
+     * emits rate * distance particles along the jump.
+     */
+    protected start(): void {
+        this.resetTracking();
+    }
+
     protected onDisable(): void {
         this._distanceRemainder = 0;
-        this._wasPlaying = false;
     }
 
     protected update(dt: number): void {
@@ -55,13 +65,6 @@ export class UnityParticleRateOverDistanceEmitter extends Component {
         if (!particleSystem.isPlaying) {
             this._lastWorldPosition.set(this._currentWorldPosition);
             this._distanceRemainder = 0;
-            this._wasPlaying = false;
-            return;
-        }
-
-        if (!this._wasPlaying) {
-            this._lastWorldPosition.set(this._currentWorldPosition);
-            this._wasPlaying = true;
             return;
         }
 
@@ -120,6 +123,5 @@ export class UnityParticleRateOverDistanceEmitter extends Component {
     private resetTracking(): void {
         this.node.getWorldPosition(this._lastWorldPosition);
         this._distanceRemainder = 0;
-        this._wasPlaying = false;
     }
 }

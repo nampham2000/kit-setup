@@ -85,7 +85,8 @@ function attachCollisionRuntime(builder, reporter, options) {
       continue;
     }
     if (spec.messages) {
-      reporter.high('PARTICLE_COLLISION_MESSAGES_UNPORTED', options.src || '', name, 'OnParticleCollision script messages are not delivered by the Cocos collision adapter.');
+      reporter.low('PARTICLE_COLLISION_MESSAGES_EVENT', options.src || '', name,
+        "OnParticleCollision is delivered as node event 'unity-particle-collision' (intersection, normal); the receiving script must be ported to listen to it.");
     }
     if (spec.curves.length) {
       reporter.medium('PARTICLE_COLLISION_CURVE_APPROXIMATED', options.src || '', name, `Collision ${spec.curves.join(', ')} curve uses its scalar.`);
@@ -117,7 +118,7 @@ function attachCollisionRuntime(builder, reporter, options) {
       targets,
       sourceContract: JSON.stringify({
         dampen: spec.dampen, bounce: spec.bounce, lifetimeLoss: spec.lifetimeLoss,
-        minKillSpeed: spec.minKillSpeed, maxKillSpeed: spec.maxKillSpeed, radiusScale: spec.radiusScale, subEmitters,
+        minKillSpeed: spec.minKillSpeed, maxKillSpeed: spec.maxKillSpeed, radiusScale: spec.radiusScale, subEmitters, messages: spec.messages,
       }),
     }, null, `cmp-unity-collision-${id}`);
     reporter.low('PARTICLE_COLLISION_ADAPTER_BOUND', options.src || '', name,

@@ -272,8 +272,117 @@ module.exports = function createRendererPorter(deps) {
     }
   }
 
+  // Node reached from `rootId` by a Cocos skeleton joint path ("Alpha:Hips/Alpha:Spine").
+  function nodeAtPath(builder, rootId, jointPath) {
+    let current = rootId;
+    for (const name of String(jointPath || '').split('/').filter(Boolean)) {
+      const next = (builder.objects[current]?._children || []).map((ref) => ref?.__id__)
+        .find((id) => builder.objects[id]?._name === name);
+      if (!Number.isInteger(next)) return null;
+      current = next;
+    }
+    return current;
+  }
+
+  function parentNodeId(builder, nodeId) {
+    const id = builder.objects[nodeId]?._parent?.__id__;
+    return Number.isInteger(id) ? id : null;
+  }
+
+  // Unity SkinnedMeshRenderer on an unpacked model instance. The Cocos model prefab
+  // pairs the imported mesh with a skeleton whose joint paths are relative to the
+  // model root; that root is the ancestor from which every joint path resolves.
+  // Unity's X reflection of the FBX and the scene's Z reflection compose to a Y
+  // rotation, the same for bind pose and animated bones, so skinning stays coherent.
+  function emitSkinnedMeshRenderer(gameObject, nodeId, componentId, doc, model, builder, reporter, options, unityDb, cocosDb) {
+    const meshRef = getField(doc, 'm_Mesh');
+    const meshAsset = unityDb.get(unityRefGuid(meshRef));
+    const componentFileId = `cmp-skinned-mesh-renderer-${componentId}`;
+    if (!meshAsset || !['.fbx', '.gltf', '.glb'].includes(meshAsset.ext)) {
+      reporter.high('SKINNED_MESH_UNRESOLVED', model.file, gameObject.name, 'SkinnedMeshRenderer mesh is not an imported model sub-asset');
+      return;
+    }
+    const meshName = unityModelMeshName(meshAsset, deps.unityRefFileId(meshRef)) || gameObject.name;
+    let resolved = cocosDb.resolveModelMeshByStem(meshAsset.stem, meshName, meshAsset.ext);
+    if (!resolved) {
+      const missing = handleMissingModel(meshAsset, reporter, options, { autoCopy: true, meshNameHint: meshName });
+      resolved = missing.resolved || null;
+      if (!resolved?.meshUuid) {
+        reporter.medium('SKINNED_MESH_PENDING_IMPORT', meshAsset.relativePath, gameObject.name,
+          'Model copied for AssetDB import; refresh and rerun the porter to bind the skinned mesh.');
+        return;
+      }
+    }
+    const skin = cocosDb.resolveModelSkinByMesh(meshAsset.stem, resolved.meshUuid, resolved.fallbackExt || meshAsset.ext);
+    if (!skin?.skeletonUuid || !skin.joints.length) {
+      reporter.high('SKINNED_MESH_SKELETON_UNRESOLVED', meshAsset.relativePath, gameObject.name,
+        'The imported Cocos model has no skeleton for this mesh; refresh AssetDB and rerun the porter.');
+      return;
+    }
+    let skinningRoot = parentNodeId(builder, nodeId);
+    while (Number.isInteger(skinningRoot) && !skin.joints.every((joint) => Number.isInteger(nodeAtPath(builder, skinningRoot, joint)))) {
+      skinningRoot = parentNodeId(builder, skinningRoot);
+    }
+    if (!Number.isInteger(skinningRoot)) {
+      reporter.high('SKINNED_MESH_ROOT_UNRESOLVED', model.file, gameObject.name,
+        `No ancestor resolves every skeleton joint path (first: ${skin.joints[0]}); the ported bone hierarchy differs from the model.`);
+      return;
+    }
+    // Slot i stays slot i: an unresolved Unity slot falls back to the model's own
+    // material at that index (as for MeshRenderer), then FBX sub-mesh order is remapped.
+    const modelMaterials = resolved.materialUuids || [];
+    const materialRefs = getNestedList(doc, 'm_Materials');
+    let materialUuids = materialRefs.length ? materialRefs.map((materialRef, index) => {
+      const materialAsset = unityDb.get(unityRefGuid(materialRef));
+      return (materialAsset ? resolveUnityMaterialUuid(materialAsset, options, unityDb, cocosDb, reporter, gameObject.name) : '') || modelMaterials[index] || '';
+    }) : modelMaterials.slice();
+    if (materialUuids.length && !materialUuids.includes('')) {
+      materialUuids = cocosMaterialSlots(meshAsset, meshName, materialUuids, reporter, gameObject.name);
+    } else if (materialUuids.includes('')) {
+      reporter.medium('SKINNED_MESH_MATERIAL_SLOT_EMPTY', meshAsset.relativePath, gameObject.name,
+        'A SkinnedMeshRenderer material slot resolved to no Unity or model material; the slot renders with the default material.');
+    }
+    builder.addSkinnedMeshRenderer(nodeId, componentId, resolved.meshUuid, materialUuids, skin.skeletonUuid, skinningRoot, componentFileId, {
+      castShadows: Number(getField(doc, 'm_CastShadows', 1) || 0) !== 0,
+      receiveShadows: Number(getField(doc, 'm_ReceiveShadows', 1) || 0) !== 0,
+    });
+    // Bone basis and bind pose are carried over structurally; skinning parity needs a visual check.
+    reporter.medium('SKINNED_MESH_BOUND', meshAsset.relativePath, gameObject.name,
+      `SkinnedMeshRenderer bound to the imported skeleton (${skin.joints.length} joints) under ${builder.objects[skinningRoot]?._name || 'root'}; verify the deformation visually.`);
+  }
+
+  // Cocos SkinnedMeshRenderer defaults to BakedSkinningModel, which samples joint
+  // textures baked by a SkeletalAnimation and ignores bone transforms driven by an
+  // AnimationController or Animation. Every skinning root therefore gets a
+  // SkeletalAnimation with useBakedAnimation=false (the ported Animation component is
+  // converted in place; SkeletalAnimation extends it), after all components exist.
+  function attachRealtimeSkinning(builder, reporter) {
+    const roots = new Map();
+    for (const object of builder.objects) {
+      if (object?.__type__ !== 'cc.SkinnedMeshRenderer') continue;
+      const rootId = object._skinningRoot?.__id__;
+      if (Number.isInteger(rootId)) roots.set(rootId, (roots.get(rootId) || 0) + 1);
+    }
+    for (const [rootId, renderers] of roots) {
+      const root = builder.objects[rootId];
+      const animation = (root._components || []).map((ref) => builder.objects[ref.__id__])
+        .find((component) => component?.__type__ === 'cc.Animation' || component?.__type__ === 'cc.SkeletalAnimation');
+      if (animation) {
+        animation.__type__ = 'cc.SkeletalAnimation';
+        animation._useBakedAnimation = false;
+        if (!Array.isArray(animation._sockets)) animation._sockets = [];
+      } else {
+        builder.addComponent(rootId, 'cc.SkeletalAnimation', { playOnLoad: false, _clips: [], _defaultClip: null, _useBakedAnimation: false, _sockets: [] },
+          null, `cmp-skeletal-animation-${rootId}`);
+      }
+      reporter.low('SKINNED_MESH_REALTIME_SKINNING', '', root._name || '', `${renderers} skinned renderer(s) use real-time skinning under ${root._name || 'root'}.`);
+    }
+  }
+
   return {
     emitSyntheticModelRenderer,
     emitMeshRenderer,
+    emitSkinnedMeshRenderer,
+    attachRealtimeSkinning,
   };
 };
