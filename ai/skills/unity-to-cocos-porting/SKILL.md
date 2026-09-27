@@ -90,6 +90,14 @@ legacy Built-in materials into a user's URP project to recover pack appearance.
 Keep working compatibility fixes; reconstruct the original in an isolated project
 or implement a verified pipeline-compatible equivalent. Backups do not substitute
 for checking compatibility before changing a working source project.
+When diagnosing pale hex-aura-orange, include both material owners: hex-mat uses
+Legacy Additive gray tint, while energy-liquid-mat uses Legacy Soft Additive.
+The working URP conversion can use white-base Additive for both. Equal white
+coefficients do not make Soft Additive equivalent: its shader premultiplies RGB
+and blends One/OneMinusSrcColor. The material-reference audit must report this
+difference instead of rejecting the mist as an unknown kind. Compare matching
+camera/time captures and resolve original-versus-working pipeline intent before
+applying a pack-wide brightness multiplier.
 Reference projects must include the source QualitySettings.asset, not just pack
 assets. Combat Magic's historical quality is 150 pixel lights, MSAA 4 and soft
 particles; omitting that file silently used 4 lights and invalidated lighting

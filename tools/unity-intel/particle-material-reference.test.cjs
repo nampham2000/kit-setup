@@ -28,3 +28,11 @@ test('incomplete and invalid material evidence cannot pass',()=>{
  assert.throws(()=>contract({...urp,shader:'Unknown'}),/Unsupported/);
  assert.throws(()=>compare({},{}),/reference differs/);
 });
+test('soft-additive mist is not interchangeable with URP additive despite equal white coefficients',()=>{
+ const soft=contract({shader:'Legacy Shaders/Particles/Additive (Soft)',gpuColor:[1,1,1,1],srcBlend:1,dstBlend:6});
+ assert.deepEqual(soft.rgbaCoefficient,contract(urp).rgbaCoefficient);
+ assert.equal(soft.property,null);assert.equal(soft.rgbPremultiplyAlpha,true);
+ assert.throws(()=>compare(soft,contract(urp)),/rgbPremultiplyAlpha/);
+ assert.throws(()=>contract({...legacy,shader:soft.shader}),/blend contract/);
+ assert.throws(()=>contract({shader:soft.shader,gpuColor:[.5,.5,.5,1],srcBlend:1,dstBlend:6}),/no material tint/);
+});
