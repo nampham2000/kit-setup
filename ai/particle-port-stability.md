@@ -213,3 +213,9 @@ the float delta before wrapping and retain cycles for delay calculations. Native
 ElectroDamage replay matches count/seed/age across 301 consecutive frames; isolated
 startup checkpoints had missed the first divergence at frame 263. Do not emulate
 a nonexistent Cocos engine wrap or reset the fraction at every duration boundary.
+
+### Native import and burst evidence
+
+- Before tint/alpha compensation, compare Unity imported texture format and mip pixels. PNG equality does not imply GPU sampling equality. Use `tools/unity-intel/IMPORTED_TEXTURE_MIPS.md` for the source-bound native sRGB mip route. Unity NPOT/max-size import can change dimensions; preserve native dimensions and bind by UUID rather than requiring equality with the source PNG. Refresh the scene through AssetDB and assert runtime bindings before capture.
+- Random burst counts are integer samples, not float lerps. The measured ordered TwoConstants bursts uses an independent xorshift stream, an inclusive unsigned modulo count and a wrapped float event clock. Source-gate probability, repeat count, start delay and emission-rate mode; retain a HIGH obligation for unsupported combinations. Native fixtures cover 12 seeds, zero/offset burst times, four loops and constant continuous emission. Test clear/replay and live particle identities; checking only capped particle counts can hide a wrong burst count.
+- Re-fetch shared main between completed features and before pushing. Audit changed files, integrate only when no running generator is loading those dependencies, then rerun affected regressions. Do not reset another project checkout or overwrite local work.

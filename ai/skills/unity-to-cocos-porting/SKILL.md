@@ -1302,3 +1302,15 @@ primitive topology and UVs with source-version evidence. The measured Sphere
 axis-angle subset and late wrapped emission-clock traps are documented in
 [particle-port-stability](../../particle-port-stability.md); do not generalize
 those fixtures to unmeasured shapes, spaces or rotation modules.
+
+### Native import and burst evidence
+
+- Before tint/alpha compensation, compare Unity imported texture format and mip pixels. PNG equality does not imply GPU sampling equality. Use `tools/unity-intel/IMPORTED_TEXTURE_MIPS.md` for the source-bound native sRGB mip route. Unity NPOT/max-size import can change dimensions; preserve native dimensions and bind by UUID rather than requiring equality with the source PNG. Refresh the scene through AssetDB and assert runtime bindings before capture.
+- Random burst counts are integer samples, not float lerps. The measured ordered TwoConstants bursts uses an independent xorshift stream, an inclusive unsigned modulo count and a wrapped float event clock. Source-gate probability, repeat count, start delay and emission-rate mode; retain a HIGH obligation for unsupported combinations. Native fixtures cover 12 seeds, zero/offset burst times, four loops and constant continuous emission. Test clear/replay and live particle identities; checking only capped particle counts can hide a wrong burst count.
+- Re-fetch shared main between completed features and before pushing. Audit changed files, integrate only when no running generator is loading those dependencies, then rerun affected regressions. Do not reset another project checkout or overwrite local work.
+
+### Imported texture contract (ASTC, BMP and PNG)
+
+Treat container extension, Unity importer output and shader sampling as three different contracts. Before claiming texture parity, record active build target, Unity texture/graphics format, sRGB/data role, dimensions, complete mip chain, filter/wrap/aniso/mip bias, alpha handling and the shader property/UV/channel using the texture. A PNG made from a BMP is not proof of equivalence; ASTC selected in a platform override is not proof that the current Editor GPU is sampling ASTC.
+
+Use `tools/unity-intel/IMPORTED_TEXTURE_MIPS.md` for the measured sRGB Texture2D route, including BMP inputs mapped to Cocos-imported PNG UUIDs. The producer must reject unsupported GPU sampling and linear/HDR/normal-map cases outside its measured scope. Do not replace unsupported ASTC with raw source PNG and call it equivalent; integrate a validated decoder or capture on a matching reference device. Preserve any future ASTC decoder from shared main and run native sampler/shader regressions before adoption. Do not apply an sRGB texture wrapper to linear masks/normals. Texture-byte equality alone cannot certify toon lighting, crystal refraction, channel swizzles, procedural UVs, premultiplied blend or double gamma conversion. Validate those in the actual effect. A 98–100% target requires measured image and semantic acceptance on named cases, not an importer success code.

@@ -19,3 +19,13 @@ test('native mip normalization flips rows once, preserves UUID, validates before
   texture.srgb=false;assert.throws(()=>normalize(capture,mapping,root,root,'hash'),/sRGB/);
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+test('native BMP import preserves compressed pixels, mip levels and converted PNG UUID',()=>{
+ const fixture=path.join(__dirname,'fixtures/native-bmp'),capture=JSON.parse(fs.readFileSync(path.join(fixture,'capture.json'))),root=fs.mkdtempSync(path.join(os.tmpdir(),'native-bmp-'));
+ try{fs.writeFileSync(path.join(root,'converted.png.meta'),JSON.stringify({subMetas:{texture:{importer:'texture',uuid:'converted-png-texture'}}}));
+ const output=normalize(capture,[{unityPath:'Assets/TextureImportRegression/Synthetic.bmp',cocosMeta:'converted.png.meta',output:'native.json'}],fixture,root,'fixture');const data=JSON.parse(output[0].text);assert.equal(data.textureUuid,'converted-png-texture');assert.equal(data.format,'RGBA_DXT1_SRGB');assert.equal(data.mips.length,5);assert.equal(data.sampler.filterMode,'Bilinear');
+ const native=Buffer.from(capture.textures[0].mips[0].rgba,'base64'),top=Buffer.from(data.mips[0].rgba,'base64');assert.deepEqual(top.subarray(0,64),native.subarray(7*64,8*64));
+ const bmp=fs.readFileSync(path.join(fixture,'Assets/TextureImportRegression/Synthetic.bmp'));let changed=0;for(let y=0;y<8;y++)for(let x=0;x<16;x++){const src=54+(y*16+x)*3,dst=(y*16+x)*4;for(let c=0;c<3;c++)if(bmp[src+2-c]!==native[dst+c])changed++;assert.equal(native[dst+3],255);}assert.ok(changed>0,'native compressed texels must differ from raw BMP conversion');
+ const stale=structuredClone(capture);stale.textures[0].sourceTextureSha256='stale';assert.throws(()=>normalize(stale,[{unityPath:'Assets/TextureImportRegression/Synthetic.bmp',cocosMeta:'converted.png.meta',output:'native.json'}],fixture,root,'fixture'),/changed after/);
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
