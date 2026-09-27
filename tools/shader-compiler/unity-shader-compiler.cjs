@@ -143,6 +143,8 @@ function transpileShaderFile(srcPath, outPath, options = {}) {
 
   // 7. Write outputs if not dryRun
   if (!options.dryRun && outPath) {
+    if (validationResult.propertyBindings.errors.length) throw Object.assign(
+      new Error(validationResult.propertyBindings.errors.join('\n')), { code: 'EFX3302_PROPERTY_UNIFORM_MISSING' });
     ensureDir(path.dirname(outPath));
     fs.writeFileSync(outPath, effectCode, 'utf8');
 
@@ -332,15 +334,16 @@ function cmdBatch(options) {
   console.log(`\nBatch conversion finished: ${successCount}/${shaders.length} converted.`);
 }
 
-function cmdValidate(effectPath) {
+function cmdValidate(effectPath, options = {}) {
   if (!fs.existsSync(effectPath)) {
     console.error(`Effect file not found: ${effectPath}`);
     process.exit(1);
   }
   const text = fs.readFileSync(effectPath, 'utf8');
-  const res = validateCceffectStructure(text, { effectPath });
+  const res = validateCceffectStructure(text, { effectPath, chunkRoot: options.chunkRoot });
   console.log(`Static validation for '${effectPath}': ${res.valid ? '✅ PASS' : '❌ FAIL'}`);
   console.log('Scope: text/ABI heuristics only. Cocos importer, runtime shader variants, and Unity visual parity were NOT checked.');
+  console.log(`Property bindings: ${res.propertyBindings.complete ? 'checked' : 'incomplete (resolve chunks and run live AssetDB import)'}`);
   if (res.errors.length > 0) {
     console.log('Errors:');
     for (const e of res.errors) console.log(`  - ❌ ${e}`);
@@ -543,6 +546,7 @@ function main() {
     else if (arg === '--max-closure-depth' && args[i + 1]) options.maxClosureDepth = Number(args[++i]);
     else if (arg === '--json') options.json = true;
     else if (arg === '--no-cache') options.noCache = true;
+    else if (arg === '--chunk-root' && args[i + 1]) options.chunkRoot = args[++i];
   }
 
   if (command === 'batch' && !options.dir) {
@@ -575,7 +579,7 @@ function main() {
     options.dir = options.dir || args[1];
     cmdBatch(options);
   } else if (command === 'validate') {
-    cmdValidate(args[1] || options.out);
+    cmdValidate(args[1] || options.out, options);
   } else if (command === 'chain') {
     options.src = options.src || args[1];
     cmdChain(options);
@@ -596,7 +600,7 @@ Usage:
   node unity-shader-compiler.cjs scan <UnityDir>
   node unity-shader-compiler.cjs inspect <Shader>
   node unity-shader-compiler.cjs batch --dir <ShadersDir> --out-dir <EffectsDir> [-m]
-  node unity-shader-compiler.cjs validate <Effect>
+  node unity-shader-compiler.cjs validate <Effect> [--chunk-root <CreatorEngine/editor/assets/chunks>]
   node unity-shader-compiler.cjs doctor
 
 'chain' is the entry point for "port this prefab/material-set config and whatever it renders with":

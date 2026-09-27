@@ -14,7 +14,6 @@ export class UnityParticleOrbitAdapter extends Component {
 
     protected start(): void {
         if (!this.source || !this.sourceContract) throw new Error('Missing Unity Orbit source contract');
-        if (this.source.limitVelocityOvertimeModule.enable) throw new Error('Unity Orbit with velocity limit requires a validated integration adapter');
         const spec = JSON.parse(this.sourceContract) as UnityOrbitSpec;
         installUnityParticleOrbit(this.source, spec);
     }

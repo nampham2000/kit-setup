@@ -1,0 +1,1459 @@
+{
+ "unityVersion": "6000.3.1f1",
+ "sourceProbeSha256": "7975973d378b16ad287d8eb94fe7d50b5df6a777b566d9aecbf1e0547be70ca4",
+ "seed": 1,
+ "cases": [
+  {
+   "name": "2d-rotation",
+   "rotation3D": false,
+   "strength": 1,
+   "frequency": 1,
+   "damping": false,
+   "quality": 1,
+   "positionAmount": 0,
+   "rotationAmount": 10,
+   "rotationCurve": false,
+   "angularOverLifetime": [
+    0,
+    0,
+    0
+   ],
+   "startRotation": [
+    10,
+    20,
+    30
+   ],
+   "position": [
+    0.3,
+    -0.7,
+    1.1
+   ],
+   "lifetime": 10,
+   "remaining": 10,
+   "sizeAmount": 0,
+   "dt": 0.0166666675,
+   "rows": [
+    {
+     "rotation": 30.016428,
+     "rotation3D": [
+      0,
+      0,
+      30.016428
+     ],
+     "angularVelocity3D": [
+      0,
+      0,
+      0
+     ],
+     "position": [
+      0.3,
+      -0.7,
+      1.1
+     ],
+     "totalVelocity": [
+      0,
+      0,
+      0
+     ],
+     "size": 1,
+     "remaining": 9.983334
+    },
+    {
+     "rotation": 30.0328541,
+     "rotation3D": [
+      0,
+      0,
+      30.0328541
+     ],
+     "angularVelocity3D": [
+      0,
+      0,
+      0
+     ],
+     "position": [
+      0.3,
+      -0.7,
+      1.1
+     ],
+     "totalVelocity": [
+      0,
+      0,
+      0
+     ],
+     "size": 1,
+     "remaining": 9.966667
+    },
+    {
+     "rotation": 30.04928,
+     "rotation3D": [
+      0,
+      0,
+      30.04928
+     ],
+     "angularVelocity3D": [
+      0,
+      0,
+      0
+     ],
+     "position": [
+      0.3,
+      -0.7,
+      1.1
+     ],
+     "totalVelocity": [
+      0,
+      0,
+      0
+     ],
+     "size": 1,
+     "remaining": 9.95
+    },
+    {
+     "rotation": 30.0657082,
+     "rotation3D": [
+      0,
+      0,
+      30.0657082
+     ],
+     "angularVelocity3D": [
+      0,
+      0,
+      0
+     ],
+     "position": [
+      0.3,
+      -0.7,
+      1.1
+     ],
+     "totalVelocity": [
+      0,
+      0,
+      0
+     ],
+     "size": 1,
+     "remaining": 9.933333
+    }
+   ]
+  },
+  {
+   "name": "3d-rotation",
+   "rotation3D": true,
+   "strength": 1,
+   "frequency": 1,
+   "damping": false,
+   "quality": 1,
+   "positionAmount": 0,
+   "rotationAmount": 10,
+   "rotationCurve": false,
+   "angularOverLifetime": [
+    0,
+    0,
+    0
+   ],
+   "startRotation": [
+    10,
+    20,
+    30
+   ],
+   "position": [
+    0.3,
+    -0.7,
+    1.1
+   ],
+   "lifetime": 10,
+   "remaining": 10,
+   "sizeAmount": 0,
+   "dt": 0.0166666675,
+   "rows": [
+    {
+     "rotation": 30.016428,
+     "rotation3D": [
+      10.0049706,
+      20.0988522,
+      30.016428
+     ],
+     "angularVelocity3D": [
+      0,
+      0,
+      0
+     ],
+     "position": [
+      0.3,
+      -0.7,
+      1.1
+     ],
+     "totalVelocity": [
+      0,
+      0,
+      0
+     ],
+     "size": 1,
+     "remaining": 9.983334
+    },
+    {
+     "rotation": 30.0328541,
+     "rotation3D": [
+      10.0099411,
+      20.1977062,
+      30.0328541
+     ],
+     "angularVelocity3D": [
+      0,
+      0,
+      0
+     ],
+     "position": [
+      0.3,
+      -0.7,
+      1.1
+     ],
+     "totalVelocity": [
+      0,
+      0,
+      0
+     ],
+     "size": 1,
+     "remaining": 9.966667
+    },
+    {
+     "rotation": 30.04928,
+     "rotation3D": [
+      10.0149117,
+      20.29656,
+      30.04928
+     ],
+     "angularVelocity3D": [
+      0,
+      0,
+      0
+     ],
+     "position": [
+      0.3,
+      -0.7,
+      1.1
+     ],
+     "totalVelocity": [
+      0,
+      0,
+      0
+     ],
+     "size": 1,
+     "remaining": 9.95
+    },
+    {
+     "rotation": 30.0657082,
+     "rotation3D": [
+      10.0198822,
+      20.3954124,
+      30.0657082
+     ],
+     "angularVelocity3D": [
+      0,
+      0,
+      0
+     ],
+     "position": [
+      0.3,
+      -0.7,
+      1.1
+     ],
+     "totalVelocity": [
+      0,
+      0,
+      0
+     ],
+     "size": 1,
+     "remaining": 9.933333
+    }
+   ]
+  },
+  {
+   "name": "3d-strength2",
+   "rotation3D": true,
+   "strength": 2,
+   "frequency": 1,
+   "damping": false,
+   "quality": 1,
+   "positionAmount": 0,
+   "rotationAmount": 10,
+   "rotationCurve": false,
+   "angularOverLifetime": [
+    0,
+    0,
+    0
+   ],
+   "startRotation": [
+    10,
+    20,
+    30
+   ],
+   "position": [
+    0.3,
+    -0.7,
+    1.1
+   ],
+   "lifetime": 10,
+   "remaining": 10,
+   "sizeAmount": 0,
+   "dt": 0.0166666675,
+   "rows": [
+    {
+     "rotation": 30.0328541,
+     "rotation3D": [
+      10.0099411,
+      20.1977062,
+      30.0328541
+     ],
+     "angularVelocity3D": [
+      0,
+      0,
+      0
+     ],
+     "position": [
+      0.3,
+      -0.7,
+      1.1
+     ],
+     "totalVelocity": [
+      0,
+      0,
+      0
+     ],
+     "size": 1,
+     "remaining": 9.983334
+    },
+    {
+     "rotation": 30.0657082,
+     "rotation3D": [
+      10.0198822,
+      20.3954124,
+      30.0657082
+     ],
+     "angularVelocity3D": [
+      0,
+      0,
+      0
+     ],
+     "position": [
+      0.3,
+      -0.7,
+      1.1
+     ],
+     "totalVelocity": [
+      0,
+      0,
+      0
+     ],
+     "size": 1,
+     "remaining": 9.966667
+    },
+    {
+     "rotation": 30.09856,
+     "rotation3D": [
+      10.0298243,
+      20.59312,
+      30.09856
+     ],
+     "angularVelocity3D": [
+      0,
+      0,
+      0
+     ],
+     "position": [
+      0.3,
+      -0.7,
+      1.1
+     ],
+     "totalVelocity": [
+      0,
+      0,
+      0
+     ],
+     "size": 1,
+     "remaining": 9.95
+    },
+    {
+     "rotation": 30.1314144,
+     "rotation3D": [
+      10.0397654,
+      20.7908268,
+      30.1314144
+     ],
+     "angularVelocity3D": [
+      0,
+      0,
+      0
+     ],
+     "position": [
+      0.3,
+      -0.7,
+      1.1
+     ],
+     "totalVelocity": [
+      0,
+      0,
+      0
+     ],
+     "size": 1,
+     "remaining": 9.933333
+    }
+   ]
+  },
+  {
+   "name": "3d-position-amount",
+   "rotation3D": true,
+   "strength": 1,
+   "frequency": 1,
+   "damping": false,
+   "quality": 1,
+   "positionAmount": 1,
+   "rotationAmount": 10,
+   "rotationCurve": false,
+   "angularOverLifetime": [
+    0,
+    0,
+    0
+   ],
+   "startRotation": [
+    10,
+    20,
+    30
+   ],
+   "position": [
+    0.3,
+    -0.7,
+    1.1
+   ],
+   "lifetime": 10,
+   "remaining": 10,
+   "sizeAmount": 0,
+   "dt": 0.0166666675,
+   "rows": [
+    {
+     "rotation": 30.016428,
+     "rotation3D": [
+      10.0049706,
+      20.0988522,
+      30.016428
+     ],
+     "angularVelocity3D": [
+      0,
+      0,
+      0
+     ],
+     "position": [
+      0.3009941,
+      -0.680229247,
+      1.10328531
+     ],
+     "totalVelocity": [
+      0.05964589,
+      1.18624425,
+      0.19711715
+     ],
+     "size": 1,
+     "remaining": 9.983334
+    },
+    {
+     "rotation": 30.0224075,
+     "rotation3D": [
+      10.0118008,
+      20.1995277,
+      30.0224075
+     ],
+     "angularVelocity3D": [
+      0,
+      0,
+      0
+     ],
+     "position": [
+      0.302360058,
+      -0.660094261,
+      1.10448146
+     ],
+     "totalVelocity": [
+      0.08195794,
+      1.20809865,
+      0.0717667341
+     ],
+     "size": 1,
+     "remaining": 9.966667
+    },
+    {
+     "rotation": 30.0180836,
+     "rotation3D": [
+      10.0201168,
+      20.30004,
+      30.0180836
+     ],
+     "angularVelocity3D": [
+      0,
+      0,
+      0
+     ],
+     "position": [
+      0.304023176,
+      -0.6399919,
+      1.10361683
+     ],
+     "totalVelocity": [
+      0.09978682,
+      1.20614123,
+      -0.0518749952
+     ],
+     "size": 1,
+     "remaining": 9.95
+    },
+    {
+     "rotation": 30.003809,
+     "rotation3D": [
+      10.0295439,
+      20.39847,
+      30.003809
+     ],
+     "angularVelocity3D": [
+      0,
+      0,
+      0
+     ],
+     "position": [
+      0.30590874,
+      -0.6203061,
+      1.10076153
+     ],
+     "totalVelocity": [
+      0.113132894,
+      1.18114948,
+      -0.1713213
+     ],
+     "size": 1,
+     "remaining": 9.933333
+    }
+   ]
+  },
+  {
+   "name": "3d-damping-frequency2",
+   "rotation3D": true,
+   "strength": 1,
+   "frequency": 2,
+   "damping": true,
+   "quality": 1,
+   "positionAmount": 0,
+   "rotationAmount": 10,
+   "rotationCurve": false,
+   "angularOverLifetime": [
+    0,
+    0,
+    0
+   ],
+   "startRotation": [
+    10,
+    20,
+    30
+   ],
+   "position": [
+    0.3,
+    -0.7,
+    1.1
+   ],
+   "lifetime": 10,
+   "remaining": 10,
+   "sizeAmount": 0,
+   "dt": 0.0166666675,
+   "rows": [
+    {
+     "rotation": 29.9602184,
+     "rotation3D": [
+      10.273387,
+      19.9586182,
+      29.9602184
+     ],
+     "angularVelocity3D": [
+      0,
+      0,
+      0
+     ],
+     "position": [
+      0.3,
+      -0.7,
+      1.1
+     ],
+     "totalVelocity": [
+      0,
+      0,
+      0
+     ],
+     "size": 1,
+     "remaining": 9.983334
+    },
+    {
+     "rotation": 29.9204369,
+     "rotation3D": [
+      10.5467739,
+      19.9172382,
+      29.9204369
+     ],
+     "angularVelocity3D": [
+      0,
+      0,
+      0
+     ],
+     "position": [
+      0.3,
+      -0.7,
+      1.1
+     ],
+     "totalVelocity": [
+      0,
+      0,
+      0
+     ],
+     "size": 1,
+     "remaining": 9.966667
+    },
+    {
+     "rotation": 29.8806534,
+     "rotation3D": [
+      10.8201609,
+      19.8758583,
+      29.8806534
+     ],
+     "angularVelocity3D": [
+      0,
+      0,
+      0
+     ],
+     "position": [
+      0.3,
+      -0.7,
+      1.1
+     ],
+     "totalVelocity": [
+      0,
+      0,
+      0
+     ],
+     "size": 1,
+     "remaining": 9.95
+    },
+    {
+     "rotation": 29.8408718,
+     "rotation3D": [
+      11.0935469,
+      19.8344765,
+      29.8408718
+     ],
+     "angularVelocity3D": [
+      0,
+      0,
+      0
+     ],
+     "position": [
+      0.3,
+      -0.7,
+      1.1
+     ],
+     "totalVelocity": [
+      0,
+      0,
+      0
+     ],
+     "size": 1,
+     "remaining": 9.933333
+    }
+   ]
+  },
+  {
+   "name": "3d-high",
+   "rotation3D": true,
+   "strength": 1,
+   "frequency": 1,
+   "damping": false,
+   "quality": 2,
+   "positionAmount": 0,
+   "rotationAmount": 10,
+   "rotationCurve": false,
+   "angularOverLifetime": [
+    0,
+    0,
+    0
+   ],
+   "startRotation": [
+    10,
+    20,
+    30
+   ],
+   "position": [
+    0.3,
+    -0.7,
+    1.1
+   ],
+   "lifetime": 10,
+   "remaining": 10,
+   "sizeAmount": 0,
+   "dt": 0.0166666675,
+   "rows": [
+    {
+     "rotation": 30.08972,
+     "rotation3D": [
+      9.919125,
+      20.1557369,
+      30.08972
+     ],
+     "angularVelocity3D": [
+      0,
+      0,
+      0
+     ],
+     "position": [
+      0.3,
+      -0.7,
+      1.1
+     ],
+     "totalVelocity": [
+      0,
+      0,
+      0
+     ],
+     "size": 1,
+     "remaining": 9.983334
+    },
+    {
+     "rotation": 30.1794376,
+     "rotation3D": [
+      9.838249,
+      20.3114738,
+      30.1794376
+     ],
+     "angularVelocity3D": [
+      0,
+      0,
+      0
+     ],
+     "position": [
+      0.3,
+      -0.7,
+      1.1
+     ],
+     "totalVelocity": [
+      0,
+      0,
+      0
+     ],
+     "size": 1,
+     "remaining": 9.966667
+    },
+    {
+     "rotation": 30.2691555,
+     "rotation3D": [
+      9.757374,
+      20.46721,
+      30.2691555
+     ],
+     "angularVelocity3D": [
+      0,
+      0,
+      0
+     ],
+     "position": [
+      0.3,
+      -0.7,
+      1.1
+     ],
+     "totalVelocity": [
+      0,
+      0,
+      0
+     ],
+     "size": 1,
+     "remaining": 9.95
+    },
+    {
+     "rotation": 30.3588734,
+     "rotation3D": [
+      9.676498,
+      20.6229477,
+      30.3588734
+     ],
+     "angularVelocity3D": [
+      0,
+      0,
+      0
+     ],
+     "position": [
+      0.3,
+      -0.7,
+      1.1
+     ],
+     "totalVelocity": [
+      0,
+      0,
+      0
+     ],
+     "size": 1,
+     "remaining": 9.933333
+    }
+   ]
+  },
+  {
+   "name": "3d-low",
+   "rotation3D": true,
+   "strength": 1,
+   "frequency": 1,
+   "damping": false,
+   "quality": 0,
+   "positionAmount": 0,
+   "rotationAmount": 10,
+   "rotationCurve": false,
+   "angularOverLifetime": [
+    0,
+    0,
+    0
+   ],
+   "startRotation": [
+    10,
+    20,
+    30
+   ],
+   "position": [
+    0.3,
+    -0.7,
+    1.1
+   ],
+   "lifetime": 10,
+   "remaining": 10,
+   "sizeAmount": 0,
+   "dt": 0.0166666675,
+   "rows": [
+    {
+     "rotation": 29.9738216,
+     "rotation3D": [
+      10.0309343,
+      20.2240486,
+      29.9738216
+     ],
+     "angularVelocity3D": [
+      0,
+      0,
+      0
+     ],
+     "position": [
+      0.3,
+      -0.7,
+      1.1
+     ],
+     "totalVelocity": [
+      0,
+      0,
+      0
+     ],
+     "size": 1,
+     "remaining": 9.983334
+    },
+    {
+     "rotation": 29.9476414,
+     "rotation3D": [
+      10.06187,
+      20.4480972,
+      29.9476414
+     ],
+     "angularVelocity3D": [
+      0,
+      0,
+      0
+     ],
+     "position": [
+      0.3,
+      -0.7,
+      1.1
+     ],
+     "totalVelocity": [
+      0,
+      0,
+      0
+     ],
+     "size": 1,
+     "remaining": 9.966667
+    },
+    {
+     "rotation": 29.9214611,
+     "rotation3D": [
+      10.092804,
+      20.6721458,
+      29.9214611
+     ],
+     "angularVelocity3D": [
+      0,
+      0,
+      0
+     ],
+     "position": [
+      0.3,
+      -0.7,
+      1.1
+     ],
+     "totalVelocity": [
+      0,
+      0,
+      0
+     ],
+     "size": 1,
+     "remaining": 9.95
+    },
+    {
+     "rotation": 29.89528,
+     "rotation3D": [
+      10.1237392,
+      20.8961964,
+      29.89528
+     ],
+     "angularVelocity3D": [
+      0,
+      0,
+      0
+     ],
+     "position": [
+      0.3,
+      -0.7,
+      1.1
+     ],
+     "totalVelocity": [
+      0,
+      0,
+      0
+     ],
+     "size": 1,
+     "remaining": 9.933333
+    }
+   ]
+  },
+  {
+   "name": "3d-with-rotation-over-lifetime",
+   "rotation3D": true,
+   "strength": 1,
+   "frequency": 1,
+   "damping": false,
+   "quality": 1,
+   "positionAmount": 0,
+   "rotationAmount": 10,
+   "rotationCurve": false,
+   "angularOverLifetime": [
+    60,
+    90,
+    120
+   ],
+   "startRotation": [
+    10,
+    20,
+    30
+   ],
+   "position": [
+    0.3,
+    -0.7,
+    1.1
+   ],
+   "lifetime": 10,
+   "remaining": 10,
+   "sizeAmount": 0,
+   "dt": 0.0166666675,
+   "rows": [
+    {
+     "rotation": 32.0164261,
+     "rotation3D": [
+      11.0049706,
+      21.5988522,
+      32.0164261
+     ],
+     "angularVelocity3D": [
+      60.0000038,
+      90,
+      120.000008
+     ],
+     "position": [
+      0.3,
+      -0.7,
+      1.1
+     ],
+     "totalVelocity": [
+      0,
+      0,
+      0
+     ],
+     "size": 1,
+     "remaining": 9.983334
+    },
+    {
+     "rotation": 34.0328522,
+     "rotation3D": [
+      12.0099421,
+      23.1977062,
+      34.0328522
+     ],
+     "angularVelocity3D": [
+      60.0000038,
+      90,
+      120.000008
+     ],
+     "position": [
+      0.3,
+      -0.7,
+      1.1
+     ],
+     "totalVelocity": [
+      0,
+      0,
+      0
+     ],
+     "size": 1,
+     "remaining": 9.966667
+    },
+    {
+     "rotation": 36.04928,
+     "rotation3D": [
+      13.0149126,
+      24.79656,
+      36.04928
+     ],
+     "angularVelocity3D": [
+      60.0000038,
+      90,
+      120.000008
+     ],
+     "position": [
+      0.3,
+      -0.7,
+      1.1
+     ],
+     "totalVelocity": [
+      0,
+      0,
+      0
+     ],
+     "size": 1,
+     "remaining": 9.95
+    },
+    {
+     "rotation": 38.0657043,
+     "rotation3D": [
+      14.0198841,
+      26.3954124,
+      38.0657043
+     ],
+     "angularVelocity3D": [
+      60.0000038,
+      90,
+      120.000008
+     ],
+     "position": [
+      0.3,
+      -0.7,
+      1.1
+     ],
+     "totalVelocity": [
+      0,
+      0,
+      0
+     ],
+     "size": 1,
+     "remaining": 9.933333
+    }
+   ]
+  },
+  {
+   "name": "3d-rotation-curve",
+   "rotation3D": true,
+   "strength": 1,
+   "frequency": 1,
+   "damping": false,
+   "quality": 1,
+   "positionAmount": 0,
+   "rotationAmount": 20,
+   "rotationCurve": true,
+   "angularOverLifetime": [
+    0,
+    0,
+    0
+   ],
+   "startRotation": [
+    10,
+    20,
+    30
+   ],
+   "position": [
+    0.3,
+    -0.7,
+    1.1
+   ],
+   "lifetime": 1,
+   "remaining": 0.5,
+   "sizeAmount": 0,
+   "dt": 0.0166666675,
+   "rows": [
+    {
+     "rotation": 30.016428,
+     "rotation3D": [
+      10.0049706,
+      20.0988522,
+      30.016428
+     ],
+     "angularVelocity3D": [
+      0,
+      0,
+      0
+     ],
+     "position": [
+      0.3,
+      -0.7,
+      1.1
+     ],
+     "totalVelocity": [
+      0,
+      0,
+      0
+     ],
+     "size": 1,
+     "remaining": 0.483333349
+    },
+    {
+     "rotation": 30.0334015,
+     "rotation3D": [
+      10.010107,
+      20.2010021,
+      30.0334015
+     ],
+     "angularVelocity3D": [
+      0,
+      0,
+      0
+     ],
+     "position": [
+      0.3,
+      -0.7,
+      1.1
+     ],
+     "totalVelocity": [
+      0,
+      0,
+      0
+     ],
+     "size": 1,
+     "remaining": 0.466666639
+    },
+    {
+     "rotation": 30.0509243,
+     "rotation3D": [
+      10.0154085,
+      20.3064461,
+      30.0509243
+     ],
+     "angularVelocity3D": [
+      0,
+      0,
+      0
+     ],
+     "position": [
+      0.3,
+      -0.7,
+      1.1
+     ],
+     "totalVelocity": [
+      0,
+      0,
+      0
+     ],
+     "size": 1,
+     "remaining": 0.45
+    },
+    {
+     "rotation": 30.0689926,
+     "rotation3D": [
+      10.0208759,
+      20.415184,
+      30.0689926
+     ],
+     "angularVelocity3D": [
+      0,
+      0,
+      0
+     ],
+     "position": [
+      0.3,
+      -0.7,
+      1.1
+     ],
+     "totalVelocity": [
+      0,
+      0,
+      0
+     ],
+     "size": 1,
+     "remaining": 0.433333278
+    }
+   ]
+  },
+  {
+   "name": "3d-negative-start",
+   "rotation3D": true,
+   "strength": 1,
+   "frequency": 1,
+   "damping": false,
+   "quality": 1,
+   "positionAmount": 0,
+   "rotationAmount": 10,
+   "rotationCurve": false,
+   "angularOverLifetime": [
+    0,
+    0,
+    0
+   ],
+   "startRotation": [
+    -80,
+    200,
+    5
+   ],
+   "position": [
+    -2.1,
+    0.4,
+    0.9
+   ],
+   "lifetime": 10,
+   "remaining": 10,
+   "sizeAmount": 0,
+   "dt": 0.0166666675,
+   "rows": [
+    {
+     "rotation": 5.11646461,
+     "rotation3D": [
+      -79.86421,
+      200.1344,
+      5.11646461
+     ],
+     "angularVelocity3D": [
+      0,
+      0,
+      0
+     ],
+     "position": [
+      -2.1,
+      0.4,
+      0.9
+     ],
+     "totalVelocity": [
+      0,
+      0,
+      0
+     ],
+     "size": 1,
+     "remaining": 9.983334
+    },
+    {
+     "rotation": 5.232929,
+     "rotation3D": [
+      -79.72843,
+      200.268784,
+      5.232929
+     ],
+     "angularVelocity3D": [
+      0,
+      0,
+      0
+     ],
+     "position": [
+      -2.1,
+      0.4,
+      0.9
+     ],
+     "totalVelocity": [
+      0,
+      0,
+      0
+     ],
+     "size": 1,
+     "remaining": 9.966667
+    },
+    {
+     "rotation": 5.34939337,
+     "rotation3D": [
+      -79.59264,
+      200.403183,
+      5.34939337
+     ],
+     "angularVelocity3D": [
+      0,
+      0,
+      0
+     ],
+     "position": [
+      -2.1,
+      0.4,
+      0.9
+     ],
+     "totalVelocity": [
+      0,
+      0,
+      0
+     ],
+     "size": 1,
+     "remaining": 9.95
+    },
+    {
+     "rotation": 5.465858,
+     "rotation3D": [
+      -79.45686,
+      200.537567,
+      5.465858
+     ],
+     "angularVelocity3D": [
+      0,
+      0,
+      0
+     ],
+     "position": [
+      -2.1,
+      0.4,
+      0.9
+     ],
+     "totalVelocity": [
+      0,
+      0,
+      0
+     ],
+     "size": 1,
+     "remaining": 9.933333
+    }
+   ]
+  },
+  {
+   "name": "3d-size-amount",
+   "rotation3D": true,
+   "strength": 1,
+   "frequency": 1,
+   "damping": false,
+   "quality": 1,
+   "positionAmount": 0,
+   "rotationAmount": 10,
+   "rotationCurve": false,
+   "angularOverLifetime": [
+    0,
+    0,
+    0
+   ],
+   "startRotation": [
+    10,
+    20,
+    30
+   ],
+   "position": [
+    0.3,
+    -0.7,
+    1.1
+   ],
+   "lifetime": 10,
+   "remaining": 10,
+   "sizeAmount": 1,
+   "dt": 0.0166666675,
+   "rows": [
+    {
+     "rotation": 30.016428,
+     "rotation3D": [
+      10.0049706,
+      20.0988522,
+      30.016428
+     ],
+     "angularVelocity3D": [
+      0,
+      0,
+      0
+     ],
+     "position": [
+      0.3,
+      -0.7,
+      1.1
+     ],
+     "totalVelocity": [
+      0,
+      0,
+      0
+     ],
+     "size": 1,
+     "remaining": 9.983334
+    },
+    {
+     "rotation": 30.0328541,
+     "rotation3D": [
+      10.0099411,
+      20.1977062,
+      30.0328541
+     ],
+     "angularVelocity3D": [
+      0,
+      0,
+      0
+     ],
+     "position": [
+      0.3,
+      -0.7,
+      1.1
+     ],
+     "totalVelocity": [
+      0,
+      0,
+      0
+     ],
+     "size": 1,
+     "remaining": 9.966667
+    },
+    {
+     "rotation": 30.04928,
+     "rotation3D": [
+      10.0149117,
+      20.29656,
+      30.04928
+     ],
+     "angularVelocity3D": [
+      0,
+      0,
+      0
+     ],
+     "position": [
+      0.3,
+      -0.7,
+      1.1
+     ],
+     "totalVelocity": [
+      0,
+      0,
+      0
+     ],
+     "size": 1,
+     "remaining": 9.95
+    },
+    {
+     "rotation": 30.0657082,
+     "rotation3D": [
+      10.0198822,
+      20.3954124,
+      30.0657082
+     ],
+     "angularVelocity3D": [
+      0,
+      0,
+      0
+     ],
+     "position": [
+      0.3,
+      -0.7,
+      1.1
+     ],
+     "totalVelocity": [
+      0,
+      0,
+      0
+     ],
+     "size": 1,
+     "remaining": 9.933333
+    }
+   ]
+  }
+ ]
+}

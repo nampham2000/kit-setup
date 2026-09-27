@@ -1,4 +1,5 @@
 'use strict';
+const {unityProceduralSortCenter}=require('./particle-procedural-sort-center.cjs');
 
 // Geometry contracts measured with Unity ParticleSystemRenderer.BakeMesh.
 // Local billboard rotations are clockwise; mesh rotations are not. Both are
@@ -8,6 +9,7 @@ function particleRendererContract(particle = {}, renderer = {}) {
   const mode = Number(renderer.m_RenderMode ?? 0);
   const alignment = Number(renderer.m_RenderAlignment ?? 0);
   const localBillboard = mode === 0 && alignment === 2;
+  const worldBillboard = mode === 0 && alignment === 1;
   const mesh = mode === 4;
   const pivot = renderer.m_Pivot || {};
   const shape = particle.ShapeModule || {}, initial = particle.InitialModule || {};
@@ -19,18 +21,55 @@ function particleRendererContract(particle = {}, renderer = {}) {
     && constant(initial.gravityModifier, 0)
     && ['VelocityModule', 'ForceModule', 'NoiseModule'].every(key => particle[key] && Number(particle[key].enabled) === 0);
   const stretchedPivot = mode === 1 && Number(pivot.y || 0) !== 0;
+  // BakeMesh (fixtures/particle-pivot-alignment-native.json): View billboards move by
+  // pivot*size in their rotated camera plane and by pivot.z*size.x toward the camera;
+  // Mesh vertices are offset by pivot*mesh bounds (Unity negates Z) before size and
+  // rotation. Mesh World alignment ignores the emitter rotation; Mesh Velocity alignment
+  // is LookRotation(total world velocity, world up) followed by rotation3D.
+  const pivotValues = [Number(pivot.x || 0), Number(pivot.y || 0), Number(pivot.z || 0)];
+  const pivotSet = pivotValues.some(value => value !== 0);
+  const viewBillboard = mode === 0 && alignment === 0;
+  // Native billboard-frames BakeMesh: axial render modes ignore the alignment
+  // enum and emitter rotation. Vertical still tracks camera yaw; Horizontal
+  // stays in the world XZ plane. Do not classify their World enum as a gap.
+  const axialBillboard = mode === 2 || mode === 3;
+  const meshWorldFrame = mesh && alignment === 1;
+  const meshVelocityFrame = mesh && alignment === 4 && !straightBoxVelocity;
   const unsupported = [];
-  const sorting = { fudge: Number(renderer.m_SortingFudge || 0), order: Number(renderer.m_SortingOrder || 0), layer: Number(renderer.m_SortingLayerID || 0) };
-  if (sorting.fudge || sorting.order || sorting.layer) unsupported.push('source-renderer-sorting-requires-camera-adapter');
-  if ((Number(pivot.x || 0) !== 0 || Number(pivot.z || 0) !== 0) || (mode !== 1 && Number(pivot.y || 0) !== 0)) unsupported.push('pivot-axes');
-  if (alignment !== 0 && alignment !== 2 && !straightBoxVelocity && mode !== 1) unsupported.push('alignment');
+  // Sorting is bound for every transparent renderer by particle-sorting-binding.
+  const sorting = { fudge: Number(renderer.m_SortingFudge || 0), order: Number(renderer.m_SortingOrder || 0), layer: Number(renderer.m_SortingLayerID || 0), sortMode: Number(renderer.m_SortMode || 0) };
+  const proceduralCenter=unityProceduralSortCenter(particle);
+  if(proceduralCenter)sorting.proceduralCenter=proceduralCenter;
+  // Local/axial billboard pivots, stretched X/Z pivots, Facing and billboard Velocity are unmeasured.
+  if (pivotSet && !(mesh || viewBillboard || (mode === 1 && pivotValues[0] === 0 && pivotValues[2] === 0))) unsupported.push('pivot-axes');
+  if (alignment !== 0 && alignment !== 2 && !worldBillboard && !straightBoxVelocity && mode !== 1 && !axialBillboard && !meshWorldFrame && !meshVelocityFrame) unsupported.push('alignment');
+  if(mode===3)unsupported.push('vertical-camera-frame');
   if ((localBillboard || mesh) && Number(particle.RotationModule?.enabled) === 1) unsupported.push('euler-rotation-over-lifetime');
+  // Min/Max Particle Size (Unity defaults 0 and 0.5) are fractions of the
+  // viewport WIDTH at the particle's view depth. BakeMesh: billboards scale
+  // max(size.x, size.y) uniformly, stretched billboards clamp only the width,
+  // mesh particles are never clamped. A stretched minimum is not measured.
+  const sizeValue = (value, fallback) => (value === undefined || value === null || value === '' || !Number.isFinite(Number(value)) ? fallback : Number(value));
+  const sizeClamp = { min: sizeValue(renderer.m_MinParticleSize, 0), max: sizeValue(renderer.m_MaxParticleSize, 0.5) };
+  if (mode === 1 && sizeClamp.min > 0) unsupported.push('stretched-min-particle-size');
   return {
-    version: 2, sorting, mode, alignment, localBillboard, straightBoxVelocity,
+    version: 4, sorting, mode, alignment, localBillboard, worldBillboard, straightBoxVelocity,
     cocosAlignment: localBillboard || straightBoxVelocity || alignment === 2 ? 0 : alignment === 0 ? 2 : 1,
-    eulerSigns: mesh ? [-1, -1, 1] : localBillboard ? [1, 1, -1] : [-1, 1, -1],
-    requiresMaterialAdapter: localBillboard || stretchedPivot || mesh,
-    sourceRendererPivot: [Number(pivot.x || 0), Number(pivot.y || 0), Number(pivot.z || 0), localBillboard ? 2 : 0],
+    eulerSigns: mesh ? [-1, -1, 1] : localBillboard || worldBillboard ? [1, 1, -1] : viewBillboard ? [-1, -1, -1] : [-1, 1, -1],
+    // Horizontal/Vertical billboards need the source vertex program for Unity's
+    // size/sqrt(2) corner geometry; builtin particle effects draw them at size.
+    requiresMaterialAdapter: localBillboard || worldBillboard || stretchedPivot || mesh || mode === 2 || mode === 3 || (viewBillboard && pivotSet),
+    // w: 2 Local billboard; 3 Mesh rotation already in world space (World alignment,
+    // or the Velocity frame written by UnityParticleMeshFrameAdapter).
+    sourceRendererPivot: [...pivotValues, localBillboard ? 2 : worldBillboard ? 4 : meshWorldFrame || meshVelocityFrame ? 3 : 0],
+    // Runtime state a material cannot carry: mesh bounds for the pivot, per-particle Velocity frame.
+    meshFrame: mesh && (pivotSet || meshVelocityFrame) ? { pivot: pivotSet, velocity: meshVelocityFrame } : null,
+    // Unity linearizes particle vertex colors in a Linear project unless the
+    // renderer opts out; the default for new renderers is on.
+    applyActiveColorSpace: renderer.m_ApplyActiveColorSpace === undefined ? true : Number(renderer.m_ApplyActiveColorSpace) !== 0,
+    // Vertex-program state: x=min, y=max, w=1 enables (the effect default w=0
+    // leaves materials written before this contract unclamped).
+    sizeClamp, sourceRendererSize: [sizeClamp.min, sizeClamp.max, 0, 1],
     unsupported,
   };
 }

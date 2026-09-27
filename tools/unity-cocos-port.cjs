@@ -8,7 +8,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const binarySerializedFile = require('./lib/unity-serialized-file.cjs');
 const { createPathBoundary, inspectContainedPath } = require('./lib/path-boundary.cjs');
-const { assertUnityPortPreflight } = require('./unity-intel/preflight.cjs');
+const { assertUnityPortPreflight, readReceipt } = require('./unity-intel/preflight.cjs');
 const {
   ensureCocosEngineFeatures,
   createMcpClient,
@@ -68,6 +68,13 @@ const { PortCache } = require('./unity-cocos-port/port-cache');
 const createUiSpriteAlphaPorter = require('./unity-cocos-port/ui-sprite-alpha-porter');
 const createComponentDispatcher = require('./unity-cocos-port/component-dispatcher');
 const createRuntimeComponentPorter = require('./unity-cocos-port/runtime-component-porter');
+const { unityModelImportBasis, unityModelMeshName, unityModelRendererName } = require('./unity-cocos-port/model-import-basis');
+const { unitySlotIndexForCocosPrimitive } = require('./unity-cocos-port/fbx-submesh-order');
+const {
+  requestModelMeshBasis,
+  removeModelMeshBasis,
+  attachModelMeshBasisRuntime,
+} = require('./unity-cocos-port/model-mesh-basis-binding');
 const {
   scaffoldCSharpToTypeScript,
   scaffoldFile
@@ -84,6 +91,7 @@ const {
   importedUnityAssetPath: importedUnityAssetPathImpl,
   ensureAssetMeta: ensureAssetMetaImpl,
   copyUnityAssetToCocos: copyUnityAssetToCocosImpl,
+  writePreparedUnityTexture: writePreparedUnityTextureImpl,
   handleMissingModel: handleMissingModelImpl,
 } = createAssetImportPorter({
   ensureDirectoryMetas,
@@ -107,6 +115,7 @@ const {
   resolveCurrentStandaloneMaterialUuid,
   firstSubMetaRecord,
   copyUnityAssetToCocos: copyUnityAssetToCocosImpl,
+  writePreparedUnityTexture: writePreparedUnityTextureImpl,
   ensureDirectoryMetas,
   ensureMaterialAssetMeta,
   libraryJsonPathForUuid,
@@ -168,31 +177,10 @@ const {
   resolveLibraryAssetUuid,
 });
 
-// Unity ModelImporter "Scale Factor" (meshes.globalScale) is baked into Unity's mesh data but not into
-// the Cocos FBX import (file-unit conversion is handled by both importers). Returns 1 when unknown.
-const unityModelImportScaleCache = new Map();
-function unityModelImportScale(modelAsset) {
-  const file = modelAsset?.path ? `${modelAsset.path}.meta` : '';
-  if (!file) return 1;
-  if (!unityModelImportScaleCache.has(file)) {
-    let scale = 1;
-    try {
-      const text = fs.readFileSync(file, 'utf8');
-      const meshes = /^\s{2}meshes:\s*$([\s\S]*?)^\s{2}\S/m.exec(text);
-      const match = /^\s+globalScale:\s*([-\d.eE]+)\s*$/m.exec(meshes ? meshes[1] : '');
-      const parsed = match ? Number(match[1]) : NaN;
-      if (Number.isFinite(parsed) && parsed > 0) scale = parsed;
-    } catch (_) { /* missing meta: keep the neutral scale */ }
-    unityModelImportScaleCache.set(file, scale);
-  }
-  return unityModelImportScaleCache.get(file);
-}
-
 const {
   emitSyntheticModelRenderer: emitSyntheticModelRendererImpl,
   emitMeshRenderer: emitMeshRendererImpl,
 } = createRendererPorter({
-  unityModelImportScale,
   resolveUnityMaterialUuids,
   resolveUnityMaterialUuid,
   resolveUnityBuiltinMeshUuid,
@@ -219,6 +207,7 @@ const { emitParticleSystem: emitParticleSystemImpl } = createParticlePorter({
 const { emitLight: emitLightImpl } = createLightPorter({ getField });
 const {
   emitAnimator: emitAnimatorImpl,
+  emitLegacyAnimation: emitLegacyAnimationImpl,
   parseUnityAnimationClip: parseUnityAnimationClipForOracle,
 } = createAnimationPorter({
   parseUnityYaml,
@@ -244,6 +233,10 @@ const {
   translateUnitySerializedValue: translateUnitySerializedValueImpl,
   emitMonoBehaviour: emitMonoBehaviourImpl,
 } = createScriptPorter({
+  // Hoisted: nested prefab queueing is defined further down this module.
+  generatedPrefabUuid: (asset, options, unityDb, reporter) => (options.recursive
+    ? queueNestedPrefabAsset(options, asset, unityDb, reporter).prefabUuid
+    : readJsonIfExists(`${nestedPrefabOutputPath(options, asset)}.meta`)?.uuid) || '',
   hasField,
   getField,
   getTopLevelSerializedFields,
@@ -281,6 +274,7 @@ const componentDispatcher = createComponentDispatcher({
   emitSpriteRenderer,
   emitLight,
   emitAnimator,
+  emitLegacyAnimation,
   emitMonoBehaviour,
   emitRigidbody2D,
   emitCircleCollider2D,
@@ -334,6 +328,9 @@ Options:
   --quiet                   Chỉ in tổng kết (ít token hơn cho AI agent).
   --strip-private-prefix    Map Unity serialized _field to Cocos field when wiring custom scripts. Default.
   --no-strip-private-prefix Preserve leading underscore in custom script fields.
+  --nested-prefab-map <UnityDir>=<CocosDir>
+                            Link nested prefabs under UnityDir to the mirrored prefabs a
+                            directory-mode port already wrote under CocosDir (repeatable).
   --layer-map <json>        JSON object overriding Unity layer index to Cocos layer name/value.
 
 Examples:
@@ -552,6 +549,12 @@ function parseArgs(argv) {
       options.engineFeatureRepair = false;
       continue;
     }
+    if (arg === '--keep-existing-imports') {
+      // Existing unity_imported copies/materials (with .meta) are owned by another
+      // binding pipeline; only missing dependencies are copied or converted.
+      options.keepExistingImports = true;
+      continue;
+    }
     if (arg === '--no-engine-feature-restart') {
       options.engineFeatureRestart = false;
       continue;
@@ -648,6 +651,10 @@ function parseArgs(argv) {
       options.layerMap = JSON.parse(readValue(arg));
       continue;
     }
+    if (arg === '--nested-prefab-map') {
+      (options.nestedPrefabMap = options.nestedPrefabMap || []).push(readValue(arg));
+      continue;
+    }
     if (arg.startsWith('--layer-map=')) {
       options.layerMap = JSON.parse(arg.slice('--layer-map='.length));
       continue;
@@ -681,8 +688,32 @@ function parseArgs(argv) {
   if (options.out) options.out = path.resolve(options.cocosRoot, options.out);
   if (!options.unityRoot && options.src) options.unityRoot = inferUnityRoot(options.src);
   if (options.unityRoot) options.unityRoot = path.resolve(options.unityRoot);
+  options.nestedPrefabMap = (options.nestedPrefabMap || []).map((entry) => {
+    const index = entry.lastIndexOf('=');
+    if (index <= 0) fail(`--nested-prefab-map needs <UnityDir>=<CocosDir>: ${entry}`);
+    const unityDir = path.resolve(options.unityRoot || '', entry.slice(0, index));
+    const cocosDir = path.resolve(options.cocosRoot, entry.slice(index + 1));
+    if (!isPathInside(cocosDir, path.join(options.cocosRoot, 'assets'))) fail(`--nested-prefab-map target must be under assets/: ${entry}`);
+    return { unityDir, cocosDir };
+  });
 
   return options;
+}
+
+function isPathInside(child, parent) {
+  const relative = path.relative(path.resolve(parent), path.resolve(child));
+  return !!relative && !relative.startsWith('..') && !path.isAbsolute(relative);
+}
+
+// A prefab that an earlier directory-mode port already produced (mirrored
+// from its Unity folder) is linked, not regenerated beside the new output.
+function mappedNestedPrefabOutputPath(options, sourceAsset) {
+  for (const { unityDir, cocosDir } of options.nestedPrefabMap || []) {
+    if (!isPathInside(sourceAsset.path, unityDir)) continue;
+    const relative = path.relative(unityDir, sourceAsset.path).replace(/.prefab$/i, '.prefab');
+    return path.join(cocosDir, relative);
+  }
+  return '';
 }
 
 function inferUnityRoot(src) {
@@ -890,14 +921,9 @@ function splitTopLevel(text, delimiter) {
 }
 
 function parseUnityScalar(raw, keyHint = '') {
+  // Unity's serializer never writes YAML comments: "Material #137" (3ds Max
+  // material names) is one plain scalar, as in lib/unity-yaml.cjs.
   let value = String(raw ?? '').trim();
-  if (value === '') return '';
-  if (!value.startsWith('"') && !value.startsWith("'")) {
-    const commentIdx = value.indexOf('#');
-    if (commentIdx >= 0) {
-      value = value.slice(0, commentIdx).trim();
-    }
-  }
   if (value === '') return '';
   if (keyHint === 'fileID') return value === '0' ? '' : value;
   if (keyHint === 'guid') return value;
@@ -955,10 +981,28 @@ function readUnityAssetText(file) {
   return text;
 }
 
+// Net `{` depth of a line, ignoring braces inside quoted scalars.
+function unityFlowDepth(line) {
+  let depth = 0;
+  let quote = '';
+  for (const ch of line) {
+    if (quote) { if (ch === quote) quote = ''; continue; }
+    if (ch === '"' || ch === "'") { quote = ch; continue; }
+    if (ch === '{') depth += 1;
+    else if (ch === '}') depth -= 1;
+  }
+  return depth;
+}
+
 function parseUnityYaml(file) {
-  const text = readUnityAssetText(file).replace(/\r\n/g, '\n');
+  return parseUnityYamlText(readUnityAssetText(file));
+}
+
+function parseUnityYamlText(source) {
+  const text = String(source).replace(/\r\n/g, '\n');
   const docs = [];
   let current = null;
+  let openFlow = 0;
   for (const line of text.split('\n')) {
     const header = /^--- !u!(\d+) &(-?\d+)(?:\s+stripped)?/.exec(line);
     if (header) {
@@ -971,9 +1015,20 @@ function parseUnityYaml(file) {
         typeName: '',
         lines: [],
       };
+      openFlow = 0;
       continue;
     }
-    if (current) current.lines.push(line);
+    if (!current) continue;
+    // Unity wraps long flow mappings (19-digit fileIDs + guid) onto the next
+    // line: `- target: {fileID: 6544115798007152704, guid: 917d...,` / `type: 3}`.
+    // Keep one logical line per key so every field reader sees the whole value.
+    if (openFlow > 0 && current.lines.length) {
+      current.lines[current.lines.length - 1] += ` ${line.trim()}`;
+    } else {
+      current.lines.push(line);
+      openFlow = 0;
+    }
+    openFlow += unityFlowDepth(line);
   }
   if (current) docs.push(current);
 
@@ -1346,23 +1401,19 @@ function withConsistentCocosEuler(transform) {
 // Unity -> Cocos handedness conversion. This is a MODEL basis, not an authored
 // gameplay rotation: TapeJam's authored Y180 becomes identity here because the
 // Cocos-imported mesh already contains the corresponding file-axis conversion.
-function correctNestedModelForwardAxis(transform) {
+// Unity also multiplies the model by ModelImporter.globalScale, which the Cocos
+// importer ignores (unity-cocos-port/model-import-basis.js), so the basis carries
+// that uniform scale: B = Y180 * globalScale.
+function correctNestedModelForwardAxis(transform, modelScale = 1) {
   const source = transform || {};
   const rotation = source.localRotation || { x: 0, y: 0, z: 0, w: 1 };
+  const scale = source.localScale || { x: 1, y: 1, z: 1 };
   return withConsistentCocosEuler({
     ...source,
     localRotation: multiplyQuaternion(rotation, NESTED_MODEL_FORWARD_BASIS),
+    localScale: modelScale === 1 ? scale : { x: scale.x * modelScale, y: scale.y * modelScale, z: scale.z * modelScale },
   });
 }
-
-// Child node that carries NESTED_MODEL_FORWARD_BASIS for a MeshRenderer whose mesh is an FBX/glTF
-// sub-asset referenced directly by a MeshFilter (see CocosPrefabBuilder.addMeshBasisNode).
-const MESH_BASIS_NODE_NAME = '__meshBasis';
-const MESH_BASIS_TRANSFORM = Object.freeze(withConsistentCocosEuler({
-  localPosition: { x: 0, y: 0, z: 0 },
-  localRotation: NESTED_MODEL_FORWARD_BASIS,
-  localScale: { x: 1, y: 1, z: 1 },
-}));
 
 function hasExplicitNestedModelForwardBasisRotation(transform) {
   const rotation = transform?.localRotation || {};
@@ -1378,14 +1429,18 @@ function hasExplicitNestedModelForwardBasisRotation(transform) {
 // turn (holder pegs/labels appear on the wrong side). Rebase each immediate
 // mounted child by the inverse basis so its world transform remains authored:
 //   (root * B) * (B^-1 * child) == root * child.
-// For a 180-degree Y quaternion B^-1 equals B.
-function rebaseNestedModelMountedChildTransform(transform) {
+// For a 180-degree Y quaternion B^-1 equals B; the model scale divides out.
+function rebaseNestedModelMountedChildTransform(transform, modelScale = 1) {
   const source = transform || {};
   const rotation = source.localRotation || { x: 0, y: 0, z: 0, w: 1 };
+  const position = rotateVectorByQuaternion(source.localPosition, NESTED_MODEL_FORWARD_BASIS);
+  const scale = source.localScale;
   return withConsistentCocosEuler({
     ...source,
-    localPosition: rotateVectorByQuaternion(source.localPosition, NESTED_MODEL_FORWARD_BASIS),
+    localPosition: modelScale === 1 || !position ? position
+      : { x: position.x / modelScale, y: position.y / modelScale, z: position.z / modelScale },
     localRotation: multiplyQuaternion(NESTED_MODEL_FORWARD_BASIS, rotation),
+    ...(modelScale === 1 || !scale ? {} : { localScale: { x: scale.x / modelScale, y: scale.y / modelScale, z: scale.z / modelScale } }),
   });
 }
 
@@ -1513,24 +1568,105 @@ class UnityAssetDatabase {
   }
 }
 
-// A folder batch ports many prefabs in one process. The Unity project is immutable for the whole
-// run (the preflight receipt goes stale otherwise), so its GUID index is scanned once per process:
-// rescanning every .meta for each prefab read ~200 MB per prefab on a 27k-asset project. The Cocos
-// database is rebuilt per prefab because every port adds assets.
-const scannedUnityAssetDatabases = new Map();
+// The GUID index only reads Unity .meta files, and the preflight receipt pins
+// the Unity source state for the whole run, so one scan per process serves
+// every prefab of a batch. Rescanning per prefab walked the entire project
+// (Assets + PackageCache) each time and dominated batch port time.
+const unityAssetDatabases = new Map();
 
-function scannedUnityAssetDatabase(root, extraRoots = []) {
-  const key = JSON.stringify([
-    path.resolve(root),
-    extraRoots.map((entry) => [path.resolve(entry.dir), entry.prefix || '']),
-  ]);
-  let db = scannedUnityAssetDatabases.get(key);
+// A coordinator (runShardedBatch, or a project script porting many scenes)
+// validates the preflight receipt and scans the GUID index once, then hands
+// both to its direct children. Hashing the Unity project for the receipt and
+// walking every .meta file cost minutes per process on slow project drives.
+const PARENT_PREFLIGHT_ENV = 'CC_PLAYABLE_PORT_PARENT_PREFLIGHT';
+const PARENT_GUID_INDEX_ENV = 'CC_PLAYABLE_PORT_PARENT_GUID_INDEX';
+
+function inheritedParentContext(envName) {
+  const raw = process.env[envName];
+  if (!raw) return null;
+  try {
+    const context = JSON.parse(raw);
+    // Only a direct child of the process that did the work may reuse it.
+    return context && Number(context.parentPid) === process.ppid ? context : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function loadInheritedUnityAssetDatabase(key) {
+  const context = inheritedParentContext(PARENT_GUID_INDEX_ENV);
+  if (!context || path.resolve(String(context.unityRoot || '')) !== key) return null;
+  const index = readJsonIfExists(String(context.file || ''));
+  if (!index || path.resolve(String(index.unityRoot || '')) !== key || !Array.isArray(index.records)) return null;
+  const db = new UnityAssetDatabase(key, unityPackageAssetRoots(key));
+  for (const record of index.records) db.byGuid.set(record.guid, record);
+  return db;
+}
+
+function scannedUnityAssetDatabase(unityRoot) {
+  const key = path.resolve(unityRoot);
+  let db = unityAssetDatabases.get(key);
   if (!db) {
-    db = new UnityAssetDatabase(root, extraRoots);
-    db.scan();
-    scannedUnityAssetDatabases.set(key, db);
+    db = loadInheritedUnityAssetDatabase(key);
+    if (!db) {
+      db = new UnityAssetDatabase(key, unityPackageAssetRoots(key));
+      db.scan();
+    }
+    unityAssetDatabases.set(key, db);
   }
   return db;
+}
+
+/**
+ * Environment for child porter processes: the validated receipt identity and
+ * a GUID index file written once. Children still re-read and check the receipt
+ * file; they only skip recomputing the Unity project state.
+ */
+function prepareUnityPortChildEnv(options, preflight) {
+  const env = {};
+  if (preflight?.receipt && preflight.projectRoot) {
+    env[PARENT_PREFLIGHT_ENV] = JSON.stringify({
+      parentPid: process.pid,
+      projectRoot: preflight.projectRoot,
+      receiptId: preflight.receipt.receiptId,
+      integrity: preflight.receipt.integrity,
+      stateFingerprint: preflight.receipt.stateFingerprint,
+    });
+  }
+  if (options.unityRoot) {
+    const unityRoot = path.resolve(options.unityRoot);
+    const db = scannedUnityAssetDatabase(unityRoot);
+    const file = path.join(require('os').tmpdir(), `cc-playable-guid-index-${process.pid}.json`);
+    fs.writeFileSync(file, JSON.stringify({ unityRoot, records: [...db.byGuid.values()] }));
+    env[PARENT_GUID_INDEX_ENV] = JSON.stringify({ parentPid: process.pid, unityRoot, file });
+  }
+  return env;
+}
+
+function cleanupUnityPortChildEnv(env) {
+  try {
+    const file = JSON.parse(env?.[PARENT_GUID_INDEX_ENV] || '{}').file;
+    if (file) fs.rmSync(file, { force: true });
+  } catch (_) { /* best effort temp cleanup */ }
+}
+
+/**
+ * The parent's validated preflight ({ projectRoot, receipt }) when this process
+ * is its direct child and the receipt on disk is still that exact receipt;
+ * otherwise null and the caller runs the full assertUnityPortPreflight.
+ */
+function inheritedPreflightStillValid(options) {
+  const context = inheritedParentContext(PARENT_PREFLIGHT_ENV);
+  if (!context) return null;
+  const projectRoot = path.resolve(String(context.projectRoot || ''));
+  if (options.unityRoot && path.resolve(options.unityRoot) !== projectRoot) return null;
+  let receipt;
+  try { receipt = readReceipt(projectRoot); } catch (_) { return null; }
+  const valid = !!receipt && receipt.receiptId === context.receiptId && receipt.integrity === context.integrity
+    && receipt.stateFingerprint === context.stateFingerprint
+    && Date.parse(receipt.expiresAt) > Date.now()
+    && !!receipt.decision?.implementationAllowed;
+  return valid ? { applicable: true, projectRoot, receipt, inherited: true } : null;
 }
 
 class CocosAssetDatabase {
@@ -1834,16 +1970,30 @@ class CocosAssetDatabase {
             const materialUuid = component._materials[slot]?.__uuid__ || '';
             materialSlots.push({
               rendererLocalId,
+              rendererNodeName: objects[component.node?.__id__]?._name || '',
               slot,
               materialUuid,
               materialName: materialNames.get(materialUuid) || '',
             });
           }
         }
+        // Top-level FBX nodes (Cocos frame). Unity merges a single one into the model
+        // root unless ModelImporter.preserveHierarchy is set.
+        const topLevelNodes = (rootNode._children || [])
+          .map((ref) => objects[ref?.__id__])
+          .filter((node) => node?.__type__ === 'cc.Node')
+          .map((node) => ({
+            name: node._name || '',
+            localId: objects[node._prefab?.__id__]?.fileId || '',
+            position: node._lpos || { x: 0, y: 0, z: 0 },
+            rotation: node._lrot || { x: 0, y: 0, z: 0, w: 1 },
+            scale: node._lscale || { x: 1, y: 1, z: 1 },
+          }));
         return {
           prefabUuid: scene.uuid,
           rootLocalId,
           rootName: rootNode._name || stem,
+          topLevelNodes,
           materialSlots,
           assetPath: record.path,
           source: record.relativePath,
@@ -1993,6 +2143,12 @@ function firstImportedSubMetaRecordByUnityFileId(parentUuid, subMetas, importer,
 function firstImportedSubMetaRecord(baseUuid, subMetas, importer, nameHint = '') {
   const hints = subMetaLookupHints(nameHint);
   if (hints.length) {
+    // An exact mesh name ("Object001") must win over a longer one containing it.
+    const exact = normalizeKey(nameHint);
+    for (const record of subMetaRecords(baseUuid, subMetas, importer)) {
+      const name = String(record.subMeta.name || record.subMeta.displayName || '').replace(/\.(mesh|material|prefab)$/i, '');
+      if (!isPendingGeneratedSubMeta(record.subMeta) && normalizeKey(name) === exact) return record;
+    }
     for (const hint of hints) {
       for (const record of subMetaRecords(baseUuid, subMetas, importer)) {
         if (
@@ -3557,8 +3713,17 @@ function inheritRootLayersFromDescendants(roots, gameObjects, transforms, report
   }
 }
 
-function inspectPrefabInstanceDependency(doc, unityDb, reporter, ownerFile, recursionDepth) {
+// Pre-2018.3 scenes serialize an instance as a `Prefab` (class 1001) with
+// m_ParentPrefab + m_Modification and m_IsPrefabParent: 0, instead of a
+// PrefabInstance with m_SourcePrefab. m_IsPrefabParent: 1 marks a prefab asset itself.
+function prefabInstanceSource(doc) {
   const source = getField(doc, 'm_SourcePrefab');
+  if (source) return source;
+  return Number(getField(doc, 'm_IsPrefabParent', 1)) === 0 ? getField(doc, 'm_ParentPrefab') : undefined;
+}
+
+function inspectPrefabInstanceDependency(doc, unityDb, reporter, ownerFile, recursionDepth) {
+  const source = prefabInstanceSource(doc);
   const guid = unityRefGuid(source);
   if (!guid) return;
   const asset = unityDb.get(guid);
@@ -3630,6 +3795,78 @@ function collapseStrippedTransformsToInstanceRoot(context) {
   }
 }
 
+// A scene (or prefab) only serializes a stripped Transform for a nested
+// PrefabInstance when something references it. Scene roots are ordered by
+// m_RootOrder overrides, so a root-level instance of a .prefab usually has no
+// stripped Transform at all and would otherwise vanish from the port. The same
+// holds for an instance parented under a Transform of another prefab instance
+// through m_TransformParent alone (the ARPGDemo12 shrines under the fountain
+// models). Give it one that points at the source prefab root so the regular
+// stripped-transform path merges its overrides and links the generated prefab.
+function synthesizeRootPrefabInstanceTransforms(context) {
+  const {
+    file, byId, transforms, prefabInstanceInfos, unityDb, reporter, options, recursionDepth,
+    referencedTransformIds, childReferencedTransformIds,
+  } = context;
+  if (!options.recursive) return;
+  const claimed = new Set();
+  for (const doc of byId.values()) {
+    if (!doc?.stripped || ![4, 224].includes(Number(doc.classId))) continue;
+    const instanceId = unityRefFileId(getField(doc, 'm_PrefabInstance'));
+    if (instanceId) claimed.add(instanceId);
+  }
+  for (const [instanceId, instanceInfo] of prefabInstanceInfos.entries()) {
+    const parentId = instanceInfo.parentTransformId || '';
+    if (claimed.has(instanceId) || (parentId && !transforms.has(parentId))) continue;
+    const sourceGuid = unityRefGuid(instanceInfo.sourcePrefab);
+    const sourceAsset = unityDb.get(sourceGuid);
+    if (sourceAsset?.ext !== '.prefab') continue;
+    const nested = queueNestedPrefabAsset(options, sourceAsset, unityDb, reporter, recursionDepth + 1);
+    const sourceRoot = nested?.model?.roots?.[0];
+    if (!sourceRoot) {
+      reporter.medium('ROOT_PREFAB_INSTANCE_UNRESOLVED', file, sourceAsset.relativePath, 'Root-level prefab instance source has no root transform; instance skipped', `instance ${instanceId}`);
+      continue;
+    }
+    const transformId = `${instanceId}:root-transform`;
+    const classId = sourceRoot.isRect ? 224 : 4;
+    byId.set(transformId, {
+      classId,
+      fileId: transformId,
+      stripped: true,
+      className: UNITY_CLASS[classId] || `UnityClass${classId}`,
+      typeName: classId === 224 ? 'RectTransform' : 'Transform',
+      lines: [
+        `  m_CorrespondingSourceObject: {fileID: ${sourceRoot.fileId}, guid: ${sourceGuid}, type: 3}`,
+        `  m_PrefabInstance: {fileID: ${instanceId}}`,
+      ],
+    });
+    transforms.set(transformId, {
+      fileId: transformId,
+      gameObjectId: 0,
+      parentId: 0,
+      children: [],
+      isRect: !!sourceRoot.isRect,
+      localPosition: { x: 0, y: 0, z: 0 },
+      anchoredPosition: null,
+      localRotation: { x: 0, y: 0, z: 0, w: 1 },
+      localScale: { x: 1, y: 1, z: 1 },
+      euler: { x: 0, y: 0, z: 0 },
+      sizeDelta: { x: 100, y: 100 },
+      anchorMin: { x: 0.5, y: 0.5 },
+      anchorMax: { x: 0.5, y: 0.5 },
+      anchor: { x: 0.5, y: 0.5 },
+    });
+    if (parentId) {
+      // The stripped-transform pass only materializes referenced child roots.
+      referencedTransformIds?.add(transformId);
+      childReferencedTransformIds?.add(transformId);
+    }
+    reporter.low(parentId ? 'NESTED_PREFAB_INSTANCE_SYNTHESIZED' : 'ROOT_PREFAB_INSTANCE_SYNTHESIZED', file, sourceAsset.relativePath,
+      parentId ? 'Synthesized the stripped root Transform of a prefab instance parented through m_TransformParent only'
+        : 'Synthesized the stripped root Transform of a root-level prefab instance', `instance ${instanceId}`);
+  }
+}
+
 function materializeStrippedTransforms(context) {
   const {
     file,
@@ -3674,6 +3911,18 @@ function materializeStrippedTransforms(context) {
     referencedTransformIds,
     childReferencedTransformIds,
     reporter,
+  });
+  synthesizeRootPrefabInstanceTransforms({
+    file,
+    byId,
+    transforms,
+    prefabInstanceInfos,
+    unityDb,
+    reporter,
+    options,
+    recursionDepth,
+    referencedTransformIds,
+    childReferencedTransformIds,
   });
 
   for (const transform of [...transforms.values()]) {
@@ -3769,6 +4018,7 @@ function materializeStrippedTransforms(context) {
       const materialOverrideGroups = collectPrefabMaterialOverrideGroups(instanceInfo, sourceGuid, unityDb);
       gameObject.syntheticModelAsset = sourceAsset;
       gameObject.syntheticModelName = name;
+      gameObject.syntheticModelTransformOverrides = transformOverrideFlags(props);
       gameObject.syntheticModelMaterialOverrideGroups = materialOverrideGroups;
       gameObject.syntheticModelExternalMaterialRemaps = collectUnityModelExternalMaterialRemaps(sourceAsset, unityDb);
       for (const [componentId, componentDoc] of componentDocs.entries()) {
@@ -3851,6 +4101,7 @@ function materializeStrippedTransforms(context) {
       transformId,
       syntheticModelAsset: sourceAsset,
       syntheticModelName: String(gameObjectProps.m_Name || sourceAsset.stem),
+      syntheticModelTransformOverrides: transformOverrideFlags(transformProps),
       syntheticModelMaterialOverrideGroups: collectPrefabMaterialOverrideGroups(instanceInfo, sourceGuid, unityDb),
       syntheticModelExternalMaterialRemaps: collectUnityModelExternalMaterialRemaps(sourceAsset, unityDb),
     });
@@ -3979,7 +4230,7 @@ function parsePrefabInstanceInfo(doc) {
   const info = {
     fileId: doc.fileId,
     parentTransformId: unityRefFileId(getField(doc, 'm_TransformParent')),
-    sourcePrefab: getField(doc, 'm_SourcePrefab'),
+    sourcePrefab: prefabInstanceSource(doc),
     overridesByTarget: new Map(),
     removedGameObjectSourceIds: parsePrefabInstanceReferenceList(doc, 'm_RemovedGameObjects'),
     removedComponentSourceIds: parsePrefabInstanceReferenceList(doc, 'm_RemovedComponents'),
@@ -4215,6 +4466,47 @@ function transformFromPrefabOverrides(baseTransform, props) {
 // nested-prefab scale/position/rotation (for example TapeTap_Circle 1.25 -> 1).
 function resolveNestedPrefabEffectiveTransform(strippedTransform, sourceTransform, props) {
   return transformFromPrefabOverrides(sourceTransform || strippedTransform, props || {});
+}
+
+// Transform fields a PrefabInstance serializes. The other fields of an FBX model
+// instance come from the file, which only the Cocos import can read.
+function transformOverrideFlags(props) {
+  const has = (key) => props?.[key] != null;
+  return {
+    position: ['x', 'y', 'z'].map((axis) => has(`m_LocalPosition.${axis}`)),
+    rotation: ['x', 'y', 'z', 'w'].some((axis) => has(`m_LocalRotation.${axis}`)),
+    scale: ['x', 'y', 'z'].map((axis) => has(`m_LocalScale.${axis}`)),
+  };
+}
+
+// Unity merges an FBX's single top-level node into the model root (unless
+// preserveHierarchy): the root's default transform is that node's, and a scene
+// override replaces it field by field. Cocos keeps the node as a child of an
+// identity root. Fill the fields the instance does not override from the Cocos
+// node, mapped back into Unity's import basis (reflect X, position * globalScale).
+function mergedModelRootTransform(transform, flags, topNode, modelScale = 1) {
+  const source = transform || {};
+  const p = topNode?.position || {}, q = topNode?.rotation || {}, s = topNode?.scale || {};
+  const nodePosition = { x: -Number(p.x || 0) * modelScale, y: Number(p.y || 0) * modelScale, z: Number(p.z || 0) * modelScale };
+  const nodeRotation = { x: Number(q.x || 0), y: -Number(q.y || 0), z: -Number(q.z || 0), w: Number(q.w ?? 1) };
+  const nodeScale = { x: Number(s.x ?? 1), y: Number(s.y ?? 1), z: Number(s.z ?? 1) };
+  const position = source.localPosition || { x: 0, y: 0, z: 0 };
+  const scale = source.localScale || { x: 1, y: 1, z: 1 };
+  const pick = (overridden, index, value, fallback) => (overridden?.[index] ? value : fallback);
+  return withConsistentCocosEuler({
+    ...source,
+    localPosition: {
+      x: pick(flags?.position, 0, position.x, nodePosition.x),
+      y: pick(flags?.position, 1, position.y, nodePosition.y),
+      z: pick(flags?.position, 2, position.z, nodePosition.z),
+    },
+    localRotation: flags?.rotation ? (source.localRotation || { x: 0, y: 0, z: 0, w: 1 }) : nodeRotation,
+    localScale: {
+      x: pick(flags?.scale, 0, scale.x, nodeScale.x),
+      y: pick(flags?.scale, 1, scale.y, nodeScale.y),
+      z: pick(flags?.scale, 2, scale.z, nodeScale.z),
+    },
+  });
 }
 
 function unityCanvasRenderMode(gameObject, model) {
@@ -4667,7 +4959,39 @@ function applyNestedParticlePrefabOverrides(builder, nestedPrefab, reporter, opt
     const rendererData = parseUnityRendererDoc(rendererDoc);
     applyUnitySerializedOverrides(particleData, particleProps);
     applyUnitySerializedOverrides(rendererData, rendererProps);
+    // The converter clears renderer._mesh (the mesh is resolved by the particle
+    // porter, not the converter). Re-applying the merged data for a colour or
+    // module override must not drop the mesh a Mesh-mode emitter already had.
+    const renderer = builder.objects[builder.objects[particleId]?.renderer?.__id__];
+    const resolvedMesh = renderer?._mesh || null;
     applyUnityParticleDataToCocos(builder, particleId, particleData, rendererData);
+    if (renderer && Number(rendererData?.m_RenderMode) === 4) {
+      const meshOverride = Object.entries(rendererProps).find(([propertyPath]) => /^m_Mesh\d?$/.test(propertyPath));
+      if (!meshOverride) {
+        renderer._mesh = resolvedMesh;
+      } else {
+        const builtin = resolveUnityBuiltinMeshUuid(meshOverride[1], gameObject.name);
+        const meshAsset = builtin ? null : unityDb.get(unityRefGuid(meshOverride[1]));
+        const meshName = meshAsset ? unityModelMeshName(meshAsset, unityRefFileId(meshOverride[1])) : '';
+        const resolved = meshAsset && cocosDb?.resolveModelMeshByStem
+          ? cocosDb.resolveModelMeshByStem(meshAsset.stem, meshName || meshAsset.stem, meshAsset.ext === '.asset' ? '.fbx' : meshAsset.ext)
+          : null;
+        const meshUuid = builtin || resolved?.meshUuid || '';
+        renderer._mesh = meshUuid ? cocosUuid(meshUuid, 'cc.Mesh') : resolvedMesh;
+        if (meshUuid) {
+          // The nested build bound the source mesh's basis; the overriding mesh owns it now.
+          removeModelMeshBasis(builder, particleId);
+          const nodeId = builder.objects[particleId]?.node?.__id__;
+          if (meshAsset && requestModelMeshBasis(builder, reporter, options, nodeId, particleId, meshAsset, gameObject.name)) {
+            attachModelMeshBasisRuntime(builder, reporter, options);
+          }
+        }
+        if (!meshUuid) {
+          reporter.medium('NESTED_PARTICLE_MESH_OVERRIDE_UNRESOLVED', nestedPrefab.sourceAsset?.relativePath || '', gameObject.name,
+            'Scene overrides the particle mesh but no Cocos mesh could be resolved; the source mesh is kept');
+        }
+      }
+    }
     if (particleProps.m_Enabled != null) {
       builder.objects[particleId]._enabled = Number(particleProps.m_Enabled) !== 0;
     }
@@ -4929,24 +5253,6 @@ class CocosPrefabBuilder {
     return id;
   }
 
-  // A MeshFilter that references an FBX/glTF mesh sub-asset directly (no linked model prefab) needs
-  // the same Unity-to-Cocos model basis as a nested model root: Unity mirrors the file's mesh data on
-  // import while Cocos keeps it. The basis lives on a dedicated child that only hosts the renderer, so
-  // the authored node transform seen by scripts and child nodes stays identical to Unity.
-  // `importScale` is the Unity ModelImporter scale factor baked into Unity's mesh data.
-  addMeshBasisNode(nodeId, fileId, importScale = 1) {
-    const parent = this.objects[nodeId];
-    const scale = Number.isFinite(importScale) && importScale > 0 ? importScale : 1;
-    return this.addNode(
-      MESH_BASIS_NODE_NAME,
-      nodeId,
-      scale === 1 ? MESH_BASIS_TRANSFORM : { ...MESH_BASIS_TRANSFORM, localScale: { x: scale, y: scale, z: scale } },
-      parent?._layer ?? 1073741824,
-      true,
-      `${fileId}-mesh-basis`,
-    );
-  }
-
   addTargetInfo(localId) {
     return this.add({
       __type__: 'cc.TargetInfo',
@@ -5076,6 +5382,16 @@ class CocosPrefabBuilder {
   }
 
   addComponent(nodeId, type, body, unityComponentId, fileId) {
+    // Source-bound runtime adapters are idempotent per (node, type, source):
+    // a flattened nested particle prefab already carries the adapters bound
+    // when it was built, and the outer prefab's binding pass sees it again.
+    const sourceId = body?.source?.__id__;
+    if (Number.isInteger(sourceId)) {
+      const existing = (this.objects[nodeId]?._components || [])
+        .map((ref) => ref?.__id__)
+        .find((id) => this.objects[id]?.__type__ === type && this.objects[id]?.source?.__id__ === sourceId);
+      if (Number.isInteger(existing)) return existing;
+    }
     const mounted = this.nestedPrefabInstanceByNode.has(nodeId);
     const componentId = this.add({
       __type__: type,
@@ -5785,23 +6101,80 @@ class CocosPrefabBuilder {
   }
 }
 
+// Unity 2022.2+ lists scene roots in a SceneRoots object; older files keep
+// m_RootOrder on each root Transform or as a PrefabInstance override.
+function unityRootOrder(transform, model) {
+  if (!model.rootOrderIndex) {
+    const index = new Map();
+    const sceneRoots = (model.docs || []).find((doc) => Number(doc.classId) === 1660057539);
+    if (sceneRoots) {
+      getNestedList(sceneRoots, 'm_Roots').map(unityRefFileId).filter(Boolean)
+        .forEach((fileId, order) => index.set(String(fileId), order));
+    }
+    model.rootOrderIndex = index;
+  }
+  const fileId = String(transform.fileId);
+  if (model.rootOrderIndex.has(fileId)) return model.rootOrderIndex.get(fileId);
+  const doc = model.byId?.get(fileId);
+  const direct = doc && !doc.stripped ? Number(getField(doc, 'm_RootOrder', NaN)) : NaN;
+  if (Number.isFinite(direct)) return direct;
+  const instanceId = fileId.includes(':') ? fileId.split(':')[0] : unityRefFileId(getField(doc || { lines: [] }, 'm_PrefabInstance'));
+  const instanceDoc = instanceId ? model.byId?.get(String(instanceId)) : null;
+  if (instanceDoc) {
+    for (const props of parsePrefabInstanceInfo(instanceDoc).overridesByTarget.values()) {
+      const order = Number(props.m_RootOrder);
+      if (Number.isFinite(order)) return order;
+    }
+  }
+  return Number.MAX_SAFE_INTEGER;
+}
+
 function buildCocosPrefabBuilder(model, outputFile, options, reporter, unityDb, cocosDb) {
-  const rootName = model.roots[0]
+  // A Unity scene has several roots, but a Cocos prefab has exactly one; wrap
+  // them in an identity node named after the output so the graph stays valid.
+  const wrapRoots = model.roots.length > 1 || /\.unity$/i.test(String(model.file || ''));
+  const rootName = !wrapRoots && model.roots[0]
     ? model.gameObjects.get(model.roots[0].gameObjectId)?.name || path.basename(outputFile, '.prefab')
     : path.basename(outputFile, '.prefab');
   const builder = new CocosPrefabBuilder(rootName, cocosDb, reporter, options);
   const layerResolver = buildLayerResolver(options, cocosDb, reporter);
 
-  for (const root of model.roots) emitNodeRecursive(root, null, model, builder, layerResolver, reporter, options, unityDb, cocosDb);
+  const rootParentId = wrapRoots
+    ? builder.addNode(rootName, null, {
+      localPosition: { x: 0, y: 0, z: 0 },
+      localRotation: { x: 0, y: 0, z: 0, w: 1 },
+      localScale: { x: 1, y: 1, z: 1 },
+      euler: { x: 0, y: 0, z: 0 },
+    }, layerResolver(0, rootName), true, `node-${sanitizeFileId(rootName)}-scene-root`)
+    : null;
+  if (wrapRoots) {
+    reporter.low('SCENE_ROOTS_WRAPPED', model.file, rootName, `${model.roots.length} Unity root objects were parented under one Cocos prefab root`);
+  }
+  const orderedRoots = wrapRoots ? [...model.roots].sort((a, b) => unityRootOrder(a, model) - unityRootOrder(b, model)) : model.roots;
+  for (const root of orderedRoots) emitNodeRecursive(root, rootParentId, model, builder, layerResolver, reporter, options, unityDb, cocosDb);
   emitComponents(model, builder, reporter, options, unityDb, cocosDb);
   require('./unity-cocos-port/ui-layout-porter').finalizeUnityLayouts(builder);
   runtimeComponentPorter.attachParticleSubEmitterFollowers(model, builder, reporter);
   runtimeComponentPorter.attachParticleRateOverDistanceEmitters(model, builder, reporter);
   runtimeComponentPorter.attachParticleHierarchyTransformSync(builder, reporter);
   runtimeComponentPorter.attachParticleRendererVisibility(builder, reporter);
+  require('./unity-cocos-port/particle-sorting-binding').attachSortingRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-orbit-binding').attachOrbitRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-noise-binding').attachNoiseRuntime(builder, reporter, options);
+  require('./unity-cocos-port/particle-start-rotation-binding.cjs').attachStartRotationRuntime(builder, reporter, options);
+  require('./unity-cocos-port/particle-initial-state-binding.cjs').attachInitialStateRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-birth-state-binding').attachBirthStateRuntime(builder, reporter, options);
+  require('./unity-cocos-port/particle-simulation-step-binding').attachSimulationStepRuntime(builder, reporter, options);
+  require('./unity-cocos-port/particle-burst-spread-binding').attachBurstSpreadRuntime(builder, reporter, options);
+  require('./unity-cocos-port/particle-shape-distribution-binding').attachShapeDistributionRuntime(builder, reporter, options);
+  require('./unity-cocos-port/particle-edge-shape-binding.cjs').attachEdgeShapeRuntime(builder, reporter, options);
+  require('./unity-cocos-port/particle-burst-emission-binding').attachBurstEmissionRuntime(builder, reporter, options);
+  require('./unity-cocos-port/particle-limit-velocity-binding').attachLimitVelocityRuntime(builder, reporter, options);
+  require('./unity-cocos-port/particle-prewarm-binding').attachPrewarmRuntime(builder, reporter, options);
+  require('./unity-cocos-port/particle-euler-rotation-binding').attachEulerRotationRuntime(builder, reporter, options);
+  require('./unity-cocos-port/particle-mesh-frame-binding').attachMeshFrameRuntime(builder, reporter, options);
+  require('./unity-cocos-port/particle-collision-binding').attachCollisionRuntime(builder, reporter, options);
+  attachModelMeshBasisRuntime(builder, reporter, options);
   if (builder.rootPrefabInfoId && builder.nestedPrefabInstanceRootIds.length) {
     const existing = Array.isArray(builder.objects[builder.rootPrefabInfoId].nestedPrefabInstanceRoots)
       ? builder.objects[builder.rootPrefabInfoId].nestedPrefabInstanceRoots.filter((entry) => Number.isInteger(entry?.__id__))
@@ -6082,6 +6455,8 @@ function queueNestedPrefabAsset(options, sourceAsset, unityDb, reporter, recursi
 }
 
 function nestedPrefabOutputPath(options, sourceAsset) {
+  const mapped = mappedNestedPrefabOutputPath(options, sourceAsset);
+  if (mapped) return mapped;
   const fileName = `${path.basename(sourceAsset.path, path.extname(sourceAsset.path))}.prefab`;
   return path.join(path.dirname(options.out), fileName);
 }
@@ -6101,6 +6476,10 @@ function writeQueuedNestedPrefabAssets(options, reporter, unityDb, cocosDb) {
 
     const outputFile = entry.outputFile || nestedPrefabOutputPath(options, sourceAsset);
     if (path.resolve(outputFile) === path.resolve(options.out)) continue;
+    if (mappedNestedPrefabOutputPath(options, sourceAsset) && fs.existsSync(outputFile)) {
+      reporter.low('NESTED_PREFAB_MAPPED_REUSED', sourceAsset.relativePath, toPosix(path.relative(options.cocosRoot, outputFile)), 'Nested prefab linked to the previously ported mapped output');
+      continue;
+    }
     if (fs.existsSync(outputFile) && !options.overwrite && !options.dryRun) {
       reporter.medium('NESTED_PREFAB_OUTPUT_EXISTS', sourceAsset.path, outputFile, 'Nested Cocos prefab already exists; use --overwrite to replace it');
       continue;
@@ -6152,7 +6531,7 @@ function portPrefab(options, reporter) {
   if (!reporter) reporter = new Reporter();
   if (!options._addedCocosCustomLayers) options._addedCocosCustomLayers = new Map();
 
-  const unityDb = scannedUnityAssetDatabase(options.unityRoot, unityPackageAssetRoots(options.unityRoot));
+  const unityDb = scannedUnityAssetDatabase(options.unityRoot);
   runtimeComponentPorter.ensureParticleSubEmitterFollowerScript(options, reporter);
   runtimeComponentPorter.ensureParticleHierarchyTransformSyncScript(options, reporter);
   runtimeComponentPorter.ensureParticleRendererVisibilityScript(options, reporter);
@@ -6381,11 +6760,13 @@ async function runShardedBatch(options, plan) {
   // spawnSync sẽ chạy TUẦN TỰ (nó block tới khi con xong) nên phải dùng spawn
   // bất đồng bộ rồi chờ tất cả. Vì hàm này đồng bộ, dùng Atomics.wait để nhường
   // CPU trong lúc chờ thay vì quay vòng đốt CPU.
+  const childEnv = prepareUnityPortChildEnv(options, options._preflight);
   const running = children.map((child) => {
     const proc = spawn(process.execPath, child.args, {
       cwd: options.cocosRoot,
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
+      env: { ...process.env, ...childEnv },
     });
     const state = { done: false, status: null, stdout: '', stderr: '' };
     proc.stdout.on('data', (d) => { state.stdout += d.toString(); });
@@ -6406,6 +6787,7 @@ async function runShardedBatch(options, plan) {
   const doneSignal = waitAll();
 
   await doneSignal;
+  cleanupUnityPortChildEnv(childEnv);
 
   const totals = { high: 0, medium: 0, low: 0 };
   let failedShards = 0;
@@ -6492,7 +6874,7 @@ function emitNodeRecursive(transform, parentNodeId, model, builder, layerResolve
   });
   if (canvasRenderMode === 2) resolvedTransform.preserveWorldSpaceCanvasLocalZ = true;
   if (emissionContext?.rebaseNestedModelMountedChild) {
-    resolvedTransform = rebaseNestedModelMountedChildTransform(resolvedTransform);
+    resolvedTransform = rebaseNestedModelMountedChildTransform(resolvedTransform, emissionContext.modelBasisScale ?? 1);
     reporter.low(
       'NESTED_MODEL_MOUNTED_CHILD_BASIS_REBASED',
       model.file,
@@ -6691,9 +7073,23 @@ function emitNodeRecursive(transform, parentNodeId, model, builder, layerResolve
       }
       const materialOverrides = [];
       const remaps = gameObject.syntheticModelExternalMaterialRemaps || [];
-      const explicitMaterialAssets = (gameObject.syntheticModelMaterialOverrideGroups || [])
+      const overrideGroups = gameObject.syntheticModelMaterialOverrideGroups || [];
+      const explicitMaterialAssets = overrideGroups
         .flatMap((group) => group.materialAssets || [])
         .filter(Boolean);
+      // Explicit overrides are Unity material slots of one Unity renderer; Unity merges
+      // a single-node FBX into the root ("//RootNode"), Cocos keeps the node's name.
+      const modelFile = gameObject.syntheticModelAsset.path;
+      const singleNode = modelPrefab.topLevelNodes?.length === 1 ? modelPrefab.topLevelNodes[0].name : '';
+      const unityOverrideFor = (slot) => {
+        const group = overrideGroups.find((entry) => {
+          const name = unityModelRendererName(gameObject.syntheticModelAsset, entry.sourceFileId);
+          return name === slot.rendererNodeName || (name === '//RootNode' && slot.rendererNodeName === singleNode);
+        }) || (overrideGroups.length === 1 ? overrideGroups[0] : null);
+        if (!group) return undefined;
+        const unityIndex = unitySlotIndexForCocosPrimitive(modelFile, slot.rendererNodeName, slot.slot);
+        return unityIndex === null ? undefined : (group.materialAssets[unityIndex] || null);
+      };
       const shadowOverrideRenderers = new Set();
       for (const slot of modelPrefab.materialSlots || []) {
         if (!shadowOverrideRenderers.has(slot.rendererLocalId)) {
@@ -6709,8 +7105,9 @@ function emitNodeRecursive(transform, parentNodeId, model, builder, layerResolve
           });
         }
         const normalizedSlotName = normalizeKey(slot.materialName);
-        const explicitMaterialAsset = explicitMaterialAssets[slot.slot]
-          || (explicitMaterialAssets.length === 1 ? explicitMaterialAssets[0] : null);
+        const mapped = unityOverrideFor(slot);
+        const explicitMaterialAsset = mapped !== undefined ? mapped
+          : (explicitMaterialAssets[slot.slot] || (explicitMaterialAssets.length === 1 ? explicitMaterialAssets[0] : null));
         const remap = explicitMaterialAsset
           ? { materialAsset: explicitMaterialAsset }
           : remaps.find((entry) => normalizeKey(entry.name) === normalizedSlotName)
@@ -6738,10 +7135,33 @@ function emitNodeRecursive(transform, parentNodeId, model, builder, layerResolve
           materialUuid,
         );
       }
+      const basis = unityModelImportBasis(gameObject.syntheticModelAsset);
+      if (basis && !basis.supported) {
+        reporter.high('UNITY_MODEL_IMPORT_BASIS_UNMEASURED', gameObject.syntheticModelAsset.relativePath, gameObject.name,
+          `Unity ModelImporter settings have no measured Cocos basis: ${basis.reasons.join('; ')}`);
+      }
+      const modelScale = basis?.supported ? basis.scale : 1;
+      const mergedNode = basis?.supported && !basis.preserveHierarchy && modelPrefab.topLevelNodes?.length === 1
+        ? modelPrefab.topLevelNodes[0]
+        : null;
+      const rootTransform = mergedNode
+        ? mergedModelRootTransform(resolvedTransform, gameObject.syntheticModelTransformOverrides, mergedNode, modelScale)
+        : resolvedTransform;
+      if (mergedNode?.localId) {
+        // The Unity root IS this node; its transform now lives on the instance root.
+        materialOverrides.push(
+          { localId: mergedNode.localId, propertyPath: '_lpos', value: { __type__: 'cc.Vec3', x: 0, y: 0, z: 0 } },
+          { localId: mergedNode.localId, propertyPath: '_lrot', value: { __type__: 'cc.Quat', x: 0, y: 0, z: 0, w: 1 } },
+          { localId: mergedNode.localId, propertyPath: '_lscale', value: { __type__: 'cc.Vec3', x: 1, y: 1, z: 1 } },
+          { localId: mergedNode.localId, propertyPath: '_euler', value: { __type__: 'cc.Vec3', x: 0, y: 0, z: 0 } },
+        );
+        reporter.low('NESTED_MODEL_MERGED_ROOT_NODE', gameObject.syntheticModelAsset.relativePath, gameObject.name,
+          'Unity merged the single FBX node into the model root: the Cocos node transform moved onto the instance root and non-overridden fields took the FBX node values');
+      }
       const nodeId = builder.addNestedPrefabInstance(
         gameObject.name,
         parentNodeId,
-        correctNestedModelForwardAxis(resolvedTransform),
+        correctNestedModelForwardAxis(rootTransform, modelScale),
         layerValue,
         gameObject.active,
         modelPrefab.prefabUuid,
@@ -6764,15 +7184,6 @@ function emitNodeRecursive(transform, parentNodeId, model, builder, layerResolve
         gameObject.name,
         'Linked model root received the Unity-to-Cocos FBX forward-axis basis; immediate mounted children are inversely rebased',
       );
-      const nestedImportScale = unityModelImportScale(gameObject.syntheticModelAsset);
-      if (nestedImportScale !== 1) {
-        reporter.medium(
-          'MODEL_IMPORT_SCALE_UNPORTED',
-          gameObject.syntheticModelAsset.relativePath,
-          gameObject.name,
-          `Unity ModelImporter scale factor ${nestedImportScale} is baked into Unity's mesh data but not into the linked Cocos model; verify this model's size`,
-        );
-      }
       for (const childId of transform.children) {
         const child = model.transforms.get(childId);
         if (!child) {
@@ -6781,23 +7192,17 @@ function emitNodeRecursive(transform, parentNodeId, model, builder, layerResolve
         }
         emitNodeRecursive(child, nodeId, model, builder, layerResolver, reporter, options, unityDb, cocosDb, {
           rebaseNestedModelMountedChild: true,
+          modelBasisScale: modelScale,
         });
       }
       return;
     }
   }
 
-  const nodeTransform = gameObjectHasWorldScaledParticleSystem(gameObject, model)
-    ? compensateParentScale(transform, resolvedTransform, model)
-    : resolvedTransform;
-  if (nodeTransform !== resolvedTransform) {
-    reporter.low(
-      'PARTICLE_WORLD_SCALE_PARENT_COMPENSATED',
-      model.file,
-      gameObject.name,
-      'Unity ParticleSystem scale is represented as Cocos Scale Space World; Cocos node scale was parent-compensated so world scale matches Unity without baking particle size or speed'
-    );
-  }
+  // scalingMode=1 is Unity Local, mapped to Cocos scaleSpace=Local. The
+  // renderer already reads node.getScale(); changing the hierarchy scale
+  // divides the local particle size twice and changes child world poses.
+  const nodeTransform = resolvedTransform;
 
   const nodeId = builder.addNode(
     gameObject.name,
@@ -6850,56 +7255,6 @@ function gameObjectHasParticleSystem(gameObject, model) {
     const classId = Number(doc?.classId || 0);
     return classId === 198 || classId === 223;
   });
-}
-
-function gameObjectHasWorldScaledParticleSystem(gameObject, model) {
-  return (gameObject.components || []).some((componentId) => {
-    const doc = model.componentDocs.get(componentId);
-    const classId = Number(doc?.classId || 0);
-    return (classId === 198 || classId === 223) && Number(getField(doc, 'scalingMode', 0) || 0) === 1;
-  });
-}
-
-function transformParentWorldScale(transform, transforms) {
-  const scale = { x: 1, y: 1, z: 1 };
-  let parent = transform?.parentId ? transforms.get(transform.parentId) : null;
-  const visited = new Set();
-  while (parent && !visited.has(parent.fileId)) {
-    visited.add(parent.fileId);
-    const localScale = parent.localScale || { x: 1, y: 1, z: 1 };
-    scale.x *= Number(localScale.x == null ? 1 : localScale.x);
-    scale.y *= Number(localScale.y == null ? 1 : localScale.y);
-    scale.z *= Number(localScale.z == null ? 1 : localScale.z);
-    parent = parent.parentId ? transforms.get(parent.parentId) : null;
-  }
-  return scale;
-}
-
-function compensateParentScale(transform, resolvedTransform, model) {
-  const parentScale = transformParentWorldScale(transform, model.transforms);
-  if (
-    Math.abs(parentScale.x - 1) <= 1e-6
-    && Math.abs(parentScale.y - 1) <= 1e-6
-    && Math.abs(parentScale.z - 1) <= 1e-6
-  ) {
-    return resolvedTransform;
-  }
-
-  const localScale = resolvedTransform.localScale || transform?.localScale || { x: 1, y: 1, z: 1 };
-  const divide = (value, divisor) => {
-    const n = Number(value == null ? 1 : value);
-    const d = Number(divisor == null ? 1 : divisor);
-    return Math.abs(d) > 1e-6 ? n / d : n;
-  };
-
-  return {
-    ...resolvedTransform,
-    localScale: {
-      x: divide(localScale.x, parentScale.x),
-      y: divide(localScale.y, parentScale.y),
-      z: divide(localScale.z, parentScale.z),
-    },
-  };
 }
 
 function emitComponents(model, builder, reporter, options, unityDb, cocosDb) {
@@ -7604,6 +7959,10 @@ function emitAnimator(nodeId, componentId, doc, builder, reporter, options, unit
   return emitAnimatorImpl(nodeId, componentId, doc, builder, reporter, options, unityDb, cocosDb, gameObject, model);
 }
 
+function emitLegacyAnimation(nodeId, componentId, doc, builder, reporter, options, unityDb, cocosDb, gameObject, model) {
+  return emitLegacyAnimationImpl(nodeId, componentId, doc, builder, reporter, options, unityDb, cocosDb, gameObject, model);
+}
+
 function emitMonoBehaviour(nodeId, componentId, doc, model, builder, reporter, options, unityDb, cocosDb, gameObject) {
   return emitMonoBehaviourImpl(nodeId, componentId, doc, model, builder, reporter, options, unityDb, cocosDb, gameObject);
 }
@@ -7894,7 +8253,9 @@ async function main() {
     return;
   }
   if (!options.dryRun) {
-    assertUnityPortPreflight(options.src || options.unityRoot, {
+    // A sharded batch passes this on to its own shards, so a coordinator above
+    // it (a project port-all script) validates once for the whole chain.
+    options._preflight = inheritedPreflightStillValid(options) || assertUnityPortPreflight(options.src || options.unityRoot, {
       projectRoot: options.unityRoot || undefined,
       requireProject: true,
     });
@@ -7923,6 +8284,14 @@ if (require.main === module) {
 }
 
 module.exports = {
+  collectUnityModelExternalMaterialRemaps,
+  parseUnityYaml,
+  getField,
+  getNestedList,
+  unityRefGuid,
+  unityRefFileId,
+  emitLegacyAnimation,
+  parseUnityAnimationClip: parseUnityAnimationClipForOracle,
   CocosPrefabBuilder,
   CocosAssetDatabase,
   portPrefab,
@@ -7947,6 +8316,8 @@ module.exports = {
   convertNodePosition,
   multiplyQuaternion,
   correctNestedModelForwardAxis,
+  mergedModelRootTransform,
+  transformOverrideFlags,
   buildNestedPrefabPropertyOverrides,
   rebaseNestedModelMountedChildTransform,
   hasExplicitNestedModelForwardBasisRotation,
@@ -7956,5 +8327,13 @@ module.exports = {
   convertRotation,
   parseArgs,
   parseUnityAnimationClipForOracle,
+  prepareUnityPortChildEnv,
+  cleanupUnityPortChildEnv,
+  inheritedPreflightStillValid,
+  scannedUnityAssetDatabase,
+  parseUnityYamlText,
+  parsePrefabInstanceInfo,
+  applyNestedParticlePrefabOverrides,
+  CocosPrefabBuilder,
   main,
 };

@@ -11,6 +11,7 @@ const {
   scanUnityProject,
 } = require('./unity-intel/service.cjs');
 const { runUnityPortPreflight } = require('./unity-intel/preflight.cjs');
+const { sharedUnityMcpInstallState, shouldAutoBootstrap } = require('./unity-intel/shared-mcp-install-state.cjs');
 
 const COMMANDS = new Set(['doctor', 'setup', 'preflight', 'scan', 'query']);
 const SECTIONS = new Set(['features', 'assets', 'dependencies', 'unresolved', 'diagnostics', 'scenes', 'scripts']);
@@ -35,6 +36,7 @@ Options:
   --project <path>   Unity project root (bắt buộc).
   --provider <mode>  auto | static | unity-mcp. Default: auto.
   --bootstrap        Cho phép scan/preflight tự cài/reload Unity-MCP (setup luôn bật).
+  --no-bootstrap     Không tự cài Unity-MCP của shared kit khi manifest còn thiếu.
   --unity <file>     Unity Editor executable; phải đúng version project.
   --mcp-url <url>    Override HTTP loopback endpoint. Token chỉ nhận qua UNITY_MCP_TOKEN.
   --timeout-ms <n>   Thời gian chờ setup/reload/live scan. Default: 180000 khi bootstrap.
@@ -59,7 +61,10 @@ Options:
   --json             Xuất JSON (mặc định khi stdout không phải TTY).
   --help             Hiện trợ giúp.
 
-Mặc định không sửa Unity project. Chỉ setup hoặc --bootstrap mới ghi package/config.`;
+Khi Packages/manifest.json chưa có Unity-MCP của shared kit (com.ccplayable.unity-intelligence +
+com.ivanmurzak.unity.mcp), preflight/scan với provider auto|unity-mcp tự chạy bootstrap để cài trước;
+MCP bên thứ ba (vd com.unity.ai.assistant) không thay thế được scanner này. Dùng --no-bootstrap hoặc
+--provider static để giữ project nguyên trạng. Khi scanner đã được khai báo, chỉ setup/--bootstrap mới ghi package/config.`;
 
 function valueAfter(argv, index, option) {
   const value = argv[index + 1];
@@ -86,6 +91,7 @@ function parseArgs(argv) {
     if (argument === '--help' || argument === '-h') { options.help = true; continue; }
     if (argument === '--json') { options.json = true; continue; }
     if (argument === '--bootstrap') { options.bootstrap = true; continue; }
+    if (argument === '--no-bootstrap') { options.noBootstrap = true; continue; }
     if (argument === '--include-vendor') { options.includeVendor = true; continue; }
     if (argument === '--no-cache') { options.cache = false; continue; }
     if (argument === '--refresh-cache') { options.refreshCache = true; continue; }
@@ -135,6 +141,7 @@ function parseArgs(argv) {
   if (options.targets && (options.targets.length > 8 || options.targets.some(value => value.length > 320))) {
     throw new Error('--target tối đa 8 giá trị, mỗi giá trị <=320 ký tự.');
   }
+  if (options.bootstrap && options.noBootstrap) throw new Error('--bootstrap và --no-bootstrap xung đột.');
   if (options.command === 'setup') {
     options.bootstrap = true;
     options.provider = 'unity-mcp';
@@ -167,14 +174,24 @@ function compactScanResult(result) {
 
 async function execute(options) {
   if (!options.project) throw new Error('Thiếu --project <UnityProjectRoot>.');
+  const installState = sharedUnityMcpInstallState(path.resolve(options.project));
+  if (shouldAutoBootstrap(options, installState)) {
+    options.bootstrap = true;
+    console.error('[unity-intel] Unity-MCP của shared kit chưa có trong Packages/manifest.json; tự cài trước khi scan (tắt bằng --no-bootstrap).');
+  }
   if (options.command === 'doctor') {
-    return inspectUnityProject({
+    const report = await inspectUnityProject({
       project: options.project,
       unity: options.unity,
       mcpUrl: options.mcpUrl,
       mcpToken: process.env.UNITY_MCP_TOKEN || undefined,
       timeoutMs: options.timeoutMs || 3_000,
     });
+    return {
+      ...report,
+      sharedKitMcp: installState,
+      ...(installState.installed ? {} : { remediation: 'npm run unity:intel:setup -- --project <UnityProjectRoot>' }),
+    };
   }
   if (options.command === 'preflight') {
     const result = await runUnityPortPreflight({
@@ -212,6 +229,10 @@ function printHuman(payload, command) {
     console.log(`Lock: ${payload.doctor && payload.doctor.lock ? payload.doctor.lock.state : 'unknown'}`);
     console.log(`Unity-MCP: ${payload.connection && payload.connection.url ? payload.connection.url : 'not configured'}`);
     console.log(`Live scanner tool: ${payload.canUseLiveMcp ? 'ready' : 'unavailable'}`);
+    if (payload.sharedKitMcp && !payload.sharedKitMcp.installed) {
+      const others = payload.sharedKitMcp.thirdPartyMcp.length ? ` (có ${payload.sharedKitMcp.thirdPartyMcp.join(', ')} nhưng không thay thế được)` : '';
+      console.log(`Shared-kit Unity-MCP: chưa cài${others} -> ${payload.remediation}`);
+    }
     if (payload.liveMcp && payload.liveMcp.error) {
       console.log(`  ${payload.liveMcp.error.code}: ${payload.liveMcp.error.message}`);
     }

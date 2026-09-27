@@ -20,6 +20,32 @@ mesh geometry to compensate for these material differences.
 
 ## Mandatory workflow
 
+When a migrated URP particle preview differs from an isolated legacy reference,
+audit active shader properties before adjusting brightness. A dormant serialized
+`_TintColor` does not drive URP Particles/Unlit: its multiply path uses `_BaseColor`.
+Legacy Additive/Alpha Blended instead use `2 * vertexColor * _TintColor * texture`.
+In Linear space, legacy gray Color(.5) uploads as .214041, so its RGB coefficient
+is .428082; migrated URP white BaseColor contributes1. Alpha can still match.
+This is a shader coefficient comparison, not a final-image brightness ratio.
+`tools/unity-intel/particle-material-reference.cjs` checks the bounded multiply
+contracts and rejects unsupported keywords; it cannot establish visual parity.
+Keep the intended original appearance distinct from the current compatibility
+preview. Do not silently switch baselines or apply a global exposure multiplier.
+
+Before replacing source materials, read GraphicsSettings.currentRenderPipeline.
+Camera.actualRenderingPath=Forward does not prove Built-in; an active URP project
+can report the same value. Restoring old Built-in particle materials into URP can
+produce black geometry. Preserve working compatibility fixes and validate original
+shader behavior in an isolated matching-pipeline reference or a verified compatible
+shader. Capture the source QualitySettings.asset and assert active pipeline, color
+space, pixel-light budget, MSAA, soft particles and linear-light flag using
+unity-intel/reference-render-state.cjs. Asset hashes alone cannot prove equivalent
+render settings. Missing quality state invalidates previous lighting acceptance.
+Read the intensity flag independently of ColorSpace: legacy Built-in lighting
+uses sRGBDecode(gammaRGB*intensity), not sRGBDecode(gammaRGB)*intensity. Include
+GraphicsSettings.asset in the reference source closure; do not synthesize modern
+lighting flags while claiming original project settings.
+
 For Editor shader import failures, repair the shared generator and add a portable
 regression fixture before regenerating project assets. In Creator 3.8, fog
 uniforms belong to `builtin/uniforms/cc-global`; there is no `cc-fog` uniform
@@ -29,6 +55,25 @@ hidden properties that are referenced by source code, and preserve authored
 UV varying widths, including particle custom data in float4 UV channels.
 Passing static checks does not close the issue: reimport the affected effects,
 verify Editor compilation and exercise their particle variants in Preview.
+
+Before publishing effect text, use `assertEffectPropertyBindings` from
+`tools/shader-compiler/effect-property-bindings.cjs`. It checks properties against
+the selected vertex/fragment pair per technique/pass, resolves anchors, merge
+keys, `propertyIndex`, local includes and explicit `target` names. Uniforms in
+an unrelated program do not satisfy a property. The CLI accepts `--chunk-root
+<CreatorEngine/editor/assets/chunks>` to resolve installed engine declarations;
+unresolved vendor includes are explicitly unverified and still need live import.
+Never delete all hidden properties or silently drop an intended binding to make
+the check pass. An invalid property binding is rejected before an existing
+effect is overwritten by the shared publisher/transpiler.
+
+Use the shared `generated-asset-writer.cjs` for generated material/effect text.
+It stages complete content on the project volume outside Assets, atomically
+publishes it, and skips identical writes. Finish AssetDB refresh/registration
+before opening the graph. A `Can not change the asset ... original asset is not
+exist` stack in the Assets tree is a registration/UI synchronization symptom,
+not a shader compile diagnosis. Resolve the exact URL and UUID first; `.meta`
+and direct library cache writes alone do not prove Editor import success.
 
 1. Run Unity port preflight before reading raw Unity source or writing output:
 
@@ -137,14 +182,33 @@ verify Editor compilation and exercise their particle variants in Preview.
 
 - A Cocos effect contains `CCEffect` pass/property YAML and one or more `CCProgram` blocks.
 - Keep sampler declarations outside UBOs. Pack scalar/vector uniforms for std140 alignment and bind property targets explicitly.
+- An effect property's declared default does not guarantee Material.getProperty returns a value before runtime assignment. Initialize serialized or runtime Vec4 values before cloning/saving them. Animated uniforms and light/depth/color textures must reach actual renderer MaterialInstances; changing a shared parent alone does not prove instance UBO updates. Track instance replacement and destroyed instances, and verify a measured live surface response rather than only shader import.
+- Shared uniform blocks must have matching member precision in vertex and fragment stages. A mediump trail vertex template combined with a highp fragment shader can import successfully yet fail WebGL linking when the variant first renders. Declare explicit matching highp members for shared lighting blocks; also align shared sampler/varying precision. effect-property-bindings checks recognizable UBO members against each stage's ordered default declarations and resolved chunks, and reports unresolved/conditional declarations as evidence gaps. This static gate does not replace live variant linking across all particle/trail modes.
 - Match source cull, depth test/write, blend, alpha clip and queue behavior before tuning color.
 - `--unity-uv` changes texture sampling convention for Unity-authored mesh UVs; never compensate by globally flipping mesh UVs when procedural shader code also reads `uv.y`.
 
 ### Particle depth, capture and material-instance validation
 
+For black Standard geometry and flat-color distortion captures, read the source
+lighting/color and capture-layer checks in
+[Unity port visual parity](../unity-to-cocos-porting/references/visual-parity.md).
+SolidColor camera clears do not disable skybox ambient/reflection. Cocos 3.8.8
+capture masks require every node-layer bit, unlike Unity's intersection test.
+
 For Unity soft particles and GrabPass conversions, bind scene-depth/color render textures to the particle renderer's **material instance**, not only its shared parent material. Creator recompiles per-emitter instances and can retain default samplers from the parent. Initialize render textures before assigning camera targets; exclude particles and UI from opaque captures; remove destroyed renderers/materials from capture tracking. Validate both depth-contact fade and distortion with a non-black background in Preview. Check source render alignment (View, Local, Facing, Velocity) explicitly; camera-axis billboards alone do not cover these modes. A shader import pass does not verify these runtime contracts.
 
 Unbound GrabPass adapters must not draw an opaque black quad: use an explicit capture-ready uniform, bind on emitter activation and after material variant compilation, and keep descriptor bindings current. Prefab-edit views without an opaque capture should skip the refraction pass. Verify the actual refraction in the game Preview before accepting this fallback.
+
+GrabPass inclusion must preserve equal-key transparent draws too. Native Built-in
+`FX/Glass/Stained BumpDistort` includes tied Legacy Particles Additive, Alpha
+Blended, Additive (Soft), and Alpha Blended Premultiply in its grabbed image.
+The 192-case `stained-grab-ties-native.json` fixture covers coincident bounds,
+perspective/orthographic cameras and creation/material/sibling permutations;
+higher sorting order stays after glass and fails its depth test when behind it.
+Use `UnityStainedGrabOrdering` for this measured tie contract. A strict `<`
+comparison alone can omit the central glow and turn an explosion dark even
+when particle counts, material colors and lighting match. Do not transfer this
+shader-specific tie behavior to arbitrary custom shaders without a native probe.
 
 For bright ground spots, isolate emitter lighting from particle alpha/depth. Built-in Unity point lights sample `_LightTextureB0` using squared distance normalized by range, while Cocos sphere lights use inverse-square and size attenuation. A universal luminance multiplier does not preserve the near-field result. Capture the live source attenuation table and account for Cocos exposure/light-meter scaling in a scoped adapter; do not dim every particle or globally change light import heuristics based on one scene.
 

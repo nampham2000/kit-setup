@@ -3,14 +3,16 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { compressUuid } = require('./core-utils');
 const { unsupportedNoiseReasons } = require('./particle-noise-binding');
-const names = ['UnityNoiseKernel', 'UnityParticleOrbit', 'UnityParticleOrbitAdapter'];
+const names = ['UnityNoiseKernel', 'UnityParticleLimitVelocity', 'UnityParticleOrbit', 'UnityParticleOrbitAdapter'];
 
 function unsupportedOrbitReasons(spec) {
   const reasons=[];
   if(![0,1].includes(spec.simulationSpace)||spec.inWorldSpace)reasons.push('world-velocity-or-custom-space');
   if(spec.simulationSpace===1&&spec.scalingMode!==0)reasons.push('world-nonhierarchical-scaling');
   if(spec.simulationSpace===1&&spec.noiseEnabled)reasons.push('world-noise-composition');
-  if(spec.limitEnabled)reasons.push('velocity-limit');
+  // Unity limits stored + orbital/radial velocity and stores only the non-animated part
+  // (velocity-limit-composition-native.json); its speed modifier acts after the limit.
+  if(spec.limitEnabled&&(spec.velocity.speedModifier?.minMaxState!==0||spec.velocity.speedModifier?.scalar!==1))reasons.push('velocity-limit-speed-modifier');
   if(spec.noiseEnabled && (!spec.noise?.enabled || unsupportedNoiseReasons(spec.noise,spec.limitEnabled).length || spec.velocity.speedModifier?.minMaxState!==0 || spec.velocity.speedModifier?.scalar!==1))reasons.push('noise-composition');
   for(const key of ['orbitalOffsetX','orbitalOffsetY','orbitalOffsetZ'])if(spec.velocity[key]?.minMaxState!==0||spec.velocity[key]?.scalar!==0)reasons.push(key);
   for(const [key,c] of Object.entries(spec.velocity))if(c?.maxCurve&&[c.maxCurve,c.minCurve].some(v=>v?.m_Curve?.some(k=>k.weightedMode)))reasons.push(key+'-weighted');

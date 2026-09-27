@@ -1,0 +1,16 @@
+{
+  "name": "CcPlayable.UnityIntelligence.Capture",
+  "rootNamespace": "CcPlayable.UnityIntelligence.Capture",
+  "references": [],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

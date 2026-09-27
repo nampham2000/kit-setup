@@ -22,6 +22,7 @@
  */
 
 const { splitArgs, matchParen } = require('./call-rewriter.cjs');
+const { createEffectChunkResolver } = require('./effect-property-bindings.cjs');
 
 // Fixed-arity GLSL ES 3.00 builtins. Variadic/overloaded-arity functions
 // (texture, min, max, ...) are deliberately absent: only exact arities here.
@@ -190,6 +191,18 @@ function matchingBrace(code, open) {
  * Set and therefore reported the invalid shader as compile-clean.
  */
 function checkDuplicateFunctionLocals(code, program, diags) {
+  const facts = expression => {
+    if (/\|\|/.test(expression)) return [];
+    return expression.split('&&').flatMap(term => {
+      const simple = /^\s*(!)?\s*([A-Za-z_]\w*)\s*$/.exec(term);
+      if (simple) return [{ symbol: simple[2], op: simple[1] ? '==' : '!=', value: '0' }];
+      const compare = /^\s*([A-Za-z_]\w*)\s*(==|!=)\s*([A-Za-z_]\w*|\d+)\s*$/.exec(term);
+      return compare ? [{ symbol: compare[1], op: compare[2], value: compare[3] }] : [];
+    });
+  };
+  const exclusive = (a, b) => a.branches.some(x => b.branches.some(y => x.id === y.id && x.arm !== y.arm))
+    || a.facts.some(x => b.facts.some(y => x.symbol === y.symbol && x.value === y.value && x.op !== y.op
+      || x.symbol === y.symbol && x.op === '==' && y.op === '==' && /^[01]$/.test(x.value) && /^[01]$/.test(y.value) && x.value !== y.value));
   const userTypes = [...code.matchAll(/\bstruct\s+([A-Za-z_]\w*)/g)].map(m => m[1]);
   const types = [
     'bool', 'int', 'uint', 'float', 'double',
@@ -207,34 +220,97 @@ function checkDuplicateFunctionLocals(code, program, diags) {
     const declared = new Map();
     for (const param of splitArgs(fn[2])) {
       const pm = /([A-Za-z_]\w*)\s*(?:\[[^\]]*\])?\s*$/.exec(param.trim());
-      if (pm && param.trim() !== 'void') declared.set(pm[1], { type: 'parameter', line: lineAt(code, fn.index) });
+      if (pm && param.trim() !== 'void') declared.set(pm[1], [{ type: 'parameter', line: lineAt(code, fn.index), branches: [], facts: [] }]);
     }
 
     const body = code.slice(open + 1, close);
     const bodyStartLine = lineAt(code, open);
     let depth = 0;
     const lines = body.split('\n');
+    const branches = []; let branchId = 0;
     for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
+      const line = lines[i].trimEnd();
+      const conditional = /^\s*#\s*(if|ifdef|ifndef)\s+(.+)$/.exec(line);
+      if (conditional) branches.push({ id: branchId++, arm: 0, facts: facts((conditional[1] === 'ifndef' ? '!' : '') + conditional[2]) });
+      else if (/^\s*#\s*(?:elif|else)\b/.test(line) && branches.length) {
+        const branch=branches[branches.length - 1]; branch.arm++;
+        branch.facts=facts(/^\s*#\s*elif\s+(.+)$/.exec(line)?.[1] || '');
+      }
+      else if (/^\s*#\s*endif\b/.test(line)) branches.pop();
       if (depth === 0 && !/^\s*for\s*\(/.test(line)) {
         const dm = new RegExp(`^\\s*(?:const\\s+)?(${types})\\s+([A-Za-z_]\\w*)\\s*(?:=|;|,)`).exec(line);
         if (dm) {
-          const previous = declared.get(dm[2]);
+          const prior = declared.get(dm[2]) || [];
+          // Declarations in distinct arms of the same #if never coexist.
+          // Separate #if blocks can both be active and must still fail.
+          const context={branches:branches.map(b=>({id:b.id,arm:b.arm})),facts:branches.flatMap(b=>b.facts)};
+          const previous = prior.find(p => !exclusive(p,context));
           if (previous) {
             diags.push({
               severity: 'high', code: 'GLSL_DUPLICATE_LOCAL', program,
               line: bodyStartLine + i,
               message: `'${dm[2]}' is declared twice in ${fn[1]}() (${previous.type} and ${dm[1]}); GLSL cannot compile this scope.`,
             });
-          } else {
-            declared.set(dm[2], { type: dm[1], line: bodyStartLine + i });
           }
+          prior.push({ type: dm[1], line: bodyStartLine + i, ...context });
+          declared.set(dm[2], prior);
         }
       }
       for (const ch of line) {
         if (ch === '{') depth++;
         else if (ch === '}') depth = Math.max(0, depth - 1);
       }
+    }
+    fnRe.lastIndex = close + 1;
+  }
+}
+
+// Structs declared by Cocos Creator 3.8.8 engine chunks (chunks/**/*.chunk).
+// A local of one of these types is legal even though the struct is not in
+// the effect text itself.
+const ENGINE_CHUNK_STRUCTS = new Set([
+  'CCLight', 'Cluster', 'LightGrid', 'LightingIntermediateData', 'LightingMiscData',
+  'LightingResult', 'LightingResultPerLayer', 'SpriteFragmentData', 'SpriteVertexData',
+  'StandardSurface', 'StandardVertInput', 'SurfacesMaterialData', 'SurfacesMaterialDataPerLayer',
+  'SurfacesStandardVertexIntermediate', 'ToonSurface',
+]);
+const GLSL_VALUE_TYPE = /^(?:void|bool|int|uint|float|double|[biud]?vec[234]|d?mat[234](?:x[234])?|[iu]?sampler\w+)$/;
+// HLSL spellings are only legal when a compat #define maps them; leave those
+// to the residual-symbol checks instead of guessing about included macros.
+const HLSL_VALUE_ALIAS = /^(?:half|float|int|uint|bool|fixed|min16float|min10float|min16int)[1-4]?(?:x[1-4])?$/;
+const STATEMENT_KEYWORD = new Set(['return', 'else', 'case', 'default', 'break', 'continue', 'discard',
+  'const', 'highp', 'mediump', 'lowp', 'precision', 'in', 'out', 'inout', 'flat', 'smooth', 'uniform']);
+
+/**
+ * A local declared with a type GLSL never saw (`V o;` left behind after a
+ * Unity output struct was flattened into varyings) is EFX2406 in the Cocos
+ * importer, but no other rule looks at declaration types.
+ */
+function checkUndeclaredLocalTypes(code, program, diags, extraDeclared) {
+  const userTypes = new Set([...code.matchAll(/\bstruct\s+([A-Za-z_]\w*)/g)].map(m => m[1]));
+  const macros = new Set([...code.matchAll(/#\s*define\s+([A-Za-z_]\w*)/g)].map(m => m[1]));
+  const known = t => GLSL_VALUE_TYPE.test(t) || HLSL_VALUE_ALIAS.test(t) || userTypes.has(t)
+    || ENGINE_CHUNK_STRUCTS.has(t) || macros.has(t) || STATEMENT_KEYWORD.has(t) || extraDeclared?.has(t);
+  const fnRe = /\b[A-Za-z_]\w*\s+([A-Za-z_]\w*)\s*\(([^)]*)\)\s*\{/g;
+  const reported = new Set();
+  let fn;
+  while ((fn = fnRe.exec(code)) !== null) {
+    const open = fn.index + fn[0].lastIndexOf('{');
+    const close = matchingBrace(code, open);
+    if (close < 0) continue;
+    const body = code.slice(open + 1, close);
+    const declRe = /(^|[;{}])\s*([A-Za-z_]\w*)\s+([A-Za-z_]\w*)\s*(?:\[[^\]]*\]\s*)?(?==|;|,)/g;
+    let m;
+    while ((m = declRe.exec(body)) !== null) {
+      const type = m[2];
+      if (known(type) || reported.has(type)) continue;
+      if (/^\s*#/.test(body.slice(body.lastIndexOf('\n', m.index + m[1].length) + 1))) continue;
+      reported.add(type);
+      diags.push({
+        severity: 'high', code: 'GLSL_UNDECLARED_TYPE', program,
+        line: lineAt(code, open + 1 + m.index + m[1].length),
+        message: `'${type} ${m[3]}' in ${fn[1]}() uses a type that is neither a GLSL type nor a declared struct; the Cocos importer rejects the effect (EFX2406). A Unity struct was probably flattened into varyings without removing its local.`,
+      });
     }
     fnRe.lastIndex = close + 1;
   }
@@ -407,6 +483,14 @@ function collectDeclared(code) {
     if (GLSL_KEYWORDS.has(m[1]) || /^(?:vec|mat|ivec|bvec|sampler)/.test(m[1]) ||
         ['float', 'int', 'bool', 'uint', 'void'].includes(m[1])) add(m[2]);
   }
+  // GLSL permits `vec3 s = sin(v), c = cos(v);`. Every comma declarator
+  // introduces a local; commas inside an initializer call do not.
+  for (const declaration of code.matchAll(/\b(?:float|int|uint|bool|[biu]?vec[234]|mat[234])\s+([A-Za-z_]\w*\s*(?:=|,|;)[^;{}]*);/g)) {
+    for (const part of splitArgs(declaration[1])) {
+      const name=/^\s*([A-Za-z_]\w*)\s*(?:=|\[|$)/.exec(part)?.[1];
+      if(name)add(name);
+    }
+  }
   // UBO / struct members: every `type name;` inside a block
   const blockRe = /\{([^{}]*)\}/g;
   while ((m = blockRe.exec(code)) !== null) {
@@ -436,15 +520,15 @@ function collectDeclared(code) {
  * before GLSL compilation, so analyzing each block in isolation incorrectly
  * reports shared UBO members and helper functions as undeclared.
  */
-function collectLocalIncludeDeclarations(program, programsByName) {
+function collectLocalIncludeDeclarations(program, programsByName, chunkResolver) {
   const declared = new Set();
   const visited = new Set();
   const visit = (name) => {
     if (visited.has(name)) return;
     visited.add(name);
-    const included = programsByName.get(name);
-    if (!included) return;
-    const code = stripComments(included.code);
+    const included = programsByName.get(name)?.code ?? chunkResolver?.(name);
+    if (included == null) return;
+    const code = stripComments(included);
     for (const symbol of collectDeclared(code)) declared.add(symbol);
     for (const match of code.matchAll(/^\s*#\s*include\s+<([^>]+)>/gm)) visit(match[1]);
   };
@@ -599,7 +683,7 @@ function checkPropertyBinding(effectText, effectYaml, diags) {
  * @param {string} effectText
  * @returns {{ok: boolean, errors: object[], warnings: object[], diagnostics: object[]}}
  */
-function analyzeEffect(effectText) {
+function analyzeEffect(effectText, options = {}) {
   const diags = [];
   if (!effectText || typeof effectText !== 'string') {
     return { ok: false, errors: [{ severity: 'high', code: 'EMPTY_EFFECT', message: 'Empty effect content' }], warnings: [], diagnostics: [] };
@@ -607,6 +691,7 @@ function analyzeEffect(effectText) {
 
   const { programs, effectYaml } = splitEffect(effectText);
   const programsByName = new Map(programs.map(program => [program.name, program]));
+  const chunks = createEffectChunkResolver(new Map(programs.map(p => [p.name, p.code])), options);
 
   // A surface-shader effect is not a set of independent programs: `standard-vs`
   // and `standard-fs` `#include` the shared-ubos / macro-remapping / surface-*
@@ -627,13 +712,15 @@ function analyzeEffect(effectText) {
     ]) pooled.add(n);
   }
 
+  const fileStructs = [...stripComments(effectText).matchAll(/\bstruct\s+([A-Za-z_]\w*)/g)].map(m => m[1]);
   for (const p of programs) {
     const code = stripComments(p.code);
-    const linkedDeclarations = collectLocalIncludeDeclarations(p, programsByName);
+    const linkedDeclarations = collectLocalIncludeDeclarations(p, programsByName, chunks);
     if (pooled) for (const name of pooled) linkedDeclarations.add(name);
     checkBalance(code, p.name, diags);
     checkCallArity(code, p.name, diags);
     checkDuplicateFunctionLocals(code, p.name, diags);
+    checkUndeclaredLocalTypes(code, p.name, diags, new Set([...linkedDeclarations, ...fileStructs]));
     checkUninitializedOutputSelfAssignments(code, p.name, diags);
     checkVectorAssignmentDimensions(code, p.name, diags);
     checkResidualsAndScope(code, p.name, diags, linkedDeclarations);

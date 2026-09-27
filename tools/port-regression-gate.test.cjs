@@ -9,6 +9,9 @@ const test = require('node:test');
 
 const {
   DEFAULT_RECEIPT,
+  PORTABLE_HASH_CONTRACT,
+  RECEIPT_KIND,
+  RECEIPT_SCHEMA_VERSION,
   REGISTRY_KIND,
   assertPortableRegistry,
   initRegistry,
@@ -101,6 +104,11 @@ test('a win-less demo can verify lifecycle through two measured gesture restarts
   const file=writeRegistry(root,source);
   assert.equal(validateRegistry(root,source,{configFile:file}).suites.length,1);
   entry.requiredEvalMetrics.resets.min=1; writeMatrix(root,matrix,[entry]);
+  assert.throws(()=>validateRegistry(root,source,{configFile:file}),error=>error.code==='REGRESSION_WIN_RECEIPT_MISSING');
+  // Evals that return {ok, metrics:{...}} declare dotted paths; the contract reads them too.
+  entry.requiredEvalMetrics={'metrics.resets':{min:2,max:2},'metrics.rounds':{min:3,max:3}}; writeMatrix(root,matrix,[entry]);
+  assert.equal(validateRegistry(root,source,{configFile:file}).suites.length,1);
+  entry.requiredEvalMetrics['metrics.rounds'].min=2; writeMatrix(root,matrix,[entry]);
   assert.throws(()=>validateRegistry(root,source,{configFile:file}),error=>error.code==='REGRESSION_WIN_RECEIPT_MISSING');
 });
 
@@ -485,6 +493,74 @@ test('run refreshes once, executes declared rounds, and binds receipt to watched
   assert.equal(fs.existsSync(path.join(root, ...DEFAULT_RECEIPT.split('/'))), true);
 });
 
+test('receipt from a CRLF checkout stays current on an LF checkout; binary watch files stay byte-exact', async t => {
+  const root = fixture(t);
+  const matrix = 'tools/qa/lifecycle.json';
+  const toCrlf = file => fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replace(/\r?\n/g, '\r\n'));
+  const toLf = file => fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n'));
+  fs.writeFileSync(path.join(root, 'tools', 'qa', 'assert-lifecycle.js'), '({ok:true})\n');
+  writeMatrix(root, matrix, [{
+    name: 'complete level', evalFile: 'tools/qa/assert-lifecycle.js', requireEvalOk: true, regressionTags: ['win'],
+  }]);
+  const reference = path.join(root, 'docs', 'references', 'unity.png');
+  const pngBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x0d, 0x0a]);
+  fs.writeFileSync(reference, pngBytes);
+  writeRegistry(root, registry([{
+    id: 'lifecycle', risks: ['level-lifecycle'], runs: 2, matrix,
+    watchFiles: ['assets/script/Game.ts', 'docs/references/unity.png'],
+  }], ['level-lifecycle']));
+  const textFiles = ['tools/port-regressions.json', matrix, 'tools/qa/assert-lifecycle.js', 'assets/script/Game.ts']
+    .map(relative => path.join(root, ...relative.split('/')));
+  // PC A (autocrlf=true) produces the receipt.
+  textFiles.forEach(toCrlf);
+  const result = await runRegressionGate({ project: root }, {
+    assertPortable() { return { ok: true, files: 5 }; },
+    async refreshPreview() { return { ok: true, tool: 'fake-refresh' }; },
+    runMatrix(_root, _suite, runNumber) { return { run: runNumber, ok: true, cases: [{ name: 'complete level', ok: true }] }; },
+  });
+  assert.equal(result.ok, true);
+  const receiptFile = path.join(root, ...DEFAULT_RECEIPT.split('/'));
+  const receipt = JSON.parse(fs.readFileSync(receiptFile, 'utf8'));
+  assert.equal(receipt.schemaVersion, RECEIPT_SCHEMA_VERSION);
+  assert.equal(receipt.snapshot.hashContract, PORTABLE_HASH_CONTRACT);
+
+  // PC B: same commit with LF working copies.
+  textFiles.forEach(toLf);
+  const receiptBytes = fs.readFileSync(receiptFile);
+  assert.equal(checkRegressionReceipt({ project: root, portabilityCheck: false }).snapshotDigest, result.snapshotDigest);
+  // check is read-only: it never rewrites the receipt.
+  assert.deepEqual(fs.readFileSync(receiptFile), receiptBytes);
+
+  // Changing line endings inside a binary reference is a real byte change.
+  fs.writeFileSync(reference, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0a, 0x1a, 0x0a, 0x0a]));
+  assert.throws(() => checkRegressionReceipt({ project: root, portabilityCheck: false }),
+    error => error.code === 'REGRESSION_RECEIPT_STALE');
+  assert.deepEqual(fs.readFileSync(receiptFile), receiptBytes);
+});
+
+test('a v1 raw-byte receipt is reported stale, not reused, and check leaves it untouched', t => {
+  const root = fixture(t);
+  const matrix = 'tools/qa/lifecycle.json';
+  fs.writeFileSync(path.join(root, 'tools', 'qa', 'assert-lifecycle.js'), '({ok:true})\n');
+  writeMatrix(root, matrix, [{
+    name: 'complete level', evalFile: 'tools/qa/assert-lifecycle.js', requireEvalOk: true, regressionTags: ['win'],
+  }]);
+  writeRegistry(root, registry([{
+    id: 'lifecycle', risks: ['level-lifecycle'], runs: 2, matrix, watchFiles: ['assets/script/Game.ts'],
+  }], ['level-lifecycle']));
+  assert.equal(RECEIPT_SCHEMA_VERSION, 2);
+  const receiptFile = path.join(root, ...DEFAULT_RECEIPT.split('/'));
+  fs.mkdirSync(path.dirname(receiptFile), { recursive: true });
+  fs.writeFileSync(receiptFile, JSON.stringify({
+    schemaVersion: 1, kind: RECEIPT_KIND, ok: true, snapshot: { digest: 'a'.repeat(64) }, suites: [],
+  }));
+  const before = fs.readFileSync(receiptFile);
+  assert.throws(() => checkRegressionReceipt({ project: root, portabilityCheck: false }),
+    error => error.code === 'REGRESSION_RECEIPT_STALE' && error.details.actualSchemaVersion === 1 &&
+      error.details.hashContract === PORTABLE_HASH_CONTRACT);
+  assert.deepEqual(fs.readFileSync(receiptFile), before);
+});
+
 test('mandatory suite failure writes evidence but keeps the gate red', async t => {
   const root = fixture(t);
   const matrix = 'tools/qa/input.json';
@@ -621,6 +697,32 @@ test('portability proof rejects a local-only oracle that another checkout would 
   loaded = loadRegistry(root);
   assert.throws(() => assertPortableRegistry(root, loaded),
     error => error.code === 'REGRESSION_FILES_UNTRACKED' && error.details.files.some(file => file.endsWith('local-only.js')));
+});
+
+test('portability proof accepts watch files tracked inside a pinned submodule', t => {
+  const root = fixture(t);
+  const kit = fs.mkdtempSync(path.join(os.tmpdir(), 'regression-kit-'));
+  t.after(() => fs.rmSync(kit, { recursive: true, force: true }));
+  const git = (cwd, ...args) => assert.equal(spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'protocol.file.allow=always', ...args],
+    { cwd, encoding: 'utf8' }).status, 0, args.join(' '));
+  fs.writeFileSync(path.join(kit, 'Runtime.ts'), 'export {};\n');
+  git(kit, 'init'); git(kit, 'add', 'Runtime.ts'); git(kit, 'commit', '-m', 'kit');
+  const matrix = 'tools/qa/input-kit.json';
+  writeMatrix(root, matrix, [{ name: 'tap', gesture: '0.5,0.5,0.5,0.5,100,1', eval: 'true', requireEvalOk: true }]);
+  git(root, 'init');
+  git(root, 'submodule', 'add', kit, 'kit');
+  writeRegistry(root, registry([{
+    id: 'kit-input', risks: ['input-response'], matrix, watchFiles: ['assets/script/Game.ts', 'kit/Runtime.ts'],
+  }], ['input-response']));
+  git(root, 'add', 'package.json', 'assets/script/Game.ts', matrix, 'tools/port-regressions.json');
+  assert.equal(assertPortableRegistry(root, loadRegistry(root)).ok, true);
+  fs.writeFileSync(path.join(root, 'kit', 'Local.ts'), 'export {};\n');
+  writeRegistry(root, registry([{
+    id: 'kit-input', risks: ['input-response'], matrix, watchFiles: ['kit/Runtime.ts', 'kit/Local.ts'],
+  }], ['input-response']));
+  git(root, 'add', 'tools/port-regressions.json');
+  assert.throws(() => assertPortableRegistry(root, loadRegistry(root)),
+    error => error.code === 'REGRESSION_FILES_UNTRACKED' && error.details.files.includes('kit/Local.ts'));
 });
 
 test('native rendered animation requires complete sampled source and measured runtime parity',t=>{

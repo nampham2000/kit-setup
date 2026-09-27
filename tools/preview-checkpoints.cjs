@@ -743,11 +743,14 @@ function validateConfig(config, overrides = {}) {
     if (entry.gestureGapMs !== undefined && !entry.gestures && !entry.gesturesFromEvalBefore) {
       throw new Error(`cases[${index}].gestureGapMs cần gestures hoặc gesturesFromEvalBefore`);
     }
+    // Delays pace a sequence of independent touch lifecycles (static gestures or
+    // targets resolved by evalBefore), e.g. waiting for a scene reload between taps.
+    const delayedGestures = entry.gestures || entry.gesturesFromEvalBefore;
     if (entry.gestureDelaysMs !== undefined && (!Array.isArray(entry.gestureDelaysMs)
-      || !entry.gestures || entry.gestureDelaysMs.length !== entry.gestures.length
+      || !Array.isArray(delayedGestures) || entry.gestureDelaysMs.length !== delayedGestures.length
       || entry.gestureDelaysMs.some(x => !Number.isFinite(x) || x < 0 || x > 60000)
       || entry.gestureDelaysMs.reduce((a,b) => a+b,0) > 180000)) {
-      throw new Error(`cases[${index}].gestureDelaysMs must match gestures, each 0-60000 ms and total <=180000 ms`);
+      throw new Error(`cases[${index}].gestureDelaysMs must match gestures/gesturesFromEvalBefore, each 0-60000 ms and total <=180000 ms`);
     }
     if (entry.previewDevice !== undefined
       && (typeof entry.previewDevice !== 'string' || !entry.previewDevice.trim())) {

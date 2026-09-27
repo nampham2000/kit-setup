@@ -11,8 +11,10 @@ const {canBindOrbit}=require('./particle-orbit-binding');
 const spec={enabled:true,simulationSpace:0,inWorldSpace:false,limitEnabled:false,noiseEnabled:true,noise:fixture.noise,velocity:fixture.velocity};
 test('generic orbital eligibility accepts measured High composition and rejects unmeasured variants',()=>{
  assert.equal(canBindOrbit(spec),true);
- assert.equal(canBindOrbit({...spec,noise:{...spec.noise,quality:0}}),false);
- assert.equal(canBindOrbit({...spec,limitEnabled:true}),false);
+ assert.equal(canBindOrbit({...spec,noise:{...spec.noise,quality:3}}),false);
+ // Binds only when both the orbit and noise bindings accept the measured limit composition.
+ const composition=require('./particle-limit-velocity-binding').LIMIT_VELOCITY_COMPOSITION==='animated-velocity-before-limit';
+ assert.equal(canBindOrbit({...spec,limitEnabled:true}),composition);
  assert.equal(canBindOrbit({...spec,velocity:{...spec.velocity,speedModifier:{minMaxState:0,scalar:2}}}),false);
 });
 const vec=(x=0,y=0,z=0)=>({x,y,z,set(x,y,z){this.x=x;this.y=y;this.z=z;}});

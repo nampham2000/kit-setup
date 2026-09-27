@@ -22,10 +22,26 @@ CCEffect %{
         blendDst: one
         blendSrcAlpha: zero
         blendDstAlpha: dst_alpha
+    b4: &b4
+      targets:
+      - blend: true
+        blendSrc: one
+        blendDst: one_minus_src_color
+        blendSrcAlpha: zero
+        blendDstAlpha: one
+    b5: &b5
+      targets:
+      - blend: true
+        blendSrc: one
+        blendDst: one_minus_src_alpha
+        blendSrcAlpha: zero
+        blendDstAlpha: one
     d1: &d1 { depthTest: true, depthWrite: false }
     r1: &r1 { cullMode: none }
     p1: &p1
       sourceRendererPivot: { value: [0,0,0,0] }
+      sourceRendererSize: { value: [0,0.5,0,0] }
+      sourceRendererMesh: { value: [0,0,0,0] }
       mainTexture:            { value: grey }
       mainTiling_Offset:      { value: [1, 1, 0, 0]  }
     p2: &p2
@@ -84,14 +100,14 @@ CCEffect %{
       frag: no-tint-fs:addSmooth
       rasterizerState: *r1
       depthStencilState: *d1
-      blendState: *b1
+      blendState: *b4
       properties: *p1
     - vert: source-particle-vs:lpvs_main
       frag: no-tint-fs:addSmooth
       phase: deferred-forward
       rasterizerState: *r1
       depthStencilState: *d1
-      blendState: *b1
+      blendState: *b4
       propertyIndex: 0
   - name: premultiply-blend
     passes:
@@ -99,14 +115,14 @@ CCEffect %{
       frag: no-tint-fs:premultiplied
       rasterizerState: *r1
       depthStencilState: *d1
-      blendState: *b2
+      blendState: *b5
       properties: *p1
     - vert: source-particle-vs:lpvs_main
       frag: no-tint-fs:premultiplied
       phase: deferred-forward
       rasterizerState: *r1
       depthStencilState: *d1
-      blendState: *b2
+      blendState: *b5
       propertyIndex: 0
 }%
 
@@ -127,6 +143,7 @@ CCProgram tinted-fs %{
 
   vec4 add () {
     vec4 col = 2.0 * color * tintColor * CCSampleWithAlphaSeparated(mainTexture, uv);
+    col.a = clamp(col.a, 0.0, 1.0);
     return CCFragOutput(col);
   }
 
@@ -190,13 +207,22 @@ in vec3 a_texCoord;  // xy:vertex index,z:frame index
   in vec4 a_color1;     // mesh color
 #endif
 
-uniform SourceRenderer { vec4 sourceRendererPivot; };
+uniform SourceRenderer { vec4 sourceRendererPivot; vec4 sourceRendererSize; vec4 sourceRendererMesh; };
 vec4 sourceEuler(vec3 e) {
   vec3 s=sin(e*0.5),c=cos(e*0.5);
   return vec4(s.x*c.y*c.z+c.x*s.y*s.z,
               c.x*s.y*c.z-s.x*c.y*s.z,
               c.x*c.y*s.z-s.x*s.y*c.z,
               c.x*c.y*c.z+s.x*s.y*s.z);
+}
+// Unity ParticleSystemRenderer.minParticleSize/maxParticleSize (BakeMesh):
+// max(size.x, size.y) is clamped to x/y times the viewport WIDTH in world
+// units at the particle's view depth (clip w; 1 for orthographic cameras).
+// w=1 enables the clamp; the property default w=0 keeps older materials.
+float sourceSizeFactor(vec3 center, vec3 s) {
+  float width = 2.0 * (cc_matViewProj * vec4(center, 1.0)).w / abs(cc_matProj[0][0]);
+  float m = max(max(s.x, s.y), 1e-6);
+  return sourceRendererSize.w < 0.5 ? 1.0 : min(max(m, sourceRendererSize.x * width), sourceRendererSize.y * width) / m;
 }
 vec4 lpvs_main () {
   vec3 compScale = scale.xyz * a_texCoord1;
@@ -216,6 +242,12 @@ vec4 lpvs_main () {
     #if CC_RENDER_MODE == RENDER_MODE_STRETCHED_BILLBOARD
       velocity = cc_matWorld * velocity;
     #endif
+  #endif
+
+  #if CC_RENDER_MODE == RENDER_MODE_STRETCHED_BILLBOARD
+    compScale.x *= sourceSizeFactor(pos.xyz, compScale); // length stays unclamped
+  #elif CC_RENDER_MODE != RENDER_MODE_MESH
+    compScale.xy *= sourceSizeFactor(pos.xyz, compScale);
   #endif
 
   #pragma define INDENTIFY_NEG_QUAT 10.0
@@ -242,7 +274,7 @@ vec4 lpvs_main () {
       #endif
       vec4 rot = quaternionFromEuler(rotEuler);
       #if CC_RENDER_MODE == RENDER_MODE_BILLBOARD
-        if(sourceRendererPivot.w == 2.0) rot=sourceEuler(rotEuler);
+        rot=sourceEuler(rotEuler);
       #endif
     #endif
     #if CC_RENDER_MODE == RENDER_MODE_MESH
@@ -252,39 +284,67 @@ vec4 lpvs_main () {
 
   #if CC_RENDER_MODE != RENDER_MODE_MESH
     vec2 cornerOffset = vec2((a_texCoord.xy - 0.5));
+    #if CC_RENDER_MODE == RENDER_MODE_HORIZONTAL_BILLBOARD || CC_RENDER_MODE == RENDER_MODE_VERTICAL_BILLBOARD
+      // Unity bakes Horizontal/Vertical billboards with corners at size/2 on
+      // the diagonals: the quad side is size/sqrt(2), unlike View billboards.
+      compScale.xy *= 0.70710678;
+    #endif
 
     #if CC_RENDER_MODE == RENDER_MODE_BILLBOARD || CC_RENDER_MODE == RENDER_MODE_VERTICAL_BILLBOARD
       #if CC_RENDER_MODE == RENDER_MODE_BILLBOARD
-        if(sourceRendererPivot.w == 2.0) {
+        if(sourceRendererPivot.w == 2.0 || sourceRendererPivot.w == 4.0) {
           vec3 offset=vec3(cornerOffset*compScale.xy,0.0);
           rotateVecFromQuat(offset,rot);
-          rotateVecFromQuat(offset,nodeRotation);
+          if(sourceRendererPivot.w == 2.0) rotateVecFromQuat(offset,nodeRotation);
           pos.xyz+=offset;
         } else {
-          computeVertPos(pos, cornerOffset, rot, compScale, cc_matViewInv);
+          // Unity View billboards (BakeMesh): pivot x/y move the quad by pivot*size in its
+          // rotated camera plane; pivot z moves it toward the camera by pivot.z*size.x.
+          vec3 offset=vec3((cornerOffset+sourceRendererPivot.xy)*compScale.xy,0.0);
+          rotateVecFromQuat(offset,rot);
+          // Camera basis vectors are columns of the inverse view matrix.
+          // The builtin helper reads rows, inverting camera pitch/yaw.
+          pos.xyz+=normalize(cc_matViewInv[0].xyz)*offset.x
+                 +normalize(cc_matViewInv[1].xyz)*offset.y
+                 +normalize(cc_matViewInv[2].xyz)*offset.z;
+          pos.xyz += normalize(cc_matViewInv[2].xyz) * (sourceRendererPivot.z * compScale.x);
         }
       #else
-        computeVertPos(pos, cornerOffset, rot, compScale, cc_matViewInv);
+        // Native axial quads rotate their unscaled corner, then apply each
+        // size axis. Rotating an anisotropically scaled quad changes its shape.
+        vec3 offset=vec3(cornerOffset,0.0);rotateVecFromQuat(offset,rot);
+        offset.xy*=compScale.xy;
+        vec3 right=normalize(vec3(cc_matView[0][0],cc_matView[1][0],cc_matView[2][0]));
+        pos.xyz+=right*offset.x+vec3(0.0,1.0,0.0)*offset.y;
       #endif
     #elif CC_RENDER_MODE == RENDER_MODE_STRETCHED_BILLBOARD
-      if (dot(velocity.xyz,velocity.xyz)>0.0)
+      // Unity bakes a zero-velocity stretched particle as a degenerate quad at
+      // its position; normalize(0) would emit NaN vertices instead.
+      if (dot(velocity.xyz,velocity.xyz)>0.0) {
         pos.xyz+=normalize(velocity.xyz)*(2.0*compScale.y*sourceRendererPivot.y);
-      computeVertPos(pos, cornerOffset, rot, compScale, cc_cameraPos.xyz, velocity, frameTile_velLenScale.z, frameTile_velLenScale.w, a_texCoord.x);
-    #elif RENDER_MODE_HORIZONTAL_BILLBOARD
-      computeVertPos(pos, cornerOffset, rot, compScale);
+        computeVertPos(pos, cornerOffset, rot, compScale, cc_cameraPos.xyz, velocity, frameTile_velLenScale.z, frameTile_velLenScale.w, a_texCoord.x);
+      }
+    #elif CC_RENDER_MODE == RENDER_MODE_HORIZONTAL_BILLBOARD
+      vec3 offset=vec3(cornerOffset,0.0);rotateVecFromQuat(offset,rot);
+      offset.xy*=compScale.xy;
+      pos.xyz+=vec3(offset.x,0.0,-offset.y);
     #endif
 
     color = a_color;
   #endif
   #if CC_RENDER_MODE == RENDER_MODE_MESH
     mat3 rotMat = quatToMat3(rot);
-    mat3 nodeMat = quatToMat3(nodeRotation);
+    // w=3: the particle rotation is already world space (Unity World alignment, or the
+    // Velocity frame from UnityParticleMeshFrameAdapter); skip the emitter rotation.
+    mat3 nodeMat = sourceRendererPivot.w == 3.0 ? mat3(1.0) : quatToMat3(nodeRotation);
     rotMat = nodeMat * rotMat;
     rot = mat3ToQuat(rotMat);
 
     mat4 xformNoScale = matrixFromRT(rot, pos.xyz);
     mat4 xform = matFromRTS(rot, pos.xyz, compScale);
-    pos = xform * vec4(a_texCoord3, 1);
+    // Unity mesh pivot is in mesh-bounds units; sourceRendererMesh.xyz holds the Cocos mesh
+    // bounds size (0 until UnityParticleMeshFrameAdapter binds it).
+    pos = xform * vec4(a_texCoord3 + sourceRendererPivot.xyz * sourceRendererMesh.xyz, 1);
     vec4 normal = xformNoScale * vec4(a_normal, 0);
     color = a_color * a_color1;
   #endif

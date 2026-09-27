@@ -2042,3 +2042,82 @@ CCProgram fs %{
 
 
 
+
+describe('Non-standard struct names and multi-pass render state', () => {
+  // Shape of the LegacyPreviewCompatibility URP shim: one-letter structs and a
+  // later transparent pass after the opaque one URP actually draws.
+  const shader = `Shader "Test/ShortStructs" {
+    Properties { _MainTex ("Texture", 2D) = "white" {} _Color ("Color", Color) = (1,1,1,1) }
+    SubShader {
+      Tags { "RenderPipeline"="UniversalPipeline" "RenderType"="Opaque" }
+      Pass {
+        Name "OPAQUE"
+        Tags { "LightMode"="UniversalForward" }
+        HLSLPROGRAM
+        #pragma vertex Vert
+        #pragma fragment Frag
+        #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+        TEXTURE2D(_MainTex); SAMPLER(sampler_MainTex);
+        CBUFFER_START(UnityPerMaterial) float4 _Color; float4 _MainTex_ST; CBUFFER_END
+        struct A { float4 positionOS:POSITION; float2 uv:TEXCOORD0; float4 color:COLOR; };
+        struct V { float4 positionCS:SV_POSITION; float2 uv:TEXCOORD0; float4 color:COLOR; };
+        V Vert(A i) { V o; o.positionCS=TransformObjectToHClip(i.positionOS.xyz); o.uv=i.uv*_MainTex_ST.xy+_MainTex_ST.zw; o.color=i.color; return o; }
+        half4 Frag(V i):SV_Target { return SAMPLE_TEXTURE2D(_MainTex,sampler_MainTex,i.uv)*_Color*i.color; }
+        ENDHLSL
+      }
+      Pass {
+        Name "EFFECT"
+        Tags { "LightMode"="UniversalForward" }
+        Blend SrcAlpha OneMinusSrcAlpha ZWrite Off Cull Off
+        HLSLPROGRAM
+        #pragma vertex Vert
+        #pragma fragment Frag
+        struct A { float4 positionOS:POSITION; };
+        struct V { float4 positionCS:SV_POSITION; };
+        V Vert(A i) { V o; o.positionCS=TransformObjectToHClip(i.positionOS.xyz); return o; }
+        half4 Frag(V i):SV_Target { return 1; }
+        ENDHLSL
+      }
+    }
+  }`;
+
+  test('the vertex output local is removed whatever its struct is named', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'short-structs-'));
+    const src = path.join(dir, 'ShortStructs.shader');
+    fs.writeFileSync(src, shader);
+    const { effectCode, validationResult } = transpileShaderFile(src, '', { dryRun: true, report: false });
+    assert.doesNotMatch(effectCode, /\bV\s+o\s*;/);
+    assert.equal(validationResult.valid, true, validationResult.errors.join(' | '));
+  });
+
+  test('a later pass does not leak Blend/ZWrite/Cull into the first pass', () => {
+    const parsed = parseShaderLab(shader);
+    const first = parsed.subShaders[0].passes[0].renderState;
+    assert.equal(first.zWrite, true);
+    assert.notEqual(first.cull, 'off');
+    assert.ok(!first.blend || !first.blend.enabled);
+    const second = parsed.subShaders[0].passes[1].renderState;
+    assert.equal(second.zWrite, false);
+    assert.ok(second.blend && second.blend.enabled);
+  });
+
+  test('the analyzer rejects a local whose type GLSL never declared', () => {
+    const effect = `CCEffect %{
+  techniques:
+  - passes:
+    - vert: vs:vert
+      frag: fs:frag
+}%
+CCProgram vs %{
+  precision highp float;
+  in vec3 a_position;
+  vec4 vert () { V o; vec4 pos = vec4(a_position, 1.0); return pos; }
+}%
+CCProgram fs %{
+  precision highp float;
+  vec4 frag () { StandardSurface s; return vec4(1.0); }
+}%`;
+    const codes = analyzeEffect(effect).errors.map(e => e.code + ':' + e.message.split("'")[1]);
+    assert.deepEqual(codes, ['GLSL_UNDECLARED_TYPE:V o']);
+  });
+});

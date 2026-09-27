@@ -1,5 +1,8 @@
 'use strict';
 const { particleRendererContract } = require('./particle-renderer-contract');
+const { unityMaterialRenderQueue } = require('./particle-sorting-binding');
+const { unityModelMeshName } = require('./model-import-basis');
+const { requestModelMeshBasis } = require('./model-mesh-basis-binding');
 
 const {
   applyParticleRendererMesh,
@@ -69,7 +72,9 @@ module.exports = function createParticlePorter(deps = {}) {
     const meshAsset = unityRefGuid && unityDb?.get ? unityDb.get(unityRefGuid(meshRef)) : null;
     if (!meshAsset) return { meshUuid: '', pendingImport: false, meshAsset: null };
 
-    const meshNameHint = meshAsset.stem || gameObject?.name || '';
+    // A multi-mesh FBX is addressed by mesh file ID, not by the file stem.
+    const meshNameHint = unityModelMeshName(meshAsset, unityRefFileId ? unityRefFileId(meshRef) : meshRef.fileID)
+      || meshAsset.stem || gameObject?.name || '';
     const resolved = cocosDb?.resolveModelMeshByStem
       ? cocosDb.resolveModelMeshByStem(meshAsset.stem, meshNameHint, meshAsset.ext === '.asset' ? '.fbx' : meshAsset.ext)
       : null;
@@ -105,13 +110,17 @@ module.exports = function createParticlePorter(deps = {}) {
       const alignmentData = parseUnityRendererDoc(rendererDoc);
       const rendererContract = particleRendererContract(parseUnityParticleDoc(doc), alignmentData);
       const alignment = Number(alignmentData.m_RenderAlignment || 0);
-      if (rendererContract.unsupported.length) {
+      // particle-euler-rotation-binding owns Euler rotation over lifetime and
+      // reports its own state once the prefab graph is complete.
+      const unsupported = rendererContract.unsupported.filter((reason) => reason !== 'euler-rotation-over-lifetime');
+      if (unsupported.length) {
         reporter.high('PARTICLE_RENDER_ALIGNMENT_ADAPTER_REQUIRED', options.src || '', gameObject?.name || '',
-          `Unity renderer requires additional measured adapters: ${rendererContract.unsupported.join(', ')}. Validate the generated effect in Preview.`);
+          `Unity renderer requires additional measured adapters: ${unsupported.join(', ')}. Validate the generated effect in Preview.`);
       }
       const meshRef = firstRendererMeshRef(rendererDoc);
       const mesh = resolveParticleRendererMesh(meshRef, gameObject, componentId, reporter, options, unityDb, cocosDb);
       if (mesh.meshUuid && applyParticleRendererMesh(builder, particleId, mesh.meshUuid)) {
+        if (mesh.meshAsset) requestModelMeshBasis(builder, reporter, options, nodeId, particleId, mesh.meshAsset, gameObject?.name || '');
         reporter.low(
           'PARTICLE_MESH_RESOLVED',
           mesh.source || mesh.meshAsset?.relativePath || '',
@@ -146,6 +155,11 @@ module.exports = function createParticlePorter(deps = {}) {
       const materialAsset = !usedBuiltInDefaultParticleMaterial && materialRef?.guid && unityDb?.get
         ? unityDb.get(String(materialRef.guid))
         : null;
+      // Unity sorts transparent renderers by render queue before camera distance.
+      Object.defineProperty(builder.objects[particleId], 'unityRenderQueue', {
+        value: usedBuiltInDefaultParticleMaterial ? 3000 : materialAsset ? unityMaterialRenderQueue(materialAsset, unityDb) : null,
+        configurable: true,
+      });
       const uv = parseUnityParticleDoc(doc).UVModule;
       let spriteTextureAsset = null;
       if (Number(uv?.enabled) !== 0 && Number(uv?.mode) === 1) {

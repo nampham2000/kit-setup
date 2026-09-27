@@ -12,7 +12,9 @@ const CACHE_SCHEMA_VERSION = 2;
 // evidence after same-size content replacement.
 // Version 6 stores referenceEvidence grouped per GUID + field path with
 // occurrence counts instead of one entry per occurrence.
-const INDEXER_VERSION = 6;
+// Version 7: games-port grouped referenceEvidence merged with main's version-6 record
+// (Resources LoadAll catalogs, animator-controller shape); both version-6 shapes are stale.
+const INDEXER_VERSION = 7;
 
 const EXTRACTOR_FILES = [
   'schema.cjs',
@@ -26,6 +28,7 @@ const EXTRACTOR_FILES = [
   'engine-feature-closure.cjs',
   'script-index.cjs',
   '../lib/unity-serialized-file.cjs',
+  '../unity-cocos-port/animator-controller-shape.js',
 ];
 
 function extractorFingerprint(readFile = (file) => fs.readFileSync(file)) {

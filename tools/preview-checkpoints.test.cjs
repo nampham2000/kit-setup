@@ -325,3 +325,23 @@ test('output/reference paths reject an intermediate symlink or junction', t => {
   const relative = path.relative(projectRoot, path.join(link, 'manifest.json'));
   assert.throws(() => resolveInsideProject(relative, 'outputDir'), /symlink|junction/);
 });
+
+test('evalBefore-resolved gesture sequences accept per-gesture delays', () => {
+  const tap = (path) => ({ x1: `${path}.x`, y1: `${path}.y`, x2: `${path}.x`, y2: `${path}.y`, durationMs: 80, steps: 1 });
+  const value = validateConfig({
+    url: 'http://127.0.0.1:7456/',
+    cases: [{ name: 'reload', evalBefore: '({ok:true,target:{x:0.5,y:0.5}})', eval: 'true',
+      gesturesFromEvalBefore: [tap('target'), tap('target')], gestureDelaysMs: [0, 45000] }],
+  });
+  assert.deepEqual(value.cases[0].gestureDelaysMs, [0, 45000]);
+  assert.throws(() => validateConfig({
+    url: 'http://127.0.0.1:7456/',
+    cases: [{ name: 'reload', evalBefore: '({})', eval: 'true',
+      gesturesFromEvalBefore: [tap('target'), tap('target')], gestureDelaysMs: [0] }],
+  }), /gestureDelaysMs must match/);
+  assert.throws(() => validateConfig({
+    url: 'http://127.0.0.1:7456/',
+    cases: [{ name: 'reload', evalBefore: '({})', eval: 'true',
+      gestureFromEvalBefore: tap('target'), gestureDelaysMs: [0] }],
+  }), /gestureDelaysMs must match/);
+});

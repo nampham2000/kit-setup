@@ -110,6 +110,10 @@ function generateTypings(options = {}) {
   const raw = loadMergedConfigFromFile(configPath).merged;
   const dts = buildTypings(raw);
 
+  const existing=fs.existsSync(outputPath)?fs.readFileSync(outputPath,'utf8'):null;
+  if(existing?.replace(/\r\n/g,'\n')===dts)return outputPath;
+  if(options.check)throw new Error('Stale configuration typings: '+outputPath);
+
   const outDir = path.dirname(outputPath);
   if (!fs.existsSync(outDir)) {
     fs.mkdirSync(outDir, { recursive: true });
@@ -121,7 +125,10 @@ function generateTypings(options = {}) {
 }
 
 if (require.main === module) {
-  generateTypings();
+  const args=process.argv.slice(2);
+  if(args.length>1||args.some(a=>!['--help','--check','--verify'].includes(a))){console.error('Use no arguments, --help, --check or --verify');process.exitCode=1;}
+  else if(args[0]==='--help')console.log('Generate merged configuration typings; --check/--verify is read-only.');
+  else try{generateTypings({check:args.length===1});}catch(error){console.error(error.message);process.exitCode=1;}
 }
 
 module.exports = { buildTypings, generateTypings, inferTsType, interfaceName, propertyName };

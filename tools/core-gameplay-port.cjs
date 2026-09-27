@@ -7,6 +7,7 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
 const { isPathInside } = require('./lib/path-boundary.cjs');
+const { PORTABLE_HASH_CONTRACT, hashPortableFile } = require('./lib/portable-content-hash.cjs');
 const { digest: digestPortReport } = require('./report-digest.cjs');
 const {
   DEFAULT_CONFIG: DEFAULT_REGRESSION_REGISTRY,
@@ -15,6 +16,7 @@ const {
   mergeRegistryRequiredRisks,
 } = require('./port-regression-gate.cjs');
 const { runUnityPortPreflight, assertUnityPortPreflight } = require('./unity-intel/preflight.cjs');
+const { sharedUnityMcpInstallState, shouldAutoBootstrap } = require('./unity-intel/shared-mcp-install-state.cjs');
 const { FIDELITY_CHECKPOINTS } = require('./unity-intel/core-gameplay-scope.cjs');
 const {
   PHYSICS_BACKENDS,
@@ -25,7 +27,11 @@ const {
 
 const MANIFEST_SCHEMA_VERSION = 3;
 const MANIFEST_KIND = 'cc-playable-core-port-manifest';
-const EVIDENCE_SCHEMA_VERSION = 1;
+// v2: targetHashes use the portable text-LF contract so committed evidence
+// survives CRLF/LF checkouts. v1 evidence (raw working-copy bytes) is retired.
+const EVIDENCE_SCHEMA_VERSION = 2;
+const LEGACY_EVIDENCE_SCHEMA_VERSIONS = Object.freeze([1]);
+const EVIDENCE_BINDS = Object.freeze(['briefId', 'stateFingerprint', 'checkpoint', 'targetHashes']);
 const EVIDENCE_KIND = 'cc-playable-core-checkpoint-evidence';
 const DEFAULT_MANIFEST = '.ai/port/core-gameplay.json';
 const RESUME_PACKET_SCHEMA_VERSION = 1;
@@ -98,6 +104,8 @@ Options:
   --no-cache             Re-scan Unity records without reading/writing the incremental index.
   --refresh-cache        Ignore the current index cache and replace it with fresh records.
   --bootstrap            Allow Unity-MCP package setup/reload during init.
+  --no-bootstrap         Do not install the shared-kit Unity-MCP when the manifest lacks it
+                         (init installs it by default; scaffold stays static-first).
   --force                Replace an existing manifest during init.
   --dry-run              Init without creating a directory or file.
   --write                Persist the refreshed packet when running resume.
@@ -135,6 +143,7 @@ function parseArgs(argv) {
     if (argument === '--help' || argument === '-h') { options.help = true; continue; }
     if (argument === '--json') { options.json = true; continue; }
     if (argument === '--bootstrap') { options.bootstrap = true; continue; }
+    if (argument === '--no-bootstrap') { options.noBootstrap = true; continue; }
     if (argument === '--force') { options.force = true; continue; }
     if (argument === '--dry-run') { options.dryRun = true; continue; }
     if (argument === '--write') { options.write = true; continue; }
@@ -362,12 +371,7 @@ function createManifest(brief, options = {}) {
       minimumFidelity: core.acceptance.minimumFidelity,
       targetFidelity: core.acceptance.targetFidelity,
       targetEntryScene,
-      evidenceContract: {
-        schemaVersion: EVIDENCE_SCHEMA_VERSION,
-        kind: EVIDENCE_KIND,
-        methods: EVIDENCE_METHODS,
-        binds: ['briefId', 'stateFingerprint', 'checkpoint', 'targetHashes'],
-      },
+      evidenceContract: currentEvidenceContract(),
       requiredArtifacts: [
         targetEntryScene,
         'assets/script/**/*.ts',
@@ -622,10 +626,15 @@ async function initCorePort(options, dependencies = {}) {
   const runPreflight = dependencies.runPreflight || runUnityPortPreflight;
   const progress = dependencies.onProgress || (() => {});
   progress({ stage: 'preflight', status: 'start' });
+  const autoBootstrap = !options.dryRun && !dependencies.runPreflight && shouldAutoBootstrap(
+    { command: 'preflight', provider: options.provider || 'auto', bootstrap: options.bootstrap === true, noBootstrap: options.noBootstrap === true },
+    sharedUnityMcpInstallState(unityRoot),
+  );
+  if (autoBootstrap) progress({ stage: 'unity-mcp-install', status: 'start' });
   const result = await runPreflight({
     project: unityRoot,
     provider: options.provider || 'auto',
-    bootstrap: options.bootstrap === true,
+    bootstrap: options.bootstrap === true || autoBootstrap,
     sourceDispositions: options.dispositions,
     cache: options.cache !== false,
     indexCacheDir: options.cacheDir,
@@ -894,7 +903,7 @@ function buildResumePacket(options, dependencies = {}) {
     addAction('Refine static output, bind targetEvidence cho checkpoint, rồi chạy verify visual/runtime theo oracle nguồn.');
   }
   if (freshness.fresh && checkpoints.targetBound === checkpoints.total && checkpoints.verificationBound < checkpoints.total) {
-    addAction('Thu runtime/visual evidence schema v1; mandatory input/rules/win-lose phải dùng runtime evidence.');
+    addAction(`Thu runtime/visual evidence schema v${EVIDENCE_SCHEMA_VERSION}; mandatory input/rules/win-lose phải dùng runtime evidence.`);
   }
   if (phase === 'ready-for-acceptance') addAction('Chạy ai:port:core:verify; chỉ kết luận runnable/fidelity khi acceptance pass.');
 
@@ -1170,13 +1179,11 @@ function validateManifest(cocosRoot, file) {
     }
   }
   validateLogicalPath(manifest.source.entryScene, 'source');
-  if (manifest.delivery.minimumFidelity !== 80 || manifest.delivery.targetFidelity !== 90) {
-    throw corePortError('CORE_PORT_MANIFEST_INVALID', 'Fidelity threshold bi thay doi; minimum/target bat buoc la 80/90.');
+  const minimum=manifest.delivery.minimumFidelity,target=manifest.delivery.targetFidelity;
+  if (!Number.isFinite(minimum)||!Number.isFinite(target)||minimum<80||target<90||target<minimum||target>100) {
+    throw corePortError('CORE_PORT_MANIFEST_INVALID', 'Fidelity minimum/target must be numbers, at least 80/90, ordered and at most 100. Stricter user targets are supported.');
   }
-  const evidenceContract = manifest.delivery.evidenceContract;
-  if (!evidenceContract || evidenceContract.schemaVersion !== EVIDENCE_SCHEMA_VERSION ||
-      evidenceContract.kind !== EVIDENCE_KIND || !arraysEqual(evidenceContract.methods || [], EVIDENCE_METHODS) ||
-      !arraysEqual(evidenceContract.binds || [], ['briefId', 'stateFingerprint', 'checkpoint', 'targetHashes'])) {
+  if (!validEvidenceContract(manifest.delivery.evidenceContract)) {
     throw corePortError('CORE_PORT_MANIFEST_INVALID', 'Checkpoint evidence contract bi thay doi.');
   }
   validateLogicalPath(manifest.delivery.targetEntryScene, 'target');
@@ -1227,6 +1234,29 @@ function safeUnityEvidence(unityRoot, logical) {
   } catch (_) { return false; }
 }
 
+function currentEvidenceContract() {
+  return {
+    schemaVersion: EVIDENCE_SCHEMA_VERSION,
+    kind: EVIDENCE_KIND,
+    methods: [...EVIDENCE_METHODS],
+    binds: [...EVIDENCE_BINDS],
+    targetHashContract: PORTABLE_HASH_CONTRACT,
+  };
+}
+
+// Manifests written before evidence v2 keep a v1 contract block. The block is
+// descriptive only: checkpoint evidence is always judged against the current
+// schema, so accepting the legacy block cannot lower the rubric, and committed
+// manifests do not need a forced core:init just to change the hash contract.
+function validEvidenceContract(contract) {
+  if (!contract || contract.kind !== EVIDENCE_KIND || !arraysEqual(contract.methods || [], EVIDENCE_METHODS) ||
+      !arraysEqual(contract.binds || [], EVIDENCE_BINDS)) return false;
+  if (contract.schemaVersion === EVIDENCE_SCHEMA_VERSION) return contract.targetHashContract === PORTABLE_HASH_CONTRACT;
+  return LEGACY_EVIDENCE_SCHEMA_VERSIONS.includes(contract.schemaVersion) && contract.targetHashContract === undefined;
+}
+
+// Committed evidence must hash identically on CRLF and LF checkouts of the
+// same commit; see tools/lib/portable-content-hash.cjs.
 function currentTargetHashes(cocosRoot, targetEvidence) {
   const hashes = [];
   for (const relative of [...targetEvidence].sort()) {
@@ -1234,7 +1264,7 @@ function currentTargetHashes(cocosRoot, targetEvidence) {
     try { file = resolveContained(cocosRoot, relative, { mustExist: true }); } catch (_) { return null; }
     const stat = fs.statSync(file);
     if (!stat.isFile()) return null;
-    hashes.push({ path: relative, sha256: hashFile(file) });
+    hashes.push({ path: relative, sha256: hashPortableFile(file) });
   }
   return hashes;
 }
@@ -1473,7 +1503,7 @@ function verifyCorePort(options, dependencies = {}) {
     },
     fidelity,
     engineFeatureReplacements,
-    evidenceContract: manifest.delivery.evidenceContract,
+    evidenceContract: currentEvidenceContract(),
     claim: previewOnly
       ? previewAccepted
         ? `Core gameplay preview-accepted at ${fidelity.score}/100 and preview-runnable; build acceptance was not run and is not claimed.`
@@ -1523,6 +1553,8 @@ module.exports = {
   MANIFEST_SCHEMA_VERSION,
   MANIFEST_KIND,
   EVIDENCE_SCHEMA_VERSION,
+  LEGACY_EVIDENCE_SCHEMA_VERSIONS,
+  PORTABLE_HASH_CONTRACT,
   EVIDENCE_KIND,
   DEFAULT_MANIFEST,
   RESUME_PACKET_SCHEMA_VERSION,
@@ -1568,6 +1600,8 @@ module.exports = {
   resumeCorePort,
   validateManifest,
   currentTargetHashes,
+  currentEvidenceContract,
+  validEvidenceContract,
   checkpointEvidencePasses,
   evaluateFidelity,
   runRequiredGates,

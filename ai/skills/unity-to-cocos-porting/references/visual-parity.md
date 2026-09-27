@@ -1,5 +1,14 @@
 # Evidence to check before adjusting a Unity port
 
+- **Native reference capture:** use `unity.intel.reference.capture` with the
+  original source pipeline, camera, materials and actual imported texture sizes.
+  Editor batch mode must retain graphics; its capture hook runs after particle
+  jobs in PostLateUpdate because WaitForEndOfFrame never fires in batch mode.
+  Refresh changed package C# and wait for compilation before capture. Require
+  every requested PNG, camera and exact viewport; `complete=true` with zero or
+  missing frames is invalid evidence. Inspect images and per-frame particle
+  counts/spatial bins before measuring Cocos against them.
+
 - **Particle alignment and gradient boundaries:** Unity `RenderAlignment=2`
   means emitter Local, while Cocos `2` means View. Cocos CPU alignment World
   (`0`) reads the full emitter world rotation; Local (`1`) reads only its local
@@ -83,6 +92,38 @@ For material parity, read Unity ColorSpace, shader formula, blend factors, alpha
 source, UV orientation, and import settings together. See the shader conversion
 skill for the shader-specific checks. Avoid changing geometry to hide a material
 or importer error.
+
+When opaque geometry appears black, capture the source ambient mode, all 27 SH
+coefficients, directional-light direction/color/intensity and default reflection
+texture with its HDR decode values and mip chain. A Unity camera using SolidColor
+can still use a procedural skybox for ambient/reflection; preserve that distinction.
+Reflect lighting vectors and SH odd-Z terms along with world coordinates. Compare
+an effect-free wall/floor frame with matching camera and viewport before changing
+particle brightness. Legacy Additive/Alpha particles can be unlit even when their
+distortion capture includes lit geometry. Material.GetColor/API values alone do
+not prove GPU uniform values: Color and HDR properties have different conversion
+rules. Probe the original shader-bound values in linear floating-point render
+targets when uncertain; do not gamma-decode every color property blindly.
+
+Creator 3.8.8 camera culling requires `(visibility & node.layer) === node.layer`.
+A node with DEFAULT|CAPTURE is excluded from a camera seeing only CAPTURE. Use
+exclusive capture layers and preserve original layers across cached selections;
+validate intended inclusions and exclusions with
+`tools/shader-compiler/capture-visibility-contract.cjs` using actual Preview masks.
+For GrabPass, prove the preceding transparent objects are captured, the refracting
+surface is excluded, and its actual material instance receives the capture texture.
+Use `verify-runtime --viewport-size WxH --preview-device WebpageFullScreen` and
+check canvasSize; Chrome window dimensions include browser chrome and are not a
+reference viewport. These gates establish specific contracts, not a 95% score.
+
+Verify Scene/Prefab view separately when the user reports Editor-only darkness.
+Runtime-created native GPU textures do not populate serialized material samplers:
+bind imported Texture2D subasset UUIDs for the Editor and preserve source sampler
+wrap/filter settings. Serialize source light/SH defaults too. Keep the Editor
+color-output path separate from a custom linear HDR target whose presentation
+camera already encodes sRGB. An unbound distortion capture must skip its pass.
+Rerun the measured Preview comparison after adding Editor defaults; they must
+not introduce a second decode/encode or replace the native runtime mip chain.
 
 Run `node --test playable-shared-kit/tools/unity-cocos-port/porting-regressions.test.cjs`
 for the shared regressions. Integration fixtures must use temporary Unity/Cocos

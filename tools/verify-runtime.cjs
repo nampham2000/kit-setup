@@ -21,6 +21,7 @@ const path = require('path');
 const { spawn, spawnSync } = require('child_process');
 const { color } = require('./lib/term-color.cjs');
 const { createRuntimeProfile, closeRuntimeProfile } = require('./lib/runtime-profile.cjs');
+const { validateCheckpoints, captureRuntimeCheckpoints } = require('./lib/runtime-checkpoints.cjs');
 
 const WEBSOCKET_REEXEC_ENV = 'PLAYABLE_VERIFY_RUNTIME_WEBSOCKET_REEXEC';
 
@@ -70,6 +71,7 @@ Options:
   --seconds <n>        Thời gian chạy để đo FPS. Default: 6.
   --min-fps <n>        FPS tối thiểu coi là đạt. Default: 20.
   --window-size <WxH>  Kích thước cửa sổ Chrome. Default: 720x1280 (dọc).
+  --viewport-size <WxH> Set the exact page viewport at device scale 1 for aligned reference captures.
   --preview-device <name>
                        Chọn device trong toolbar Cocos preview (vd
                        "WebpageFullScreen") trước eval/gesture/screenshot.
@@ -155,23 +157,31 @@ function findBuiltHtml(options) {
 
 /** Client CDP tối giản trên WebSocket có sẵn của Node. */
 class CdpSession {
-  constructor(wsUrl) {
+  constructor(wsUrl, commandTimeoutMs = 90000, connectTimeoutMs = 15000) {
     this.wsUrl = wsUrl;
     this.nextId = 1;
     this.pending = new Map();
     this.listeners = new Map();
+    this.commandTimeoutMs = commandTimeoutMs;
+    this.connectTimeoutMs = connectTimeoutMs;
   }
 
   connect() {
     return new Promise((resolve, reject) => {
       this.ws = new WebSocket(this.wsUrl);
-      this.ws.addEventListener('open', () => resolve());
-      this.ws.addEventListener('error', (e) => reject(new Error(`WebSocket lỗi: ${e.message || 'unknown'}`)));
+      const timer=setTimeout(()=>{reject(new Error('CDP connection timed out'));this.close();},this.connectTimeoutMs);
+      this.ws.addEventListener('open', () => {clearTimeout(timer);resolve();});
+      this.ws.addEventListener('error', (e) => {
+        clearTimeout(timer);
+        const error=new Error(`WebSocket lỗi: ${e.message || 'unknown'}`);this.rejectPending(error);reject(error);
+      });
+      this.ws.addEventListener('close',()=>{clearTimeout(timer);const error=new Error('CDP WebSocket closed');this.rejectPending(error);reject(error);});
       this.ws.addEventListener('message', (event) => {
         let msg;
         try { msg = JSON.parse(event.data); } catch (_) { return; }
         if (msg.id && this.pending.has(msg.id)) {
-          const { resolve: res, reject: rej } = this.pending.get(msg.id);
+          const { resolve: res, reject: rej, timer } = this.pending.get(msg.id);
+          clearTimeout(timer);
           this.pending.delete(msg.id);
           if (msg.error) rej(new Error(`${msg.error.message} (${msg.error.code})`));
           else res(msg.result);
@@ -189,8 +199,11 @@ class CdpSession {
     const payload = { id, method, params };
     if (sessionId) payload.sessionId = sessionId;
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
-      this.ws.send(JSON.stringify(payload));
+      if(this.ws?.readyState!==1){reject(new Error('CDP WebSocket is not open'));return;}
+      const timer=setTimeout(()=>{this.pending.delete(id);reject(new Error(`CDP command timed out: ${method}`));},this.commandTimeoutMs);
+      this.pending.set(id, { resolve, reject, timer });
+      try{this.ws.send(JSON.stringify(payload));}
+      catch(error){clearTimeout(timer);this.pending.delete(id);reject(error);}
     });
   }
 
@@ -200,7 +213,12 @@ class CdpSession {
   }
 
   close() {
+    this.rejectPending(new Error('CDP session closed'));
     try { this.ws.close(); } catch (_) { /* ignore */ }
+  }
+  rejectPending(error) {
+    for(const {reject,timer} of this.pending.values()){clearTimeout(timer);reject(error);}
+    this.pending.clear();
   }
 }
 
@@ -535,6 +553,7 @@ async function dispatchTouchGestureSequence(session, sessionId, gestures, timing
  * same checks, same monochrome-frame heuristic.
  */
 async function runOne(target, options) {
+  if(options.checkpoints)validateCheckpoints(options.checkpoints);
   const isUrl = isUrlTarget(target);
   const htmlFile = isUrl ? null : target;
   const browser = findBrowser(options.browser);
@@ -562,6 +581,7 @@ async function runOne(target, options) {
     exceptions: [],
     exceptionDetails: [],
     consoleErrors: [],
+    consoleErrorDetails: [],
     consoleWarnings: [],
     eventCounts: { exceptions: 0, consoleErrors: 0, consoleWarnings: 0 },
     frames: 0,
@@ -627,6 +647,7 @@ async function runOne(target, options) {
       if (params.type === 'error') {
         result.eventCounts.consoleErrors += 1;
         pushUniqueBounded(result.consoleErrors, text.slice(0, 300), 50);
+        pushUniqueBounded(result.consoleErrorDetails, {message:text.slice(0,1000),source:'console',stack:params.stackTrace?.callFrames||[]},20,item=>JSON.stringify(item));
       } else if (params.type === 'warning') {
         result.eventCounts.consoleWarnings += 1;
         pushUniqueBounded(result.consoleWarnings, text.slice(0, 200), 50);
@@ -637,12 +658,14 @@ async function runOne(target, options) {
       if (e.level === 'error') {
         result.eventCounts.consoleErrors += 1;
         pushUniqueBounded(result.consoleErrors, `[${e.source}] ${String(e.text).slice(0, 300)}`, 50);
+        pushUniqueBounded(result.consoleErrorDetails, {message:String(e.text).slice(0,1000),source:e.source||'',url:e.url||'',line:Number(e.lineNumber??-1)+1,stack:e.stackTrace?.callFrames||[]},20,item=>JSON.stringify(item));
       }
     });
 
     await session.send('Runtime.enable', {}, sessionId);
     await session.send('Log.enable', {}, sessionId);
     await session.send('Page.enable', {}, sessionId);
+    if(options.viewportSize)await applyViewportSize(session,sessionId,options.viewportSize);
     await session.send('Page.addScriptToEvaluateOnNewDocument', { source: FRAME_COUNTER }, sessionId);
     if (options.gesture || options.gestures?.length || options.gestureFromEvalBefore
       || options.gesturesFromEvalBefore?.length) {
@@ -785,6 +808,12 @@ async function runOne(target, options) {
       }
     }
 
+    if(options.checkpoints){
+      result.checkpoints=await captureRuntimeCheckpoints(session,sessionId,options.checkpoints,{
+        directory:path.resolve(PROJECT_ROOT,options.screenshotDir),viewportSize:options.viewportSize,
+        eventCounts:result.eventCounts,onCheckpoint:options.onCheckpoint,
+      });
+    }
     if (!options.noScreenshot) {
       const shot = await session.send('Page.captureScreenshot', { format: 'png' }, sessionId);
       if (shot && shot.data) {
@@ -857,6 +886,17 @@ function normaliseWindowSize(value) {
   return m ? m[1] + ',' + m[2] : '720,1280';
 }
 
+function parseViewportSize(value) {
+  const match=/^(\d+)\s*[x,]\s*(\d+)$/i.exec(String(value||'').trim());
+  if(!match)throw new Error('--viewport-size requires WxH');
+  const width=Number(match[1]),height=Number(match[2]);
+  if(width<1 || height<1 || width>16384 || height>16384)throw new Error('--viewport-size dimensions must be 1..16384');
+  return {width,height};
+}
+async function applyViewportSize(session,sessionId,size) {
+  await session.send('Emulation.setDeviceMetricsOverride',{width:size.width,height:size.height,deviceScaleFactor:1,mobile:false},sessionId);
+}
+
 function parseArgs(argv) {
   const o = {
     seconds: 6, minFps: 20, all: false, json: false, noScreenshot: false,
@@ -882,6 +922,8 @@ function parseArgs(argv) {
     if (a.startsWith('--min-fps=')) { o.minFps = Number(a.split('=')[1]) || 20; continue; }
     if (a === '--window-size') { o.windowSize = normaliseWindowSize(argv[++i]); continue; }
     if (a.startsWith('--window-size=')) { o.windowSize = normaliseWindowSize(a.split('=')[1]); continue; }
+    if(a==='--viewport-size'){o.viewportSize=parseViewportSize(argv[++i]);continue;}
+    if(a.startsWith('--viewport-size=')){o.viewportSize=parseViewportSize(a.slice('--viewport-size='.length));continue;}
     if (a === '--preview-device') { o.previewDevice = String(argv[++i] || ''); continue; }
     if (a.startsWith('--preview-device=')) { o.previewDevice = a.slice('--preview-device='.length); continue; }
     if (a === '--browser') { o.browser = argv[++i]; continue; }
@@ -1005,4 +1047,6 @@ module.exports = {
   parseArgs, parseGesture, resolveGestureFromEvalBefore,
   isNavigationEvaluationError, evaluatePageWithNavigationRetry,
   dispatchTouchGesture, dispatchTouchGestureSequence, selectCocosPreviewDevice,
+  parseViewportSize,applyViewportSize,
+  CdpSession,
 };

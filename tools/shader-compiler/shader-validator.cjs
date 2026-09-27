@@ -14,6 +14,7 @@
 
 const { analyzeEffect } = require('./glsl-static-analyzer.cjs');
 const { findReservedIdentifiers } = require('./glsl-reserved-identifiers.cjs');
+const { checkEffectPropertyBindings } = require('./effect-property-bindings.cjs');
 
 const SAMPLER_TYPES = /\b(?:sampler2DArray|samplerCubeShadow|sampler2DShadow|samplerCube|sampler2D|sampler3D)\b/;
 
@@ -259,6 +260,10 @@ function validateCceffectStructure(effectText, options = {}) {
   }
 
   // 2b. Sampler names cannot be reached through a #define.
+  const propertyBindings = checkEffectPropertyBindings(effectText, options);
+  errors.push(...propertyBindings.errors);
+  warnings.push(...propertyBindings.warnings);
+
   checkSamplerNames(programs, errors, warnings);
 
   // 2c. `in` variables are read-only.
@@ -328,7 +333,7 @@ function validateCceffectStructure(effectText, options = {}) {
   // GLSL cannot compile (`clamp(dot(a,b))`) or cannot link (`i.wn`). Without
   // this pass the gate reported PASS / confidence 100 on exactly those files,
   // which is worse than no gate -- it tells the caller there is nothing to fix.
-  const analysis = analyzeEffect(effectText);
+  const analysis = analyzeEffect(effectText, options);
   for (const d of analysis.errors) {
     const where = d.program ? `${d.program}:${d.line}` : 'effect';
     errors.push(`[${d.code}] ${where} -- ${d.message}`);
@@ -342,6 +347,7 @@ function validateCceffectStructure(effectText, options = {}) {
     errors,
     warnings,
     glslAnalysis: analysis,
+    propertyBindings,
   };
 }
 

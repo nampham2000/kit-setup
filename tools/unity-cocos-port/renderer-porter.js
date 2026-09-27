@@ -1,8 +1,11 @@
 'use strict';
 
-const { sanitizeFileId } = require('./core-utils');
-
-const MODEL_FILE_EXTENSIONS = new Set(['.fbx', '.gltf', '.glb']);
+const fs = require('fs');
+const path = require('path');
+const { toPosix, sanitizeFileId } = require('./core-utils');
+const { unityModelMeshName } = require('./model-import-basis');
+const { cocosSlotsForUnitySlots } = require('./fbx-submesh-order');
+const { requestModelMeshBasis } = require('./model-mesh-basis-binding');
 
 module.exports = function createRendererPorter(deps) {
   const {
@@ -51,12 +54,26 @@ module.exports = function createRendererPorter(deps) {
     }).filter(Boolean);
   }
 
+  // Unity material slot i draws Unity sub-mesh i; the Cocos primitive order of the
+  // same FBX mesh differs (fbx-submesh-order.js). Returns the slots in Cocos order.
+  function cocosMaterialSlots(modelAsset, modelName, unitySlots, reporter, label) {
+    if (!modelAsset || String(modelAsset.ext || '').toLowerCase() !== '.fbx' || unitySlots.length < 1) return unitySlots;
+    const slots = cocosSlotsForUnitySlots(modelAsset.path, modelName, unitySlots);
+    if (!slots) return unitySlots;
+    reporter.low('FBX_SUBMESH_MATERIALS_REORDERED', modelAsset.relativePath || '', label,
+      `Unity sub-mesh material slots (${unitySlots.length}) were mapped onto ${slots.length} Cocos primitive(s) by FBX material object`);
+    return slots;
+  }
+
   function resolveSyntheticMaterialOverrides(gameObject, resolvedModel, options, unityDb, cocosDb, reporter) {
     const explicitAssets = gameObject.syntheticModelMaterialOverrideGroups?.[0]?.materialAssets || [];
     const externalAssets = explicitAssets.length ? [] : orderedExternalMaterialAssets(gameObject, resolvedModel);
     const assets = explicitAssets.length ? explicitAssets : externalAssets;
     if (!assets.length) return [];
-    const uuids = resolveUnityMaterialUuids(assets, options, unityDb, cocosDb, reporter, gameObject.name);
+    let uuids = resolveUnityMaterialUuids(assets, options, unityDb, cocosDb, reporter, gameObject.name);
+    if (explicitAssets.length) {
+      uuids = cocosMaterialSlots(gameObject.syntheticModelAsset, gameObject.syntheticModelName || gameObject.name, uuids, reporter, gameObject.name);
+    }
     if (externalAssets.length && uuids.length) {
       reporter.low(
         'MODEL_EXTERNAL_MATERIAL_REMAP_WIRED',
@@ -71,15 +88,6 @@ module.exports = function createRendererPorter(deps) {
 
   function emitSyntheticModelRenderer(gameObject, nodeId, builder, reporter, options, unityDb, cocosDb) {
     const modelAsset = gameObject.syntheticModelAsset;
-    const importScale = typeof deps.unityModelImportScale === 'function' ? deps.unityModelImportScale(modelAsset) : 1;
-    if (importScale !== 1) {
-      reporter.medium(
-        'MODEL_IMPORT_SCALE_UNPORTED',
-        modelAsset?.relativePath || '',
-        gameObject.name,
-        `Unity ModelImporter scale factor ${importScale} is baked into Unity's mesh data but not into the Cocos import; verify this model's size`,
-      );
-    }
     const meshNameHint = gameObject.syntheticModelName || gameObject.name;
     const componentId = `synthetic-model-${modelAsset.guid || modelAsset.uuid || gameObject.fileId}`;
     const componentFileId = `cmp-model-${sanitizeFileId(gameObject.name)}`;
@@ -89,7 +97,7 @@ module.exports = function createRendererPorter(deps) {
       const overrideMaterialUuids = resolveSyntheticMaterialOverrides(
         gameObject, resolved, options, unityDb, cocosDb, reporter,
       );
-      builder.addMeshRenderer(
+      const rendererId = builder.addMeshRenderer(
         nodeId,
         componentId,
         resolved.meshUuid,
@@ -97,6 +105,7 @@ module.exports = function createRendererPorter(deps) {
         componentFileId,
         { castShadows: true, receiveShadows: true },
       );
+      requestModelMeshBasis(builder, reporter, options, nodeId, rendererId, modelAsset, gameObject.name);
       reporter.low('NESTED_MODEL_RENDERER_CREATED', modelAsset.relativePath, gameObject.name, 'Nested model asset resolved to Cocos MeshRenderer', resolved.source);
       return;
     }
@@ -106,7 +115,7 @@ module.exports = function createRendererPorter(deps) {
       const overrideMaterialUuids = resolveSyntheticMaterialOverrides(
         gameObject, missing.resolved, options, unityDb, cocosDb, reporter,
       );
-      builder.addMeshRenderer(
+      const rendererId = builder.addMeshRenderer(
         nodeId,
         componentId,
         missing.resolved.meshUuid,
@@ -114,6 +123,7 @@ module.exports = function createRendererPorter(deps) {
         componentFileId,
         { castShadows: true, receiveShadows: true },
       );
+      requestModelMeshBasis(builder, reporter, options, nodeId, rendererId, modelAsset, gameObject.name);
       reporter.low(
         missing.pendingImport ? 'NESTED_MODEL_PENDING_MESH_WIRED' : 'NESTED_MODEL_RENDERER_CREATED',
         modelAsset.relativePath,
@@ -199,9 +209,12 @@ module.exports = function createRendererPorter(deps) {
       );
     }
 
+    // A multi-mesh FBX is addressed by mesh file ID; the GameObject name ("Lid")
+    // need not match the mesh name ("Object001") and would fall back to mesh 0.
+    const unityMeshName = meshAsset && !builtinMeshUuid ? unityModelMeshName(meshAsset, deps.unityRefFileId(meshRef)) : '';
     if (meshAsset && !meshUuid) {
       const requiredExt = meshAsset.ext === '.asset' ? '.fbx' : meshAsset.ext;
-      const resolved = cocosDb.resolveModelMeshByStem(meshAsset.stem, gameObject.name, requiredExt, deps.unityRefFileId(meshRef));
+      const resolved = cocosDb.resolveModelMeshByStem(meshAsset.stem, unityMeshName || gameObject.name, requiredExt, deps.unityRefFileId(meshRef));
       if (resolved) {
         meshUuid = resolved.meshUuid;
         if (hasExplicitMaterialSlots) {
@@ -214,7 +227,7 @@ module.exports = function createRendererPorter(deps) {
       } else {
         // A Unity Mesh .asset is serialized YAML that no Cocos importer reads: handleMissingModel
         // exports it straight to FBX (FBX-only model pipeline) instead of copying the raw file.
-        const missing = handleMissingModel(meshAsset, reporter, options, { autoCopy: true, meshNameHint: gameObject.name });
+        const missing = handleMissingModel(meshAsset, reporter, options, { autoCopy: true, meshNameHint: unityMeshName || gameObject.name });
         meshPendingImport = Boolean(missing.pendingImport);
         if (missing.resolved?.meshUuid) {
           meshUuid = missing.resolved.meshUuid;
@@ -242,33 +255,21 @@ module.exports = function createRendererPorter(deps) {
         .filter(Boolean);
     }
 
+    if (meshAsset && !builtinMeshUuid && materialUuids.length && !materialUuids.includes('')) {
+      materialUuids = cocosMaterialSlots(meshAsset, unityMeshName || gameObject.name, materialUuids, reporter, gameObject.name);
+    }
+
     if (!meshUuid && meshPendingImport && meshAsset) {
       recordPendingMeshRepair(options, options.out, componentFileId, meshAsset.stem, gameObject.name, meshAsset.relativePath);
     }
     if (!meshUuid && !meshPendingImport) reporter.high('MESH_UNRESOLVED', model.file, gameObject.name, 'MeshRenderer has no resolved Cocos mesh');
-
-    // Unity mirrors FBX/glTF mesh data on import (x -> -x) while Cocos keeps the file basis, so under
-    // the regular Unity -> Cocos node conversion (z -> -z) the mesh would appear turned 180 degrees
-    // about its local Y. Host the renderer on a basis child; the node keeps its authored transform.
-    let rendererNodeId = nodeId;
-    const modelFileMesh = Boolean(!builtinMeshUuid && meshAsset
-      && MODEL_FILE_EXTENSIONS.has(String(meshAsset.ext || '').toLowerCase())
-      && (meshUuid || meshPendingImport));
-    if (modelFileMesh && typeof builder.addMeshBasisNode === 'function') {
-      // Unity bakes ModelImporter.globalScale into the mesh data; the Cocos import does not.
-      const importScale = typeof deps.unityModelImportScale === 'function' ? deps.unityModelImportScale(meshAsset) : 1;
-      rendererNodeId = builder.addMeshBasisNode(nodeId, componentFileId, importScale);
-      reporter.low(
-        'MODEL_MESH_FORWARD_AXIS_CORRECTED',
-        meshAsset.relativePath,
-        gameObject.name,
-        `FBX mesh referenced by a MeshFilter was placed on a Unity-to-Cocos basis child (180 degrees about Y, import scale ${importScale})`,
-      );
-    }
-    builder.addMeshRenderer(rendererNodeId, componentId, meshUuid, materialUuids, componentFileId, {
+    const rendererId = builder.addMeshRenderer(nodeId, componentId, meshUuid, materialUuids, componentFileId, {
       castShadows: Number(getField(doc, 'm_CastShadows', 1) || 0) !== 0,
       receiveShadows: Number(getField(doc, 'm_ReceiveShadows', 1) || 0) !== 0,
     });
+    if (meshAsset && !builtinMeshUuid && (meshUuid || meshPendingImport)) {
+      requestModelMeshBasis(builder, reporter, options, nodeId, rendererId, meshAsset, gameObject.name);
+    }
   }
 
   return {
