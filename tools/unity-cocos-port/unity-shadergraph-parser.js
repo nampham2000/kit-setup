@@ -238,6 +238,12 @@ vec3 unity_normal_blend(vec3 A, vec3 B) {
   return normalize(vec3(A.xy + B.xy, A.z * B.z));
 }
 
+// Split widens its Dynamic Vector input with zero components (a Vector2 splits into x, y, 0, 0).
+vec4 sg_vec4(float v) { return vec4(v); }
+vec4 sg_vec4(vec2 v) { return vec4(v, 0.0, 0.0); }
+vec4 sg_vec4(vec3 v) { return vec4(v, 0.0); }
+vec4 sg_vec4(vec4 v) { return v; }
+
 float unity_remap(float In, vec2 InMinMax, vec2 OutMinMax) {
   return OutMinMax.x + (In - InMinMax.x) * (OutMinMax.y - OutMinMax.x) / max(InMinMax.y - InMinMax.x, 0.00001);
 }
@@ -292,6 +298,30 @@ function splitJsonDocuments(text) {
  * their { m_Id } references. Edges keep their { m_Node: { m_Id } } references (looked up by id).
  * A single-document (legacy) graph is returned unchanged.
  */
+// Value-only input slot types whose serialized m_Value is the input when nothing is wired (e.g. a
+// Subtract A of 1, a Remap In Min Max of (-1, -0.37)). UV, Normal, Position, Tangent, texture and
+// sampler slots are excluded: unconnected they stand for a mesh attribute or asset, not m_Value.
+const VALUE_SLOT_TYPES = /\.(Vector1|Vector2|Vector3|Vector4|DynamicVector|DynamicValue|ColorRGBA|ColorRGB|Boolean)MaterialSlot$/;
+const glslFloat = value => {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  const text = String(n);
+  return /[.eE]/.test(text) ? text : `${text}.0`;
+};
+function serializedSlotValue(node, slotId) {
+  const slot = (node && Array.isArray(node.m_Slots) ? node.m_Slots : [])
+    .find(entry => entry && Number(entry.m_Id) === Number(slotId) && Number(entry.m_SlotType ?? 0) === 0);
+  if (!slot || !VALUE_SLOT_TYPES.test(String(slot.m_Type || ''))) return null;
+  const value = slot.m_Value;
+  if (typeof value === 'number' || typeof value === 'boolean') return glslFloat(Number(value));
+  if (!value || typeof value !== 'object') return null;
+  const keys = ['x', 'y', 'z', 'w'].filter(key => key in value);
+  const channels = keys.length ? keys : ['r', 'g', 'b', 'a'].filter(key => key in value);
+  const parts = channels.map(key => glslFloat(value[key]));
+  if (parts.length < 2 || parts.length > 4 || parts.some(part => part === null)) return null;
+  return `vec${parts.length}(${parts.join(', ')})`;
+}
+
 function normalizeShaderGraph(text) {
   const docs = splitJsonDocuments(text.replace(/^﻿/, ''));
   if (docs.length <= 1) return docs[0] || JSON.parse(text);
@@ -695,7 +725,7 @@ ${fragmentCode}
 
     const getInputExpr = (toNodeId, toSlotId, defaultVal = '0.0') => {
       const edge = this.edges.find((e) => e.toNodeId === toNodeId && e.toSlotId === toSlotId);
-      if (!edge) return defaultVal;
+      if (!edge) return serializedSlotValue(this.nodes.get(toNodeId), toSlotId) ?? defaultVal;
       const key = `${edge.fromNodeId}_${edge.fromSlotId}`;
       if (evaluatedNodes.has(key)) {
         return evaluatedNodes.get(key);
@@ -855,6 +885,13 @@ ${fragmentCode}
         evaluatedNodes.set(`${nodeId}_3`, outVar);
         continue;
       }
+      if (typeStr.includes('NegateNode') || name === 'Negate') {
+        const a = getInputExpr(nodeId, 0, '0.0');
+        const outVar = getVarName('negate');
+        codeLines.push(`    vec4 ${outVar} = -vec4(${a});`);
+        evaluatedNodes.set(`${nodeId}_1`, outVar);
+        continue;
+      }
       if (typeStr.includes('OneMinusNode') || name === 'One Minus') {
         const a = getInputExpr(nodeId, 0, '0.0');
         const outVar = getVarName('oneMinus');
@@ -943,7 +980,7 @@ ${fragmentCode}
       if (typeStr.includes('SplitNode') || name === 'Split') {
         const inVal = getInputExpr(nodeId, 0, 'vec4(1.0)');
         const outVar = getVarName('split');
-        codeLines.push(`    vec4 ${outVar} = vec4(${inVal});`);
+        codeLines.push(`    vec4 ${outVar} = sg_vec4(${inVal});`);
         evaluatedNodes.set(`${nodeId}_1`, `${outVar}.r`);
         evaluatedNodes.set(`${nodeId}_2`, `${outVar}.g`);
         evaluatedNodes.set(`${nodeId}_3`, `${outVar}.b`);

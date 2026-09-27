@@ -93,3 +93,44 @@ test('the vertex program declares vertex colour only behind USE_VERTEX_COLOR', (
   assert.match(vs, /#if USE_VERTEX_COLOR\s+in lowp vec4 a_color;\s+#endif/);
   assert.match(vs, /#if USE_VERTEX_COLOR\s+v_color = a_color;\s+#else\s+v_color = vec4\(1\.0\);/);
 });
+
+// JellyCubeRun2048 TintMaskJelly.shadergraph: alpha = Remap(Negate(Split(UV).G), (-1, -0.37), Remap)
+// and base = Albedo x (1 - mask) + Color x mask. The emitter ignored serialized slot values (Subtract A
+// became 0, In Min Max became (-1, 1)), dropped Negate, and built vec4(vec2) for Split (EFX2406).
+test('unconnected value slots use their serialized m_Value; Negate and a Vector2 Split are emitted', () => {
+  const slot = (id, type, slotId, name, value) => ({ m_SGVersion: 0, m_Type: `UnityEditor.ShaderGraph.${type}`, m_ObjectId: id, m_Id: slotId, m_DisplayName: name, m_SlotType: 0, m_Value: value });
+  const docs = [
+    {
+      m_SGVersion: 3, m_Type: 'UnityEditor.ShaderGraph.GraphData', m_ObjectId: 'g', m_Properties: [],
+      m_Nodes: [{ m_Id: 'n-uv' }, { m_Id: 'n-split' }, { m_Id: 'n-neg' }, { m_Id: 'n-remap' }, { m_Id: 'n-sub' }, { m_Id: 'n-alpha' }, { m_Id: 'n-base' }],
+      m_Edges: [
+        { m_OutputSlot: { m_Node: { m_Id: 'n-uv' }, m_SlotId: 0 }, m_InputSlot: { m_Node: { m_Id: 'n-split' }, m_SlotId: 0 } },
+        { m_OutputSlot: { m_Node: { m_Id: 'n-split' }, m_SlotId: 2 }, m_InputSlot: { m_Node: { m_Id: 'n-neg' }, m_SlotId: 0 } },
+        { m_OutputSlot: { m_Node: { m_Id: 'n-neg' }, m_SlotId: 1 }, m_InputSlot: { m_Node: { m_Id: 'n-remap' }, m_SlotId: 0 } },
+        { m_OutputSlot: { m_Node: { m_Id: 'n-remap' }, m_SlotId: 3 }, m_InputSlot: { m_Node: { m_Id: 'n-alpha' }, m_SlotId: 0 } },
+        { m_OutputSlot: { m_Node: { m_Id: 'n-sub' }, m_SlotId: 2 }, m_InputSlot: { m_Node: { m_Id: 'n-base' }, m_SlotId: 0 } },
+      ],
+      m_ActiveTargets: [{ m_Id: 't-urp' }],
+    },
+    { m_SGVersion: 0, m_Type: 'UnityEditor.ShaderGraph.UVNode', m_ObjectId: 'n-uv', m_Name: 'UV', m_Slots: [] },
+    { m_SGVersion: 0, m_Type: 'UnityEditor.ShaderGraph.SplitNode', m_ObjectId: 'n-split', m_Name: 'Split', m_Slots: [] },
+    { m_SGVersion: 0, m_Type: 'UnityEditor.ShaderGraph.NegateNode', m_ObjectId: 'n-neg', m_Name: 'Negate', m_Slots: [] },
+    { m_SGVersion: 0, m_Type: 'UnityEditor.ShaderGraph.RemapNode', m_ObjectId: 'n-remap', m_Name: 'Remap', m_Slots: [{ m_Id: 's-remap-in' }, { m_Id: 's-remap-inmm' }, { m_Id: 's-remap-outmm' }] },
+    slot('s-remap-in', 'DynamicVectorMaterialSlot', 0, 'In', { x: -1, y: -1, z: -1, w: -1 }),
+    slot('s-remap-inmm', 'Vector2MaterialSlot', 1, 'In Min Max', { x: -1, y: -0.37 }),
+    slot('s-remap-outmm', 'Vector2MaterialSlot', 2, 'Out Min Max', { x: 0, y: 1 }),
+    { m_SGVersion: 0, m_Type: 'UnityEditor.ShaderGraph.SubtractNode', m_ObjectId: 'n-sub', m_Name: 'Subtract', m_Slots: [{ m_Id: 's-sub-a' }, { m_Id: 's-sub-b' }] },
+    slot('s-sub-a', 'DynamicVectorMaterialSlot', 0, 'A', { x: 1, y: 1, z: 1, w: 1 }),
+    slot('s-sub-b', 'DynamicVectorMaterialSlot', 1, 'B', { x: 0.25, y: 0.25, z: 0.25, w: 0.25 }),
+    { m_SGVersion: 0, m_Type: 'UnityEditor.ShaderGraph.BlockNode', m_ObjectId: 'n-alpha', m_Name: 'SurfaceDescription.Alpha', m_Slots: [], m_SerializedDescriptor: 'SurfaceDescription.Alpha' },
+    { m_SGVersion: 0, m_Type: 'UnityEditor.ShaderGraph.BlockNode', m_ObjectId: 'n-base', m_Name: 'SurfaceDescription.BaseColor', m_Slots: [], m_SerializedDescriptor: 'SurfaceDescription.BaseColor' },
+    { m_SGVersion: 1, m_Type: 'UnityEditor.Rendering.Universal.ShaderGraph.UniversalTarget', m_ObjectId: 't-urp', m_ActiveSubTarget: { m_Id: 't-unlit' }, m_SurfaceType: 1 },
+    { m_SGVersion: 2, m_Type: 'UnityEditor.Rendering.Universal.ShaderGraph.UniversalUnlitSubTarget', m_ObjectId: 't-unlit' },
+  ];
+  const parser = new ShaderGraphParser(docs.map(doc => JSON.stringify(doc, null, 4)).join('\n\n'), {});
+  const glsl = String(parser._transpileGraphToGLSL());
+  assert.match(glsl, /vec4 _sg_split_\d+ = sg_vec4\(_sg_uv_\d+\);/, 'a Vector2 input is widened with zeros');
+  assert.match(glsl, /vec4 _sg_negate_\d+ = -vec4\(_sg_split_\d+\.g\);/);
+  assert.match(glsl, /unity_remap\(float\(_sg_negate_\d+\), vec2\(-1\.0, -0\.37\), vec2\(0\.0, 1\.0\)\)/, 'In/Out Min Max come from the slots');
+  assert.match(glsl, /vec4\(vec4\(1\.0, 1\.0, 1\.0, 1\.0\)\) - vec4\(vec4\(0\.25, 0\.25, 0\.25, 0\.25\)\)/, 'Subtract A and B come from the slots');
+});
