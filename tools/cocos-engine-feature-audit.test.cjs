@@ -10,6 +10,7 @@ const {
   EngineFeatureError,
   createEvidence,
   scanTextEvidence,
+  stripCodeNoise,
   decidePhysicsBackend,
   inferRequiredModules,
   auditCocosEngineFeatures,
@@ -672,4 +673,50 @@ test('the MCP client refuses a Profile API write to another project that shares 
     error => error.code === 'ENGINE_FEATURE_MCP_PROJECT_MISMATCH' && error.details.editorProject === `${root}-combat-magic`);
   await assert.rejects(assertMcpProjectIdentity({ call: async () => ({ content: [] }) }, root),
     error => error.code === 'ENGINE_FEATURE_MCP_PROJECT_UNVERIFIED');
+});
+
+test('code sources ignore cc.X class names in comments and strings (graphics false positive)', () => {
+  const code = [
+    "import { js, Node } from 'cc';",
+    '/** Audits that no visible cc.Graphics is drawn. */',
+    '// cc.RichText is not used here either',
+    "const isGraphics = (c) => js.getClassName(c) === 'cc.Graphics';",
+    'const label = `uses cc.Mask ${node.name}`;',
+  ].join('\n');
+  const evidence = createEvidence();
+  scanTextEvidence(code, 'assets/script/UiAudit.ts', evidence);
+  assert.equal(evidence.facts.Graphics, undefined);
+  assert.equal(evidence.facts.RichText, undefined);
+  assert.equal(evidence.facts.Mask, undefined);
+  assert.deepEqual(inferRequiredModules(evidence).filter((name) => ['graphics', 'rich-text', 'mask'].includes(name)), []);
+});
+
+test('code sources still count real cc.X uses, named imports and addComponent strings', () => {
+  const code = [
+    "import { Graphics as G } from 'cc';",
+    'const a = node.addComponent(cc.Mask);',
+    "const b = node.addComponent('cc.RichText');",
+    'const t = `${cc.ParticleSystem2D.name}`;',
+  ].join('\n');
+  const evidence = createEvidence();
+  scanTextEvidence(code, 'assets/script/Real.ts', evidence);
+  assert.ok(evidence.facts.Graphics, 'named import');
+  assert.ok(evidence.facts.Mask, 'cc.Mask expression');
+  assert.ok(evidence.facts.RichText, 'addComponent string');
+  assert.ok(evidence.facts.ParticleSystem2D, 'template expression');
+});
+
+test('serialized assets keep their string __type__ and cc.X evidence', () => {
+  const evidence = evidenceFor(JSON.stringify([{ __type__: 'cc.Graphics' }, { note: 'cc.Mask' }]));
+  assert.ok(evidence.facts.Graphics);
+  assert.ok(evidence.facts.Mask);
+});
+
+test('stripCodeNoise blanks comments and strings but keeps offsets, newlines and template expressions', () => {
+  const code = "call('xq'); // cz\n/* dz */ tag`tq${expr}uq`";
+  const stripped = stripCodeNoise(code);
+  assert.equal(stripped.length, code.length);
+  assert.equal(stripped.split('\n').length, 2);
+  for (const noise of ['xq', 'cz', 'dz', 'tq', 'uq']) assert.ok(!stripped.includes(noise), noise);
+  for (const kept of ['call', 'tag', 'expr']) assert.ok(stripped.includes(kept), kept);
 });
