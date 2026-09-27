@@ -749,6 +749,21 @@
         "tools/unity-cocos-port/particle-lights-native.test.cjs"
       ],
       "acceptance": "Linear color space does not imply linear light intensity. Bind GraphicsSettings.lightsUseLinearIntensity and validate source particle light uploads; do not assume intensity and sRGB decoding commute."
+    },
+    {
+      "id": "particle-catalog-phase-acceptance",
+      "origin": "fbb2fd4",
+      "applicability": "conditional",
+      "sharedPaths": [
+        "tools/particle-feature-inventory.cjs",
+        "tools/particle-catalog-policy.cjs",
+        "tools/port-regression-gate.cjs"
+      ],
+      "testPaths": [
+        "tools/particle-catalog-policy.test.cjs",
+        "tools/port-regression-gate.test.cjs"
+      ],
+      "acceptance": "Inventory representatives before bulk conversion; report renderer plus module gaps. New particle registries request catalog scope by default. Every declared prefab/phase requires native reference, semantic checks and explicit color/silhouette bounds. Reference selection, Editor lifecycle and trustworthy source producers remain separate required evidence."
     }
   ]
 }

@@ -70,6 +70,21 @@ function writeRegistry(root, value) {
   return file;
 }
 
+test('particle catalog closes previous-pack coverage and binds reference/gap files into receipt', t=>{
+  const root=fixture(t),prefab='assets/prefabs/Roll.prefab',matrix='tools/qa/catalog-cases.json';
+  const catalog={schemaVersion:1,prefabs:[prefab],phases:['birth','peak','decay'],referenceDecision:'selected',bindingReport:'tools/qa/gaps.json',referenceState:'tools/qa/reference.json',referenceMetrics:{foregroundRgbSimilarity:.95,foregroundIou:.95}};
+  for(const [name,data]of [['catalog',catalog],['gaps',{gaps:[],moduleGaps:[]}],['reference',{renderPipeline:'Built-in'}]])fs.writeFileSync(path.join(root,'tools/qa/'+name+'.json'),JSON.stringify(data));
+  writeMatrix(root,matrix,catalog.phases.map(phase=>({name:phase,particlePrefab:prefab,particlePhase:phase,eval:'({ok:true})',requireEvalOk:true,referenceImage:'docs/references/unity.png',requiredReferenceMetrics:{foregroundRgbSimilarity:{min:.95},foregroundIou:{min:.95}},screenshotRegion:{x:0,y:0,width:1,height:1},requiredScreenshotMetrics:{brightPixelRatio:{min:.01,max:.99}}})));
+  const value={schemaVersion:1,kind:REGISTRY_KIND,requiredRisks:['particle-vfx'],particleCatalog:'tools/qa/catalog.json',suites:[{id:'catalog-suite',risks:['particle-vfx'],matrix,watchFiles:[prefab]}]},file=writeRegistry(root,value);
+  const loaded=validateRegistry(root,value,{configFile:file}),api=require('./port-regression-gate.cjs');
+  const before=api.registrySnapshot(root,loaded).digest;
+  assert.ok(api.portableFileList(root,loaded).includes('tools/qa/reference.json'));
+  fs.writeFileSync(path.join(root,'tools/qa/reference.json'),JSON.stringify({renderPipeline:'URP'}));
+  assert.notEqual(api.registrySnapshot(root,loaded).digest,before);
+  fs.writeFileSync(path.join(root,'tools/qa/gaps.json'),JSON.stringify({gaps:[],moduleGaps:[{code:'UNMEASURED'}]}));
+  assert.throws(()=>validateRegistry(root,value,{configFile:file}),e=>e.code==='REGRESSION_PARTICLE_CATALOG_UNACCEPTED');
+});
+
 function registry(suites, requiredRisks) {
   return { schemaVersion: 1, kind: REGISTRY_KIND, requiredRisks, suites };
 }
