@@ -83,6 +83,25 @@ catalog regression suites. Do not fabricate passing suites to clear this gate.
 
 # Large-project scan diagnostics
 
+Electricity adds a native-verified constant prewarm subset: billboard, looping,
+zero-size Box shape, constant initial values, no motion, random inputs or other
+enabled modules. Only this invariant may resolve the generic initialization RNG
+obligation. Meshes, randomized inputs and new enabled modules keep the guard.
+The fixture records five source contracts and their native phase samples; this
+does not certify arbitrary prewarm RNG.
+
+Thin effects can miss all three runtime smoke-test sample locations. The runOne
+API accepts contentProbePoints (up to 16 normalized points) selected from an
+independent visible native reference. Default probes remain active. Do not disable
+the blank-frame guard, sample UI, or choose points from the candidate image.
+
+For Linear Unity alpha particles, decode sRGB texture values before filtering,
+blend into a linear floating-point target, then apply the sRGB transfer once.
+Electricity's raw gamma blending produced dark purple despite correct blend
+factors. Reusing UnitySrgbTexture, UnityLinearTarget and the measured AOE frame
+pipeline corrected sampled RGB to within one byte without tint compensation.
+Check the actual source pipeline first; do not apply this to Gamma sources.
+
 Check the first visible frame, not just particle count. Creator 3.8.8 detaches an
 empty particle model in beforeRender, then sets _needAttach one render too late
 after the first birth. Electricity ef_01 reproduced count=1 and correct lifetime
