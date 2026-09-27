@@ -35,13 +35,13 @@ function attachAlignToDirectionRuntime(builder, reporter, options) {
   stageAlignToDirectionRuntime(options);
   let classId = builder.cocosDb?.findScriptClass?.('UnityParticleAlignToDirectionAdapter')?.classId;
   const meta = path.join(options.cocosRoot, 'assets/script/UnityParticleAlignToDirectionAdapter.ts.meta');
-  if (!classId && fs.existsSync(meta)) classId = compressUuid(JSON.parse(fs.readFileSync(meta, 'utf8')).uuid);
+  if (!classId && fs.existsSync(meta)) { try { classId = compressUuid(JSON.parse(fs.readFileSync(meta, 'utf8')).uuid); } catch { classId = ''; } }
   let bound = 0;
   for (const { p, id } of particles) {
     const spec = p.unityAlignToDirectionContract;
     const name = builder.objects[p.node.__id__]?._name || '';
     if (!spec.mesh) {
-      reporter.high('PARTICLE_ALIGN_TO_DIRECTION_UNMEASURED', options.src || '', name,
+      reporter.medium('PARTICLE_ALIGN_TO_DIRECTION_UNMEASURED', options.src || '', name,
         'alignToDirection is only measured for mesh particles; billboards keep their unaligned rotation.');
       continue;
     }

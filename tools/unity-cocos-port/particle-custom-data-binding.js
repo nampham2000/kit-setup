@@ -56,6 +56,11 @@ function stageCustomDataRuntime(options) {
   }
 }
 
+// A .meta AssetDB is still writing parses as nothing rather than aborting the prefab.
+function metaClassId(meta) {
+  try { return compressUuid(JSON.parse(fs.readFileSync(meta, 'utf8')).uuid); } catch { return ''; }
+}
+
 function attachCustomDataRuntime(builder, reporter, options) {
   const particles = builder.objects.map((p, id) => ({ p, id }))
     .filter(({ p }) => p?.__type__ === 'cc.ParticleSystem' && p.unityCustomDataContract);
@@ -64,7 +69,9 @@ function attachCustomDataRuntime(builder, reporter, options) {
     const spec = p.unityCustomDataContract;
     const name = builder.objects[p.node.__id__]?._name || '';
     if (spec.custom2) {
-      reporter.high('PARTICLE_CUSTOM2_STREAM_UNPORTED', options.src || '', name, 'Renderer streams Unity Custom2; only Custom1 is fed to the material.');
+      // A disabled CustomDataModule streams zeros, which is also what the material reads without a feed.
+      if (spec.enabled) reporter.high('PARTICLE_CUSTOM2_STREAM_UNPORTED', options.src || '', name, 'Renderer streams Unity Custom2 from an enabled CustomDataModule; only Custom1 is fed to the material.');
+      else reporter.low('PARTICLE_CUSTOM2_STREAM_ZERO', options.src || '', name, 'Renderer streams Unity Custom2 but the CustomDataModule is disabled (zeros).');
     }
     if (!spec.components || !spec.curves.length) continue;
     if (spec.curves.some((c) => c.keys.some((k) => !Number.isFinite(k.value)))) {
@@ -74,7 +81,7 @@ function attachCustomDataRuntime(builder, reporter, options) {
     if (!staged) { stageCustomDataRuntime(options); staged = true; }
     let classId = builder.cocosDb?.findScriptClass?.('UnityParticleCustomDataAdapter')?.classId;
     const meta = path.join(options.cocosRoot, 'assets/script/UnityParticleCustomDataAdapter.ts.meta');
-    if (!classId && fs.existsSync(meta)) classId = compressUuid(JSON.parse(fs.readFileSync(meta, 'utf8')).uuid);
+    if (!classId && fs.existsSync(meta)) classId = metaClassId(meta);
     if (!classId) {
       reporter.high('PARTICLE_CUSTOM_DATA_ADAPTER_REQUIRED', options.src || '', name,
         'AssetDB must import assets/script/UnityParticleCustomDataAdapter.ts; refresh and rerun porter.');

@@ -58,6 +58,22 @@ test('the adapter carries the curves, with or without texture-sheet animation', 
   assert.equal(animated.added.length, 1);
 });
 
+test('Custom2 is high only when an enabled module feeds it', () => {
+  const options = { cocosRoot: fs.mkdtempSync(path.join(os.tmpdir(), 'custom2-')) };
+  const levels = (contract) => {
+    const out = [];
+    const { builder } = builderWith(contract);
+    const reporter = Object.fromEntries(['high', 'medium', 'low'].map((level) => [level, (code) => out.push(`${level}:${code}`)]));
+    attachCustomDataRuntime(builder, reporter, options);
+    return out.filter((c) => c.includes('CUSTOM2'));
+  };
+  // Custom1XYZW + Custom2XYZW streams.
+  const streams = { m_VertexStreams: '00010304052226' };
+  assert.deepEqual(levels(particleCustomDataContract(lightning, streams)), ['high:PARTICLE_CUSTOM2_STREAM_UNPORTED']);
+  const disabled = { CustomDataModule: { ...lightning.CustomDataModule, enabled: 0 } };
+  assert.deepEqual(levels(particleCustomDataContract(disabled, streams)), ['low:PARTICLE_CUSTOM2_STREAM_ZERO']);
+});
+
 test('runtime samples Unity MinMaxCurve modes per particle age', () => {
   const out = {};
   const source = ts.transpileModule(fs.readFileSync(path.join(__dirname, 'runtime/UnityParticleCustomData.ts'), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;

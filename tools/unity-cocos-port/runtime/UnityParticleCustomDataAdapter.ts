@@ -18,6 +18,11 @@ export class UnityParticleCustomDataAdapter extends Component {
     // start: materials bound by scene runtimes in onLoad must exist before the define is added.
     protected start(): void {
         if (EDITOR_NOT_IN_PREVIEW || !this.source || this.stream) return;
+        // Only materials whose effect declares the Custom1 texture take the feed: others would
+        // log unknown-property warnings and get an instanced material for nothing.
+        const material = this.source.getSharedMaterial(0);
+        const declares = !!material?.effectAsset?.techniques.some((t) => t.passes.some((p) => !!p.properties && 'customDataTexture' in p.properties));
+        if (!declares) return;
         const spec = JSON.parse(this.sourceContract || '{"curves":[]}') as UnityCustomDataSpec;
         this.stream = new UnityParticleCustomDataStream(this.source, spec);
     }
