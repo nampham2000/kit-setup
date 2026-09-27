@@ -9,6 +9,18 @@ test('source callback modules retain the existing death path',()=>{
  assert.equal(capacityRetirementEligible({EmissionModule:{enabled:true}}),true);
  for(const name of ['SubModule','CollisionModule','TrailModule','TriggerModule']){assert.equal(capacityRetirementEligible({[name]:{enabled:true}}),false);assert.equal(capacityRetirementEligible({[name]:{enabled:false}}),true);}
 });
+test('adapter retries installation after an early onLoad without a processor',()=>{
+ const out={},decorator=()=>target=>target;
+ const cc={Component:class{},ParticleSystem:class{},_decorator:{ccclass:decorator,executionOrder:decorator,executeInEditMode:target=>target,playOnFocus:target=>target,property:()=>{}}};
+ const code=ts.transpileModule(fs.readFileSync(path.join(__dirname,'runtime/UnityParticleSimulationStepAdapter.ts'),'utf8'),{compilerOptions:{module:1,target:7,experimentalDecorators:true}}).outputText;
+ new Function('exports','require',code)(out,name=>name==='cc'?cc:name.includes('BirthTiming')?timing:name.includes('SimulationStep')?{installUnityParticleSimulationStep(){}}:{installUnityParticleRandomForce(){}});
+ const adapter=new out.UnityParticleSimulationStepAdapter();
+ adapter.source={};adapter.sourceCapacityRetirement=true;adapter.onLoad();
+ assert.equal(adapter.source.unityCapacityRetirement,undefined);
+ adapter.source.processor={_particles:{data:[],length:0,removeAt(){}},updateParticles(){return 0;}};
+ adapter.source._emit=()=>{};adapter.start();
+ assert.equal(adapter.source.unityCapacityRetirement,true);
+});
 function simulate(row,retire){
  const pool={data:[],get length(){return this.data.length;},removeAt(i){this.data[i]=this.data[this.data.length-1];this.data.pop();}};
  const kernel=new UnityStartRotationKernel(row.capacity);kernel.reset(row.seed);

@@ -322,7 +322,17 @@ vec4 lpvs_main () {
       // its position; normalize(0) would emit NaN vertices instead.
       if (dot(velocity.xyz,velocity.xyz)>0.0) {
         pos.xyz+=normalize(velocity.xyz)*(2.0*compScale.y*sourceRendererPivot.y);
-        computeVertPos(pos, cornerOffset, rot, compScale, cc_cameraPos.xyz, velocity, frameTile_velLenScale.z, frameTile_velLenScale.w, a_texCoord.x);
+        // Native BakeMesh keeps the width axis in the camera plane, including
+        // off-axis particles. A raw 3D cross product tilts the quad into depth.
+        vec3 sourceCameraBack=normalize(vec3(cc_matView[0][2],cc_matView[1][2],cc_matView[2][2]));
+        // Reverse the cross under Unity-to-Cocos Z reflection so the texture
+        // width is not mirrored. UV asymmetry is visible in native Electro arcs.
+        vec3 sourceStretchRight=cross(velocity.xyz,pos.xyz-cc_cameraPos.xyz);
+        sourceStretchRight-=sourceCameraBack*dot(sourceStretchRight,sourceCameraBack);
+        float sourceWidthLength=length(sourceStretchRight);
+        if(sourceWidthLength>0.0)sourceStretchRight/=sourceWidthLength;
+        vec3 sourceStretchUp=velocity.xyz*frameTile_velLenScale.z+normalize(velocity.xyz)*frameTile_velLenScale.w*compScale.y;
+        pos.xyz+=sourceStretchRight*compScale.x*abs(cornerOffset.x)*sign(cornerOffset.y)-sourceStretchUp*a_texCoord.x;
       }
     #elif CC_RENDER_MODE == RENDER_MODE_HORIZONTAL_BILLBOARD
       vec3 offset=vec3(cornerOffset,0.0);rotateVecFromQuat(offset,rot);

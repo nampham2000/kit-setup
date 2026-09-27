@@ -165,3 +165,13 @@ tests alone missed this integration gap. Check counts, birth seeds and lifetimes
 at late frames, not just visible startup frames; never reset a reference seed to
 hide saturated-pool divergence.
 
+Stretched billboard acceptance must include an asymmetric texture and off-axis
+camera/particle positions. The native width axis is projected into the camera
+plane; reflect the cross-product order with the coordinate basis, otherwise the
+texture width is mirrored. Route all source stretched renderers through the source
+effect, including zero-pivot Mobile materials. Sixteen native BakeMesh cases cover
+parallel/oblique velocities and both camera projections. Geometry alone cannot
+prove UV orientation: seeded Electro Charge Arm replay exposed the width mirror
+(frame-15 foreground overlap improved from .243 to .902 after correcting it).
+Keep the residual thin-edge/radial approximation visible in the image report.
+
