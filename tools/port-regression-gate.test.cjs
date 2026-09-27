@@ -772,3 +772,53 @@ test('--preview-url swaps only the matrix origin and keeps path and query', () =
   gate.executeMatrix(root, { id: 's', matrix: 'm/matrix.json' }, 1, { spawnSync: (_e, args) => { plain.push(...args); return { status: 0, stdout: '{"ok":true}' }; } });
   require('node:assert').ok(!plain.includes('--url') || process.env.CC_PLAYABLE_PREVIEW_URL);
 });
+
+test('ui-layout tag requires a bounded centre offset at two viewports and hashes evalHelpers', t => {
+  const root = fixture(t);
+  fs.writeFileSync(path.join(root, 'tools', 'qa', 'ui-layout-balance.js'), 'globalThis.__probe = 1;\n');
+  const matrix = 'tools/qa/ui-layout.json';
+  const cases = ['720x1280', '1280x600'].map((windowSize, index) => ({
+    name: `lose popup ${index}`,
+    windowSize,
+    evalHelpers: ['tools/qa/ui-layout-balance.js'],
+    eval: '__ccUiLayoutBalance({nodes:["Canvas/Popup/TryAgain"],container:"Canvas/Popup"})',
+    requireEvalOk: true,
+    requiredEvalMetrics: { centerOffsetPx: { max: 4 }, insideSafeRect: { min: 1 }, overlapCount: { max: 0 } },
+    referenceImage: 'docs/references/unity.png',
+    regressionTags: ['ui-layout'],
+  }));
+  writeMatrix(root, matrix, cases);
+  const source = registry([{
+    id: 'popup-layout', risks: ['font-ui-layout'], matrix, watchFiles: ['assets/script/Game.ts'],
+  }], ['font-ui-layout']);
+  const file = writeRegistry(root, source);
+  const loaded = validateRegistry(root, source, { configFile: file });
+  assert.ok(loaded.suites[0].matrixEvidence.dependencies.some(item => item.relative === 'tools/qa/ui-layout-balance.js'));
+
+  const unbounded = cases.map(entry => ({ ...entry, requiredEvalMetrics: { centerOffsetPx: { min: 0 } } }));
+  writeMatrix(root, matrix, unbounded);
+  assert.throws(() => validateRegistry(root, source, { configFile: file }),
+    error => error.code === 'REGRESSION_UI_LAYOUT_BALANCE_MISSING');
+
+  const loose = cases.map(entry => ({ ...entry, requiredEvalMetrics: { centerOffsetPx: { max: 500 } } }));
+  writeMatrix(root, matrix, loose);
+  assert.throws(() => validateRegistry(root, source, { configFile: file }),
+    error => error.code === 'REGRESSION_UI_LAYOUT_BALANCE_MISSING');
+
+  const nested = cases.map(entry => ({ ...entry, requiredEvalMetrics: { 'metrics.centerOffsetXPx': { max: 8 } } }));
+  writeMatrix(root, matrix, nested);
+  assert.doesNotThrow(() => validateRegistry(root, source, { configFile: file }));
+
+  const oneViewport = cases.map(entry => ({ ...entry, windowSize: '720x1280' }));
+  writeMatrix(root, matrix, oneViewport);
+  assert.throws(() => validateRegistry(root, source, { configFile: file }),
+    error => error.code === 'REGRESSION_UI_LAYOUT_VIEWPORTS_MISSING');
+
+  const untagged = oneViewport.map(entry => ({ ...entry, regressionTags: undefined, requiredEvalMetrics: undefined }));
+  writeMatrix(root, matrix, untagged);
+  assert.doesNotThrow(() => validateRegistry(root, source, { configFile: file }));
+
+  writeMatrix(root, matrix, [{ ...cases[0], evalHelpers: ['tools/qa/missing.js'] }, cases[1]]);
+  assert.throws(() => validateRegistry(root, source, { configFile: file }),
+    error => error.code === 'REGRESSION_PATH_MISSING');
+});

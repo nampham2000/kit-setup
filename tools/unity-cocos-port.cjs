@@ -5909,6 +5909,12 @@ class CocosPrefabBuilder {
     return componentId;
   }
 
+  /** The emitted cc.UITransform object of a node (mutable), or null. */
+  uiTransformOf(nodeId) {
+    const componentId = this.uiTransformByNode.get(nodeId);
+    return Number.isInteger(componentId) ? this.objects[componentId] || null : null;
+  }
+
   addFullStretchWidget(nodeId, fileId) {
     return this.addComponent(nodeId, 'cc.Widget', {
       _alignFlags: 45,

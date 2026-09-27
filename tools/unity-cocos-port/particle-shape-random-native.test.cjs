@@ -1,6 +1,20 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),ts=require('typescript');
-const out={};new Function('exports','require',ts.transpileModule(fs.readFileSync(path.join(__dirname,'runtime/UnityParticleShapeRandom.ts'),'utf8'),{compilerOptions:{module:1}}).outputText)(out,()=>({Vec3:{set(v,x,y,z){Object.assign(v,{x,y,z});},transformQuat(){},transformMat4(){}}}));
+function loadTs(name,imports={}){const out={};new Function('exports','require',ts.transpileModule(fs.readFileSync(path.join(__dirname,'runtime',name+'.ts'),'utf8'),{compilerOptions:{module:1}}).outputText)(out,id=>imports[id]||({Vec3:{set(v,x,y,z){Object.assign(v,{x,y,z});},transformQuat(){},transformMat4(){}}}));return out;}
+const nativeRadius=loadTs('UnityParticleNativeRadius');
+const out=loadTs('UnityParticleShapeRandom',{'./UnityParticleNativeRadius':nativeRadius});
+test('Unity 6000.3.1f1 Sphere radius interpolation holds on an independent seed and three thicknesses',()=>{
+ const f=require('./fixtures/radius-native-holdout.json');assert.equal(f.unityVersion,'6000.3.1f1');assert.equal(f.seed,42);assert.deepEqual(f.rows.map(r=>r.thickness),[1,.5,.25]);
+ for(const row of f.rows){const kernel=new out.UnityShapeRandomKernel(row.particles.length,true);kernel.reset(f.seed);kernel.beginBatch(row.particles.length,0,1,row.thickness,360,0);let max=0;
+  for(let i=0;i<row.particles.length;i++){const radius=Math.hypot(kernel.values[i*6],kernel.values[i*6+1],kernel.values[i*6+2]);max=Math.max(max,Math.abs(radius-row.particles[i].radius));}
+  assert.ok(max<.00005,JSON.stringify({thickness:row.thickness,max}));
+ }
+});
+test('native radius profile is version gated and preserves analytic fallback',()=>{
+ const shape={enable:true,shapeType:3,emitFrom:0,arcMode:0,arcSpread:0,randomDirectionAmount:0,sphericalDirectionAmount:0,randomPositionAmount:0,alignToDirection:false,radius:1,radiusThickness:1,arc:360,angle:0,emit(){}};
+ const fallback=out.installUnityParticleShapeRandom({shapeModule:{...shape},capacity:8});assert.equal(fallback.radialApproximation,true);assert.equal(fallback.nativeRadiusVersion,null);
+ const measured=out.installUnityParticleShapeRandom({shapeModule:{...shape},capacity:8},'6000.3.1f1');assert.equal(measured.radialApproximation,true);assert.equal(measured.nativeRadiusVersion,'6000.3.1f1');
+});
 test('Sphere/Hemisphere native directions with explicitly bounded analytic radius approximation',()=>{
  for(const name of ['shape-seed-matrix','shape-velocity-matrix']){
   const f=require('./fixtures/'+name+'.json');assert.equal(f.sourceProbeSha256,crypto.createHash('sha256').update(fs.readFileSync(path.join(__dirname,'fixtures/capture-'+name+'.cs'),'utf8').replace(/\r\n/g,'\n')).digest('hex'));

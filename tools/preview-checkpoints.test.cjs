@@ -345,3 +345,23 @@ test('evalBefore-resolved gesture sequences accept per-gesture delays', () => {
       gestureFromEvalBefore: tap('target'), gestureDelaysMs: [0] }],
   }), /gestureDelaysMs must match/);
 });
+
+test('evalHelpers prepend shared QA helpers to evalBefore/eval and reject non-js paths', () => {
+  const helper = 'playable-shared-kit/tools/qa/ui-layout-balance.js';
+  const value = validateConfig({
+    url: 'http://127.0.0.1:7456/',
+    evalHelpers: [helper],
+    cases: [
+      { name: 'balanced', eval: '__ccUiLayoutBalance({nodes:[],container:"Canvas"})', requireEvalOk: true },
+      { name: 'no eval' },
+      { name: 'own helpers', evalHelpers: [], evalBefore: '1' },
+    ],
+  });
+  assert.match(value.cases[0].evalExpression, /__ccUiLayoutBalance = measureUiLayoutBalance/);
+  assert.ok(value.cases[0].evalExpression.endsWith('__ccUiLayoutBalance({nodes:[],container:"Canvas"})'));
+  assert.equal(value.cases[1].evalExpression, '');
+  assert.equal(value.cases[2].evalBeforeExpression, '1');
+  assert.throws(() => validateConfig({
+    url: 'http://127.0.0.1:7456/', cases: [{ name: 'bad', evalHelpers: ['README.md'], eval: '1' }],
+  }), /evalHelpers/);
+});

@@ -10,4 +10,5 @@ export { GameUtils } from './utils/GameUtils';
 export { ObjectPool, PoolHandle, type PoolConfig, type PoolKey } from './utils/pool/ObjectPool';
 export { makeNodePoolConfig } from './utils/pool/NodePoolAdapter';
 export * from './config/index';
+export * from './utils/text/TmpLabelBaseline';
 export const PLAYABLE_CORE_MODULE_LAYOUT = 1;

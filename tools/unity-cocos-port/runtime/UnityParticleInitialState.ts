@@ -1,10 +1,12 @@
+import { installUnityParticleBurstRandom, UnityBurstRandomSpec } from './UnityParticleBurstRandom';
 import { installUnityParticleShapeRandom } from './UnityParticleShapeRandom';
 import { installUnityParticleSizeRandom } from './UnityParticleSizeRandom';
 import { Color, ParticleSystem } from 'cc';
 import { UnityStartRotationKernel, unityStartSpeedRandom } from './UnityParticleStartRotation';
 interface Curve {minMaxState:number;scalar:number;minScalar:number;}
 export interface UnityInitialStateSpec {
-    autoRandomSeed:boolean;randomSeed:number;size3D:boolean;rotation3D:boolean;meshScalarAxis?:boolean;
+    autoRandomSeed:boolean;randomSeed:number;size3D:boolean;rotation3D:boolean;meshScalarAxis?:boolean;burstRandom?:UnityBurstRandomSpec[];
+    nativeRadiusVersion?:string;
     lifetime:Curve;speed:Curve;size:Curve[];rotation:Curve[];signs:number[];
     color:{min:number[];max:number[];random:boolean};
 }
@@ -34,7 +36,7 @@ export function installUnityParticleInitialState(system:ParticleSystem,spec:Unit
     // Existing generated start-rotation adapters become no-ops, avoiding two RNGs.
     runtime.unityStartRotation=state;
     installUnityParticleSizeRandom(system);
-    const shape=installUnityParticleShapeRandom(system);
+    const shape=installUnityParticleShapeRandom(system,spec.nativeRadiusVersion);
     if(spec.meshScalarAxis){
         if(!shape)throw new Error('Scalar mesh axis requires the measured native shape stream');
         const module=system.shapeModule as any,emitShape=module.emit;
@@ -89,4 +91,5 @@ export function installUnityParticleInitialState(system:ParticleSystem,spec:Unit
         clear.call(this);state.seed=choose();initialized=false;index=0;
         if(runtime.unityNoise)runtime.unityNoise.reset(state.seed);
     };
+    if(spec.burstRandom)installUnityParticleBurstRandom(system,spec.burstRandom);
 }
