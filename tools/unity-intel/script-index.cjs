@@ -2,7 +2,10 @@
 
 const path = require('node:path');
 
-const SCRIPT_INDEX_SCHEMA_VERSION = 3;
+const { detachedString } = require('./guid-index.cjs');
+
+// Version 4: games-port detached strings merged with main's version-3 index shape.
+const SCRIPT_INDEX_SCHEMA_VERSION = 4;
 
 /**
  * Names which commonly occur in C# source but do not identify a project-owned
@@ -62,6 +65,12 @@ function sortedUnique(values) {
   return [...new Set(values)].sort(compareText);
 }
 
+// RegExp captures of 13+ characters are V8 slices of the whole (stripped)
+// C# source. Script evidence is retained and cached, so it must own its text.
+function detachedStrings(values) {
+  return values.map(detachedString);
+}
+
 function stripCommentsPreserveStrings(source) {
   return String(source || '')
     .replace(/\/\*[\s\S]*?\*\//g, ' ')
@@ -82,7 +91,7 @@ function extractResourceLoadPaths(text) {
     const normalized = normalizeAssetPath(value).replace(/^\/+|\/+$/g, '');
     if (normalized) paths.push(normalized);
   }
-  return sortedUnique(paths);
+  return detachedStrings(sortedUnique(paths));
 }
 
 // Bounded resource-folder catalog, including the common vendor demo foreach over
@@ -121,7 +130,7 @@ function extractResourceLoadAllPaths(text) {
       }
     }
   }
-  return sortedUnique(paths);
+  return detachedStrings(sortedUnique(paths));
 }
 
 function splitTopLevelCommaList(value) {
@@ -164,7 +173,8 @@ function extractDeclaredTypeBases(source) {
     if (!entries.has(typeName)) entries.set(typeName, []);
     entries.set(typeName, sortedUnique([...entries.get(typeName), ...baseTypes]));
   }
-  return objectFromSortedEntries(entries.entries());
+  return objectFromSortedEntries([...entries.entries()]
+    .map(([typeName, baseTypes]) => [detachedString(typeName), detachedStrings(baseTypes)]));
 }
 
 /**
@@ -187,9 +197,9 @@ function analyzeCSharpSource(text) {
   }
 
   return {
-    declaredTypes: sortedUnique(declaredTypes),
+    declaredTypes: detachedStrings(sortedUnique(declaredTypes)),
     declaredTypeBases: extractDeclaredTypeBases(source),
-    identifierCandidates: sortedUnique(identifierCandidates),
+    identifierCandidates: detachedStrings(sortedUnique(identifierCandidates)),
     resourceLoadPaths: extractResourceLoadPaths(text),
     resourceLoadAllPaths: extractResourceLoadAllPaths(text),
   };

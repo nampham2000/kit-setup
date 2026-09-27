@@ -867,8 +867,32 @@ module.exports = function createAnimationPorter(deps) {
     return { name: controllerName, parameters, states, transitions, childStateIds, anyStateTransitionIds, defaultStateId };
   }
 
-  function cocosConditionFromUnity(condition) {
-    return { __type__: 'cc.animation.TriggerCondition', trigger: condition.event };
+  // Unity AnimatorControllerParameterType: 1 Float, 3 Int, 4 Bool, 9 Trigger.
+  // Cocos 3.8.8 marionette: PlainVariable {_type: VariableType FLOAT 0 / BOOLEAN 1 / INTEGER 3, _value}, TriggerVariable {_flags}.
+  const UNITY_PARAM_TYPE = { FLOAT: 1, INT: 3, BOOL: 4, TRIGGER: 9 };
+  function cocosVariableFromUnity(param) {
+    if (param.type === UNITY_PARAM_TYPE.BOOL) return { __type__: 'cc.animation.PlainVariable', _type: 1, _value: param.defaultBool !== 0 };
+    if (param.type === UNITY_PARAM_TYPE.INT) return { __type__: 'cc.animation.PlainVariable', _type: 3, _value: param.defaultInt };
+    if (param.type === UNITY_PARAM_TYPE.FLOAT) return { __type__: 'cc.animation.PlainVariable', _type: 0, _value: param.defaultFloat };
+    return { __type__: 'cc.animation.TriggerVariable', _flags: 0 };
+  }
+  // Unity AnimatorConditionMode: 1 If, 2 IfNot, 3 Greater, 4 Less, 6 Equals, 7 NotEqual.
+  // Cocos BinaryOperator: EQUAL_TO 0, NOT_EQUAL_TO 1, LESS_THAN 2, LESS_THAN_OR_EQUAL_TO 3, GREATER_THAN 4; UnaryOperator TRUTHY 0 / FALSY 1.
+  const UNITY_CONDITION_OPERATOR = { 3: 4, 4: 2, 6: 0, 7: 1 };
+  function cocosConditionFromUnity(condition, parameterTypes) {
+    const type = parameterTypes.get(condition.event) ?? UNITY_PARAM_TYPE.TRIGGER;
+    if (type === UNITY_PARAM_TYPE.TRIGGER) return { __type__: 'cc.animation.TriggerCondition', trigger: condition.event };
+    if (type === UNITY_PARAM_TYPE.BOOL) {
+      return { __type__: 'cc.animation.UnaryCondition', operator: condition.mode === 2 ? 1 : 0,
+        operand: { __type__: 'cc.animation.BindableBoolean', variable: condition.event, value: false } };
+    }
+    return {
+      __type__: 'cc.animation.BinaryCondition',
+      operator: UNITY_CONDITION_OPERATOR[condition.mode] ?? 0,
+      lhs: 0,
+      lhsBinding: { __type__: 'cc.animation.TCVariableBinding', type: type === UNITY_PARAM_TYPE.INT ? 3 : 0, variableName: condition.event },
+      rhs: condition.threshold,
+    };
   }
 
   function buildCocosAnimationGraph(controller, clipInfoByState) {
@@ -879,8 +903,10 @@ module.exports = function createAnimationPorter(deps) {
     };
 
     const variables = {};
+    const parameterTypes = new Map();
     for (const param of controller.parameters) {
-      variables[param.name] = { __type__: 'cc.animation.TriggerVariable', _flags: 0 };
+      variables[param.name] = cocosVariableFromUnity(param);
+      parameterTypes.set(param.name, param.type);
     }
 
     add({
@@ -954,7 +980,7 @@ module.exports = function createAnimationPorter(deps) {
         __type__: 'cc.animation.AnimationTransition',
         from: cocosRef(fromId),
         to: cocosRef(toId),
-        conditions: transition.conditions.map(cocosConditionFromUnity),
+        conditions: transition.conditions.map((condition) => cocosConditionFromUnity(condition, parameterTypes)),
         destinationStart: 0,
         relativeDestinationStart: false,
         duration: transition.duration,

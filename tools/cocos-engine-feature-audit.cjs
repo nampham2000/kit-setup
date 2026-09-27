@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const net = require('node:net');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
+const { readSharedPreviewIntrinsics, resolveCocosEngineRoot } = require('./cocos-engine-intrinsic-flags.cjs');
 
 const PHYSICS_BACKENDS = Object.freeze([
   'physics-builtin',
@@ -29,7 +30,11 @@ const BACKEND_LABELS = Object.freeze({
 // These Cocos 3.8.8 features intentionally have no cc-fu import-map entry.
 // Some toggle engine intrinsic flags, while others are profile-side hooks.
 // Their applied receipt is therefore the regenerated preview timestamp rather
-// than a non-existent cce:/internal/x/cc-fu/<feature> mapping.
+// than a non-existent cce:/internal/x/cc-fu/<feature> mapping. Intrinsic-flag
+// features (marionette, procedural-animation, spine-x, vendor-google) are first
+// checked against the install-wide engine preview import map, which other open
+// projects rewrite; the timestamp inference is only the fallback when that map
+// cannot be located.
 const IMPORT_MAP_SILENT_FEATURES = new Set([
   'occlusion-query',
   'debug-renderer',
@@ -410,7 +415,7 @@ function engineProfilePath(projectRoot) {
 function parseEngineProfile(bytes, file = 'settings/v2/packages/engine.json') {
   let document;
   try {
-    document = JSON.parse(Buffer.isBuffer(bytes) ? bytes.toString('utf8').replace(/^\uFEFF/, '') : String(bytes));
+    document = JSON.parse((Buffer.isBuffer(bytes) ? bytes.toString('utf8') : String(bytes)).replace(/^\uFEFF/, ''));
   } catch (error) {
     throw new EngineFeatureError('ENGINE_FEATURE_PROFILE_JSON_INVALID', `${file}: ${error.message}`);
   }
@@ -432,6 +437,73 @@ function readEngineProfile(projectRoot) {
   const bytes = fs.readFileSync(file);
   const parsed = parseEngineProfile(bytes, file);
   return { ...parsed, file, bytes, hash: sha256(bytes), modifiedMs: fs.statSync(file).mtimeMs };
+}
+
+function gitCommand(file, args, cwd, timeout = 10_000) {
+  const run = spawnSync(file, args, {
+    cwd, encoding: 'utf8', windowsHide: true, timeout, maxBuffer: 8 * 1024 * 1024,
+  });
+  return {
+    ok: !run.error && run.status === 0,
+    stdout: run.stdout || '',
+    exitCode: Number.isInteger(run.status) ? run.status : null,
+    error: run.error?.message || (run.status === 0 ? null : String(run.stderr || '').trim().slice(0, 400)),
+  };
+}
+
+// The engine profile is portable project state: another checkout only receives
+// the modules Git carries. The index (not HEAD) is read so that staging the file
+// satisfies the gate before the commit that ships it.
+function readTrackedEngineProfile(projectRoot, options = {}) {
+  const runner = options.runner || gitCommand;
+  const relative = 'settings/v2/packages/engine.json';
+  const shown = runner('git', ['show', `:./${relative}`], projectRoot, 10_000);
+  if (shown.ok) {
+    const parsed = parseEngineProfile(shown.stdout, `git index:${relative}`);
+    return { available: true, tracked: true, source: 'git-index', file: relative, ...parsed, hash: sha256(Buffer.from(shown.stdout, 'utf8')) };
+  }
+  const inside = runner('git', ['rev-parse', '--is-inside-work-tree'], projectRoot, 10_000);
+  if (!inside.ok || inside.stdout.trim() !== 'true') {
+    return { available: false, tracked: false, source: 'git-index', file: relative, reason: 'not-a-git-work-tree' };
+  }
+  // `git show` also fails on a timeout or a conflicted (multi-stage) entry: only an
+  // empty index listing proves the profile is untracked.
+  const listed = runner('git', ['ls-files', '--stage', '--', relative], projectRoot, 10_000);
+  if (!listed.ok) {
+    return { available: true, tracked: true, unreadable: true, source: 'git-index', file: relative, reason: 'git-index-unreadable', error: listed.error || null };
+  }
+  if (listed.stdout.trim()) {
+    return { available: true, tracked: true, unreadable: true, source: 'git-index', file: relative, reason: 'engine-profile-index-unreadable', error: shown.error || null };
+  }
+  return { available: true, tracked: false, source: 'git-index', file: relative, reason: 'engine-profile-untracked' };
+}
+
+// Semantic identity of a Feature Cropping config: the effective modules and the
+// selected backends. Cocos rewrites engine.json on open (key/include order, option
+// parents normalized out of includeModules, line endings), so byte diffs are noise.
+function engineProfileSignature(config) {
+  const include = new Set(config.includeModules || []);
+  const enabled = [];
+  const options = {};
+  for (const [name, record] of Object.entries(config.cache || {})) {
+    if (profileFeatureEnabled(config, include, name)) enabled.push(name);
+    if (record?._value === true && typeof record._option === 'string') options[name] = record._option;
+  }
+  return { enabled: enabled.sort(), options };
+}
+
+function engineProfileDrift(trackedConfig, workingConfig) {
+  const tracked = engineProfileSignature(trackedConfig);
+  const working = engineProfileSignature(workingConfig);
+  const drift = [];
+  for (const name of working.enabled) if (!tracked.enabled.includes(name)) drift.push(`+${name}`);
+  for (const name of tracked.enabled) if (!working.enabled.includes(name)) drift.push(`-${name}`);
+  for (const name of new Set([...Object.keys(tracked.options), ...Object.keys(working.options)])) {
+    if (tracked.options[name] !== working.options[name]) {
+      drift.push(`${name}:${tracked.options[name] || 'off'}->${working.options[name] || 'off'}`);
+    }
+  }
+  return drift.sort();
 }
 
 function readAppliedPreviewFeatures(projectRoot) {
@@ -497,43 +569,33 @@ function auditCocosEngineFeatures(projectRoot, options = {}) {
   }
   const spineBackend = resolveSpineBackend(requiredModules, options);
   const physics2dBackend = resolvePhysics2dBackend(requiredModules, options);
+  const plan = { requiredModules, disabledModules, physicsBackend: physicsDecision.backend, spineBackend, physics2dBackend };
   const profile = readEngineProfile(root);
   const include = new Set(profile.config.includeModules);
-  const profileMissing = [];
-  const profileUnexpected = [];
-  for (const moduleName of requiredModules) {
-    if (!profile.config.cache[moduleName]) {
-      profileMissing.push(`${moduleName}:unknown-to-profile`);
-    } else if (!profileFeatureEnabled(profile.config, include, moduleName)) {
-      profileMissing.push(moduleName);
-    }
-  }
-  const selectedBackend = profile.config.cache.physics?._option || null;
-  if (physicsDecision.backend && selectedBackend !== physicsDecision.backend) {
-    profileMissing.push(`physics:${physicsDecision.backend}`);
-  }
-  for (const moduleName of disabledModules) {
-    if (!profile.config.cache[moduleName]) {
-      profileUnexpected.push(`${moduleName}:unknown-to-profile`);
-    } else if (profile.config.cache[moduleName]._value !== false || include.has(moduleName)) {
-      profileUnexpected.push(moduleName);
-    }
-  }
-  const selectedSpineBackend = profile.config.cache.spine?._option || null;
-  if (spineBackend && selectedSpineBackend !== spineBackend) {
-    profileMissing.push(`spine:${spineBackend}`);
-  }
-  const selectedPhysics2dBackend = profile.config.cache['physics-2d']?._option || null;
-  if (physics2dBackend && selectedPhysics2dBackend !== physics2dBackend) {
-    profileMissing.push(`physics-2d:${physics2dBackend}`);
-  }
+  const {
+    missing: profileMissing,
+    unexpected: profileUnexpected,
+    selectedBackend,
+    selectedSpineBackend,
+    selectedPhysics2dBackend,
+  } = evaluateProfileClosure(profile.config, plan);
+  const committedProfile = auditTrackedEngineProfile(root, profile, plan, options);
   const applied = readAppliedPreviewFeatures(root);
+  const sharedEngine = options.sharedEngine || readSharedPreviewIntrinsics(resolveCocosEngineRoot(root, options));
+  const sharedKnows = moduleName => sharedEngine.available
+    && Object.prototype.hasOwnProperty.call(sharedEngine.features, moduleName);
+  const sharedMissing = [];
   const inferredProfileFeatures = [];
   const previewRegeneratedAfterProfile = Number.isFinite(applied.modifiedMs)
     && Number.isFinite(profile.modifiedMs)
     && applied.modifiedMs >= profile.modifiedMs;
   const appliedMissing = applied.available
     ? requiredModules.filter((moduleName) => {
+      if (sharedKnows(moduleName)) {
+        if (sharedEngine.features[moduleName] === true) return false;
+        sharedMissing.push(moduleName);
+        return true;
+      }
       if (appliedFeaturePresent(applied, moduleName, { spineBackend, physics2dBackend })) return false;
       const profileEnabled = profileFeatureEnabled(profile.config, include, moduleName);
       if (IMPORT_MAP_SILENT_FEATURES.has(moduleName) && profileEnabled && previewRegeneratedAfterProfile) {
@@ -546,6 +608,10 @@ function auditCocosEngineFeatures(projectRoot, options = {}) {
   const appliedUnexpected = applied.available
     ? disabledModules.filter(moduleName => applied.features.includes(moduleName) || !previewRegeneratedAfterProfile)
     : [...disabledModules];
+  // A disabled intrinsic feature that is active in the install-wide map was enabled by another
+  // open project. It cannot change a preview that never references the feature, so it is
+  // reported for review instead of failing this project's negative closure.
+  const sharedExtras = disabledModules.filter(moduleName => sharedKnows(moduleName) && sharedEngine.features[moduleName] === true);
   const profileComplete = profileMissing.length === 0 && profileUnexpected.length === 0;
   const complete = profileComplete && applied.available && appliedMissing.length === 0 && appliedUnexpected.length === 0;
   return {
@@ -580,8 +646,106 @@ function auditCocosEngineFeatures(projectRoot, options = {}) {
       missing: appliedMissing,
       unexpected: appliedUnexpected,
       complete: applied.available && appliedMissing.length === 0 && appliedUnexpected.length === 0,
+      sharedEngine: {
+        available: sharedEngine.available,
+        source: sharedEngine.source,
+        sha256: sharedEngine.sha256,
+        modifiedMs: sharedEngine.modifiedMs,
+        features: sharedEngine.features,
+        missing: sharedMissing,
+        extras: sharedExtras,
+        ...(sharedEngine.error ? { error: sharedEngine.error } : {}),
+      },
     },
+    committedProfile,
+    // null when Git cannot be read; otherwise whether a fresh checkout of the
+    // tracked profile satisfies the same closure this working copy needs.
+    portable: committedProfile.available ? committedProfile.complete : null,
     pendingEditorApply: profileComplete && !complete,
+  };
+}
+
+function evaluateProfileClosure(config, plan) {
+  const include = new Set(config.includeModules);
+  const missing = [];
+  const unexpected = [];
+  for (const moduleName of plan.requiredModules) {
+    if (!config.cache[moduleName]) {
+      missing.push(`${moduleName}:unknown-to-profile`);
+    } else if (!profileFeatureEnabled(config, include, moduleName)) {
+      missing.push(moduleName);
+    }
+  }
+  const selectedBackend = config.cache.physics?._option || null;
+  if (plan.physicsBackend && selectedBackend !== plan.physicsBackend) {
+    missing.push(`physics:${plan.physicsBackend}`);
+  }
+  for (const moduleName of plan.disabledModules) {
+    if (!config.cache[moduleName]) {
+      unexpected.push(`${moduleName}:unknown-to-profile`);
+    } else if (config.cache[moduleName]._value !== false || include.has(moduleName)) {
+      unexpected.push(moduleName);
+    }
+  }
+  const selectedSpineBackend = config.cache.spine?._option || null;
+  if (plan.spineBackend && selectedSpineBackend !== plan.spineBackend) {
+    missing.push(`spine:${plan.spineBackend}`);
+  }
+  const selectedPhysics2dBackend = config.cache['physics-2d']?._option || null;
+  if (plan.physics2dBackend && selectedPhysics2dBackend !== plan.physics2dBackend) {
+    missing.push(`physics-2d:${plan.physics2dBackend}`);
+  }
+  return {
+    missing,
+    unexpected,
+    complete: missing.length === 0 && unexpected.length === 0,
+    selectedBackend,
+    selectedSpineBackend,
+    selectedPhysics2dBackend,
+  };
+}
+
+// A working copy can satisfy the closure while the committed profile does not
+// (a tool enabled modules and engine.json was left out of the commit). That
+// checkout previews cleanly; every other checkout fails deserialization with
+// "Can not find class 'cc.SkeletalAnimation'" and similar.
+function auditTrackedEngineProfile(root, workingProfile, plan, options = {}) {
+  if (options.trackedProfile === false) {
+    return { available: false, tracked: false, source: 'git-index', reason: 'disabled', missing: [], unexpected: [], complete: false, driftFromWorkingCopy: [] };
+  }
+  let tracked;
+  try {
+    tracked = readTrackedEngineProfile(root, { runner: options.gitRunner });
+  } catch (error) {
+    return {
+      available: true, tracked: true, source: 'git-index', reason: error.code || 'ENGINE_FEATURE_PROFILE_JSON_INVALID',
+      error: error.message, missing: ['engine-profile:unreadable'], unexpected: [], complete: false, driftFromWorkingCopy: [],
+    };
+  }
+  if (tracked.unreadable) {
+    // Fail closed: a timeout or conflicted index entry proves nothing about the commit.
+    return {
+      available: true, tracked: true, source: tracked.source, file: tracked.file, reason: tracked.reason, error: tracked.error,
+      missing: ['engine-profile:unreadable'], unexpected: [], complete: false, driftFromWorkingCopy: [],
+    };
+  }
+  if (!tracked.available || !tracked.tracked) {
+    return {
+      available: tracked.available, tracked: false, source: tracked.source, file: tracked.file, reason: tracked.reason,
+      missing: tracked.available ? ['engine-profile:untracked'] : [], unexpected: [], complete: false, driftFromWorkingCopy: [],
+    };
+  }
+  const closure = evaluateProfileClosure(tracked.config, plan);
+  return {
+    available: true,
+    tracked: true,
+    source: tracked.source,
+    file: tracked.file,
+    hash: tracked.hash,
+    missing: closure.missing,
+    unexpected: closure.unexpected,
+    complete: closure.complete,
+    driftFromWorkingCopy: engineProfileDrift(tracked.config, workingProfile.config),
   };
 }
 
@@ -814,10 +978,48 @@ async function createMcpClient(projectRoot, options = {}) {
     protocolVersion: '2024-11-05', capabilities: {},
     clientInfo: { name: 'shared-kit-engine-feature-audit', version: '1.0.0' },
   });
-  return {
+  const client = {
     call: (name, args) => rpc('tools/call', { name, arguments: args || {} }),
     close: () => fetch(url, { method: 'DELETE', headers, signal: AbortSignal.timeout(5000) }).catch(() => undefined),
   };
+  if (options.verifyProjectIdentity !== false) {
+    try {
+      await assertMcpProjectIdentity(client, projectRoot);
+    } catch (error) {
+      await client.close();
+      throw error;
+    }
+  }
+  return client;
+}
+
+function sameProjectPath(left, right) {
+  const normalize = value => path.resolve(String(value || '')).replace(/[\\/]+$/, '');
+  const equal = (a, b) => (process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b);
+  if (equal(normalize(left), normalize(right))) return true;
+  // A junction, symlink or subst drive names the same project under another path.
+  try {
+    return equal(normalize(fs.realpathSync.native(normalize(left))), normalize(fs.realpathSync.native(normalize(right))));
+  } catch (_) {
+    return false;
+  }
+}
+
+// Sibling checkouts/worktrees copy settings/mcp-server.json and therefore share
+// the MCP port. Without this check a Profile API write lands in whichever
+// project's editor owns the port.
+async function assertMcpProjectIdentity(client, projectRoot) {
+  const info = unwrapToolResult(await client.call('project_get_project_info', {}));
+  const editorProject = info?.data?.path || info?.path || null;
+  if (!editorProject) {
+    throw new EngineFeatureError('ENGINE_FEATURE_MCP_PROJECT_UNVERIFIED',
+      'Cocos MCP did not report its project path; refusing to change Feature Cropping through it.');
+  }
+  if (!sameProjectPath(editorProject, projectRoot)) {
+    throw new EngineFeatureError('ENGINE_FEATURE_MCP_PROJECT_MISMATCH',
+      'Cocos MCP on this port belongs to a different project; refusing to change its Feature Cropping.',
+      { editorProject, projectRoot });
+  }
 }
 
 function unwrapToolResult(result) {
@@ -963,6 +1165,7 @@ async function ensureCocosEngineFeatures(projectRoot, options = {}) {
     fallbackUsed: false,
     pendingEditorApply: false,
     mcpAttempts: [],
+    sharedEngineReapply: null,
     restartReceipts: [],
     patchReceipt: null,
     initialAudit: audit,
@@ -1031,6 +1234,37 @@ async function ensureCocosEngineFeatures(projectRoot, options = {}) {
     audit = auditCocosEngineFeatures(root, options);
   }
 
+  // Another open project rewrote the install-wide preview map (e.g. without MARIONETTE). The
+  // project's own editor re-emits it with an in-place engine rebuild; no restart is needed.
+  if (!audit.complete && audit.profile.complete && !options.dryRun
+    && audit.appliedPreview.sharedEngine?.missing?.length) {
+    let client;
+    const reapply = { missing: [...audit.appliedPreview.sharedEngine.missing], ok: false };
+    try {
+      client = await createMcpClient(root, options);
+      const raw = await client.call('engineFeature_ensure_features', {
+        modules: audit.requiredModules.filter((name) => !PHYSICS_BACKENDS.includes(name) &&
+          !SPINE_BACKENDS.includes(name) && !PHYSICS_2D_BACKENDS.includes(name)),
+        disabledModules: audit.disabledModules,
+        physicsBackend: audit.physicsDecision.backend || undefined,
+        spineBackend: resolveSpineBackend(audit.requiredModules, options) || undefined,
+        physics2dBackend: resolvePhysics2dBackend(audit.requiredModules, options) || undefined,
+        reload: true,
+        timeoutMs: options.timeoutMs || 240_000,
+      });
+      reapply.receipt = unwrapToolResult(raw);
+      reapply.ok = reapply.receipt?.success !== false;
+    } catch (error) {
+      reapply.code = error.code || 'ENGINE_FEATURE_MCP_ERROR';
+      reapply.error = error.message;
+    } finally {
+      if (client) await client.close();
+    }
+    audit = await waitForEngineApplication(root, options);
+    reapply.complete = audit.complete;
+    result.sharedEngineReapply = reapply;
+  }
+
   if (!audit.complete && options.restart !== false && !options.dryRun) {
     const restart = await restartCocosProject(root, options);
     result.restartReceipts.push(restart);
@@ -1041,8 +1275,19 @@ async function ensureCocosEngineFeatures(projectRoot, options = {}) {
   result.ok = audit.profile.complete;
   result.complete = audit.complete;
   result.pendingEditorApply = !audit.complete;
+  result.portable = audit.portable;
+  const nextAction = portabilityNextAction(audit);
+  if (nextAction) result.nextActions = [nextAction];
   writeAuditReport(root, result, options);
   return result;
+}
+
+function portabilityNextAction(audit) {
+  const committed = audit?.committedProfile;
+  if (!committed?.available || committed.complete) return null;
+  const needed = committed.tracked ? committed.missing.concat(committed.unexpected).join(', ') : 'the whole profile (untracked)';
+  return `Stage and commit ${committed.file || 'settings/v2/packages/engine.json'}: the Git-tracked profile lacks ${needed}, ` +
+    'so other checkouts fail to deserialize these engine classes even though this preview works.';
 }
 
 function parseCli(argv) {
@@ -1096,17 +1341,22 @@ async function main(argv = process.argv.slice(2)) {
   if (options.help) return printHelp();
   const root = path.resolve(options.projectRoot);
   let output;
-  if (options.command === 'audit') output = auditCocosEngineFeatures(root, options);
+  let finalAudit = null;
+  if (options.command === 'audit') output = finalAudit = auditCocosEngineFeatures(root, options);
   else if (options.command === 'ensure') output = await ensureCocosEngineFeatures(root, options);
   else if (options.command === 'patch') {
-    const audit = auditCocosEngineFeatures(root, options);
+    const evidence = scanCocosProject(root, options);
+    const audit = auditCocosEngineFeatures(root, { ...options, evidence });
     output = patchEngineProfile(root, {
       requiredModules: audit.requiredModules,
       physicsBackend: audit.physicsDecision.backend,
       spineBackend: resolveSpineBackend(audit.requiredModules, options),
       physics2dBackend: resolvePhysics2dBackend(audit.requiredModules, options),
     }, options);
+    finalAudit = options.dryRun ? null : auditCocosEngineFeatures(root, { ...options, evidence });
   } else throw new EngineFeatureError('ENGINE_FEATURE_COMMAND_UNKNOWN', `Unknown command: ${options.command}`);
+  const nextAction = portabilityNextAction(finalAudit);
+  if (nextAction) output = { ...output, portable: false, nextActions: [nextAction] };
   console.log(JSON.stringify(output, null, 2));
   if (options.command !== 'patch' && !output.complete) process.exitCode = 1;
 }
@@ -1133,6 +1383,12 @@ module.exports = {
   inferRequiredModules,
   parseEngineProfile,
   readEngineProfile,
+  readTrackedEngineProfile,
+  engineProfileSignature,
+  engineProfileDrift,
+  evaluateProfileClosure,
+  portabilityNextAction,
+  assertMcpProjectIdentity,
   readAppliedPreviewFeatures,
   auditCocosEngineFeatures,
   patchEngineProfile,

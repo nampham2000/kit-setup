@@ -1,0 +1,2834 @@
+{
+  "schemaVersion": 1,
+  "scope": "Native automatic Play Mode samples, 60 Hz; original Electro lifetime/rate/capacity",
+  "sourceSha256": "7e8802f1fa0bc15d24ee196436b695227095fefef4e2e5107bde25ab2803cefb",
+  "producerSha256": "8051e1ce00114a625ed29192b4d9af84a41538b60adaecb838952630415ff585",
+  "rows": [
+    {
+      "name": "Ef_Charge_01",
+      "viewport": "1280x720",
+      "manifestSha256": "d272ab7c522735da99fe9a7e23be4e3f9097383b5643c738ea72d859258ff3d9",
+      "seed": 2801410621,
+      "loop": true,
+      "duration": 1,
+      "capacity": 2,
+      "rate": 2.299999952316284,
+      "lifetime": {
+        "serializedVersion": "2",
+        "minMaxState": 3,
+        "scalar": 1,
+        "minScalar": 0.5,
+        "maxCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 1,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        },
+        "minCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0.5,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        }
+      },
+      "frames": [
+        {
+          "frame": 0,
+          "particles": []
+        },
+        {
+          "frame": 15,
+          "particles": []
+        },
+        {
+          "frame": 30,
+          "particles": [
+            {
+              "seed": 3337817714,
+              "startLifetime": 0.903137743473053,
+              "remaining": 0.8212535381317139
+            }
+          ]
+        },
+        {
+          "frame": 59,
+          "particles": [
+            {
+              "seed": 3337817714,
+              "startLifetime": 0.903137743473053,
+              "remaining": 0.33792033791542053
+            },
+            {
+              "seed": 2283423403,
+              "startLifetime": 0.678817629814148,
+              "remaining": 0.5483830571174622
+            }
+          ]
+        },
+        {
+          "frame": 60,
+          "particles": [
+            {
+              "seed": 3337817714,
+              "startLifetime": 0.903137743473053,
+              "remaining": 0.32125359773635864
+            },
+            {
+              "seed": 2283423403,
+              "startLifetime": 0.678817629814148,
+              "remaining": 0.5317164063453674
+            }
+          ]
+        },
+        {
+          "frame": 61,
+          "particles": [
+            {
+              "seed": 3337817714,
+              "startLifetime": 0.903137743473053,
+              "remaining": 0.30458691716194153
+            },
+            {
+              "seed": 2283423403,
+              "startLifetime": 0.678817629814148,
+              "remaining": 0.5150496959686279
+            }
+          ]
+        },
+        {
+          "frame": 120,
+          "particles": [
+            {
+              "seed": 2589119050,
+              "startLifetime": 0.6520280241966248,
+              "remaining": 0.37449198961257935
+            }
+          ]
+        },
+        {
+          "frame": 240,
+          "particles": [
+            {
+              "seed": 380054258,
+              "startLifetime": 0.5925902724266052,
+              "remaining": 0.054185088723897934
+            },
+            {
+              "seed": 3109994054,
+              "startLifetime": 0.9064449667930603,
+              "remaining": 0.8028227090835571
+            }
+          ]
+        },
+        {
+          "frame": 300,
+          "particles": [
+            {
+              "seed": 3649084914,
+              "startLifetime": 0.9527174830436707,
+              "remaining": 0.2838776409626007
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Ef_Charge_01",
+      "viewport": "720x1280",
+      "manifestSha256": "1a373c317585e7928508093e6178a99c8e3f2c567b4195d5156c2ec6f54ad21b",
+      "seed": 2811933249,
+      "loop": true,
+      "duration": 1,
+      "capacity": 2,
+      "rate": 2.299999952316284,
+      "lifetime": {
+        "serializedVersion": "2",
+        "minMaxState": 3,
+        "scalar": 1,
+        "minScalar": 0.5,
+        "maxCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 1,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        },
+        "minCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0.5,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        }
+      },
+      "frames": [
+        {
+          "frame": 0,
+          "particles": []
+        },
+        {
+          "frame": 15,
+          "particles": []
+        },
+        {
+          "frame": 30,
+          "particles": [
+            {
+              "seed": 261178714,
+              "startLifetime": 0.8348561525344849,
+              "remaining": 0.7529719471931458
+            }
+          ]
+        },
+        {
+          "frame": 59,
+          "particles": [
+            {
+              "seed": 261178714,
+              "startLifetime": 0.8348561525344849,
+              "remaining": 0.2696385085582733
+            },
+            {
+              "seed": 3397171063,
+              "startLifetime": 0.87518310546875,
+              "remaining": 0.7447485327720642
+            }
+          ]
+        },
+        {
+          "frame": 60,
+          "particles": [
+            {
+              "seed": 261178714,
+              "startLifetime": 0.8348561525344849,
+              "remaining": 0.2529718279838562
+            },
+            {
+              "seed": 3397171063,
+              "startLifetime": 0.87518310546875,
+              "remaining": 0.7280818223953247
+            }
+          ]
+        },
+        {
+          "frame": 61,
+          "particles": [
+            {
+              "seed": 261178714,
+              "startLifetime": 0.8348561525344849,
+              "remaining": 0.2363051325082779
+            },
+            {
+              "seed": 3397171063,
+              "startLifetime": 0.87518310546875,
+              "remaining": 0.71141517162323
+            }
+          ]
+        },
+        {
+          "frame": 120,
+          "particles": [
+            {
+              "seed": 1532807757,
+              "startLifetime": 0.7237862348556519,
+              "remaining": 0.011467918753623962
+            },
+            {
+              "seed": 504715556,
+              "startLifetime": 0.6920301914215088,
+              "remaining": 0.41449427604675293
+            }
+          ]
+        },
+        {
+          "frame": 240,
+          "particles": [
+            {
+              "seed": 4135533483,
+              "startLifetime": 0.915657639503479,
+              "remaining": 0.3772521913051605
+            },
+            {
+              "seed": 1101078129,
+              "startLifetime": 0.5079639554023743,
+              "remaining": 0.4043416380882263
+            }
+          ]
+        },
+        {
+          "frame": 300,
+          "particles": [
+            {
+              "seed": 950185724,
+              "startLifetime": 0.7573111653327942,
+              "remaining": 0.5232540369033813
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Ef_Charge_Arm_01",
+      "viewport": "1280x720",
+      "manifestSha256": "64b1269888528faa7f9d47d28ed636748c4b2155eaeca1b803c94a4302508eea",
+      "seed": 2101331271,
+      "loop": true,
+      "duration": 4,
+      "capacity": 2,
+      "rate": 40,
+      "lifetime": {
+        "serializedVersion": "2",
+        "minMaxState": 0,
+        "scalar": 0.25,
+        "minScalar": 5,
+        "maxCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 1,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 1,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        },
+        "minCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        }
+      },
+      "frames": [
+        {
+          "frame": 0,
+          "particles": []
+        },
+        {
+          "frame": 15,
+          "particles": [
+            {
+              "seed": 1610528765,
+              "startLifetime": 0.25,
+              "remaining": 0.008333340287208557
+            },
+            {
+              "seed": 1278436680,
+              "startLifetime": 0.25,
+              "remaining": 0.03333333134651184
+            }
+          ]
+        },
+        {
+          "frame": 30,
+          "particles": [
+            {
+              "seed": 1153392551,
+              "startLifetime": 0.25,
+              "remaining": 0.008333325386047363
+            },
+            {
+              "seed": 4219237017,
+              "startLifetime": 0.25,
+              "remaining": 0.05833326280117035
+            }
+          ]
+        },
+        {
+          "frame": 59,
+          "particles": [
+            {
+              "seed": 2253771779,
+              "startLifetime": 0.25,
+              "remaining": 0.025000080466270447
+            },
+            {
+              "seed": 1508342242,
+              "startLifetime": 0.25,
+              "remaining": 0.07500012218952179
+            }
+          ]
+        },
+        {
+          "frame": 60,
+          "particles": [
+            {
+              "seed": 2253771779,
+              "startLifetime": 0.25,
+              "remaining": 0.008333414793014526
+            },
+            {
+              "seed": 1508342242,
+              "startLifetime": 0.25,
+              "remaining": 0.05833345651626587
+            }
+          ]
+        },
+        {
+          "frame": 61,
+          "particles": [
+            {
+              "seed": 1508342242,
+              "startLifetime": 0.25,
+              "remaining": 0.04166680574417114
+            },
+            {
+              "seed": 285260170,
+              "startLifetime": 0.25,
+              "remaining": 0.24166692793369293
+            }
+          ]
+        },
+        {
+          "frame": 120,
+          "particles": [
+            {
+              "seed": 1888947748,
+              "startLifetime": 0.25,
+              "remaining": 0.008334323763847351
+            },
+            {
+              "seed": 628885175,
+              "startLifetime": 0.25,
+              "remaining": 0.0583343505859375
+            }
+          ]
+        },
+        {
+          "frame": 240,
+          "particles": [
+            {
+              "seed": 1028777705,
+              "startLifetime": 0.25,
+              "remaining": 0.008336231112480164
+            },
+            {
+              "seed": 1776510059,
+              "startLifetime": 0.25,
+              "remaining": 0.05833625793457031
+            }
+          ]
+        },
+        {
+          "frame": 300,
+          "particles": [
+            {
+              "seed": 3795330389,
+              "startLifetime": 0.25,
+              "remaining": 0.00833652913570404
+            },
+            {
+              "seed": 1830683390,
+              "startLifetime": 0.25,
+              "remaining": 0.058336541056632996
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Ef_Charge_Arm_01",
+      "viewport": "720x1280",
+      "manifestSha256": "f5ce210fca702b22d9b65e2419a198798b6553e81d89e61e6b4f2da18477b5d0",
+      "seed": 2598398206,
+      "loop": true,
+      "duration": 4,
+      "capacity": 2,
+      "rate": 40,
+      "lifetime": {
+        "serializedVersion": "2",
+        "minMaxState": 0,
+        "scalar": 0.25,
+        "minScalar": 5,
+        "maxCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 1,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 1,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        },
+        "minCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        }
+      },
+      "frames": [
+        {
+          "frame": 0,
+          "particles": []
+        },
+        {
+          "frame": 15,
+          "particles": [
+            {
+              "seed": 3870149009,
+              "startLifetime": 0.25,
+              "remaining": 0.008333340287208557
+            },
+            {
+              "seed": 3452476212,
+              "startLifetime": 0.25,
+              "remaining": 0.03333333134651184
+            }
+          ]
+        },
+        {
+          "frame": 30,
+          "particles": [
+            {
+              "seed": 339152478,
+              "startLifetime": 0.25,
+              "remaining": 0.008333325386047363
+            },
+            {
+              "seed": 657613771,
+              "startLifetime": 0.25,
+              "remaining": 0.05833326280117035
+            }
+          ]
+        },
+        {
+          "frame": 59,
+          "particles": [
+            {
+              "seed": 3514658935,
+              "startLifetime": 0.25,
+              "remaining": 0.025000080466270447
+            },
+            {
+              "seed": 2921072326,
+              "startLifetime": 0.25,
+              "remaining": 0.07500012218952179
+            }
+          ]
+        },
+        {
+          "frame": 60,
+          "particles": [
+            {
+              "seed": 3514658935,
+              "startLifetime": 0.25,
+              "remaining": 0.008333414793014526
+            },
+            {
+              "seed": 2921072326,
+              "startLifetime": 0.25,
+              "remaining": 0.05833345651626587
+            }
+          ]
+        },
+        {
+          "frame": 61,
+          "particles": [
+            {
+              "seed": 2921072326,
+              "startLifetime": 0.25,
+              "remaining": 0.04166680574417114
+            },
+            {
+              "seed": 4236093788,
+              "startLifetime": 0.25,
+              "remaining": 0.24166692793369293
+            }
+          ]
+        },
+        {
+          "frame": 120,
+          "particles": [
+            {
+              "seed": 2060396594,
+              "startLifetime": 0.25,
+              "remaining": 0.008334323763847351
+            },
+            {
+              "seed": 237980833,
+              "startLifetime": 0.25,
+              "remaining": 0.0583343505859375
+            }
+          ]
+        },
+        {
+          "frame": 240,
+          "particles": [
+            {
+              "seed": 1919281130,
+              "startLifetime": 0.25,
+              "remaining": 0.008336231112480164
+            },
+            {
+              "seed": 69069430,
+              "startLifetime": 0.25,
+              "remaining": 0.05833625793457031
+            }
+          ]
+        },
+        {
+          "frame": 300,
+          "particles": [
+            {
+              "seed": 923662828,
+              "startLifetime": 0.25,
+              "remaining": 0.00833652913570404
+            },
+            {
+              "seed": 3267647945,
+              "startLifetime": 0.25,
+              "remaining": 0.058336541056632996
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Ef_El_Spakles_01",
+      "viewport": "1280x720",
+      "manifestSha256": "09147db42e2c669f3f67b20c8830ce25fdfb0ca10ea73876c98cedb8a8771c26",
+      "seed": 2280525287,
+      "loop": true,
+      "duration": 2,
+      "capacity": 4,
+      "rate": 5,
+      "lifetime": {
+        "serializedVersion": "2",
+        "minMaxState": 3,
+        "scalar": 1,
+        "minScalar": 0.800000011920929,
+        "maxCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 1,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        },
+        "minCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0.800000011920929,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        }
+      },
+      "frames": [
+        {
+          "frame": 0,
+          "particles": []
+        },
+        {
+          "frame": 15,
+          "particles": [
+            {
+              "seed": 2472875706,
+              "startLifetime": 0.8535875678062439,
+              "remaining": 0.7869209051132202
+            }
+          ]
+        },
+        {
+          "frame": 30,
+          "particles": [
+            {
+              "seed": 2472875706,
+              "startLifetime": 0.8535875678062439,
+              "remaining": 0.5369209051132202
+            },
+            {
+              "seed": 63795208,
+              "startLifetime": 0.8851691484451294,
+              "remaining": 0.768502414226532
+            }
+          ]
+        },
+        {
+          "frame": 59,
+          "particles": [
+            {
+              "seed": 2472875706,
+              "startLifetime": 0.8535875678062439,
+              "remaining": 0.05358707532286644
+            },
+            {
+              "seed": 63795208,
+              "startLifetime": 0.8851691484451294,
+              "remaining": 0.2851687967777252
+            },
+            {
+              "seed": 1072185866,
+              "startLifetime": 0.8538358807563782,
+              "remaining": 0.4538358449935913
+            },
+            {
+              "seed": 765235488,
+              "startLifetime": 0.8062909245491028,
+              "remaining": 0.6062911152839661
+            }
+          ]
+        },
+        {
+          "frame": 60,
+          "particles": [
+            {
+              "seed": 2472875706,
+              "startLifetime": 0.8535875678062439,
+              "remaining": 0.03692037984728813
+            },
+            {
+              "seed": 63795208,
+              "startLifetime": 0.8851691484451294,
+              "remaining": 0.2685021162033081
+            },
+            {
+              "seed": 1072185866,
+              "startLifetime": 0.8538358807563782,
+              "remaining": 0.4371691346168518
+            },
+            {
+              "seed": 765235488,
+              "startLifetime": 0.8062909245491028,
+              "remaining": 0.5896244645118713
+            }
+          ]
+        },
+        {
+          "frame": 61,
+          "particles": [
+            {
+              "seed": 2472875706,
+              "startLifetime": 0.8535875678062439,
+              "remaining": 0.020253682509064674
+            },
+            {
+              "seed": 63795208,
+              "startLifetime": 0.8851691484451294,
+              "remaining": 0.251835435628891
+            },
+            {
+              "seed": 1072185866,
+              "startLifetime": 0.8538358807563782,
+              "remaining": 0.4205024838447571
+            },
+            {
+              "seed": 765235488,
+              "startLifetime": 0.8062909245491028,
+              "remaining": 0.5729578137397766
+            }
+          ]
+        },
+        {
+          "frame": 120,
+          "particles": [
+            {
+              "seed": 1534278076,
+              "startLifetime": 0.9140154719352722,
+              "remaining": 0.2973494827747345
+            },
+            {
+              "seed": 1938248351,
+              "startLifetime": 0.8216848969459534,
+              "remaining": 0.6050192713737488
+            },
+            {
+              "seed": 2149690817,
+              "startLifetime": 0.9437009692192078,
+              "remaining": 0.527035117149353
+            },
+            {
+              "seed": 3155259364,
+              "startLifetime": 0.9393216371536255,
+              "remaining": 0.922656238079071
+            }
+          ]
+        },
+        {
+          "frame": 240,
+          "particles": [
+            {
+              "seed": 93027116,
+              "startLifetime": 0.9000256657600403,
+              "remaining": 0.4833610951900482
+            },
+            {
+              "seed": 1738962956,
+              "startLifetime": 0.9909262657165527,
+              "remaining": 0.37426164746284485
+            },
+            {
+              "seed": 2574405548,
+              "startLifetime": 0.9881477952003479,
+              "remaining": 0.7714834809303284
+            },
+            {
+              "seed": 4094588096,
+              "startLifetime": 0.986207127571106,
+              "remaining": 0.969542920589447
+            }
+          ]
+        },
+        {
+          "frame": 300,
+          "particles": [
+            {
+              "seed": 350213878,
+              "startLifetime": 0.9310840368270874,
+              "remaining": 0.31441986560821533
+            },
+            {
+              "seed": 2602027336,
+              "startLifetime": 0.9961485862731934,
+              "remaining": 0.7794845104217529
+            },
+            {
+              "seed": 2355905795,
+              "startLifetime": 0.8280283808708191,
+              "remaining": 0.4113641679286957
+            },
+            {
+              "seed": 2001591142,
+              "startLifetime": 0.9330035448074341,
+              "remaining": 0.9163396954536438
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Ef_El_Spakles_01",
+      "viewport": "720x1280",
+      "manifestSha256": "ad39672570c3510f007dd8c3d7b261f49b8a930dd5aea7477cb54308f2b5e167",
+      "seed": 516956796,
+      "loop": true,
+      "duration": 2,
+      "capacity": 4,
+      "rate": 5,
+      "lifetime": {
+        "serializedVersion": "2",
+        "minMaxState": 3,
+        "scalar": 1,
+        "minScalar": 0.800000011920929,
+        "maxCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 1,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        },
+        "minCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0.800000011920929,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        }
+      },
+      "frames": [
+        {
+          "frame": 0,
+          "particles": []
+        },
+        {
+          "frame": 15,
+          "particles": [
+            {
+              "seed": 2606957682,
+              "startLifetime": 0.909054160118103,
+              "remaining": 0.8423874974250793
+            }
+          ]
+        },
+        {
+          "frame": 30,
+          "particles": [
+            {
+              "seed": 2606957682,
+              "startLifetime": 0.909054160118103,
+              "remaining": 0.5923874974250793
+            },
+            {
+              "seed": 3599307804,
+              "startLifetime": 0.8728640079498291,
+              "remaining": 0.7561972737312317
+            }
+          ]
+        },
+        {
+          "frame": 59,
+          "particles": [
+            {
+              "seed": 2606957682,
+              "startLifetime": 0.909054160118103,
+              "remaining": 0.1090543195605278
+            },
+            {
+              "seed": 3599307804,
+              "startLifetime": 0.8728640079498291,
+              "remaining": 0.2728637456893921
+            },
+            {
+              "seed": 1986048310,
+              "startLifetime": 0.9267944097518921,
+              "remaining": 0.5267943739891052
+            },
+            {
+              "seed": 3664917516,
+              "startLifetime": 0.8128544092178345,
+              "remaining": 0.612854540348053
+            }
+          ]
+        },
+        {
+          "frame": 60,
+          "particles": [
+            {
+              "seed": 2606957682,
+              "startLifetime": 0.909054160118103,
+              "remaining": 0.09238769114017487
+            },
+            {
+              "seed": 3599307804,
+              "startLifetime": 0.8728640079498291,
+              "remaining": 0.25619709491729736
+            },
+            {
+              "seed": 1986048310,
+              "startLifetime": 0.9267944097518921,
+              "remaining": 0.5101277828216553
+            },
+            {
+              "seed": 3664917516,
+              "startLifetime": 0.8128544092178345,
+              "remaining": 0.5961878895759583
+            }
+          ]
+        },
+        {
+          "frame": 61,
+          "particles": [
+            {
+              "seed": 2606957682,
+              "startLifetime": 0.909054160118103,
+              "remaining": 0.07572106271982193
+            },
+            {
+              "seed": 3599307804,
+              "startLifetime": 0.8728640079498291,
+              "remaining": 0.23953042924404144
+            },
+            {
+              "seed": 1986048310,
+              "startLifetime": 0.9267944097518921,
+              "remaining": 0.4934610426425934
+            },
+            {
+              "seed": 3664917516,
+              "startLifetime": 0.8128544092178345,
+              "remaining": 0.5795211791992188
+            }
+          ]
+        },
+        {
+          "frame": 120,
+          "particles": [
+            {
+              "seed": 3346280607,
+              "startLifetime": 0.9103795886039734,
+              "remaining": 0.29371359944343567
+            },
+            {
+              "seed": 2935028708,
+              "startLifetime": 0.970628023147583,
+              "remaining": 0.15396159887313843
+            },
+            {
+              "seed": 1295110510,
+              "startLifetime": 0.8298900127410889,
+              "remaining": 0.4132242500782013
+            },
+            {
+              "seed": 2368947040,
+              "startLifetime": 0.9507213234901428,
+              "remaining": 0.7340556979179382
+            }
+          ]
+        },
+        {
+          "frame": 240,
+          "particles": [
+            {
+              "seed": 114136919,
+              "startLifetime": 0.9150844216346741,
+              "remaining": 0.49841979146003723
+            },
+            {
+              "seed": 612545879,
+              "startLifetime": 0.8461227416992188,
+              "remaining": 0.2294580489397049
+            },
+            {
+              "seed": 4244222640,
+              "startLifetime": 0.945127546787262,
+              "remaining": 0.1284627914428711
+            },
+            {
+              "seed": 3742581252,
+              "startLifetime": 0.856656551361084,
+              "remaining": 0.6399921774864197
+            }
+          ]
+        },
+        {
+          "frame": 300,
+          "particles": [
+            {
+              "seed": 4252099773,
+              "startLifetime": 0.826554000377655,
+              "remaining": 0.20988988876342773
+            },
+            {
+              "seed": 3886976752,
+              "startLifetime": 0.8547699451446533,
+              "remaining": 0.03810527175664902
+            },
+            {
+              "seed": 821502534,
+              "startLifetime": 0.8483516573905945,
+              "remaining": 0.4316873550415039
+            },
+            {
+              "seed": 1056463658,
+              "startLifetime": 0.8073232173919678,
+              "remaining": 0.5906591415405273
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Ef_ElectroDamage_01",
+      "viewport": "1280x720",
+      "manifestSha256": "8acdb683b4cf3791cd331b9745d1b5aca4ef084ac48848acb94a2eed4d02c9c6",
+      "seed": 971192727,
+      "loop": true,
+      "duration": 2,
+      "capacity": 4,
+      "rate": 10,
+      "lifetime": {
+        "serializedVersion": "2",
+        "minMaxState": 3,
+        "scalar": 1,
+        "minScalar": 0.5,
+        "maxCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 1,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 1,
+              "inSlope": 1,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        },
+        "minCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0.5,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 0.5,
+              "inSlope": 0.5,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        }
+      },
+      "frames": [
+        {
+          "frame": 0,
+          "particles": []
+        },
+        {
+          "frame": 15,
+          "particles": [
+            {
+              "seed": 108307203,
+              "startLifetime": 0.6372145414352417,
+              "remaining": 0.4705478549003601
+            },
+            {
+              "seed": 1294904262,
+              "startLifetime": 0.854829728603363,
+              "remaining": 0.7881630659103394
+            }
+          ]
+        },
+        {
+          "frame": 30,
+          "particles": [
+            {
+              "seed": 108307203,
+              "startLifetime": 0.6372145414352417,
+              "remaining": 0.22054779529571533
+            },
+            {
+              "seed": 1294904262,
+              "startLifetime": 0.854829728603363,
+              "remaining": 0.5381630063056946
+            },
+            {
+              "seed": 855979232,
+              "startLifetime": 0.5120488405227661,
+              "remaining": 0.29538214206695557
+            },
+            {
+              "seed": 2108130987,
+              "startLifetime": 0.9720099568367004,
+              "remaining": 0.8553431630134583
+            }
+          ]
+        },
+        {
+          "frame": 59,
+          "particles": [
+            {
+              "seed": 2108130987,
+              "startLifetime": 0.9720099568367004,
+              "remaining": 0.37200966477394104
+            },
+            {
+              "seed": 1294904262,
+              "startLifetime": 0.854829728603363,
+              "remaining": 0.05482945963740349
+            },
+            {
+              "seed": 1502891845,
+              "startLifetime": 0.5055563449859619,
+              "remaining": 0.3055564761161804
+            },
+            {
+              "seed": 728137845,
+              "startLifetime": 0.7583321332931519,
+              "remaining": 0.658332347869873
+            }
+          ]
+        },
+        {
+          "frame": 60,
+          "particles": [
+            {
+              "seed": 2108130987,
+              "startLifetime": 0.9720099568367004,
+              "remaining": 0.3553430140018463
+            },
+            {
+              "seed": 1294904262,
+              "startLifetime": 0.854829728603363,
+              "remaining": 0.03816276043653488
+            },
+            {
+              "seed": 1502891845,
+              "startLifetime": 0.5055563449859619,
+              "remaining": 0.2888897955417633
+            },
+            {
+              "seed": 728137845,
+              "startLifetime": 0.7583321332931519,
+              "remaining": 0.6416656970977783
+            }
+          ]
+        },
+        {
+          "frame": 61,
+          "particles": [
+            {
+              "seed": 2108130987,
+              "startLifetime": 0.9720099568367004,
+              "remaining": 0.3386763632297516
+            },
+            {
+              "seed": 1294904262,
+              "startLifetime": 0.854829728603363,
+              "remaining": 0.021496115252375603
+            },
+            {
+              "seed": 1502891845,
+              "startLifetime": 0.5055563449859619,
+              "remaining": 0.2722231149673462
+            },
+            {
+              "seed": 728137845,
+              "startLifetime": 0.7583321332931519,
+              "remaining": 0.6249990463256836
+            }
+          ]
+        },
+        {
+          "frame": 120,
+          "particles": [
+            {
+              "seed": 2322205345,
+              "startLifetime": 0.9318511486053467,
+              "remaining": 0.21518507599830627
+            },
+            {
+              "seed": 2435045854,
+              "startLifetime": 0.7787913084030151,
+              "remaining": 0.1621253490447998
+            },
+            {
+              "seed": 1177304262,
+              "startLifetime": 0.5318988561630249,
+              "remaining": 0.21523311734199524
+            },
+            {
+              "seed": 4282825142,
+              "startLifetime": 0.6455528140068054,
+              "remaining": 0.6288873553276062
+            }
+          ]
+        },
+        {
+          "frame": 240,
+          "particles": [
+            {
+              "seed": 4058826883,
+              "startLifetime": 0.9092741012573242,
+              "remaining": 0.5926095247268677
+            },
+            {
+              "seed": 2484670417,
+              "startLifetime": 0.7974126935005188,
+              "remaining": 0.38074812293052673
+            },
+            {
+              "seed": 1376558423,
+              "startLifetime": 0.520322859287262,
+              "remaining": 0.3036583662033081
+            },
+            {
+              "seed": 1940942131,
+              "startLifetime": 0.7815862894058228,
+              "remaining": 0.6649219393730164
+            }
+          ]
+        },
+        {
+          "frame": 300,
+          "particles": [
+            {
+              "seed": 651022413,
+              "startLifetime": 0.6325104832649231,
+              "remaining": 0.11584606021642685
+            },
+            {
+              "seed": 673062580,
+              "startLifetime": 0.8711743950843811,
+              "remaining": 0.454509973526001
+            },
+            {
+              "seed": 15480213,
+              "startLifetime": 0.8743599653244019,
+              "remaining": 0.257695734500885
+            },
+            {
+              "seed": 1461241212,
+              "startLifetime": 0.7637107968330383,
+              "remaining": 0.44704651832580566
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Ef_ElectroDamage_01",
+      "viewport": "720x1280",
+      "manifestSha256": "879513537056078a543703c43c9e6bb6fcc4ee7fb16c07f4f34f7c2d6056a61b",
+      "seed": 295823402,
+      "loop": true,
+      "duration": 2,
+      "capacity": 4,
+      "rate": 10,
+      "lifetime": {
+        "serializedVersion": "2",
+        "minMaxState": 3,
+        "scalar": 1,
+        "minScalar": 0.5,
+        "maxCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 1,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 1,
+              "inSlope": 1,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        },
+        "minCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0,
+              "inSlope": 0,
+              "outSlope": 0.5,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            },
+            {
+              "serializedVersion": "3",
+              "time": 1,
+              "value": 0.5,
+              "inSlope": 0.5,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        }
+      },
+      "frames": [
+        {
+          "frame": 0,
+          "particles": []
+        },
+        {
+          "frame": 15,
+          "particles": [
+            {
+              "seed": 3225081931,
+              "startLifetime": 0.9086201786994934,
+              "remaining": 0.7419535517692566
+            },
+            {
+              "seed": 146327877,
+              "startLifetime": 0.9896552562713623,
+              "remaining": 0.9229885935783386
+            }
+          ]
+        },
+        {
+          "frame": 30,
+          "particles": [
+            {
+              "seed": 3225081931,
+              "startLifetime": 0.9086201786994934,
+              "remaining": 0.491953581571579
+            },
+            {
+              "seed": 146327877,
+              "startLifetime": 0.9896552562713623,
+              "remaining": 0.6729886531829834
+            },
+            {
+              "seed": 1100232035,
+              "startLifetime": 0.951842725276947,
+              "remaining": 0.7351759672164917
+            },
+            {
+              "seed": 1405848152,
+              "startLifetime": 0.6256986856460571,
+              "remaining": 0.5090318918228149
+            }
+          ]
+        },
+        {
+          "frame": 59,
+          "particles": [
+            {
+              "seed": 3225081931,
+              "startLifetime": 0.9086201786994934,
+              "remaining": 0.00862059649080038
+            },
+            {
+              "seed": 146327877,
+              "startLifetime": 0.9896552562713623,
+              "remaining": 0.1896549016237259
+            },
+            {
+              "seed": 1100232035,
+              "startLifetime": 0.951842725276947,
+              "remaining": 0.25184276700019836
+            },
+            {
+              "seed": 1405848152,
+              "startLifetime": 0.6256986856460571,
+              "remaining": 0.025698628276586533
+            }
+          ]
+        },
+        {
+          "frame": 60,
+          "particles": [
+            {
+              "seed": 1405848152,
+              "startLifetime": 0.6256986856460571,
+              "remaining": 0.00903195608407259
+            },
+            {
+              "seed": 146327877,
+              "startLifetime": 0.9896552562713623,
+              "remaining": 0.17298823595046997
+            },
+            {
+              "seed": 1100232035,
+              "startLifetime": 0.951842725276947,
+              "remaining": 0.23517610132694244
+            },
+            {
+              "seed": 378662989,
+              "startLifetime": 0.5528426170349121,
+              "remaining": 0.5361762642860413
+            }
+          ]
+        },
+        {
+          "frame": 61,
+          "particles": [
+            {
+              "seed": 378662989,
+              "startLifetime": 0.5528426170349121,
+              "remaining": 0.5195095539093018
+            },
+            {
+              "seed": 146327877,
+              "startLifetime": 0.9896552562713623,
+              "remaining": 0.15632157027721405
+            },
+            {
+              "seed": 1100232035,
+              "startLifetime": 0.951842725276947,
+              "remaining": 0.21850940585136414
+            }
+          ]
+        },
+        {
+          "frame": 120,
+          "particles": [
+            {
+              "seed": 1158735368,
+              "startLifetime": 0.5120000243186951,
+              "remaining": 0.1953343003988266
+            },
+            {
+              "seed": 2447971874,
+              "startLifetime": 0.6137703061103821,
+              "remaining": 0.19710439443588257
+            },
+            {
+              "seed": 167372945,
+              "startLifetime": 0.8782128095626831,
+              "remaining": 0.8615473508834839
+            }
+          ]
+        },
+        {
+          "frame": 240,
+          "particles": [
+            {
+              "seed": 4011439385,
+              "startLifetime": 0.8057258129119873,
+              "remaining": 0.38906124234199524
+            },
+            {
+              "seed": 3654997831,
+              "startLifetime": 0.6595125198364258,
+              "remaining": 0.4428480863571167
+            },
+            {
+              "seed": 4111124721,
+              "startLifetime": 0.692757248878479,
+              "remaining": 0.6760929822921753
+            }
+          ]
+        },
+        {
+          "frame": 300,
+          "particles": [
+            {
+              "seed": 4196749203,
+              "startLifetime": 0.6470733880996704,
+              "remaining": 0.3304091989994049
+            },
+            {
+              "seed": 3523935615,
+              "startLifetime": 0.936641275882721,
+              "remaining": 0.31997692584991455
+            },
+            {
+              "seed": 1221396090,
+              "startLifetime": 0.8086116313934326,
+              "remaining": 0.29194721579551697
+            },
+            {
+              "seed": 741669283,
+              "startLifetime": 0.7367945909500122,
+              "remaining": 0.6201304793357849
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Ef_Lightning_Paw_01",
+      "viewport": "1280x720",
+      "manifestSha256": "0fe479faabd2db95b442fd133c1e8f1ab9f1661bc70e1f01760470c7301d7c6f",
+      "seed": 1536417695,
+      "loop": true,
+      "duration": 2,
+      "capacity": 6,
+      "rate": 20,
+      "lifetime": {
+        "serializedVersion": "2",
+        "minMaxState": 3,
+        "scalar": 0.5,
+        "minScalar": 0.30000001192092896,
+        "maxCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 1,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        },
+        "minCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0.6000000238418579,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        }
+      },
+      "frames": [
+        {
+          "frame": 0,
+          "particles": []
+        },
+        {
+          "frame": 15,
+          "particles": [
+            {
+              "seed": 3780245733,
+              "startLifetime": 0.3493027687072754,
+              "remaining": 0.13263612985610962
+            },
+            {
+              "seed": 1909961575,
+              "startLifetime": 0.32185131311416626,
+              "remaining": 0.15518464148044586
+            },
+            {
+              "seed": 258323827,
+              "startLifetime": 0.4412950575351715,
+              "remaining": 0.32462838292121887
+            },
+            {
+              "seed": 1004677242,
+              "startLifetime": 0.4715551733970642,
+              "remaining": 0.4048885107040405
+            },
+            {
+              "seed": 21787442,
+              "startLifetime": 0.38037753105163574,
+              "remaining": 0.363710880279541
+            }
+          ]
+        },
+        {
+          "frame": 30,
+          "particles": [
+            {
+              "seed": 2307007164,
+              "startLifetime": 0.32016122341156006,
+              "remaining": 0.10349450260400772
+            },
+            {
+              "seed": 608573912,
+              "startLifetime": 0.30096572637557983,
+              "remaining": 0.18429894745349884
+            },
+            {
+              "seed": 258323827,
+              "startLifetime": 0.4412950575351715,
+              "remaining": 0.0746283009648323
+            },
+            {
+              "seed": 1004677242,
+              "startLifetime": 0.4715551733970642,
+              "remaining": 0.15488849580287933
+            },
+            {
+              "seed": 21787442,
+              "startLifetime": 0.38037753105163574,
+              "remaining": 0.1137109026312828
+            },
+            {
+              "seed": 4073399228,
+              "startLifetime": 0.3207012712955475,
+              "remaining": 0.2540344297885895
+            }
+          ]
+        },
+        {
+          "frame": 59,
+          "particles": [
+            {
+              "seed": 886793520,
+              "startLifetime": 0.44288790225982666,
+              "remaining": 0.04288790374994278
+            },
+            {
+              "seed": 2007256755,
+              "startLifetime": 0.4141301214694977,
+              "remaining": 0.06413007527589798
+            },
+            {
+              "seed": 1280283663,
+              "startLifetime": 0.3894956707954407,
+              "remaining": 0.13949574530124664
+            },
+            {
+              "seed": 446789516,
+              "startLifetime": 0.35799160599708557,
+              "remaining": 0.05799165368080139
+            },
+            {
+              "seed": 2340878495,
+              "startLifetime": 0.3761970102787018,
+              "remaining": 0.1761971116065979
+            },
+            {
+              "seed": 4069693998,
+              "startLifetime": 0.4735609292984009,
+              "remaining": 0.3235611021518707
+            }
+          ]
+        },
+        {
+          "frame": 60,
+          "particles": [
+            {
+              "seed": 886793520,
+              "startLifetime": 0.44288790225982666,
+              "remaining": 0.026221254840493202
+            },
+            {
+              "seed": 2007256755,
+              "startLifetime": 0.4141301214694977,
+              "remaining": 0.04746343567967415
+            },
+            {
+              "seed": 1280283663,
+              "startLifetime": 0.3894956707954407,
+              "remaining": 0.12282908707857132
+            },
+            {
+              "seed": 446789516,
+              "startLifetime": 0.35799160599708557,
+              "remaining": 0.04132499545812607
+            },
+            {
+              "seed": 2340878495,
+              "startLifetime": 0.3761970102787018,
+              "remaining": 0.15953046083450317
+            },
+            {
+              "seed": 4069693998,
+              "startLifetime": 0.4735609292984009,
+              "remaining": 0.306894451379776
+            }
+          ]
+        },
+        {
+          "frame": 61,
+          "particles": [
+            {
+              "seed": 886793520,
+              "startLifetime": 0.44288790225982666,
+              "remaining": 0.009554608725011349
+            },
+            {
+              "seed": 2007256755,
+              "startLifetime": 0.4141301214694977,
+              "remaining": 0.030796770006418228
+            },
+            {
+              "seed": 1280283663,
+              "startLifetime": 0.3894956707954407,
+              "remaining": 0.106162428855896
+            },
+            {
+              "seed": 446789516,
+              "startLifetime": 0.35799160599708557,
+              "remaining": 0.024658340960741043
+            },
+            {
+              "seed": 2340878495,
+              "startLifetime": 0.3761970102787018,
+              "remaining": 0.14286379516124725
+            },
+            {
+              "seed": 4069693998,
+              "startLifetime": 0.4735609292984009,
+              "remaining": 0.2902277708053589
+            }
+          ]
+        },
+        {
+          "frame": 120,
+          "particles": [
+            {
+              "seed": 2599394093,
+              "startLifetime": 0.45448073744773865,
+              "remaining": 0.33781519532203674
+            },
+            {
+              "seed": 678130628,
+              "startLifetime": 0.4667034447193146,
+              "remaining": 0.0500376857817173
+            },
+            {
+              "seed": 3617388947,
+              "startLifetime": 0.39409464597702026,
+              "remaining": 0.22742903232574463
+            },
+            {
+              "seed": 2074357092,
+              "startLifetime": 0.3414769768714905,
+              "remaining": 0.07481123507022858
+            },
+            {
+              "seed": 2009942849,
+              "startLifetime": 0.31226712465286255,
+              "remaining": 0.09560146182775497
+            },
+            {
+              "seed": 3248967281,
+              "startLifetime": 0.4167027473449707,
+              "remaining": 0.4000372886657715
+            }
+          ]
+        },
+        {
+          "frame": 240,
+          "particles": [
+            {
+              "seed": 339617319,
+              "startLifetime": 0.478019654750824,
+              "remaining": 0.2613551616668701
+            },
+            {
+              "seed": 118446112,
+              "startLifetime": 0.3271360397338867,
+              "remaining": 0.1604716181755066
+            },
+            {
+              "seed": 1116933861,
+              "startLifetime": 0.4373464286327362,
+              "remaining": 0.4206821322441101
+            }
+          ]
+        },
+        {
+          "frame": 300,
+          "particles": [
+            {
+              "seed": 2022295970,
+              "startLifetime": 0.42346978187561035,
+              "remaining": 0.056805554777383804
+            },
+            {
+              "seed": 1205355634,
+              "startLifetime": 0.42632511258125305,
+              "remaining": 0.20966094732284546
+            },
+            {
+              "seed": 324887631,
+              "startLifetime": 0.3694503903388977,
+              "remaining": 0.05278604477643967
+            },
+            {
+              "seed": 1026123046,
+              "startLifetime": 0.39734381437301636,
+              "remaining": 0.13067959249019623
+            },
+            {
+              "seed": 3340345590,
+              "startLifetime": 0.3585411608219147,
+              "remaining": 0.2918771207332611
+            },
+            {
+              "seed": 1432264921,
+              "startLifetime": 0.39212819933891296,
+              "remaining": 0.37546420097351074
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Ef_Lightning_Paw_01",
+      "viewport": "720x1280",
+      "manifestSha256": "f06cee5bb452113b2a1eede3821c3e6917af490d666e02dc3c1bec9be10e74cf",
+      "seed": 588262024,
+      "loop": true,
+      "duration": 2,
+      "capacity": 6,
+      "rate": 20,
+      "lifetime": {
+        "serializedVersion": "2",
+        "minMaxState": 3,
+        "scalar": 0.5,
+        "minScalar": 0.30000001192092896,
+        "maxCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 1,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        },
+        "minCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0.6000000238418579,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        }
+      },
+      "frames": [
+        {
+          "frame": 0,
+          "particles": []
+        },
+        {
+          "frame": 15,
+          "particles": [
+            {
+              "seed": 2856261470,
+              "startLifetime": 0.4006071090698242,
+              "remaining": 0.18394042551517487
+            },
+            {
+              "seed": 2579311972,
+              "startLifetime": 0.3175453543663025,
+              "remaining": 0.1508786827325821
+            },
+            {
+              "seed": 3233778112,
+              "startLifetime": 0.328692764043808,
+              "remaining": 0.21202608942985535
+            },
+            {
+              "seed": 3903204468,
+              "startLifetime": 0.34253305196762085,
+              "remaining": 0.27586638927459717
+            },
+            {
+              "seed": 1460313963,
+              "startLifetime": 0.38772282004356384,
+              "remaining": 0.37105613946914673
+            }
+          ]
+        },
+        {
+          "frame": 30,
+          "particles": [
+            {
+              "seed": 218072452,
+              "startLifetime": 0.36823660135269165,
+              "remaining": 0.30156978964805603
+            },
+            {
+              "seed": 4183965582,
+              "startLifetime": 0.4232182502746582,
+              "remaining": 0.20655153691768646
+            },
+            {
+              "seed": 1460313963,
+              "startLifetime": 0.38772282004356384,
+              "remaining": 0.12105614691972733
+            },
+            {
+              "seed": 3903204468,
+              "startLifetime": 0.34253305196762085,
+              "remaining": 0.0258664358407259
+            },
+            {
+              "seed": 4087971332,
+              "startLifetime": 0.40442970395088196,
+              "remaining": 0.3877628743648529
+            }
+          ]
+        },
+        {
+          "frame": 59,
+          "particles": [
+            {
+              "seed": 672449945,
+              "startLifetime": 0.30397939682006836,
+              "remaining": 0.053979501128196716
+            },
+            {
+              "seed": 3899904119,
+              "startLifetime": 0.4465024769306183,
+              "remaining": 0.09650248289108276
+            },
+            {
+              "seed": 2243991797,
+              "startLifetime": 0.4201829433441162,
+              "remaining": 0.020182771608233452
+            },
+            {
+              "seed": 3629947271,
+              "startLifetime": 0.49319374561309814,
+              "remaining": 0.3431938588619232
+            },
+            {
+              "seed": 3726832975,
+              "startLifetime": 0.3533833622932434,
+              "remaining": 0.2533835768699646
+            },
+            {
+              "seed": 2239682864,
+              "startLifetime": 0.30906081199645996,
+              "remaining": 0.2590610682964325
+            }
+          ]
+        },
+        {
+          "frame": 60,
+          "particles": [
+            {
+              "seed": 672449945,
+              "startLifetime": 0.30397939682006836,
+              "remaining": 0.0373128317296505
+            },
+            {
+              "seed": 3899904119,
+              "startLifetime": 0.4465024769306183,
+              "remaining": 0.07983583211898804
+            },
+            {
+              "seed": 2243991797,
+              "startLifetime": 0.4201829433441162,
+              "remaining": 0.0035160973202437162
+            },
+            {
+              "seed": 3629947271,
+              "startLifetime": 0.49319374561309814,
+              "remaining": 0.3265272080898285
+            },
+            {
+              "seed": 3726832975,
+              "startLifetime": 0.3533833622932434,
+              "remaining": 0.23671691119670868
+            },
+            {
+              "seed": 2239682864,
+              "startLifetime": 0.30906081199645996,
+              "remaining": 0.24239440262317657
+            }
+          ]
+        },
+        {
+          "frame": 61,
+          "particles": [
+            {
+              "seed": 672449945,
+              "startLifetime": 0.30397939682006836,
+              "remaining": 0.02064616233110428
+            },
+            {
+              "seed": 3899904119,
+              "startLifetime": 0.4465024769306183,
+              "remaining": 0.06316918879747391
+            },
+            {
+              "seed": 2239682864,
+              "startLifetime": 0.30906081199645996,
+              "remaining": 0.22572772204875946
+            },
+            {
+              "seed": 3629947271,
+              "startLifetime": 0.49319374561309814,
+              "remaining": 0.30986055731773376
+            },
+            {
+              "seed": 3726832975,
+              "startLifetime": 0.3533833622932434,
+              "remaining": 0.22005024552345276
+            }
+          ]
+        },
+        {
+          "frame": 120,
+          "particles": [
+            {
+              "seed": 508855481,
+              "startLifetime": 0.4219696819782257,
+              "remaining": 0.10530395805835724
+            },
+            {
+              "seed": 304778494,
+              "startLifetime": 0.48613569140434265,
+              "remaining": 0.4194701910018921
+            },
+            {
+              "seed": 2131565713,
+              "startLifetime": 0.48037490248680115,
+              "remaining": 0.21370916068553925
+            },
+            {
+              "seed": 1864229089,
+              "startLifetime": 0.47301292419433594,
+              "remaining": 0.3063473403453827
+            },
+            {
+              "seed": 299753717,
+              "startLifetime": 0.4866983890533447,
+              "remaining": 0.37003278732299805
+            },
+            {
+              "seed": 630341135,
+              "startLifetime": 0.37558794021606445,
+              "remaining": 0.35892248153686523
+            }
+          ]
+        },
+        {
+          "frame": 240,
+          "particles": [
+            {
+              "seed": 996085427,
+              "startLifetime": 0.44983163475990295,
+              "remaining": 0.1331670880317688
+            },
+            {
+              "seed": 3198144013,
+              "startLifetime": 0.3610423803329468,
+              "remaining": 0.09437783062458038
+            },
+            {
+              "seed": 3200017298,
+              "startLifetime": 0.4832827150821686,
+              "remaining": 0.3666183352470398
+            },
+            {
+              "seed": 4133741573,
+              "startLifetime": 0.46082988381385803,
+              "remaining": 0.24416539072990417
+            },
+            {
+              "seed": 3841315125,
+              "startLifetime": 0.3643703758716583,
+              "remaining": 0.197705939412117
+            },
+            {
+              "seed": 218872062,
+              "startLifetime": 0.3651421368122101,
+              "remaining": 0.29847779870033264
+            }
+          ]
+        },
+        {
+          "frame": 300,
+          "particles": [
+            {
+              "seed": 3834571952,
+              "startLifetime": 0.3363772928714752,
+              "remaining": 0.0697130337357521
+            },
+            {
+              "seed": 1616919833,
+              "startLifetime": 0.4170517027378082,
+              "remaining": 0.2503875494003296
+            },
+            {
+              "seed": 3416250528,
+              "startLifetime": 0.3999499976634979,
+              "remaining": 0.03328565135598183
+            },
+            {
+              "seed": 3302700037,
+              "startLifetime": 0.4752376079559326,
+              "remaining": 0.00857308879494667
+            },
+            {
+              "seed": 1636600817,
+              "startLifetime": 0.334445059299469,
+              "remaining": 0.2177809476852417
+            },
+            {
+              "seed": 2673945644,
+              "startLifetime": 0.42825108766555786,
+              "remaining": 0.3615870475769043
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Ef_Lightning_Branch_01",
+      "viewport": "1280x720",
+      "manifestSha256": "caebd32d46658eb989bcec467cc5bab9fd3a21e1715d7b5cd0de20a67dd37628",
+      "seed": 2279580015,
+      "loop": true,
+      "duration": 2,
+      "capacity": 4,
+      "rate": 10,
+      "lifetime": {
+        "serializedVersion": "2",
+        "minMaxState": 3,
+        "scalar": 1,
+        "minScalar": 0.5,
+        "maxCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 1,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        },
+        "minCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0.5,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        }
+      },
+      "frames": [
+        {
+          "frame": 0,
+          "particles": []
+        },
+        {
+          "frame": 15,
+          "particles": [
+            {
+              "seed": 240943738,
+              "startLifetime": 0.5503240823745728,
+              "remaining": 0.38365745544433594
+            },
+            {
+              "seed": 2854191220,
+              "startLifetime": 0.7323374152183533,
+              "remaining": 0.6656707525253296
+            }
+          ]
+        },
+        {
+          "frame": 30,
+          "particles": [
+            {
+              "seed": 240943738,
+              "startLifetime": 0.5503240823745728,
+              "remaining": 0.13365739583969116
+            },
+            {
+              "seed": 2854191220,
+              "startLifetime": 0.7323374152183533,
+              "remaining": 0.415670782327652
+            },
+            {
+              "seed": 1326211453,
+              "startLifetime": 0.6318392753601074,
+              "remaining": 0.4151725769042969
+            },
+            {
+              "seed": 629764350,
+              "startLifetime": 0.5865454077720642,
+              "remaining": 0.4698786437511444
+            }
+          ]
+        },
+        {
+          "frame": 59,
+          "particles": [
+            {
+              "seed": 2946591311,
+              "startLifetime": 0.5394378304481506,
+              "remaining": 0.23943780362606049
+            }
+          ]
+        },
+        {
+          "frame": 60,
+          "particles": [
+            {
+              "seed": 2946591311,
+              "startLifetime": 0.5394378304481506,
+              "remaining": 0.22277112305164337
+            },
+            {
+              "seed": 2655004315,
+              "startLifetime": 0.5514989495277405,
+              "remaining": 0.5348325967788696
+            }
+          ]
+        },
+        {
+          "frame": 61,
+          "particles": [
+            {
+              "seed": 2946591311,
+              "startLifetime": 0.5394378304481506,
+              "remaining": 0.20610445737838745
+            },
+            {
+              "seed": 2655004315,
+              "startLifetime": 0.5514989495277405,
+              "remaining": 0.5181659460067749
+            }
+          ]
+        },
+        {
+          "frame": 120,
+          "particles": [
+            {
+              "seed": 2609643474,
+              "startLifetime": 0.876076877117157,
+              "remaining": 0.05941079184412956
+            },
+            {
+              "seed": 2597975383,
+              "startLifetime": 0.9495717287063599,
+              "remaining": 0.5329059362411499
+            },
+            {
+              "seed": 1617751774,
+              "startLifetime": 0.9752098917961121,
+              "remaining": 0.8585443496704102
+            },
+            {
+              "seed": 2935364265,
+              "startLifetime": 0.7566635608673096,
+              "remaining": 0.7399981021881104
+            }
+          ]
+        },
+        {
+          "frame": 240,
+          "particles": [
+            {
+              "seed": 1904524736,
+              "startLifetime": 0.516402542591095,
+              "remaining": 0.0997379720211029
+            },
+            {
+              "seed": 2989440802,
+              "startLifetime": 0.6995314955711365,
+              "remaining": 0.08286687731742859
+            },
+            {
+              "seed": 1361707316,
+              "startLifetime": 0.565279483795166,
+              "remaining": 0.44861510396003723
+            },
+            {
+              "seed": 638831479,
+              "startLifetime": 0.7365760803222656,
+              "remaining": 0.7199118137359619
+            }
+          ]
+        },
+        {
+          "frame": 300,
+          "particles": [
+            {
+              "seed": 1591174725,
+              "startLifetime": 0.767845630645752,
+              "remaining": 0.6511815786361694
+            },
+            {
+              "seed": 1465271800,
+              "startLifetime": 0.9789642691612244,
+              "remaining": 0.4622997045516968
+            },
+            {
+              "seed": 1878042982,
+              "startLifetime": 0.839270293712616,
+              "remaining": 0.6226061582565308
+            },
+            {
+              "seed": 2728959019,
+              "startLifetime": 0.7136422991752625,
+              "remaining": 0.6969783306121826
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Ef_Lightning_Branch_01",
+      "viewport": "720x1280",
+      "manifestSha256": "065ec9d6be84bdf706aba89485dd09a55deca635b04f6213318c297019087cd4",
+      "seed": 4174382432,
+      "loop": true,
+      "duration": 2,
+      "capacity": 4,
+      "rate": 10,
+      "lifetime": {
+        "serializedVersion": "2",
+        "minMaxState": 3,
+        "scalar": 1,
+        "minScalar": 0.5,
+        "maxCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 1,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        },
+        "minCurve": {
+          "serializedVersion": "2",
+          "m_Curve": [
+            {
+              "serializedVersion": "3",
+              "time": 0,
+              "value": 0.5,
+              "inSlope": 0,
+              "outSlope": 0,
+              "tangentMode": 0,
+              "weightedMode": 0,
+              "inWeight": 0.3333333432674408,
+              "outWeight": 0.3333333432674408
+            }
+          ],
+          "m_PreInfinity": 2,
+          "m_PostInfinity": 2,
+          "m_RotationOrder": 4
+        }
+      },
+      "frames": [
+        {
+          "frame": 0,
+          "particles": []
+        },
+        {
+          "frame": 15,
+          "particles": [
+            {
+              "seed": 4274837939,
+              "startLifetime": 0.5970152616500854,
+              "remaining": 0.43034857511520386
+            },
+            {
+              "seed": 125173845,
+              "startLifetime": 0.9266529083251953,
+              "remaining": 0.8599862456321716
+            }
+          ]
+        },
+        {
+          "frame": 30,
+          "particles": [
+            {
+              "seed": 4274837939,
+              "startLifetime": 0.5970152616500854,
+              "remaining": 0.18034866452217102
+            },
+            {
+              "seed": 125173845,
+              "startLifetime": 0.9266529083251953,
+              "remaining": 0.6099862456321716
+            },
+            {
+              "seed": 2358834950,
+              "startLifetime": 0.7681853771209717,
+              "remaining": 0.5515186786651611
+            },
+            {
+              "seed": 3351316637,
+              "startLifetime": 0.8604440093040466,
+              "remaining": 0.7437772154808044
+            }
+          ]
+        },
+        {
+          "frame": 59,
+          "particles": [
+            {
+              "seed": 3351316637,
+              "startLifetime": 0.8604440093040466,
+              "remaining": 0.26044386625289917
+            },
+            {
+              "seed": 125173845,
+              "startLifetime": 0.9266529083251953,
+              "remaining": 0.1266525536775589
+            },
+            {
+              "seed": 2358834950,
+              "startLifetime": 0.7681853771209717,
+              "remaining": 0.06818506121635437
+            },
+            {
+              "seed": 965871189,
+              "startLifetime": 0.7965072393417358,
+              "remaining": 0.49650731682777405
+            }
+          ]
+        },
+        {
+          "frame": 60,
+          "particles": [
+            {
+              "seed": 3351316637,
+              "startLifetime": 0.8604440093040466,
+              "remaining": 0.24377721548080444
+            },
+            {
+              "seed": 125173845,
+              "startLifetime": 0.9266529083251953,
+              "remaining": 0.1099858283996582
+            },
+            {
+              "seed": 2358834950,
+              "startLifetime": 0.7681853771209717,
+              "remaining": 0.05151839926838875
+            },
+            {
+              "seed": 965871189,
+              "startLifetime": 0.7965072393417358,
+              "remaining": 0.4798406660556793
+            }
+          ]
+        },
+        {
+          "frame": 61,
+          "particles": [
+            {
+              "seed": 3351316637,
+              "startLifetime": 0.8604440093040466,
+              "remaining": 0.22711054980754852
+            },
+            {
+              "seed": 125173845,
+              "startLifetime": 0.9266529083251953,
+              "remaining": 0.09331910312175751
+            },
+            {
+              "seed": 2358834950,
+              "startLifetime": 0.7681853771209717,
+              "remaining": 0.03485173359513283
+            },
+            {
+              "seed": 965871189,
+              "startLifetime": 0.7965072393417358,
+              "remaining": 0.4631739854812622
+            }
+          ]
+        },
+        {
+          "frame": 120,
+          "particles": [
+            {
+              "seed": 580472401,
+              "startLifetime": 0.9564208984375,
+              "remaining": 0.1397550255060196
+            },
+            {
+              "seed": 3592255145,
+              "startLifetime": 0.5190085172653198,
+              "remaining": 0.0023426697589457035
+            },
+            {
+              "seed": 4142209922,
+              "startLifetime": 0.7877610921859741,
+              "remaining": 0.5710954666137695
+            },
+            {
+              "seed": 42064003,
+              "startLifetime": 0.8323736190795898,
+              "remaining": 0.7157080769538879
+            }
+          ]
+        },
+        {
+          "frame": 240,
+          "particles": [
+            {
+              "seed": 2553013122,
+              "startLifetime": 0.886824905872345,
+              "remaining": 0.47016021609306335
+            },
+            {
+              "seed": 1517869531,
+              "startLifetime": 0.9210612773895264,
+              "remaining": 0.10439611971378326
+            },
+            {
+              "seed": 385800220,
+              "startLifetime": 0.5104360580444336,
+              "remaining": 0.19377146661281586
+            },
+            {
+              "seed": 3028046721,
+              "startLifetime": 0.6823316216468811,
+              "remaining": 0.6656673550605774
+            }
+          ]
+        },
+        {
+          "frame": 300,
+          "particles": [
+            {
+              "seed": 1367084429,
+              "startLifetime": 0.891871988773346,
+              "remaining": 0.17520771920681
+            },
+            {
+              "seed": 3318843398,
+              "startLifetime": 0.6153976917266846,
+              "remaining": 0.0987333208322525
+            },
+            {
+              "seed": 857231289,
+              "startLifetime": 0.9079686403274536,
+              "remaining": 0.091304250061512
+            },
+            {
+              "seed": 521537272,
+              "startLifetime": 0.711803138256073,
+              "remaining": 0.39513885974884033
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

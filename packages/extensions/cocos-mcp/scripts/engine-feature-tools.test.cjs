@@ -303,3 +303,125 @@ test('ensure_features rejects an orphan include entry without a profile cache re
     delete global.Editor;
   }
 });
+
+function sharedEngineFixture(root, { marionette }) {
+  const engine = path.join(root, 'engine');
+  fs.mkdirSync(path.join(engine, 'bin', '.cache', 'dev', 'preview'), { recursive: true });
+  fs.writeFileSync(path.join(engine, 'cc.config.json'), `${JSON.stringify({
+    features: { marionette: { modules: [], intrinsicFlags: { MARIONETTE: true } } },
+    moduleOverrides: [{
+      test: '!context.buildTimeConstants.MARIONETTE',
+      overrides: { 'cocos/animation/marionette/runtime-exports.ts': 'cocos/animation/marionette/index-empty.ts' },
+    }],
+  })}\n`);
+  const writeMap = (active) => {
+    const imports = { 'cce:/internal/x/cc-fu/animation': 'q-bundled:///fs/exports/animation.js' };
+    if (!active) {
+      imports['q-bundled:///fs/cocos/animation/marionette/runtime-exports.js'] =
+        'q-bundled:///fs/cocos/animation/marionette/index-empty.js';
+    }
+    fs.writeFileSync(path.join(engine, 'bin', '.cache', 'dev', 'preview', 'import-map.json'), `${JSON.stringify({ imports })}\n`);
+  };
+  writeMap(marionette);
+  fs.writeFileSync(path.join(engine, 'bin', '.cache', 'dev', 'VERSION'), '3');
+  const past = new Date(Date.UTC(2024, 0, 1));
+  fs.utimesSync(path.join(engine, 'bin', '.cache', 'dev', 'VERSION'), past, past);
+  return { engine, writeMap };
+}
+
+function projectFixture(t, profile) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'engine-feature-shared-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const profilePath = path.join(root, 'settings', 'v2', 'packages', 'engine.json');
+  const previewDir = path.join(root, 'temp', 'programming', 'packer-driver', 'targets', 'preview');
+  fs.mkdirSync(path.dirname(profilePath), { recursive: true });
+  fs.mkdirSync(previewDir, { recursive: true });
+  fs.writeFileSync(profilePath, `${JSON.stringify(profile)}\n`);
+  const previewPath = path.join(previewDir, 'import-map.json');
+  fs.writeFileSync(previewPath, `${JSON.stringify({ scopes: { cc: { a: 'cce:/internal/x/cc-fu/animation' } } })}\n`);
+  const profileTime = new Date(Date.UTC(2024, 0, 1, 0, 0, 10));
+  const previewTime = new Date(Date.UTC(2024, 0, 1, 0, 0, 20));
+  fs.utimesSync(profilePath, profileTime, profileTime);
+  fs.utimesSync(previewPath, previewTime, previewTime);
+  return root;
+}
+
+test('ensure_features re-applies a shared engine map another project stubbed, without an Editor restart', async t => {
+  const profile = profileFixture();
+  const config = profile.configs.defaultConfig;
+  config.cache.animation = { _value: true };
+  config.cache.marionette = { _value: true };
+  config.includeModules = [...config.includeModules, 'animation', 'marionette'].sort();
+  const root = projectFixture(t, profile);
+  const { engine, writeMap } = sharedEngineFixture(root, { marionette: false });
+  const requests = [];
+  let writes = 0;
+  global.Editor = {
+    Profile: {
+      async getProject() { return profile; },
+      async setProject() { writes += 1; },
+    },
+    Project: { path: root, tmpDir: path.join(root, 'temp') },
+    Message: {
+      async request(target, message) {
+        requests.push(`${target}:${message}`);
+        if (target === 'engine' && message === 'query-info') return { path: engine };
+        if (target === 'scene' && message === 'query-dirty') return false;
+        if (target === 'engine' && message === 'rebuild') {
+          // Quick Compile re-emits the shared preview map from this project's profile.
+          writeMap(true);
+          fs.writeFileSync(path.join(engine, 'bin', '.cache', 'dev', 'VERSION'), '3');
+          return undefined;
+        }
+        throw new Error(`unexpected request ${target}:${message}`);
+      },
+    },
+  };
+  try {
+    const tools = new EngineFeatureTools();
+    const before = await tools.execute('get_features', {});
+    assert.equal(before.data.appliedPreview.sharedEngine.features.marionette, false);
+
+    const result = await tools.execute('ensure_features', { modules: ['animation', 'marionette'], timeoutMs: 20000 });
+    assert.equal(result.success, true, result.error);
+    assert.equal(result.data.complete, true);
+    assert.equal(result.data.status, 'verified-after-rebuild');
+    assert.deepEqual(result.data.sharedGapBefore, ['marionette']);
+    assert.equal(result.data.appliedAfter.sharedEngine.features.marionette, true);
+    assert.equal(writes, 0);
+    assert.equal(requests.filter(item => item === 'engine:rebuild').length, 1);
+    assert.equal(fs.existsSync(path.join(root, 'temp', 'cocos-mcp', 'engine-feature-transaction.json')), false);
+  } finally {
+    delete global.Editor;
+  }
+});
+
+test('ensure_features verifies marionette from the shared map without rebuilding when it is live', async t => {
+  const profile = profileFixture();
+  const config = profile.configs.defaultConfig;
+  config.cache.animation = { _value: true };
+  config.cache.marionette = { _value: true };
+  config.includeModules = [...config.includeModules, 'animation', 'marionette'].sort();
+  const root = projectFixture(t, profile);
+  const { engine } = sharedEngineFixture(root, { marionette: true });
+  const requests = [];
+  global.Editor = {
+    Profile: { async getProject() { return profile; }, async setProject() { throw new Error('no write expected'); } },
+    Project: { path: root, tmpDir: path.join(root, 'temp') },
+    Message: {
+      async request(target, message) {
+        requests.push(`${target}:${message}`);
+        if (target === 'engine' && message === 'query-info') return { path: engine };
+        throw new Error(`unexpected request ${target}:${message}`);
+      },
+    },
+  };
+  try {
+    const result = await new EngineFeatureTools().execute('ensure_features', { modules: ['animation', 'marionette'] });
+    assert.equal(result.success, true, result.error);
+    assert.equal(result.data.status, 'verified');
+    assert.ok(!requests.includes('engine:rebuild'));
+  } finally {
+    delete global.Editor;
+  }
+});

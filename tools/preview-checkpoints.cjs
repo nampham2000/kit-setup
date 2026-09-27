@@ -84,6 +84,11 @@ Manifest:
     ]
   }
 
+evalHelpers (manifest hoặc case, 0-8 file .js trong project, ví dụ
+"playable-shared-kit/tools/qa/ui-layout-balance.js") được nối vào trước
+evalBefore/eval để eval dùng helper QA dùng chung; nội dung helper được đọc lại
+mỗi lần chạy và regression gate hash chúng như evalFile.
+
 Mỗi case reload preview trong browser session riêng. Tool sinh từng PNG,
 manifest.json và index.html dạng contact sheet. Khi khai báo
 requiredReferenceMetrics, tool crop/resize reference về đúng ROI candidate và
@@ -135,6 +140,27 @@ function readExpression(entry, inlineKey, fileKey) {
     return fs.readFileSync(file, 'utf8');
   }
   return entry[inlineKey] ? String(entry[inlineKey]) : '';
+}
+
+/** Shared QA helper scripts prepended to evalBefore/eval (e.g. tools/qa/ui-layout-balance.js). */
+function readEvalHelpers(entry, config, index) {
+  const list = entry.evalHelpers !== undefined ? entry.evalHelpers : config.evalHelpers;
+  if (list === undefined) return '';
+  if (!Array.isArray(list) || list.length > 8
+    || list.some(item => typeof item !== 'string' || !/.c?js$/i.test(item.trim()))) {
+    throw new Error(`cases[${index}].evalHelpers phải là 0-8 đường dẫn .js trong project`);
+  }
+  return list.map(item => {
+    const file = resolveInsideProject(item.trim(), 'evalHelpers');
+    if (!fs.existsSync(file)) throw new Error(`Không tìm thấy evalHelpers: ${item}`);
+    return `${fs.readFileSync(file, 'utf8')}
+;
+`;
+  }).join('');
+}
+
+function withEvalHelpers(helpers, expression) {
+  return helpers && expression ? `${helpers}${expression}` : expression;
 }
 
 function evaluateEvalAssertion(required, value) {
@@ -763,12 +789,13 @@ function validateConfig(config, overrides = {}) {
     }
     if (seen.has(slug)) throw new Error(`Checkpoint trùng tên sau normalize: ${name}`);
     seen.add(slug);
+    const evalHelpers = readEvalHelpers(entry, config, index);
     return {
       ...entry,
       name,
       slug,
-      evalBeforeExpression: readExpression(entry, 'evalBefore', 'evalBeforeFile'),
-      evalExpression: readExpression(entry, 'eval', 'evalFile'),
+      evalBeforeExpression: withEvalHelpers(evalHelpers, readExpression(entry, 'evalBefore', 'evalBeforeFile')),
+      evalExpression: withEvalHelpers(evalHelpers, readExpression(entry, 'eval', 'evalFile')),
       parsedGesture: entry.gesture ? parseGesture(entry.gesture) : null,
       parsedGestures: entry.gestures ? entry.gestures.map(gesture => parseGesture(gesture)) : [],
       gestureFromEvalBefore: entry.gestureFromEvalBefore

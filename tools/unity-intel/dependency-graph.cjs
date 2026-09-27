@@ -7,6 +7,18 @@ function addToMapSet(map, key, value) {
   map.get(key).add(value);
 }
 
+// Index records carry one grouped entry per GUID + field path (see
+// summarizeGuidReferences); live/legacy inputs may still be one per occurrence.
+function referenceOccurrences(reference) {
+  return Number.isInteger(reference.occurrences) && reference.occurrences > 0 ? reference.occurrences : 1;
+}
+
+function referenceLines(reference) {
+  return Array.isArray(reference.evidenceLines) && reference.evidenceLines.length
+    ? reference.evidenceLines
+    : [reference.line];
+}
+
 function buildDependencyGraph(records, guidIndex, options = {}) {
   const edgeGroups = new Map();
   const outgoing = new Map();
@@ -47,7 +59,7 @@ function buildDependencyGraph(records, guidIndex, options = {}) {
         const item = unresolvedGroups.get(key);
         item.kinds.add(reference.kind || 'asset');
         if (reference.fieldPath) item.fields.add(reference.fieldPath);
-        item.occurrences += 1;
+        item.occurrences += referenceOccurrences(reference);
         continue;
       }
       if (target.assetPath === record.assetPath) continue;
@@ -76,9 +88,11 @@ function buildDependencyGraph(records, guidIndex, options = {}) {
         });
       }
       const edge = edgeGroups.get(edgeKey);
-      edge.occurrences += 1;
-      if (Number.isInteger(reference.line) && edge.evidenceLines.length < 3 &&
-          !edge.evidenceLines.includes(reference.line)) edge.evidenceLines.push(reference.line);
+      edge.occurrences += referenceOccurrences(reference);
+      for (const line of referenceLines(reference)) {
+        if (Number.isInteger(line) && edge.evidenceLines.length < 3 &&
+            !edge.evidenceLines.includes(line)) edge.evidenceLines.push(line);
+      }
       addToMapSet(outgoing, edge.from, edge.to);
       addToMapSet(assetOutgoing, edge.from, edge.to);
       addToMapSet(incoming, edge.to, edge.from);

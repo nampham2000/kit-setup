@@ -77,7 +77,8 @@ const UNITY_PHYSICS_2D_FACTS = Object.freeze([
   ['Rigidbody2D', /(?:^|\n)Rigidbody2D:\s*/m],
   ['Collider2D', /(?:^|\n)(?:BoxCollider2D|CircleCollider2D|CapsuleCollider2D|PolygonCollider2D|EdgeCollider2D|CompositeCollider2D):\s*/m],
   ['Physics2DQuery', /\bPhysics2D\s*\.\s*(?:Raycast|RaycastAll|RaycastNonAlloc|Linecast|Overlap\w+|CircleCast|BoxCast|CapsuleCast)\s*\(/],
-  ['Physics2DSimulation', /\bRigidbody2D\b|\bAddForce\s*\(/],
+  // A bare AddForce( is also the 3D Rigidbody API; only 2D-typed evidence selects Box2D.
+  ['Physics2DSimulation', /\bRigidbody2D\b|\bForceMode2D\b/],
 ]);
 
 /**
@@ -252,16 +253,18 @@ function detectUnityEngineFeatureEvidence(input = {}) {
   }
 
   if (/(?:^|\n)(?:OcclusionArea|OcclusionPortal):/m.test(text) ||
-      /\buseOcclusionCulling\s*=/.test(runtimeText)) {
+      // Camera.useOcclusionCulling is a member write; a bare field with the same name (for example a
+      // scroll-snap panel-culling option) is not engine occlusion culling, and writing a literal false
+      // (UIParticle's bake camera) only turns it off.
+      /\.\s*useOcclusionCulling\s*=(?!=)(?!\s*false\b)/.test(runtimeText)) {
     addMarker(markers, 'occlusion-query', 'unity-occlusion-runtime');
   }
 
   if (/\b(?:GL\s*\.\s*Begin|Graphics\s*\.\s*(?:DrawMeshNow|DrawProceduralNow))\s*\(/.test(runtimeText)) {
     addMarker(markers, 'geometry-renderer', 'unity-immediate-geometry-rendering');
   }
-  if (/\bDebug\s*\.\s*(?:DrawLine|DrawRay)\s*\(/.test(runtimeText)) {
-    addMarker(markers, 'debug-renderer', 'unity-runtime-debug-draw');
-  }
+  // UnityEngine.Debug.DrawLine/DrawRay only draw in the Editor (Scene view, or Game view with gizmos)
+  // and do nothing in a player build, so even a reachable call is never player-visible behavior.
   if (/(?:^|\n)(?:Terrain|TerrainCollider):/m.test(text) ||
       (extension === '.cs' ? referencesUnityTerrainType(runtimeText, text) : /\b(?:TerrainData|TerrainCollider)\b/.test(runtimeText))) {
     addMarker(markers, 'terrain', 'unity-terrain-runtime');

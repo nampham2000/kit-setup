@@ -463,10 +463,16 @@ test and acceptance gate to that registry. The AOE source project runs
 
 - Setup indexes Unity source before installing MCP. On large asset-library projects,
   a Node heap failure in this phase is a scanner failure, not a Unity connection
-  failure. Persisted regex captures (GUID, fileID, field path) must own their small
-  strings instead of retaining the full YAML backing buffer. Keep the GC regression
-  in `tools/unity-intel/guid-index.test.cjs`; avoid concurrent scans of the same
-  project while the first cache is being built.
+  failure. Persisted regex captures (GUID, fileID, field path, C# identifiers) must own
+  their small strings instead of retaining the full YAML/C# backing buffer. Index
+  records keep reference evidence grouped per GUID + field path (occurrence count and
+  at most three lines), never one entry per occurrence: level prefabs repeat the same
+  PPtr thousands of times, which made records, dependency edges and the index cache
+  grow with project bytes until the snapshot fingerprint ran out of heap. Keep the GC
+  regressions in `tools/unity-intel/guid-index.test.cjs`, `script-index.test.cjs` and
+  `unity-project-index.test.cjs`; memory tests use a capped child heap and scalar-first
+  assertions. Avoid concurrent scans of the same project while the first cache is
+  being built.
 
 - Use one npm forwarding separator: `npm run unity:intel:doctor -- --project <root>`.
   An extra standalone `--` is passed to the parser and fails before probing Unity;
@@ -532,6 +538,118 @@ test and acceptance gate to that registry. The AOE source project runs
 - For recurring faults, fix the shared converter and its tests before adding a game-specific offset.
   Keep project layout overrides config-driven; existing approved overrides need a separate runtime
   comparison before removal. Re-port only after the normal Unity source gate passes.
+
+### Removed or deferred controls: re-balance the sibling group
+
+- Dropping a deferred meta control (rule `interactive-affordance-parity`) changes the layout of
+  the group it belonged to. Survivors must not keep the anchoredPositions that Unity authored for
+  the whole group. Real case (ScrewOut PopupLose): HomeBtn x=-243 and TryAgainButton x=191 form a
+  pair centred near x=1. The playable removed HomeBtn, but TryAgain kept x=191 and rendered
+  190 px off-centre. The tap regression still passed because it tapped the runtime position.
+- The same fault appears whenever a row, pair or group member is removed, deferred or hidden. It
+  also appears when a LayoutGroup would have re-flowed the survivors and the port used pre-layout
+  anchoredPositions instead.
+- Fix:
+  - If the source group has a Horizontal/VerticalLayoutGroup, port it (`UnityFixedLayoutGroup`)
+    so the survivors re-flow.
+  - Otherwise add an explicit adapter layout (re-centre or re-flow) in `playable-config.json`.
+    Record the reason and the source values: the original x/y and size of every group member.
+  - Never hard-code a new offset read from a screenshot.
+- Static audit on the Unity prefab, before writing the Cocos layout:
+
+  ```bash
+  node playable-shared-kit/tools/unity-cocos-port/ui-sibling-removal-audit.cjs \
+    --prefab "<Unity>/Assets/_Game/Prefabs/UI/PopupLose.prefab" --removed Content/HomeBtn
+  # portable form, committed with the port:
+  node playable-shared-kit/tools/unity-cocos-port/ui-sibling-removal-audit.cjs \
+    --config tools/ui-sibling-removal.json --unity-project <UnityProjectRoot> --check
+  ```
+
+  The manifest (`kind: "ui-sibling-removal-audit"`) lists each prefab (`Assets/...`), its
+  `removed` nodes and `adapters[]`. Each adapter declares `removed` or `group`, a `strategy`
+  (`source-layout|recenter|reflow|explicit-position`), a `reason`, `sourceValues` and optionally a
+  `configPath`. The audit reports these codes:
+  - high `UI_SIBLING_REMOVED_UNBALANCED`: the survivor is off the original group centre;
+  - high `UI_SIBLING_REMOVED_LAYOUT_REFLOW`: a LayoutGroup lost a child (the report includes
+    `expectedReflow` positions);
+  - medium `UI_SIBLING_REMOVED_GAP`: an interior member was removed;
+  - low `UI_SIBLING_REMOVED_RESOLVED`: a valid adapter covers the group.
+
+  A serialized `m_LocalScale` of 0 (Animator pop-in) is treated as 1 and listed in
+  `zeroScaleAssumedOne`.
+- Runtime acceptance: add a matrix case tagged `ui-layout` for each affected group. Load the shared
+  probe with `evalHelpers` and bound its metrics:
+
+  ```json
+  {
+    "name": "lose popup source viewport",
+    "windowSize": "720x1280",
+    "evalHelpers": ["playable-shared-kit/tools/qa/ui-layout-balance.js"],
+    "eval": "__ccUiLayoutBalance({ nodes: ['Canvas/PopupLose/Content/TryAgainButton'], container: 'Canvas/PopupLose/Content' })",
+    "requireEvalOk": true,
+    "requiredEvalMetrics": {
+      "centerOffsetPx": { "max": 4 },
+      "insideSafeRect": { "min": 1 },
+      "overlapCount": { "max": 0 }
+    },
+    "regressionTags": ["ui-layout"]
+  }
+  ```
+
+  Duplicate the case at a short/wide viewport, for example `"windowSize": "1280x600"` or a
+  `previewDevice`. The regression gate fails a matrix with `REGRESSION_UI_LAYOUT_BALANCE_MISSING`
+  when a tagged case lacks a `centerOffsetPx|centerOffsetXPx|centerOffsetYPx` max of 32 design px
+  or less. It fails with `REGRESSION_UI_LAYOUT_VIEWPORTS_MISSING` when fewer than 2 distinct
+  explicit viewports run.
+- The probe returns numeric metrics measured in world design px:
+  - `centerOffsetPx` (per `axis`, default `x`), plus signed `centerOffsetXPx`/`centerOffsetYPx`;
+  - `insideSafeRect` (1 or 0) and `outsideSafePx`, measured against the Canvas unless `safeArea`
+    or `safeInsetPx` is given;
+  - `overlapCount` and `overlapMaxRatio` between the listed controls.
+
+  An inactive or missing control returns `ok:false`, so list only the survivors that must be
+  visible. Only the helpers are prepended; the eval's last expression remains its result.
+- Tests: `node --test playable-shared-kit/tools/unity-cocos-port/ui-sibling-removal-audit.test.cjs
+  playable-shared-kit/tools/qa/ui-layout-balance.test.cjs`.
+
+### UI must come from the game's own assets (no Graphics placeholders)
+
+- Build every popup, HUD element, button, ribbon, badge and frame from the source game's assets:
+  the Unity prefab/RectTransform, its Sprites (Simple or Sliced with the importer spriteBorder),
+  the TMP font asset or TTF, and the outline/shadow values from the TMP material keywords.
+- Do not draw frames, panels, buttons, ribbons, text outlines or icons with `cc.Graphics`,
+  solid-colour sprites or primitives to fill a gap. That is a placeholder, not a port. Graphics is
+  only valid when the source is procedural too (a LineRenderer or mask inside playable-core), or
+  for an invisible technical overlay such as a hit area or stencil.
+- When a popup is an adapter with no source equivalent (for example revive or continue replacing
+  IAP), assemble it from the same game's existing frames, ribbons, buttons, icons and fonts.
+  Record the reason and each source asset path in config. Do not invent a new visual style.
+- Text must be readable. Use the source font and its TMP effective size (never smaller), wrap
+  inside the source rect and never break inside a word; a heading such as "CONTINUE?" should not
+  split into "CONTIN / UE?". Check the source viewport and a short/wide viewport.
+- Text must sit at the TMP baseline, not the Cocos default. Cocos 3.8.8 web ignores font metrics
+  and places the baseline with a fixed `BASELINE_RATIO` of 0.26: CENTER puts it 0.37F below the
+  content centre (plus the outline width in `CacheMode.CHAR`), TOP puts it 0.87F below the top
+  (+m in CHAR), and BOTTOM puts it 0.26F above the bottom (0.13F - m in CHAR). TMP
+  (TextMeshProUGUI `anchorOffset`) uses the font asset FaceInfo `ascentLine`/`descentLine`/
+  `capLine` scaled by fontSize / pointSize * scale, plus `m_margin` and `m_VerticalAlignment`:
+  - Middle (512) centres [descent, ascent].
+  - Geometry/Midline (4096) centres the glyph boxes of the real string from `m_GlyphTable`.
+  - Capline (8192) centres the cap height.
+  - Baseline (2048) puts the baseline on the rect centre.
+  For Baloo (a = 1.05, d = -0.524) this left every centred label 0.107F + m too low, and a
+  Bottom label about 34 units too low. Fix it with
+  `tools/unity-cocos-port/tmp-label-baseline.cjs`: port.prefab now moves the Label content
+  through UITransform anchorY and sets `lineHeight = tmpLineAdvance`. For runtime-built labels,
+  use `playable-core/utils/text/TmpLabelBaseline.ts` (`tmpLabelBaselineShift`) and carry the
+  FaceInfo, glyph boxes, `vMode` and margins in config. Never tune the offset from a screenshot,
+  and never use the TMP lineHeight as an offset. Acceptance measures face ink top/bottom in a
+  tight ROI against the TMP ink derived from source, within ~2 px at design scale.
+- Acceptance:
+  - a runtime assertion that the UI tree has no `cc.Graphics` outside an allowlist with reasons;
+  - sprite and font UUIDs match a source oracle;
+  - a tight screenshot ROI per popup;
+  - a text-fit metric showing no clipped or mid-word-wrapped labels.
 
 ### Portable checkout / cross-PC bootstrap
 
@@ -1305,3 +1423,22 @@ render delta immediately at birth removes impacts early. The opt-in
 backend step, and resets its comparison origin with `resetAccumulator`.
 Native Combat Magic expiry fixtures keep the first impact at frame 180 and
 remove it at 181. Collision generation remains a separate verification gate.
+
+For scalar Mesh particle mismatches, capture `axisOfRotation` as well as
+`rotation3D`; the latter alone is not a complete orientation. Preserve native
+primitive topology and UVs with source-version evidence. The measured Sphere
+axis-angle subset and late wrapped emission-clock traps are documented in
+[particle-port-stability](../../particle-port-stability.md); do not generalize
+those fixtures to unmeasured shapes, spaces or rotation modules.
+
+### Native import and burst evidence
+
+- Before tint/alpha compensation, compare Unity imported texture format and mip pixels. PNG equality does not imply GPU sampling equality. Use `tools/unity-intel/IMPORTED_TEXTURE_MIPS.md` for the source-bound native sRGB mip route. Unity NPOT/max-size import can change dimensions; preserve native dimensions and bind by UUID rather than requiring equality with the source PNG. Refresh the scene through AssetDB and assert runtime bindings before capture.
+- Random burst counts are integer samples, not float lerps. The measured ordered TwoConstants bursts uses an independent xorshift stream, an inclusive unsigned modulo count and a wrapped float event clock. Source-gate probability, repeat count, start delay and emission-rate mode; retain a HIGH obligation for unsupported combinations. Native fixtures cover 12 seeds, zero/offset burst times, four loops and constant continuous emission. Test clear/replay and live particle identities; checking only capped particle counts can hide a wrong burst count.
+- Re-fetch shared main between completed features and before pushing. Audit changed files, integrate only when no running generator is loading those dependencies, then rerun affected regressions. Do not reset another project checkout or overwrite local work.
+
+### Imported texture contract (ASTC, BMP and PNG)
+
+Treat container extension, Unity importer output and shader sampling as three different contracts. Before claiming texture parity, record active build target, Unity texture/graphics format, sRGB/data role, dimensions, complete mip chain, filter/wrap/aniso/mip bias, alpha handling and the shader property/UV/channel using the texture. A PNG made from a BMP is not proof of equivalence; ASTC selected in a platform override is not proof that the current Editor GPU is sampling ASTC.
+
+Use `tools/unity-intel/IMPORTED_TEXTURE_MIPS.md` for the measured sRGB Texture2D route, including BMP inputs mapped to Cocos-imported PNG UUIDs. For ASTC where `SystemInfo.SupportsTextureFormat` is false, use the accepted SmashFest ToyBlock route: sample the active imported texture with `Graphics.Blit` and `ReadPixels`, preserving Unity's ASTC decode and `alphaIsTransparency` edge RGB. If those decoded pixels are flattened to PNG, disable Cocos `fixAlphaTransparencyArtifacts` so it does not pad them again. Do not enable this exception for unsupported non-ASTC, linear/HDR/normal-map or cubemap cases, and do not replace the imported readback with the raw source PNG. Texture-byte equality alone cannot certify toon lighting, crystal refraction, channel swizzles, procedural UVs, premultiplied blend or double gamma conversion. Validate each new asset in the actual effect and Preview. A 98–100% target requires measured image and semantic acceptance on named cases, not an importer success code.

@@ -73,6 +73,9 @@ test('unmeasured collision modes are reported, never silently dropped', () => {
   assert.deepEqual(reporter.entries.map(e => [e.level, e.code]), [['high', 'PARTICLE_COLLISION_UNSUPPORTED']]);
   const messages = particleCollisionContract({ CollisionModule: { ...rain.CollisionModule, collisionMessages: 1, m_Dampen: { minMaxState: 3, scalar: 1 } } });
   const report2 = reports();
-  attachCollisionRuntime(builderWith(messages), report2, { cocosRoot: fs.mkdtempSync(path.join(os.tmpdir(), 'collision-')) });
-  assert.deepEqual(report2.entries.map(e => e.code), ['PARTICLE_COLLISION_MESSAGES_UNPORTED', 'PARTICLE_COLLISION_CURVE_APPROXIMATED', 'PARTICLE_COLLISION_ADAPTER_BOUND']);
+  const messageBuilder = builderWith(messages);
+  attachCollisionRuntime(messageBuilder, report2, { cocosRoot: fs.mkdtempSync(path.join(os.tmpdir(), 'collision-')) });
+  // OnParticleCollision reaches ported scripts as a node event, flagged in the contract.
+  assert.deepEqual(report2.entries.map(e => [e.level, e.code]), [['low', 'PARTICLE_COLLISION_MESSAGES_EVENT'], ['medium', 'PARTICLE_COLLISION_CURVE_APPROXIMATED'], ['low', 'PARTICLE_COLLISION_ADAPTER_BOUND']]);
+  assert.equal(JSON.parse(messageBuilder.added[0].body.sourceContract).messages, true);
 });

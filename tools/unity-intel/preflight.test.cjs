@@ -185,6 +185,82 @@ test('live unresolved GUID routing defers non-core owners and accepts only hash-
   );
 });
 
+test('grouped stale-reference dispositions validate every GUID against the shared owners and stay bounded in the brief', async t => {
+  const fixture = createUnityFixture(t);
+  const cacheDir = cacheFixture(t);
+  const result = await scanUnityProject({ project: fixture.root, provider: 'static', cache: false });
+  const owner = 'Assets/Game/Scenes/Main.unity';
+  // A stale serialized level table: many GUIDs, one owner/field, one reviewed proof.
+  const tableGuids = Array.from({ length: 150 }, (_, index) => `8${String(index).padStart(31, '0')}`);
+  const otherGuid = '99999999999999999999999999999993';
+  for (const guid of tableGuids) {
+    result.snapshot.dependencies.unresolved.push({
+      guid, category: 'reachable-missing', confirmation: 'unity-editor-missing',
+      fields: ['MonoBehaviour.lstLevelData'], sources: [owner],
+      sourceEvidence: [{ source: owner, fields: ['MonoBehaviour.lstLevelData'] }],
+    });
+  }
+  result.snapshot.dependencies.unresolved.push({
+    guid: otherGuid, category: 'reachable-missing', confirmation: 'unity-editor-missing',
+    fields: ['MonoBehaviour.lstLevelData'], sources: [owner, 'Assets/Game/Scripts/Gameplay.cs'],
+    sourceEvidence: [{ source: owner, fields: ['MonoBehaviour.lstLevelData'] }],
+  });
+  result.snapshot.diagnostics.push({
+    code: 'UNITY_REACHABLE_GUID_UNRESOLVED', severity: 'high', count: tableGuids.length + 1,
+    message: 'missing', action: 'restore', evidence: [owner], source: 'unity-mcp',
+  });
+  const hash = relative => crypto.createHash('sha256')
+    .update(fs.readFileSync(path.join(fixture.root, ...relative.split('/')))).digest('hex');
+  const entry = keys => ({
+    code: 'UNITY_REACHABLE_GUID_UNRESOLVED', keys,
+    disposition: 'accept-stale-reference', basis: 'unreachable-from-target-runtime',
+    reason: 'The whole serialized level table is read only by an editor-only debug loader.',
+    owners: [{ path: owner, field: 'MonoBehaviour.lstLevelData', sha256: hash(owner) }],
+    proof: [{ path: 'Assets/Game/Scripts/Gameplay.cs', sha256: hash('Assets/Game/Scripts/Gameplay.cs'), note: 'Reviewed the only reader; it is compiled only inside UNITY_EDITOR.' }],
+  });
+  const write = entries => {
+    const file = path.join(cacheDir, `source-dispositions-${entries.length}-${Math.random().toString(16).slice(2)}.json`);
+    fs.writeFileSync(file, JSON.stringify({
+      schemaVersion: 1,
+      kind: 'unity-port-source-dispositions',
+      project: { name: result.snapshot.project.name, stateFingerprint: result.snapshot.stateFingerprint },
+      profile: 'playable-core',
+      entries,
+    }));
+    return file;
+  };
+
+  // One grouped entry covers more GUIDs than the per-entry limit would otherwise allow.
+  const grouped = write([entry(tableGuids)]);
+  const brief = createImplementationBrief(result, { project: fixture.root, sourceDispositions: grouped, now: 0 });
+  const obligation = brief.obligations.find(item => item.code === 'UNITY_REACHABLE_GUID_UNRESOLVED');
+  assert.equal(obligation.sourceDisposition.dispositioned, tableGuids.length);
+  assert.equal(obligation.sourceDisposition.required, 1);
+  assert.equal(brief.sourceDispositions.acceptedCount, tableGuids.length);
+  assert.match(brief.sourceDispositions.acceptedKeysDigest, /^[0-9a-f]{64}$/);
+  assert.equal(brief.sourceDispositions.acceptedKeys, undefined);
+  assert.ok(Buffer.byteLength(JSON.stringify(brief)) <= PREFLIGHT_MAX_BYTES);
+
+  // A grouped GUID whose live owners differ from the shared owner set is rejected by itself.
+  assert.throws(
+    () => createImplementationBrief(result, { project: fixture.root, sourceDispositions: write([entry([...tableGuids.slice(0, 3), otherGuid])]), now: 0 }),
+    error => error.code === 'UNITY_SOURCE_DISPOSITION_OWNER_MISMATCH' && error.message.includes(otherGuid),
+  );
+  // `key` and `keys` are mutually exclusive; duplicates inside or across entries are invalid.
+  assert.throws(
+    () => createImplementationBrief(result, { project: fixture.root, sourceDispositions: write([{ ...entry(tableGuids.slice(0, 2)), key: tableGuids[2] }]), now: 0 }),
+    error => error.code === 'UNITY_SOURCE_DISPOSITION_INVALID',
+  );
+  assert.throws(
+    () => createImplementationBrief(result, { project: fixture.root, sourceDispositions: write([entry([tableGuids[0], tableGuids[0]])]), now: 0 }),
+    error => error.code === 'UNITY_SOURCE_DISPOSITION_INVALID',
+  );
+  assert.throws(
+    () => createImplementationBrief(result, { project: fixture.root, sourceDispositions: write([entry(tableGuids.slice(0, 2)), entry(tableGuids.slice(1, 3))]), now: 0 }),
+    error => error.code === 'UNITY_SOURCE_DISPOSITION_INVALID',
+  );
+});
+
 test('brief preserves every high code within 12 KiB by compacting repeated routing details', async t => {
   const fixture = createUnityFixture(t);
   const result = await scanUnityProject({ project: fixture.root, provider: 'static', cache: false });

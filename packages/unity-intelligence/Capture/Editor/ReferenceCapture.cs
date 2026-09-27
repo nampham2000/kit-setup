@@ -272,7 +272,7 @@ namespace CcPlayable.UnityIntelligence.Capture
                     if (i < 8) record.particles.Add(new ParticlePose {
                         randomSeed = buffer[i].randomSeed,
                         position = VectorValues(buffer[i].position), velocity = VectorValues(buffer[i].velocity), size = VectorValues(size),
-                        color = new[] { color.r, color.g, color.b, color.a }, rotation = VectorValues(buffer[i].rotation3D),
+                        color = new[] { color.r, color.g, color.b, color.a }, rotation = VectorValues(buffer[i].rotation3D), axisOfRotation = VectorValues(buffer[i].axisOfRotation),
                         remainingLifetime = buffer[i].remainingLifetime, startLifetime = buffer[i].startLifetime,
                     });
                     var d = Vector3.Dot(world - eye, forward);
@@ -398,16 +398,28 @@ namespace CcPlayable.UnityIntelligence.Capture
                     foreach (var component in root.GetComponentsInChildren<MonoBehaviour>(true))
                     {
                         if (component == null || component.GetType().Name != entry.component) continue;
-                        var field = component.GetType().GetField(entry.field, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
-                        if (field == null) continue;
-                        var type = field.FieldType;
-                        object value = type == typeof(int) ? int.Parse(entry.value, System.Globalization.CultureInfo.InvariantCulture)
-                            : type == typeof(float) ? float.Parse(entry.value, System.Globalization.CultureInfo.InvariantCulture)
-                            : type == typeof(bool) ? (object)bool.Parse(entry.value)
-                            : type == typeof(string) ? entry.value : null;
-                        if (value == null) { ReferenceCapture.Fail(request, manifest, $"unsupported field type {type.Name} for {entry.component}.{entry.field}"); return; }
-                        field.SetValue(component, value);
-                        applied++;
+                        try
+                        {
+                            var field = component.GetType().GetField(entry.field, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
+                            // Not a field: a writable property such as Behaviour.enabled (input-driven demo scripts
+                            // are switched off so the capture spawns own the effect).
+                            var property = field == null ? component.GetType().GetProperty(entry.field, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic) : null;
+                            if (field == null && (property == null || !property.CanWrite)) continue;
+                            var type = field != null ? field.FieldType : property.PropertyType;
+                            object value = type == typeof(int) ? int.Parse(entry.value, System.Globalization.CultureInfo.InvariantCulture)
+                                : type == typeof(float) ? float.Parse(entry.value, System.Globalization.CultureInfo.InvariantCulture)
+                                : type == typeof(bool) ? (object)bool.Parse(entry.value)
+                                : type == typeof(string) ? entry.value : null;
+                            if (value == null) { ReferenceCapture.Fail(request, manifest, $"unsupported field type {type.Name} for {entry.component}.{entry.field}"); return; }
+                            if (field != null) field.SetValue(component, value); else property.SetValue(component, value);
+                            applied++;
+                        }
+                        catch (Exception error)
+                        {
+                            // Bad value text, an ambiguous property or a throwing setter fails this request, not the Editor loop.
+                            ReferenceCapture.Fail(request, manifest, $"cannot set {entry.component}.{entry.field}={entry.value}: {error.GetType().Name}: {error.Message}");
+                            return;
+                        }
                     }
                 if (applied == 0) { ReferenceCapture.Fail(request, manifest, $"no {entry.component}.{entry.field} in scene"); return; }
             }
@@ -447,6 +459,17 @@ namespace CcPlayable.UnityIntelligence.Capture
                 var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(spawn.prefab);
                 if (prefab == null) { ReferenceCapture.Fail(request, manifest, "spawn prefab not found: " + spawn.prefab); return; }
                 var instance = Instantiate(prefab);
+                foreach (var renderer in instance.GetComponentsInChildren<ParticleSystemRenderer>())
+                {
+                    if (!renderer.enabled || renderer.renderMode == ParticleSystemRenderMode.None) continue;
+                    var material = renderer.sharedMaterial;
+                    if (material == null || material.shader == null || !material.shader.isSupported
+                        || material.shader.name == "Hidden/InternalErrorShader" || material.passCount == 0)
+                    {
+                        ReferenceCapture.Fail(request, manifest, "Invalid primary particle material in native reference: " + spawn.prefab + " / " + renderer.name);
+                        return;
+                    }
+                }
                 instance.transform.position = spawn.position;
                 if (spawn.useRotation) instance.transform.eulerAngles = spawn.eulerAngles;
                 foreach(var body in instance.GetComponentsInChildren<Rigidbody>()) {
@@ -504,7 +527,13 @@ namespace CcPlayable.UnityIntelligence.Capture
         }
 
         internal void ObserveCollision(Transform actor, Collision collision, string phase) {
-            var body=actor.GetComponent<Rigidbody>();var position=actor.position;var velocity=body!=null?body.velocity:Vector3.zero;
+            var body=actor.GetComponent<Rigidbody>();var position=actor.position;
+            // Unity 6 renamed Rigidbody.velocity; the obsolete name triggers the API updater consent dialog.
+#if UNITY_6000_0_OR_NEWER
+            var velocity=body!=null?body.linearVelocity:Vector3.zero;
+#else
+            var velocity=body!=null?body.velocity:Vector3.zero;
+#endif
             var contact=collision.contactCount>0?collision.GetContact(0):default(ContactPoint);
             var record=new ReferenceCapture.CollisionRecord {actor=ReferenceCapture.HierarchyPath(actor),collider=ReferenceCapture.HierarchyPath(collision.collider.transform),phase=phase,time=Time.time,fixedTime=Time.fixedTime,position=ReferenceCapture.VectorValues(position),velocity=ReferenceCapture.VectorValues(velocity),contacts=collision.contactCount,sleeping=body!=null&&body.IsSleeping(),contactPoint=ReferenceCapture.VectorValues(contact.point),contactNormal=ReferenceCapture.VectorValues(contact.normal),separation=contact.separation};
             if(phase=="enter")collisionEvents.Add(record);

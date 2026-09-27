@@ -17,6 +17,9 @@ const {
   patchEngineProfile,
   restartCocosProject,
   sha256,
+  engineProfileDrift,
+  portabilityNextAction,
+  assertMcpProjectIdentity,
 } = require('./cocos-engine-feature-audit.cjs');
 
 function evidenceFor(text) {
@@ -284,6 +287,137 @@ test('Cocos-normalized option parents and preview aliases satisfy exact Spine an
   assert.deepEqual(audit.appliedPreview.inferredProfileFeatures, ['marionette']);
 });
 
+// Minimal Cocos 3.8.8 engine install: the intrinsic-flag features and their moduleOverrides are
+// copied from the shipped cc.config.json; the preview import map uses the bundler's module ids.
+function makeEngineRoot({ marionette, spine42 = false }) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'engine-root-'));
+  fs.writeFileSync(path.join(root, 'cc.config.json'), `${JSON.stringify({
+    features: {
+      marionette: { modules: [], intrinsicFlags: { MARIONETTE: true } },
+      'procedural-animation': { modules: [], intrinsicFlags: { PROCEDURAL_ANIMATION: true } },
+      'spine-3.8': { modules: [], intrinsicFlags: { SPINE_3_8: true } },
+      'spine-4.2': { modules: [], intrinsicFlags: { SPINE_4_2: true } },
+      animation: { modules: ['animation'] },
+    },
+    moduleOverrides: [
+      { test: 'context.buildTimeConstants && context.buildTimeConstants.NOT_PACK_PHYSX_LIBS', overrides: {
+        'cocos/physics/physx/physx.asmjs.ts': 'cocos/physics/physx/physx.null.ts' } },
+      { test: '!context.buildTimeConstants.MARIONETTE', overrides: {
+        'cocos/animation/marionette/runtime-exports.ts': 'cocos/animation/marionette/index-empty.ts' } },
+      { test: '!context.buildTimeConstants.PROCEDURAL_ANIMATION', overrides: {
+        'cocos/animation/marionette/pose-graph/runtime-exports.ts': 'cocos/animation/marionette/pose-graph/runtime-exports-empty.ts' } },
+      { test: 'context.buildTimeConstants.SPINE_3_8', overrides: {
+        'cocos/spine/lib/spine-version.ts': 'cocos/spine/lib/spine-version-3.8.ts',
+        'cocos/spine/lib/spine-instantiate.ts': 'cocos/spine/lib/spine-instantiate-3.8.ts' } },
+      { test: 'context.buildTimeConstants.SPINE_4_2', overrides: {
+        'cocos/spine/lib/spine-version.ts': 'cocos/spine/lib/spine-version-4.2.ts',
+        'cocos/spine/lib/spine-instantiate.ts': 'cocos/spine/lib/spine-instantiate-4.2.ts' } },
+    ],
+  }, null, 2)}\n`);
+  const imports = {
+    'cce:/internal/x/cc-fu/animation': 'q-bundled:///fs/exports/animation.js',
+    'q-bundled:///fs/cocos/animation/marionette/pose-graph/runtime-exports.js':
+      'q-bundled:///fs/cocos/animation/marionette/pose-graph/runtime-exports-empty.js',
+  };
+  if (!marionette) {
+    imports['q-bundled:///fs/cocos/animation/marionette/runtime-exports.js'] =
+      'q-bundled:///fs/cocos/animation/marionette/index-empty.js';
+  }
+  if (spine42) {
+    imports['q-bundled:///fs/cocos/spine/lib/spine-version.js'] = 'q-bundled:///fs/cocos/spine/lib/spine-version-4.2.js';
+    imports['q-bundled:///fs/cocos/spine/lib/spine-instantiate.js'] = 'q-bundled:///fs/cocos/spine/lib/spine-instantiate-4.2.js';
+  }
+  const preview = path.join(root, 'bin', '.cache', 'dev', 'preview');
+  fs.mkdirSync(preview, { recursive: true });
+  fs.writeFileSync(path.join(preview, 'import-map.json'), `${JSON.stringify({ imports }, null, 2)}\n`);
+  return root;
+}
+
+test('intrinsic-flag features are read from the install-wide engine preview import map', (t) => {
+  const { evaluateIntrinsicFeatures, readSharedPreviewIntrinsics } = require('./cocos-engine-intrinsic-flags.cjs');
+  const stubbed = makeEngineRoot({ marionette: false, spine42: true });
+  const live = makeEngineRoot({ marionette: true });
+  t.after(() => {
+    fs.rmSync(stubbed, { recursive: true, force: true });
+    fs.rmSync(live, { recursive: true, force: true });
+  });
+  const off = readSharedPreviewIntrinsics(stubbed);
+  assert.equal(off.available, true);
+  assert.deepEqual(off.features, {
+    marionette: false, 'procedural-animation': false, 'spine-3.8': false, 'spine-4.2': true,
+  });
+  assert.equal(off.flags.MARIONETTE, false);
+  assert.match(off.sha256, /^[0-9a-f]{64}$/);
+  const on = readSharedPreviewIntrinsics(live);
+  assert.equal(on.features.marionette, true);
+  assert.equal(on.features['spine-4.2'], false);
+  // No intrinsic declarations -> nothing evaluable; callers keep their fallback.
+  assert.deepEqual(evaluateIntrinsicFeatures({ features: { animation: {} } }, { imports: {} }).features, {});
+  assert.equal(readSharedPreviewIntrinsics(null).available, false);
+});
+
+test('a marionette stub written into the shared engine map by another project fails the applied preview', (t) => {
+  const root = makeProject('[{"__type__":"cc.animation.AnimationController"}]', {
+    appliedFeatures: ['base', 'animation'],
+  });
+  const stubbed = makeEngineRoot({ marionette: false });
+  const live = makeEngineRoot({ marionette: true });
+  t.after(() => {
+    for (const dir of [root, stubbed, live]) fs.rmSync(dir, { recursive: true, force: true });
+  });
+  const engineFile = path.join(root, 'settings', 'v2', 'packages', 'engine.json');
+  const previewFile = path.join(root, 'temp', 'programming', 'packer-driver', 'targets', 'preview', 'import-map.json');
+  const document = JSON.parse(fs.readFileSync(engineFile, 'utf8'));
+  const config = document.modules.configs.defaultConfig;
+  config.cache.animation = { _value: true };
+  config.cache.marionette = { _value: true };
+  config.includeModules.push('animation', 'marionette');
+  fs.writeFileSync(engineFile, `${JSON.stringify(document, null, 2)}\n`);
+  // The project preview was regenerated after the profile write, which used to be enough to
+  // infer marionette; the shared engine map proves the preview still loads the empty stub.
+  const profileWrite = new Date(Date.UTC(2024, 0, 1, 0, 0, 20));
+  const previewAfterProfile = new Date(Date.UTC(2024, 0, 1, 0, 0, 30));
+  fs.utimesSync(engineFile, profileWrite, profileWrite);
+  fs.utimesSync(previewFile, previewAfterProfile, previewAfterProfile);
+
+  const broken = auditCocosEngineFeatures(root, { engineRoot: stubbed });
+  assert.equal(broken.profile.complete, true);
+  assert.equal(broken.complete, false);
+  assert.deepEqual(broken.appliedPreview.missing, ['marionette']);
+  assert.deepEqual(broken.appliedPreview.sharedEngine.missing, ['marionette']);
+  assert.deepEqual(broken.appliedPreview.inferredProfileFeatures, []);
+
+  const repaired = auditCocosEngineFeatures(root, { engineRoot: live });
+  assert.equal(repaired.complete, true);
+  assert.deepEqual(repaired.appliedPreview.inferredProfileFeatures, []);
+  assert.equal(repaired.appliedPreview.sharedEngine.features.marionette, true);
+});
+
+test('a disabled intrinsic feature enabled in the shared map by another project is reported, not failed', (t) => {
+  const root = makeProject('[]', { appliedFeatures: ['base'] });
+  const live = makeEngineRoot({ marionette: true });
+  t.after(() => {
+    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(live, { recursive: true, force: true });
+  });
+  const engineFile = path.join(root, 'settings', 'v2', 'packages', 'engine.json');
+  const previewFile = path.join(root, 'temp', 'programming', 'packer-driver', 'targets', 'preview', 'import-map.json');
+  const document = JSON.parse(fs.readFileSync(engineFile, 'utf8'));
+  document.modules.configs.defaultConfig.cache.marionette = { _value: false };
+  fs.writeFileSync(engineFile, `${JSON.stringify(document, null, 2)}\n`);
+  const profileWrite = new Date(Date.UTC(2024, 0, 1, 0, 0, 20));
+  const previewAfterProfile = new Date(Date.UTC(2024, 0, 1, 0, 0, 30));
+  fs.utimesSync(engineFile, profileWrite, profileWrite);
+  fs.utimesSync(previewFile, previewAfterProfile, previewAfterProfile);
+
+  const audit = auditCocosEngineFeatures(root, {
+    engineRoot: live, requiredModules: ['base'], disabledModules: ['marionette'],
+  });
+  assert.equal(audit.complete, true);
+  assert.deepEqual(audit.appliedPreview.unexpected, []);
+  assert.deepEqual(audit.appliedPreview.sharedEngine.extras, ['marionette']);
+});
+
 test('direct fallback patch writes exact backup, CAS receipt, and pending apply state', (t) => {
   const root = makeProject('[{"__type__":"cc.Graphics"},{"__type__":"cc.MeshCollider"}]');
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -440,4 +574,124 @@ test('direct fallback CAS refuses a concurrent engine.json edit', (t) => {
     }),
     (error) => error instanceof EngineFeatureError && error.code === 'ENGINE_FEATURE_CAS_CONFLICT',
   );
+});
+
+function gitIn(root, args) {
+  const { spawnSync } = require('node:child_process');
+  const run = spawnSync('git', ['-c', 'user.email=test@example.invalid', '-c', 'user.name=test', '-c', 'core.autocrlf=false', ...args], {
+    cwd: root, encoding: 'utf8', windowsHide: true,
+  });
+  assert.equal(run.status, 0, run.stderr);
+  return run.stdout;
+}
+
+function setAnimationModules(root, enabled) {
+  const engineFile = path.join(root, 'settings', 'v2', 'packages', 'engine.json');
+  const document = JSON.parse(fs.readFileSync(engineFile, 'utf8'));
+  const config = document.modules.configs.defaultConfig;
+  const names = ['animation', 'marionette', 'skeletal-animation'];
+  for (const name of names) config.cache[name] = { _value: enabled };
+  config.includeModules = config.includeModules.filter(name => !names.includes(name)).concat(enabled ? names : []);
+  fs.writeFileSync(engineFile, `${JSON.stringify(document, null, 2)}\n`);
+}
+
+const SKINNED_PREFAB = '[{"__type__":"cc.SkeletalAnimation"},{"__type__":"cc.animation.AnimationController"}]';
+
+test('a preview that works only from an uncommitted engine profile is reported as non-portable until it is staged', (t) => {
+  const root = makeProject(SKINNED_PREFAB);
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  setAnimationModules(root, false);
+  gitIn(root, ['init', '-q']);
+  gitIn(root, ['add', '-A']);
+  gitIn(root, ['commit', '-q', '-m', 'profile without animation modules']);
+
+  // The other PC: a tool enabled the modules in the working copy only.
+  setAnimationModules(root, true);
+  const local = auditCocosEngineFeatures(root);
+  assert.equal(local.profile.complete, true);
+  assert.equal(local.committedProfile.tracked, true);
+  assert.equal(local.committedProfile.complete, false);
+  assert.deepEqual(local.committedProfile.missing, ['animation', 'marionette', 'skeletal-animation']);
+  assert.deepEqual(local.committedProfile.driftFromWorkingCopy, ['+animation', '+marionette', '+skeletal-animation']);
+  assert.equal(local.portable, false);
+  assert.match(portabilityNextAction(local), /Stage and commit settings\/v2\/packages\/engine\.json/);
+
+  gitIn(root, ['add', 'settings/v2/packages/engine.json']);
+  const staged = auditCocosEngineFeatures(root);
+  assert.equal(staged.committedProfile.complete, true);
+  assert.deepEqual(staged.committedProfile.driftFromWorkingCopy, []);
+  assert.equal(staged.portable, true);
+  assert.equal(portabilityNextAction(staged), null);
+});
+
+test('an untracked engine profile is non-portable and a non-Git project stays unverified', (t) => {
+  const root = makeProject(SKINNED_PREFAB);
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  setAnimationModules(root, true);
+  const outsideGit = auditCocosEngineFeatures(root);
+  assert.equal(outsideGit.committedProfile.available, false);
+  assert.equal(outsideGit.portable, null);
+
+  gitIn(root, ['init', '-q']);
+  const untracked = auditCocosEngineFeatures(root);
+  assert.equal(untracked.committedProfile.available, true);
+  assert.equal(untracked.committedProfile.tracked, false);
+  assert.equal(untracked.portable, false);
+  assert.match(portabilityNextAction(untracked), /untracked/);
+});
+
+test('a tracked engine profile Git cannot show fails closed instead of reading as untracked', (t) => {
+  const root = makeProject(SKINNED_PREFAB);
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  setAnimationModules(root, true);
+  const runner = (listed) => (command, args) => {
+    if (args[0] === 'show') return { ok: false, stdout: '', error: 'timed out' };
+    if (args[0] === 'rev-parse') return { ok: true, stdout: 'true\n' };
+    return listed;
+  };
+  const conflicted = auditCocosEngineFeatures(root, { gitRunner: runner({ ok: true, stdout: '100644 abc 1\tsettings/v2/packages/engine.json\n' }) });
+  assert.equal(conflicted.committedProfile.tracked, true);
+  assert.deepEqual(conflicted.committedProfile.missing, ['engine-profile:unreadable']);
+  assert.equal(conflicted.portable, false);
+  const unlisted = auditCocosEngineFeatures(root, { gitRunner: runner({ ok: true, stdout: '' }) });
+  assert.equal(unlisted.committedProfile.tracked, false);
+  assert.deepEqual(unlisted.committedProfile.missing, ['engine-profile:untracked']);
+  const broken = auditCocosEngineFeatures(root, { gitRunner: runner({ ok: false, stdout: '', error: 'index.lock' }) });
+  assert.deepEqual(broken.committedProfile.missing, ['engine-profile:unreadable']);
+});
+
+test('the MCP project identity check sees through a junction to the same project', async (t) => {
+  const real = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-real-'));
+  const link = `${real}-link`;
+  t.after(() => { fs.rmSync(link, { force: true, recursive: true }); fs.rmSync(real, { recursive: true, force: true }); });
+  try { fs.symlinkSync(real, link, 'junction'); } catch (error) { t.skip(`junction unsupported: ${error.code}`); return; }
+  const client = { call: async () => ({ content: [{ type: 'text', text: JSON.stringify({ success: true, data: { path: link } }) }] }) };
+  await assertMcpProjectIdentity(client, real);
+});
+
+test('profile drift compares effective modules, not Cocos include normalization or key order', () => {
+  const tracked = engineDocument('physics-cannon').modules.configs.defaultConfig;
+  const normalized = JSON.parse(JSON.stringify(tracked));
+  normalized.includeModules = [...normalized.includeModules].reverse();
+  normalized.cache.spine._option = 'spine-4.2'; // parent disabled: its option is not an effective choice
+  assert.deepEqual(engineProfileDrift(tracked, normalized), []);
+  const switched = JSON.parse(JSON.stringify(tracked));
+  switched.cache.physics._option = 'physics-builtin';
+  switched.cache['physics-builtin']._value = true;
+  switched.cache['physics-cannon']._value = false;
+  switched.includeModules = ['base', 'physics-builtin'];
+  assert.deepEqual(engineProfileDrift(tracked, switched), ['+physics-builtin', '-physics-cannon', 'physics:physics-cannon->physics-builtin']);
+});
+
+test('the MCP client refuses a Profile API write to another project that shares the port', async () => {
+  const clientFor = projectPath => ({
+    call: async () => ({ content: [{ type: 'text', text: JSON.stringify({ success: true, data: { path: projectPath } }) }] }),
+  });
+  const root = path.resolve(os.tmpdir(), 'cc_playable_framework');
+  // Windows paths compare case-insensitively; a trailing separator is not a different project.
+  await assertMcpProjectIdentity(clientFor(`${process.platform === 'win32' ? root.toUpperCase() : root}${path.sep}`), root);
+  await assert.rejects(assertMcpProjectIdentity(clientFor(`${root}-combat-magic`), root),
+    error => error.code === 'ENGINE_FEATURE_MCP_PROJECT_MISMATCH' && error.details.editorProject === `${root}-combat-magic`);
+  await assert.rejects(assertMcpProjectIdentity({ call: async () => ({ content: [] }) }, root),
+    error => error.code === 'ENGINE_FEATURE_MCP_PROJECT_UNVERIFIED');
 });

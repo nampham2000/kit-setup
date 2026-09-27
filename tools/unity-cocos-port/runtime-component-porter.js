@@ -283,30 +283,6 @@ function hasSubEmitterEntry(component, type, subEmitterParticleId) {
   ));
 }
 
-// A Unity Birth sub-emitter instance runs the sub-emitter system's own emission timeline per parent particle:
-// rate over time, bursts, duration and looping come from the sub-emitter's main/emission modules.
-function unitySubEmitterTimeline(subEmitterDoc) {
-  const data = subEmitterDoc ? parseUnityParticleDoc(subEmitterDoc) : null;
-  const emission = data?.EmissionModule || {};
-  const rate = emission.rateOverTime || {};
-  const approximations = [];
-  if (Number(rate.minMaxState || 0) !== 0) approximations.push('rate over time curve uses its multiplier');
-  const bursts = (Array.isArray(emission.m_Bursts) ? emission.m_Bursts : []).map((burst) => {
-    const count = burst?.countCurve || {};
-    if (Number(count.minMaxState || 0) !== 0) approximations.push('burst count curve uses its multiplier');
-    if (Number(burst?.cycleCount ?? 1) !== 1) approximations.push('burst cycles beyond the first are ignored');
-    return { time: Number(burst?.time || 0), count: Number(count.scalar ?? 0) * Math.max(0, Math.min(1, Number(burst?.probability ?? 1))) };
-  });
-  return {
-    found: Boolean(data),
-    rate: Number(rate.scalar || 0),
-    duration: Number(data?.lengthInSec || 0),
-    looping: data ? Boolean(Number(data.looping ?? 1)) : true,
-    bursts,
-    approximations,
-  };
-}
-
 function quatMultiply(a, b) {
   return {
     x: a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
@@ -340,22 +316,8 @@ function emitterForwardAngle(builder, nodeA, nodeB) {
 // which was measured on sub-emitters whose forward stays close to their parent system's forward.
 const SUB_EMITTER_ALIGNMENT_VALIDATED_DEGREES = 20;
 
-function unitySubEmitterComponentIds(model) {
-  const ids = new Set();
-  for (const [componentId, doc] of model?.componentDocs?.entries?.() || []) {
-    const classId = Number(doc?.classId || 0);
-    if (classId !== 198 && classId !== 223) continue;
-    const entries = unitySubEmitterEntries(doc);
-    if (!entries.length) continue;
-    ids.add(String(componentId));
-    for (const entry of entries) ids.add(String(entry?.emitter?.fileID || ''));
-  }
-  return ids;
-}
-
-function makeSubEmitterEntry(script, type, entry, subEmitterParticleId, subEmitterNodeId, timeline) {
+function makeSubEmitterEntry(script, type, entry, subEmitterParticleId, subEmitterNodeId) {
   const emitProbability = Math.max(0, Math.min(1, Number(entry?.emitProbability ?? 1)));
-  const birth = type === SUB_EMITTER_TYPE.birth;
   return {
     __type__: script.entryClassName,
     type,
@@ -363,15 +325,13 @@ function makeSubEmitterEntry(script, type, entry, subEmitterParticleId, subEmitt
     inherit: Number(entry?.properties || 0),
     emitProbability,
     subEmitterNode: cocosRef(subEmitterNodeId),
-    emitRatePerParticle: birth ? timeline.rate : 0,
-    emitterDuration: birth ? timeline.duration : 0,
-    emitterLooping: birth ? timeline.looping : true,
-    burstTimes: birth ? timeline.bursts.map((burst) => burst.time) : [],
-    burstCounts: birth ? timeline.bursts.map((burst) => burst.count) : [],
+    emitRatePerParticle: type === SUB_EMITTER_TYPE.birth ? 36 : 0,
     particlesPerSample: 1,
     maxSourceParticles: 32,
     deathBurstCount: 1,
-    playSubEmitterOnEnable: birth,
+    playSubEmitterOnEnable: type === SUB_EMITTER_TYPE.birth,
+    // The runtime replays the sub system's own bursts/rate per parent event (Unity semantics).
+    unityInstances: true,
   };
 }
 
@@ -658,31 +618,25 @@ function createRuntimeComponentPorter(deps) {
         if (!Array.isArray(followerComponent.entries)) followerComponent.entries = [];
         if (hasSubEmitterEntry(followerComponent, type, subEmitterParticleId)) continue;
 
-        subEmitterParticle._simulationSpace = distanceContract?.simulationSpace ?? 0;
         subEmitterParticle.playOnAwake = false;
-        if(!distanceContract)subEmitterParticle.loop = type === SUB_EMITTER_TYPE.birth;
-        if (type === SUB_EMITTER_TYPE.death) subEmitterNode._active = false;
-        const timeline = unitySubEmitterTimeline(model.componentDocs.get(subEmitterFileId));
-        if (type === SUB_EMITTER_TYPE.birth && !timeline.found) {
-          reporter.high('PARTICLE_SUB_EMITTER_TIMELINE_MISSING', model.file, subEmitterNode._name || '',
-            'Unity Birth sub-emitter source document was not found; its per-parent emission rate cannot be ported');
+        if (distanceContract) {
+          // Native constant Birth distance emission: UnityParticleDistanceSubEmitter owns it.
+          subEmitterParticle._simulationSpace = distanceContract.simulationSpace ?? 0;
+          setCocosCurveConstant(builder.objects, subEmitterParticle, 'rateOverTime', 0);
+          setCocosCurveConstant(builder.objects, subEmitterParticle, 'rateOverDistance', 0);
+        } else {
+          // Duration, loop, bursts and rate stay authored: the follower (unityInstances) reads
+          // them as the per-instance emission schedule and silences the target at runtime.
+          subEmitterParticle._simulationSpace = 0;
         }
+        if (type === SUB_EMITTER_TYPE.death) subEmitterNode._active = false;
         const forwardAngle = emitterForwardAngle(builder, sourceNodeId, subEmitterNodeId);
         if (type === SUB_EMITTER_TYPE.birth && forwardAngle > SUB_EMITTER_ALIGNMENT_VALIDATED_DEGREES) {
           reporter.medium('PARTICLE_SUB_EMITTER_ALIGNMENT_UNVALIDATED', model.file, subEmitterNode._name || '',
             `Sub-emitter forward is ${forwardAngle.toFixed(0)} deg from its parent system's; Unity's parent-velocity alignment is only validated within ${SUB_EMITTER_ALIGNMENT_VALIDATED_DEGREES} deg`);
         }
-        if (type === SUB_EMITTER_TYPE.birth && timeline.approximations.length) {
-          reporter.medium('PARTICLE_SUB_EMITTER_TIMELINE_APPROXIMATED', model.file, subEmitterNode._name || '',
-            'Unity Birth sub-emitter timeline approximated: ' + [...new Set(timeline.approximations)].join('; '));
-        }
-        setCocosCurveConstant(builder.objects, subEmitterParticle, 'rateOverTime', 0);
-        setCocosCurveConstant(builder.objects, subEmitterParticle, 'rateOverDistance', 0);
-        // The follower replays the bursts per parent instance; the looping native system would fire them on its own clock.
-        if (type === SUB_EMITTER_TYPE.birth) subEmitterParticle.bursts = [];
 
-        // A distance contract has no time rate or bursts, so its timeline emits nothing and the distance path owns it.
-        followerComponent.entries.push({...makeSubEmitterEntry(script, type, entry, subEmitterParticleId, subEmitterNodeId, timeline),
+        followerComponent.entries.push({...makeSubEmitterEntry(script, type, entry, subEmitterParticleId, subEmitterNodeId),
           ...(distanceContract?{sourceDistanceRate:distanceContract.rate,sourceSimulationSpace:distanceContract.simulationSpace,emitRatePerParticle:0}:{}),
         });
 

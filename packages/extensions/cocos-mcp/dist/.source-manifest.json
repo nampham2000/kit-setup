@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "aggregateSha256": "80d09d78a74aa98675312433813a2bf87cb3b05cc6581e925570f768df65d866",
+  "aggregateSha256": "cabb0c9fec40eca699b39eb3e6bf6f90d282104d4cbdb0aba5c87996d41f2567",
   "files": {
     "base.tsconfig.json": "5ace3c7786f1a9d5074cc945028633a589aafef89ccaa830e6152cb71e1014c2",
     "package.json": "aecb60972cb00f66b9712045a4d8ce4b1fe61fb7358802ce123d69734e1de181",
@@ -27,7 +27,7 @@
     "source/tools/debug-tools.ts": "ecc5b592a97c84a5a1ae99ead7d69c8e1c75a5cf9d7e7338af3a57cb92b390e3",
     "source/tools/dx-tools.ts": "daf172de771bb913ac2f40d6659013c5bb72cbf7b70a2ec4e1eec2f9be6d3e65",
     "source/tools/editor-runtime-tools.ts": "a1dd7a5ff7d3aafe8da47f651330eb833080bbe2ada3681b7cb47acb1e9198ea",
-    "source/tools/engine-feature-tools.ts": "81ea3610da57ecdd92477306f1c2e1a191ebfcdef164aba89a01c89b47908042",
+    "source/tools/engine-feature-tools.ts": "afcb527e483461a224fc5b533b844dcd8bc9193d9a50a37a7d58a155e93565d1",
     "source/tools/node-tools.ts": "16244dd202e55c81e89a0f6d0843c87d70d828e71c1106462c4eeb7a4083c373",
     "source/tools/prefab-tools.ts": "efe4c2e43cf87b8ba70268ceb04521cfd1b190b01aaee1d42cabe1c0ad3eec00",
     "source/tools/preferences-tools.ts": "b76a683e6850746f86287ff22831aeaaf92b808db6a594ead01c517a34a3ca13",
@@ -113,7 +113,7 @@
       "dist/tools/debug-tools.js": "dc355d524366961425d52fbe9d1316d494d6d343c0ef59d82dbae160653dc1a7",
       "dist/tools/dx-tools.js": "30bffcd2d0677b542be82eace838ac49b89c5f5492c4a325e4b3d885d04e2e09",
       "dist/tools/editor-runtime-tools.js": "538150a708e63310ca60a8944d34699255a811251f67f0e8866052a7945805ff",
-      "dist/tools/engine-feature-tools.js": "bfc1fb7c7d350c08bb4d87f3267eb294e0941f1a6b491c5491028c28727c48db",
+      "dist/tools/engine-feature-tools.js": "c3df270c9945e814cd855fe52d4a5cc4e9e2bff545c88ab2cc65ea22af0eaea9",
       "dist/tools/node-tools.js": "77f87432d4ccd80681772f060f41089a61c5e5bfebfc993ff6065488f7d54179",
       "dist/tools/prefab-tools.js": "bbd37163719afac17ccf8f18ecbe574821d785292ff3cd988b850d4127a8b830",
       "dist/tools/preferences-tools.js": "412f271ad69afdcb32ad7573fd857de78e74838161ad9d07a7349458773fc7b5",

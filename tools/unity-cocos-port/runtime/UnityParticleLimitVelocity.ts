@@ -36,7 +36,13 @@ export function installUnityParticleLimitVelocity(system: ParticleSystem): void 
         // With dampen = 1 the engine returns the limit-projected velocity and
         // keeps its own limit curve, random channel, separate axes and space.
         this.dampen = 1;
-        try { engineAnimate.call(this, particle, dt); } finally { this.dampen = dampen; }
+        // Native evaluates limit curves at the beginning of the step. The CPU
+        // processor has already decremented lifetime before invoking modules.
+        // Restore it immediately so size/color and subsequent modules keep their age.
+        const remaining = particle.remainingLifetime;
+        particle.remainingLifetime = remaining + dt;
+        try { engineAnimate.call(this, particle, dt); }
+        finally { this.dampen = dampen; particle.remainingLifetime = remaining; }
         const keep = unityDampenKeep(dampen, dt);
         velocity.x += (source.x - velocity.x) * keep;
         velocity.y += (source.y - velocity.y) * keep;

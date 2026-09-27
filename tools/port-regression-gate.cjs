@@ -103,6 +103,8 @@ Options:
   --risk <id>           Required risk for init; repeatable.
   --suite <id>          Re-run one suite and merge it into a current hash-bound receipt; repeatable.
   --force               Replace an existing registry during init.
+  --preview-url <url>   Loopback preview origin for this machine (or CC_PLAYABLE_PREVIEW_URL);
+                        replaces only each matrix URL origin, keeping path and query.
   --no-refresh          Intentionally skip Cocos AssetDB/preview refresh.
   --json                Emit compact JSON.
   --help                Show this help.
@@ -110,7 +112,14 @@ Options:
 The tracked registry owns risk coverage; the ignored receipt owns one machine's
 current run. run fails closed when a mandatory suite lacks the oracle required by
 its risk. check never opens a browser: it only proves that an existing PASS still
-matches the current registry, matrices, and watched target bytes.`;
+matches the current registry, matrices, and watched target bytes.
+
+Opt-in case tags: a case tagged "ui-layout" (a control group whose sibling was
+removed/deferred, or any re-centred/re-flowed UI group) must have a semantic eval
+with requiredEvalMetrics bounding centerOffsetPx (or centerOffsetXPx/YPx) at
+max <= 32 design px, and the ui-layout cases of a matrix must span
+>= 2 explicit viewports (windowSize/previewDevice). Use evalHelpers
+["playable-shared-kit/tools/qa/ui-layout-balance.js"] for the probe.`;
 
 function regressionError(code, message, details = null) {
   const error = new Error(message);
@@ -138,7 +147,7 @@ function parseArgs(argv) {
     if (argument === '--no-refresh') { options.refresh = false; continue; }
     const equal = /^--([a-z-]+)=(.*)$/.exec(argument);
     const name = equal ? equal[1] : argument.startsWith('--') ? argument.slice(2) : null;
-    if (!['project', 'config', 'receipt', 'output', 'risk', 'suite'].includes(name)) {
+    if (!['project', 'config', 'receipt', 'output', 'risk', 'suite', 'preview-url'].includes(name)) {
       throw regressionError('REGRESSION_OPTION_INVALID', `Option không hỗ trợ: ${argument}`);
     }
     const value = equal ? equal[2] : argv[++index];
@@ -311,6 +320,44 @@ function caseHasFirstUsePerformanceOracle(entry) {
     && metricBoundAtMost(entry.requiredEvalMetrics, 'firstFeedbackToNextSemanticMs', 200);
 }
 
+const UI_LAYOUT_TAG = 'ui-layout';
+const UI_LAYOUT_MAX_CENTER_OFFSET_PX = 32;
+const UI_LAYOUT_CENTER_METRICS = ['centerOffsetPx', 'centerOffsetXPx', 'centerOffsetYPx'];
+
+function caseViewportKey(entry, matrix) {
+  const size = String(entry.windowSize || matrix.windowSize || '').trim();
+  const device = String(entry.previewDevice || matrix.previewDevice || '').trim();
+  return size || device ? `${size}|${device}` : '';
+}
+
+/**
+ * Opt-in "ui-layout" tag: a tap regression uses the control's runtime position,
+ * so it cannot catch a lone survivor that kept pair-relative anchoredPosition.
+ * Each tagged case must bound the group centre offset, and tagged cases must run
+ * at two or more distinct viewports.
+ */
+function validateUiLayoutBalanceOracle(suite, matrix) {
+  const tagged = matrix.cases.filter(entry => (entry.regressionTags || []).includes(UI_LAYOUT_TAG));
+  if (!tagged.length) return;
+  for (const entry of tagged) {
+    const bounded = UI_LAYOUT_CENTER_METRICS.some(metric => {
+      const bound = metricBound(entry.requiredEvalMetrics, metric);
+      const max = Number(bound?.max);
+      return Number.isFinite(max) && max >= 0 && max <= UI_LAYOUT_MAX_CENTER_OFFSET_PX;
+    });
+    if (!caseHasEval(entry) || !bounded) {
+      throw regressionError('REGRESSION_UI_LAYOUT_BALANCE_MISSING',
+        `${suite.id}/${entry.name}: ui-layout cần semantic eval (requireEvalOk=true) và requiredEvalMetrics `
+        + `centerOffsetPx|centerOffsetXPx|centerOffsetYPx có max finite <= ${UI_LAYOUT_MAX_CENTER_OFFSET_PX} design px.`);
+    }
+  }
+  const viewports = new Set(tagged.map(entry => caseViewportKey(entry, matrix)));
+  if (viewports.size < 2 || viewports.has('')) {
+    throw regressionError('REGRESSION_UI_LAYOUT_VIEWPORTS_MISSING',
+      `${suite.id}: ui-layout cần các case chạy ở >=2 viewport explicit khác nhau (windowSize/previewDevice).`);
+  }
+}
+
 function caseHasResponsiveLayoutMetrics(entry) {
   return caseHasEval(entry)
     && metricBoundAtMost(entry.requiredEvalMetrics, 'layoutOverlapMax', 0.01)
@@ -481,6 +528,14 @@ function validateMatrixPolicy(projectRoot, suite, matrix, matrixFile) {
     if (entry.evalFile) addDependency(entry.evalFile, `${suite.id}.evalFile`);
     if (entry.evalBeforeFile) addDependency(entry.evalBeforeFile, `${suite.id}.evalBeforeFile`);
     if (entry.referenceImage) addDependency(entry.referenceImage, `${suite.id}.referenceImage`);
+    const evalHelpers = entry.evalHelpers !== undefined ? entry.evalHelpers : matrix.evalHelpers;
+    if (evalHelpers !== undefined) {
+      if (!Array.isArray(evalHelpers) || evalHelpers.length > 8
+        || evalHelpers.some(item => typeof item !== 'string' || !/.c?js$/i.test(item.trim()))) {
+        throw regressionError('REGRESSION_MATRIX_INVALID', `${suite.id}/${name}: evalHelpers phải là 0-8 file .js.`);
+      }
+      for (const helper of evalHelpers) addDependency(helper.trim(), `${suite.id}.evalHelpers`);
+    }
     if (entry.animationOracle) {
       const oracleFile = resolveContained(projectRoot, entry.animationOracle,
         `${suite.id}.animationOracle`, { mustExist: true });
@@ -494,6 +549,7 @@ function validateMatrixPolicy(projectRoot, suite, matrix, matrixFile) {
     }
     for (const tag of entry.regressionTags || []) tags.add(tag.trim());
   }
+  validateUiLayoutBalanceOracle(suite, matrix);
   for (const risk of suite.risks) {
     if (SEMANTIC_RISKS.has(risk) && !matrix.cases.some(caseHasEval)) {
       throw regressionError('REGRESSION_SEMANTIC_ORACLE_MISSING', `${suite.id}: risk ${risk} cần ít nhất một semantic eval.`);
@@ -819,15 +875,37 @@ function parseJsonOutput(value) {
   throw regressionError('REGRESSION_MATRIX_OUTPUT_INVALID', 'verify.visual không trả JSON hợp lệ.');
 }
 
+/**
+ * Preview ports are machine-local (Cocos takes the next free port when 7456 is busy), so a
+ * tracked matrix URL cannot be portable. --preview-url / CC_PLAYABLE_PREVIEW_URL swaps only the
+ * origin and keeps each matrix's path and query (?level=, ?tutorials=off).
+ */
+function previewUrlFor(projectRoot, suite, previewUrl) {
+  const override = previewUrl || process.env.CC_PLAYABLE_PREVIEW_URL || '';
+  if (!override) return null;
+  const base = new URL(override);
+  if (!/^https?:$/.test(base.protocol) || !['localhost', '127.0.0.1', '[::1]'].includes(base.hostname)) {
+    throw regressionError('REGRESSION_PREVIEW_URL_INVALID', 'preview-url phải là loopback http(s) origin.');
+  }
+  resolveContained(projectRoot, suite.matrix, `${suite.id}.matrix`);
+  const matrix = JSON.parse(fs.readFileSync(path.resolve(projectRoot, suite.matrix), 'utf8'));
+  const target = new URL(String(matrix.url));
+  target.protocol = base.protocol;
+  target.host = base.host;
+  return target.href;
+}
+
 function executeMatrix(projectRoot, suite, runNumber, options = {}) {
   const outputRoot = options.output || DEFAULT_OUTPUT;
   const output = path.posix.join(outputRoot.replace(/\\/g, '/'), suite.id, `run-${runNumber}`);
   resolveContained(projectRoot, output, `${suite.id}.output`);
+  const urlOverride = previewUrlFor(projectRoot, suite, options.previewUrl);
   const child = (options.spawnSync || spawnSync)(process.execPath, [
     path.join(__dirname, 'preview-checkpoints.cjs'),
     '--config', suite.matrix,
     '--output', output,
     '--json',
+    ...(urlOverride ? ['--url', urlOverride] : []),
   ], {
     cwd: projectRoot,
     encoding: 'utf8',
@@ -955,6 +1033,7 @@ async function runRegressionGate(options = {}, dependencies = {}) {
     for (let runNumber = 1; runNumber <= suite.runs; runNumber += 1) {
       const result = (dependencies.runMatrix || executeMatrix)(projectRoot, suite, runNumber, {
         output: options.output || DEFAULT_OUTPUT,
+        previewUrl: options.previewUrl,
         ...(dependencies.matrixOptions || {}),
       });
       runs.push(await Promise.resolve(result));

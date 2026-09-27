@@ -1,0 +1,26 @@
+CCEffect %{
+  techniques:
+  - passes:
+    - vert: present-vs:vert
+      frag: present-fs:frag
+      rasterizerState: { cullMode: none }
+      depthStencilState: { depthTest: false, depthWrite: false }
+      properties:
+        linearFrame: { value: black }
+}%
+CCProgram present-vs %{
+  precision highp float;
+  in vec3 a_position;
+  in vec2 a_texCoord;
+  out vec2 uv;
+  vec4 vert() { uv=a_texCoord; return vec4(a_position.xy,0.0,1.0); }
+}%
+CCProgram present-fs %{
+  precision highp float;
+  in vec2 uv;
+  uniform sampler2D linearFrame;
+  vec4 frag() {
+    vec3 c=max(texture(linearFrame,uv).rgb,vec3(0.0));
+    return vec4(mix(c*12.92,1.055*pow(c,vec3(1.0/2.4))-0.055,step(vec3(0.0031308),c)),1.0);
+  }
+}%

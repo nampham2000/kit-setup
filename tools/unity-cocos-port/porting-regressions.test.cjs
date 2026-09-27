@@ -423,6 +423,26 @@ test('particle conversion of a mesh-shader material does not overwrite the mesh 
   assert.doesNotMatch(smoke.file, /\.particle\.mtl$/);
 });
 
+test('a hand-ported effect marked "// unity-port: manual" survives re-porting with its UUID', () => {
+  // Screw Out Factory: the canonical compiler emits an invalid effect for JMO MatCap_TextureMult_Bumped,
+  // and every re-port used to overwrite the working hand port with that failing output.
+  const root = path.join(temp, 'manual-effect');
+  const shader = path.join(root, 'MatCap.shader');
+  const effect = path.join(root, 'assets', 'effects', 'MatCap.effect');
+  fs.mkdirSync(path.dirname(effect), { recursive: true });
+  fs.writeFileSync(shader, 'Shader "MatCap/Bumped/Textured Multiply" { SubShader { Pass { CGPROGRAM ENDCG } } }');
+  const handPort = '// Hand port of JMO MatCap\n// unity-port: manual\nCCEffect %{ techniques: [] }%\n';
+  fs.writeFileSync(effect, handPort);
+  fs.writeFileSync(`${effect}.meta`, JSON.stringify({ importer: 'effect', uuid: 'hand-port-uuid' }));
+  const porter = createMaterialPorter({ ensureDirectoryMetas() {} });
+  const report = reports();
+  const uuid = porter.ensureCustomPortedShaderEffect({ path: shader, relativePath: 'MatCap.shader', stem: 'MatCap' }, { cocosRoot: root }, report);
+  assert.equal(uuid, 'hand-port-uuid');
+  assert.equal(fs.readFileSync(effect, 'utf8'), handPort, 'the hand port must not be overwritten');
+  assert.ok(report.entries.some(entry => entry.args[0] === 'CUSTOM_SHADER_MANUAL_PORT_KEPT'));
+  assert.ok(!report.entries.some(entry => entry.level === 'high'));
+});
+
 test('a scene keeps every root and links root-level prefab instances to the mapped port output',()=>{
   const {portPrefab,parseArgs}=require('../unity-cocos-port.cjs');
   const root=path.join(temp,'scene-roots'),unity=path.join(root,'Unity/Assets'),cocos=path.join(root,'Cocos');
