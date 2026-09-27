@@ -295,7 +295,7 @@
     },
     {
       "id": "unity-tmp-cocos-layout-parity",
-      "rule": "Khi port Unity TMP autosize/character spacing sang Cocos Label, không map mù sang `Label.SHRINK` hoặc chép nguyên `characterSpacing`. Phải đọc prefab + TMP font asset/TTF + exact string, tính effective font size từ glyph advances và min/max source; nếu source fit ở max thì bind đúng size đó vì Cocos SHRINK không có TMP minimum contract. TMP nhân character spacing với `currentEmScale = fontSize * 0.01`; Cocos 3.8.8 default TTF assembler bỏ qua `spacingX`, nên chỉ dùng `CacheMode.CHAR` khi effect/feature của label tương thích rồi gán spacing đã quy đổi. Oracle portable phải khóa source/font hashes, formula, string, rect, wrap/overflow, runtime font identity/cache/size/spacing và tight text ROI. Unity SDF với Cocos Canvas TTF được phép dùng threshold raster riêng chỉ sau khi geometry normalized đã khớp và các semantic metrics bắt buộc pass; không screenshot-tune size/spacing.",
+      "rule": "Khi port Unity TMP autosize/character spacing sang Cocos Label, không map mù sang `Label.SHRINK` hoặc chép nguyên `characterSpacing`. Phải đọc prefab + TMP font asset/TTF + exact string, tính effective font size từ glyph advances và min/max source; nếu source fit ở max thì bind đúng size đó vì Cocos SHRINK không có TMP minimum contract. TMP nhân character spacing với `currentEmScale = fontSize * 0.01`; Cocos 3.8.8 default TTF assembler bỏ qua `spacingX`, nên chỉ dùng `CacheMode.CHAR` khi effect/feature của label tương thích rồi gán spacing đã quy đổi. Oracle portable phải khóa source/font hashes, formula, string, rect, wrap/overflow, runtime font identity/cache/size/spacing và tight text ROI. Unity SDF với Cocos Canvas TTF được phép dùng threshold raster riêng chỉ sau khi geometry normalized đã khớp và các semantic metrics bắt buộc pass; không screenshot-tune size/spacing. Baseline dọc: TMP đặt baseline từ FaceInfo `ascentLine/descentLine/capLine` của font asset * fontSize/pointSize*scale, `m_margin` và `m_VerticalAlignment` (Top/Middle/Bottom/Baseline/Geometry=Midline dùng hộp glyph m_GlyphTable của chuỗi thật/Capline), còn Cocos 3.8.8 web bỏ qua metric font và dùng BASELINE_RATIO 0.26 cố định (BITMAP CENTER: baseline = H/2 + 0.37F; CHAR cộng thêm outline width). Không map Midline/Capline/Baseline thành CENTER rồi thôi, không lấy TMP lineHeight làm offset; dùng shared `tmp-label-baseline.cjs` (porter dời UITransform anchorY) hoặc runtime `playable-core/utils/text/TmpLabelBaseline.ts` để dời content theo `tmpLabelBaselineShift`, và Label.lineHeight = `tmpLineAdvance`. Regression đo ink top/bottom của face trong tight ROI so với ink TMP suy từ nguồn ở ít nhất một nhãn Middle/Midline và một nhãn Top hoặc Bottom.",
       "agentContract": {
         "sourceClosure": [
           "tmp-prefab",
@@ -304,6 +304,17 @@
           "exact-string",
           "tmp-runtime-formula"
         ],
+        "baselineSource": [
+          "tmp-faceinfo-ascent-descent-cap",
+          "tmp-vertical-alignment",
+          "tmp-margin",
+          "tmp-glyph-table-for-geometry"
+        ],
+        "baselineHelper": [
+          "tools/unity-cocos-port/tmp-label-baseline.cjs",
+          "packages/playable-core/utils/text/TmpLabelBaseline.ts"
+        ],
+        "cocos38BaselineRatio": 0.26,
         "requiredOracle": [
           "source-hashes",
           "font-hash",
@@ -325,7 +336,9 @@
           "blind-label-shrink",
           "raw-character-spacing-copy",
           "screenshot-tuned-font-size",
-          "screenshot-tuned-spacing"
+          "screenshot-tuned-spacing",
+          "screenshot-tuned-baseline-offset",
+          "tmp-lineheight-as-vertical-offset"
         ]
       }
     },

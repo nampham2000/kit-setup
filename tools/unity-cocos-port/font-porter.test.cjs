@@ -321,3 +321,53 @@ test('preserves TMP style and weight overrides on nested prefab label instances'
   assert.equal(byProperty.get('_isItalic'), true);
   assert.equal(byProperty.get('_isUnderline'), true);
 });
+
+test('collects TMP FaceInfo, margins and Midline glyph boxes for baseline parity', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'font-porter-test-'));
+  try {
+    const ttf = asset(root, '22222222222222222222222222222222', 'Fonts/Baloo.ttf', Buffer.from([0, 1, 0, 0]));
+    const tmp = asset(root, '11111111111111111111111111111111', 'Fonts/Baloo SDF.asset', [
+      `m_SourceFontFileGUID: ${ttf.guid}`,
+      '  m_FaceInfo:',
+      '    m_PointSize: 90',
+      '    m_Scale: 1',
+      '    m_LineHeight: 141.66',
+      '    m_AscentLine: 94.5',
+      '    m_CapLine: 56',
+      '    m_Baseline: 0',
+      '    m_DescentLine: -47.160004',
+      '  m_GlyphTable:',
+      '  - m_Index: 38',
+      '    m_Metrics:',
+      '      m_Width: 45.71875',
+      '      m_Height: 57.875',
+      '      m_HorizontalBearingX: 3.15625',
+      '      m_HorizontalBearingY: 56.25',
+      '      m_HorizontalAdvance: 51.390625',
+      '  m_CharacterTable:',
+      '  - m_ElementType: 1',
+      '    m_Unicode: 67',
+      '    m_GlyphIndex: 38',
+    ].join('\n'));
+    const assets = new Map([[ttf.guid, ttf], [tmp.guid, tmp]]);
+    const db = { get: (guid) => assets.get(guid), byGuid: assets };
+    const config = makePorter(root).resolveLabelConfig({ fields: {
+      m_fontAsset: ref(tmp.guid),
+      m_text: 'CC',
+      m_VerticalAlignment: 4096,
+      m_HorizontalAlignment: 2,
+      m_margin: { x: 1, y: 2, z: 3, w: 4 },
+      m_lineSpacing: -10,
+    } }, { components: [] }, { componentDocs: new Map() }, { cocosRoot: root, dryRun: false }, db,
+    { resolveFontByStem: () => '' }, makeReporter());
+    assert.equal(config.verticalAlign, 1);
+    assert.equal(config.tmpVertical.mode, 4096);
+    assert.deepEqual({ p: config.tmpVertical.face.pointSize, a: config.tmpVertical.face.ascentLine, d: config.tmpVertical.face.descentLine },
+      { p: 90, a: 94.5, d: -47.160004 });
+    assert.deepEqual(config.tmpVertical.margin, { x: 1, y: 2, z: 3, w: 4 });
+    assert.equal(config.tmpVertical.lineSpacing, -10);
+    assert.deepEqual(config.tmpVertical.glyphExtents, { top: 56.25, bottom: 56.25 - 57.875 });
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

@@ -3,6 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { convertFontFile, isSfnt } = require('../font-converter.cjs');
+const tmpBaseline = require('./tmp-label-baseline.cjs');
 
 // Cocos Creator 3.8.8 registers these suffixes in cocos/2d/utils/font-loader.ts.
 const COCOS_DIRECT_FONT_EXTENSIONS = new Set(['.font', '.eot', '.ttf', '.woff', '.svg', '.ttc']);
@@ -231,6 +232,7 @@ module.exports = function createFontPorter(deps) {
     ensureDirectoryMetas,
     ensureAssetMeta,
   } = deps;
+  const tmpFontAssetCache = new Map();
 
   function fontReference(doc) {
     const tmp = getField(doc, 'm_fontAsset');
@@ -365,11 +367,15 @@ module.exports = function createFontPorter(deps) {
 
     let horizontalAlign = 1;
     let verticalAlign = 1;
+    let tmpVertical = null;
     if (isTmp) {
       const horizontal = number(getField(doc, 'm_HorizontalAlignment', 2), 2);
-      const vertical = number(getField(doc, 'm_VerticalAlignment', 512), 512);
       horizontalAlign = (horizontal & 1) ? 0 : ((horizontal & 4) ? 2 : 1);
-      verticalAlign = (vertical & 256) ? 0 : ((vertical & 1024) ? 2 : 1);
+      // Baseline/Geometry(Midline)/Capline have no Cocos equivalent: centre, then shift the
+      // baseline from the font asset metrics (tmp-label-baseline.cjs).
+      const mode = tmpBaseline.tmpVerticalMode(getField(doc, 'm_VerticalAlignment', 0), getField(doc, 'm_textAlignment', 65535));
+      verticalAlign = tmpBaseline.cocosVerticalAlignFor(mode);
+      tmpVertical = resolveTmpVertical(doc, mode, unityDb);
     } else {
       const alignment = number(fontData.m_Alignment, number(getField(doc, 'm_Alignment', 4), 4));
       horizontalAlign = alignment % 3;
@@ -402,7 +408,41 @@ module.exports = function createFontPorter(deps) {
       shadowBlur: 2,
       ...materialStyle,
       ...legacyEffects,
+      tmpVertical,
     };
+  }
+
+  /**
+   * Source evidence for TMP baseline parity (tmp-label-baseline.cjs): the font asset FaceInfo,
+   * m_margin, the vertical mode and, for Geometry (Midline), the glyph boxes of the serialized text.
+   */
+  function resolveTmpVertical(doc, mode, unityDb) {
+    const fontAsset = unityDb.get(unityRefGuid(getField(doc, 'm_fontAsset')));
+    let parsed = fontAsset?.path ? tmpFontAssetCache.get(fontAsset.path) : null;
+    if (!parsed) {
+      const assetText = readableAssetText(fontAsset);
+      parsed = { face: tmpBaseline.parseTmpFaceInfo(assetText), glyphs: null, assetText };
+      if (fontAsset?.path) tmpFontAssetCache.set(fontAsset.path, parsed);
+    }
+    const face = parsed.face;
+    if (!face) return { mode, face: null, fontAsset: fontAsset?.relativePath || '' };
+    const margin = getField(doc, 'm_margin', {}) || {};
+    const result = {
+      mode,
+      face,
+      fontAsset: fontAsset?.relativePath || '',
+      margin: { x: number(margin.x, 0), y: number(margin.y, 0), z: number(margin.z, 0), w: number(margin.w, 0) },
+      lineSpacing: number(getField(doc, 'm_lineSpacing', 0), 0),
+      glyphExtents: null,
+      missingGlyphs: [],
+    };
+    if (mode === tmpBaseline.TMP_VERTICAL.GEOMETRY) {
+      if (!parsed.glyphs) { parsed.glyphs = tmpBaseline.parseTmpGlyphMetrics(parsed.assetText); parsed.assetText = ''; }
+      const extents = tmpBaseline.tmpGlyphExtents(parsed.glyphs, String(getField(doc, 'm_text', '') || ''));
+      result.missingGlyphs = extents.missing;
+      result.glyphExtents = extents.empty ? null : { top: extents.top, bottom: extents.bottom };
+    }
+    return result;
   }
 
   function resolveLabelConfig(doc, gameObject, model, options, unityDb, cocosDb, reporter) {
