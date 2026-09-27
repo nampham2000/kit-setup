@@ -20,6 +20,18 @@ mesh geometry to compensate for these material differences.
 
 ## Mandatory workflow
 
+When a migrated URP particle preview differs from an isolated legacy reference,
+audit active shader properties before adjusting brightness. A dormant serialized
+`_TintColor` does not drive URP Particles/Unlit: its multiply path uses `_BaseColor`.
+Legacy Additive/Alpha Blended instead use `2 * vertexColor * _TintColor * texture`.
+In Linear space, legacy gray Color(.5) uploads as .214041, so its RGB coefficient
+is .428082; migrated URP white BaseColor contributes1. Alpha can still match.
+This is a shader coefficient comparison, not a final-image brightness ratio.
+`tools/unity-intel/particle-material-reference.cjs` checks the bounded multiply
+contracts and rejects unsupported keywords; it cannot establish visual parity.
+Keep the intended original appearance distinct from the current compatibility
+preview. Do not silently switch baselines or apply a global exposure multiplier.
+
 Before replacing source materials, read GraphicsSettings.currentRenderPipeline.
 Camera.actualRenderingPath=Forward does not prove Built-in; an active URP project
 can report the same value. Restoring old Built-in particle materials into URP can
