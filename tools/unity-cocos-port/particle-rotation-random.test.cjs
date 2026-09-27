@@ -12,7 +12,8 @@ function converted(min,max,sign){
  return objects[4];
 }
 test('retained native rotation draw matches 217 automatic deltas and 84 birth seeds',()=>{
- const producer=fs.readFileSync(path.join(__dirname,'fixtures/capture-rotation-random-channel.cjs'));
+ const producer=fs.readFileSync(path.join(__dirname,'fixtures/capture-rotation-random-channel.cjs'),'utf8').replace(/\r\n/g,'\n');
+ assert.equal(native.producerHashContract,'sha256-text-lf-v1');
  assert.equal(crypto.createHash('sha256').update(producer).digest('hex'),native.producerSha256);
  assert.equal(native.rows.length,217);assert.equal(new Set(native.rows.map(r=>r.seed)).size,84);
  for(const r of native.rows)assert.ok(Math.abs(unityRotationRandom(r.seed)-r.random)<1e-5,`${r.node} seed ${r.seed}`);

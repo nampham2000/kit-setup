@@ -1,7 +1,8 @@
 {
   "schemaVersion": 1,
+  "producerHashContract": "sha256-text-lf-v1",
   "measurement": "Automatic native Particle.rotation3D deltas; float32 integration error bounded separately from random-channel identity.",
-  "producerSha256": "61d09aab0b465a4223c1ef48985b81f7c081e931075ee6e9e303a0afd66a8d7a",
+  "producerSha256": "54d2df047a1a05657670b994e47991cf0798b7bcba3f152eb21b09fb6ecb6a36",
   "inputs": [
     {
       "file": "tools/combat-magic/oracles/live-rendering.json",

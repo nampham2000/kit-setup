@@ -20,5 +20,6 @@ for(const name of ['black-arc-tornado','fire-tornado','volcanic-tornado','lightn
  }
  }
 }
-fs.writeFileSync(output,JSON.stringify({schemaVersion:1,measurement:'Automatic native Particle.rotation3D deltas; float32 integration error bounded separately from random-channel identity.',producerSha256:hash(__filename),inputs,rows},null,2)+'\n');
+const producerSha256=crypto.createHash('sha256').update(fs.readFileSync(__filename,'utf8').replace(/\r\n/g,'\n')).digest('hex');
+fs.writeFileSync(output,JSON.stringify({schemaVersion:1,producerHashContract:'sha256-text-lf-v1',measurement:'Automatic native Particle.rotation3D deltas; float32 integration error bounded separately from random-channel identity.',producerSha256,inputs,rows},null,2)+'\n');
 console.log(JSON.stringify({rows:rows.length,seeds:new Set(rows.map(r=>r.seed)).size}));
