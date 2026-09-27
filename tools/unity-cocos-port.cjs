@@ -5045,7 +5045,7 @@ function applyNestedParticlePrefabOverrides(builder, nestedPrefab, reporter, opt
         const meshAsset = builtin ? null : unityDb.get(unityRefGuid(meshOverride[1]));
         const meshName = meshAsset ? unityModelMeshName(meshAsset, unityRefFileId(meshOverride[1])) : '';
         const resolved = meshAsset && cocosDb?.resolveModelMeshByStem
-          ? cocosDb.resolveModelMeshByStem(meshAsset.stem, meshName || meshAsset.stem, meshAsset.ext === '.asset' ? '.fbx' : meshAsset.ext)
+          ? cocosDb.resolveModelMeshByStem(meshAsset.stem, meshName || meshAsset.stem, meshAsset.ext === '.asset' ? '.fbx' : meshAsset.ext, unityRefFileId(meshOverride[1]))
           : null;
         const meshUuid = builtin || resolved?.meshUuid || '';
         renderer._mesh = meshUuid ? cocosUuid(meshUuid, 'cc.Mesh') : resolvedMesh;
@@ -8466,10 +8466,7 @@ module.exports = {
   prepareUnityPortChildEnv,
   cleanupUnityPortChildEnv,
   inheritedPreflightStillValid,
-  scannedUnityAssetDatabase,
   parseUnityYamlText,
-  parsePrefabInstanceInfo,
   applyNestedParticlePrefabOverrides,
-  CocosPrefabBuilder,
   main,
 };

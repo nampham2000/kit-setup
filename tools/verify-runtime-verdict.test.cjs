@@ -26,6 +26,9 @@ test('runtime evidence still decides the verdict', () => {
   assert.equal(runtimeVerdict(green(), options), true);
   for (const patch of [
     { exceptions: ['TypeError: boom'] },
+    { evalError: 'eval threw' },
+    { evalBeforeError: 'evalBefore threw' },
+    { checkpoints: { ok: false } },
     { consoleErrors: ['[javascript] ReferenceError'] },
     { previewDeviceError: 'device not found' },
     { previewDeviceRestoreError: 'restore failed' },
