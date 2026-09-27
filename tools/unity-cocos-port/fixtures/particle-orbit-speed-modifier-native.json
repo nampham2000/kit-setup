@@ -1,0 +1,133 @@
+{
+ "unity": "6000.3.1f1",
+ "producer": {
+  "file": "capture-orbit-speed-modifier.cs",
+  "sha256": "4ab8b4bb8eb8ed94a4c840d3310e020a761a260aa1c70072792f1ec4f36972ee"
+ },
+ "note": "Dragon Crashers knight ParticleSystem_Tornado copy at the origin (World simulation, VOL Local), one particle emitted at (4.04,0,0) with zero velocity, Simulate(1/60) x60; position every 6 steps (Unity coordinates). Variant E: orbital (-0.51,-1.56,2.76), radial 1, speedModifier 5.02, offsets 0. Variant C: same with speedModifier 1.",
+ "dt": 0.016666666666666666,
+ "sampleEvery": 6,
+ "emit": [
+  4.04,
+  0,
+  0
+ ],
+ "omega": [
+  -0.51,
+  -1.56,
+  2.76
+ ],
+ "radial": 1,
+ "variants": {
+  "E": {
+   "speedModifier": 5.02,
+   "positions": [
+    [
+     0.1,
+     4.359,
+     1.271
+    ],
+    [
+     -4.567,
+     0.8,
+     -1.986
+    ],
+    [
+     0.667,
+     -4.214,
+     -3.544
+    ],
+    [
+     6.017,
+     0.536,
+     0.287
+    ],
+    [
+     -0.497,
+     6.31,
+     1.684
+    ],
+    [
+     -6.313,
+     0.492,
+     -3.103
+    ],
+    [
+     1.645,
+     -5.732,
+     -4.637
+    ],
+    [
+     7.893,
+     1.43,
+     0.744
+    ],
+    [
+     -1.477,
+     8.197,
+     1.966
+    ],
+    [
+     -7.929,
+     -0.169,
+     -4.381
+    ]
+   ]
+  },
+  "C": {
+   "speedModifier": 1,
+   "positions": [
+    [
+     3.935,
+     1.138,
+     0.599
+    ],
+    [
+     3.423,
+     2.247,
+     1.101
+    ],
+    [
+     2.537,
+     3.21,
+     1.447
+    ],
+    [
+     1.356,
+     3.917,
+     1.591
+    ],
+    [
+     -0.009,
+     4.283,
+     1.506
+    ],
+    [
+     -1.421,
+     4.254,
+     1.19
+    ],
+    [
+     -2.731,
+     3.816,
+     0.665
+    ],
+    [
+     -3.798,
+     3,
+     -0.025
+    ],
+    [
+     -4.496,
+     1.877,
+     -0.815
+    ],
+    [
+     -4.738,
+     0.552,
+     -1.628
+    ]
+   ]
+  }
+ }
+}

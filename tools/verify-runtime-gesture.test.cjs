@@ -247,3 +247,13 @@ test('long battle gesture schedule preserves separate real touch lifecycles', as
  await assert.rejects(dispatchTouchGestureSequence(session,'s',taps,{delaysMs:[0]}),/must match/);
  await assert.rejects(dispatchTouchGestureSequence(session,'s',taps,{delaysMs:[0,Infinity]}),/must match/);
 });
+
+test('evalBefore navigation retry forwards the user eval deadline to both attempts', async () => {
+  const seen = [];
+  await evaluatePageWithNavigationRetry({}, 'session', '1', {
+    timeoutMs: 300000,
+    evaluate: async (_s, _id, _e, timeoutMs) => { seen.push(timeoutMs); if (seen.length === 1) throw new Error('Execution context was destroyed'); return 1; },
+    wait: async () => {},
+  });
+  assert.deepEqual(seen, [300000, 300000]);
+});
