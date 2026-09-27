@@ -81,3 +81,38 @@ unresolved reference choice and 186 uncovered prefab/phase cells remain. Existin
 individual diagnostic captures are valuable but have not been promoted to full
 catalog regression suites. Do not fabricate passing suites to clear this gate.
 
+# Large-project scan diagnostics
+
+Check the first visible frame, not just particle count. Creator 3.8.8 detaches an
+empty particle model in beforeRender, then sets _needAttach one render too late
+after the first birth. Electricity ef_01 reproduced count=1 and correct lifetime
+with a blank image at frame zero. The simulation-step adapter now reattaches a
+live, enabled, non-culled model after update, without an extra simulation step.
+The native frame-zero sprite became visible after this fix. Tests retain empty,
+culled, disabled, and already-attached behavior.
+
+Electricity VFX pack exposed two integration gaps despite existing unit coverage:
+the CLI passes an Assets root to particle bindings, while the timestep/gravity
+reader expected a project root; normalize both forms and test the CLI-shaped
+input. Also include UnityParticlePrewarmAdapter in the Editor lifecycle audit.
+Its absence was reproduced on ef_04; after the opt-in, all five prewarmed
+Electricity emitters installed the hook in a natural Scene instantiation.
+Keep the initial-state prewarm/RNG obligation until native samples establish
+that contract; a working prewarm hook does not certify RNG equivalence.
+
+A targeted `preflight --intent prefab` is an analysis view and does not issue a
+mutation receipt. For an asset-pack conversion, run project-intent preflight
+with `--profile full-project` before invoking the porter. Check
+`decision.mutationReceiptIssued` and `receiptId`, not only the CLI's successful
+JSON-file write. Run it after the reference Editor finishes importing assets.
+
+Before treating a silent porter as an import or shader failure, establish its
+active phase. Unity GUID indexing includes Assets and PackageCache. Directory
+entry filtering now excludes irrelevant files before expensive filesystem
+probes; accepted files and traversed directories still pass lstat/realpath
+containment checks. Do not bypass those checks or omit packages to accelerate a
+port. Prefer one sequential catalog batch to repeated one-prefab invocations,
+which repeat the source index. On a busy multi-project machine, avoid starting
+duplicate scans while an earlier scan is still active. The scan-cost and
+port-path-boundaries tests cover the filter and retained path safeguards.
+
