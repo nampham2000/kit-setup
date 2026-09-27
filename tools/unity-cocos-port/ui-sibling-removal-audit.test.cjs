@@ -212,7 +212,7 @@ test('CLI: --help and invalid mode never touch outputs; --out is idempotent; --c
 });
 
 test('shown marks a prefab-inactive runtime variant control as a group member', () => {
-  const text = read('row3-middle-removed.prefab').replace(/(m_Name: Middle\n  m_IsActive: )1/, '$10');
+  const text = read('row3-middle-removed.prefab').replace(/(m_Name: Middle\r?\n  m_IsActive: )1/, '$10');
   const hidden = auditPrefabText(text, { label: 'variant', removed: ['Right'], adapters: [] });
   assert.deepEqual(codes(hidden), ['high:UI_SIBLING_REMOVED_UNBALANCED']);
   assert.equal(hidden.findings[0].survivorCenterOffsetPx, -300);
