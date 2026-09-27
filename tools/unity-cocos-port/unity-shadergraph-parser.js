@@ -573,6 +573,11 @@ ${propertyYaml}
     #include <legacy/shadow-map-vs>
   #endif
 
+  // legacy/input-standard does not declare vertex colour; builtin effects gate it like this.
+  #if USE_VERTEX_COLOR
+    in lowp vec4 a_color;
+  #endif
+
   out highp vec3 v_worldPosition;
   out mediump vec3 v_worldNormal;
   out vec2 v_uv;
@@ -592,7 +597,11 @@ ${propertyYaml}
     v_worldPosition = worldPosition.xyz;
     v_worldNormal = normalize((matWorldIT * vec4(In.normal, 0.0)).xyz);
     v_uv = a_texCoord;
-    v_color = a_color;
+    #if USE_VERTEX_COLOR
+      v_color = a_color;
+    #else
+      v_color = vec4(1.0);
+    #endif
 
     #if CC_RECEIVE_SHADOW
       v_shadowBias = CCGetShadowBias();

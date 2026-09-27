@@ -83,3 +83,11 @@ test('Sample Texture 2D reads its Texture/UV inputs and publishes RGBA on slot 0
   assert.match(glsl, /texture\(Pattern, _sg_tilingOffset_\d+\)/, 'samples the texture property with the tiling UV');
   assert.doesNotMatch(glsl, /texture\(mainTexture/);
 });
+
+// legacy/input-standard declares no a_color: an unguarded `v_color = a_color` fails to compile (EFX2406).
+test('the vertex program declares vertex colour only behind USE_VERTEX_COLOR', () => {
+  const parser = new ShaderGraphParser(graph(), {});
+  const vs = String(parser._generateVertexShader('G', false));
+  assert.match(vs, /#if USE_VERTEX_COLOR\s+in lowp vec4 a_color;\s+#endif/);
+  assert.match(vs, /#if USE_VERTEX_COLOR\s+v_color = a_color;\s+#else\s+v_color = vec4\(1\.0\);/);
+});
