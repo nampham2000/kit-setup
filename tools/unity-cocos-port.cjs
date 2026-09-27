@@ -1316,6 +1316,32 @@ function isUnityIdentityRotation(value) {
   );
 }
 
+// cc.Quat.fromEuler / cc.Quat.toEuler (degrees), so _euler round-trips the way Cocos reads it.
+function cocosQuatFromEuler(euler) {
+  const half = Math.PI / 360;
+  const x = Number(euler.x || 0) * half, y = Number(euler.y || 0) * half, z = Number(euler.z || 0) * half;
+  const sx = Math.sin(x), cx = Math.cos(x), sy = Math.sin(y), cy = Math.cos(y), sz = Math.sin(z), cz = Math.cos(z);
+  return {
+    x: sx * cy * cz + cx * sy * sz,
+    y: cx * sy * cz + sx * cy * sz,
+    z: cx * cy * sz - sx * sy * cz,
+    w: cx * cy * cz - sx * sy * sz,
+  };
+}
+
+function cocosEulerFromQuat(q) {
+  const { x, y, z, w } = q;
+  const deg = 180 / Math.PI;
+  const test = x * y + z * w;
+  if (test > 0.499999) return vec3(0, 2 * Math.atan2(x, w) * deg, 90);
+  if (test < -0.499999) return vec3(0, -2 * Math.atan2(x, w) * deg, -90);
+  return vec3(
+    Math.atan2(2 * x * w - 2 * y * z, 1 - 2 * x * x - 2 * z * z) * deg,
+    Math.atan2(2 * y * w - 2 * x * z, 1 - 2 * y * y - 2 * z * z) * deg,
+    Math.asin(2 * test) * deg,
+  );
+}
+
 function convertTransformEuler(transform) {
   if (transform?.cocosEuler) {
     return vec3(
@@ -1325,7 +1351,18 @@ function convertTransformEuler(transform) {
     );
   }
   if (isUnityIdentityRotation(transform?.localRotation)) return vec3();
-  return convertEuler(transform?.euler);
+  // m_LocalEulerAnglesHint is Inspector state: it is absent or stale on objects never edited by
+  // hand (a cloned scene effect saved as a prefab kept (0,0,0) for a 90 deg child), and its
+  // x-only mirror disagrees with the reflected quaternion whenever y is non-zero. The runtime
+  // reads _lrot, but _euler feeds UnityParticleHierarchyTransformSync.baseEuler (JellyCubeRun2048
+  // ReviveEffect aura drawn upside down), so keep the hint only when it reproduces _lrot.
+  const rotation = convertRotation(transform?.localRotation);
+  const hinted = convertEuler(transform?.euler);
+  const fromHint = cocosQuatFromEuler(hinted);
+  const dot = fromHint.x * rotation.x + fromHint.y * rotation.y + fromHint.z * rotation.z + fromHint.w * rotation.w;
+  const length = Math.hypot(rotation.x, rotation.y, rotation.z, rotation.w) || 1;
+  if (Math.abs(dot) / length >= 1 - 1e-6) return hinted;
+  return cocosEulerFromQuat({ x: rotation.x / length, y: rotation.y / length, z: rotation.z / length, w: rotation.w / length });
 }
 
 function multiplyQuaternion(left, right) {

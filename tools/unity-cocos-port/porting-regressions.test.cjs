@@ -71,6 +71,78 @@ ParticleSystem:
   const particleBuilder={objects:[{},{}]};applyUnityParticleDataToCocos(particleBuilder,1,{scalingMode:1});
   assert.equal(particleBuilder.objects[1].scaleSpace,1);
 });
+// JellyCubeRun2048 ReviveEffect (a scene object saved as a prefab): the 90 deg X child kept
+// m_LocalEulerAnglesHint (0,0,0). _euler came from the hint, UnityParticleHierarchyTransformSync
+// rebuilt the child from it, and the aura column pointed down. _euler must reproduce _lrot.
+test('node _euler follows m_LocalRotation when the Inspector euler hint is missing or mirrored',()=>{
+  const {portPrefab,parseArgs}=require('../unity-cocos-port.cjs');
+  const root=path.join(temp,'euler-hint'),unity=path.join(root,'unity'),cocos=path.join(root,'cocos');
+  fs.mkdirSync(path.join(unity,'Assets'),{recursive:true});fs.mkdirSync(path.join(cocos,'assets'),{recursive:true});
+  const source=path.join(unity,'Assets/Revive.prefab'),out=path.join(cocos,'assets/Revive.prefab');
+  const s=Math.SQRT1_2;
+  fs.writeFileSync(source,`%YAML 1.1
+--- !u!1 &1
+GameObject:
+  m_Name: Root
+  m_IsActive: 1
+  m_Component:
+  - component: {fileID: 2}
+--- !u!4 &2
+Transform:
+  m_GameObject: {fileID: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalRotation: {x: ${-s}, y: 0, z: 0, w: ${s}}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalEulerAnglesHint: {x: 270, y: 0, z: 0}
+  m_Children:
+  - {fileID: 4}
+  - {fileID: 6}
+  m_Father: {fileID: 0}
+--- !u!1 &3
+GameObject:
+  m_Name: NoHint
+  m_IsActive: 1
+  m_Component:
+  - component: {fileID: 4}
+--- !u!4 &4
+Transform:
+  m_GameObject: {fileID: 3}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalRotation: {x: ${s}, y: 0, z: 0, w: ${s}}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_Children: []
+  m_Father: {fileID: 2}
+--- !u!1 &5
+GameObject:
+  m_Name: Yawed
+  m_IsActive: 1
+  m_Component:
+  - component: {fileID: 6}
+--- !u!4 &6
+Transform:
+  m_GameObject: {fileID: 5}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalRotation: {x: 0, y: 0.25881905, z: 0, w: 0.9659258}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalEulerAnglesHint: {x: 0, y: 30, z: 0}
+  m_Children: []
+  m_Father: {fileID: 2}
+`);
+  portPrefab(parseArgs(['port','--src',source,'--out',out,'--unity-root',unity,'--cocos-root',cocos,'--overwrite','--no-cache','--report',path.join(root,'report.csv')]));
+  const objects=JSON.parse(fs.readFileSync(out));
+  const node=name=>objects.find(o=>o.__type__==='cc.Node'&&o._name===name);
+  const near=(a,b)=>assert.ok(Math.abs(a-b)<1e-3,`${a} vs ${b}`);
+  near(node('Root')._euler.x,-270);
+  near(node('NoHint')._euler.x,-90);
+  near(node('Yawed')._euler.y,-30);
+  for(const name of ['Root','NoHint','Yawed']){
+    const {_euler:e,_lrot:q}=node(name),h=Math.PI/360;
+    const sx=Math.sin(e.x*h),cx=Math.cos(e.x*h),sy=Math.sin(e.y*h),cy=Math.cos(e.y*h),sz=Math.sin(e.z*h),cz=Math.cos(e.z*h);
+    const f=[sx*cy*cz+cx*sy*sz,cx*sy*cz+sx*cy*sz,cx*cy*sz-sx*sy*cz,cx*cy*cz-sx*sy*sz];
+    near(Math.abs(f[0]*q.x+f[1]*q.y+f[2]*q.z+f[3]*q.w),1);
+  }
+});
 test('particle UV tiling emits a typed Vec4 for a single FLOAT4 uniform',()=>{
   const source=path.join(temp,'uv-mask.mat');
   fs.writeFileSync(source,`%YAML 1.1
@@ -113,6 +185,41 @@ Material:
   const stamp=fs.statSync(second.file).mtimeMs;
   porter.convertUnityParticleMaterialToCocos({path:source,relativePath:'uv-mask.mat',stem:'Mask'},{cocosRoot:temp},new Map(),reports(),null,'particle',local);
   assert.equal(fs.statSync(second.file).mtimeMs,stamp,'unchanged generation is idempotent');
+});
+// Unity keeps every slot a shader ever exposed in m_TexEnvs: JellyCubeRun2048 built-in particle
+// materials (cloud_2x2_hard_softshadow, feather) list an empty _BaseMap before the real _MainTex,
+// and the port bound no texture at all, so the smoke drew as flat squares.
+test('particle materials bind the first texture slot that references a texture',()=>{
+  const source=path.join(temp,'cloud.mat');
+  fs.writeFileSync(source,`%YAML 1.1
+--- !u!21 &2100000
+Material:
+  m_Name: Cloud
+  m_TexEnvs:
+  - _BaseMap:
+      m_Texture: {fileID: 0}
+      m_Scale: {x: 1, y: 1}
+      m_Offset: {x: 0, y: 0}
+  - _MainTex:
+      m_Texture: {fileID: 2800000, guid: cloudtexture, type: 3}
+      m_Scale: {x: 1, y: 0.5}
+      m_Offset: {x: 0, y: 0.5}
+`);
+  const porter=createMaterialPorter({
+    parseUnityScalar:yaml.parseScalar,
+    parseUnityYaml:file=>[{classId:21,lines:fs.readFileSync(file,'utf8').split(/\r?\n/)}],
+    getField:(doc,key,fallback)=>{const line=doc.lines.find(l=>l.trim().startsWith(key+':'));return line?yaml.parseScalar(line.slice(line.indexOf(':')+1)):fallback;},
+    getIndentedBlock:(doc,key)=>key==='m_TexEnvs'?doc.lines.slice(doc.lines.findIndex(l=>l.trim()==='m_TexEnvs:')+1).filter(Boolean):[],
+    unityRefGuid:r=>r?.guid||'',
+    importedUnityAssetPath:()=>path.join(temp,'assets','cloud.mat'),
+    ensureDirectoryMetas:()=>{},ensureMaterialAssetMeta:()=>null,
+  });
+  const requested=[];
+  const unityDb={get:guid=>{requested.push(guid);return undefined;}};
+  const result=porter.convertUnityParticleMaterialToCocos({path:source,relativePath:'cloud.mat',stem:'Cloud'},{cocosRoot:temp},unityDb,reports());
+  assert.deepEqual(requested.filter(Boolean),['cloudtexture'],'the _MainTex texture is resolved, not the empty _BaseMap (the fixture has no m_Shader)');
+  const output=JSON.parse(fs.readFileSync(result.file,'utf8'));
+  assert.deepEqual(output._props[0].mainTiling_Offset,{__type__:'cc.Vec4',x:1,y:.5,z:0,w:.5},'tiling comes from the bound slot');
 });
 const animation = createAnimationPorter({
   parseUnityYaml: file => [{classId:74,lines:fs.readFileSync(file,'utf8').split(/\r?\n/)}],
