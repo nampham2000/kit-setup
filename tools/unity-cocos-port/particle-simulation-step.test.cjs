@@ -6,6 +6,20 @@ const birthStub={exports:{}};
 new Function('exports','module','require',ts.transpileModule(fs.readFileSync(path.join(__dirname,'runtime/UnityParticleBirthTiming.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText)(birthStub.exports,birthStub,()=>({}));
 new Function('exports','module','require',ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText)(moduleStub.exports,moduleStub,()=>birthStub.exports);
 const install=moduleStub.exports.installUnityParticleSimulationStep;
+test('first birth reattaches a previously empty model before the same render without a second simulation step',()=>{
+ const s=engine(1),model={scene:null};let attached=0;
+ s.getParticleCount=()=>s.emitted>0?1:0;
+ s.processor={getModel:()=>model,attachToScene:()=>{attached++;model.scene={};}};
+ install(s,.03);s.update(1/60);
+ assert.equal(attached,1);assert.equal(s.steps.length,1);assert.equal(s._needAttach,false);
+ s.update(1/60);assert.equal(attached,1,'do not reattach an already live model');
+});
+for(const mode of ['empty','culled','disabled'])test('same-frame model binding preserves '+mode+' state',()=>{
+ const s=engine(1);let attached=0;s.getParticleCount=()=>mode==='empty'?0:1;
+ s._isCulled=mode==='culled';s.enabledInHierarchy=mode!=='disabled';
+ s.processor={getModel:()=>({scene:null}),attachToScene:()=>attached++};
+ install(s,.03);s.update(1/60);assert.equal(attached,0);
+});
 function engine(duration=.1,delay=0){return {duration,loop:false,_isEmitting:true,_isPlaying:true,_time:0,startDelay:{evaluate:()=>delay},emitted:0,steps:[],
   _emit(dt){if(this._time>delay){if(this._time-(this.duration+delay)>dt&&!this.loop)this._isEmitting=false;
     if(this._isEmitting)this.emitted+=2000*dt;}},

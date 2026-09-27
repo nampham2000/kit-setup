@@ -83,6 +83,14 @@ catalog regression suites. Do not fabricate passing suites to clear this gate.
 
 # Large-project scan diagnostics
 
+Check the first visible frame, not just particle count. Creator 3.8.8 detaches an
+empty particle model in beforeRender, then sets _needAttach one render too late
+after the first birth. Electricity ef_01 reproduced count=1 and correct lifetime
+with a blank image at frame zero. The simulation-step adapter now reattaches a
+live, enabled, non-culled model after update, without an extra simulation step.
+The native frame-zero sprite became visible after this fix. Tests retain empty,
+culled, disabled, and already-attached behavior.
+
 Electricity VFX pack exposed two integration gaps despite existing unit coverage:
 the CLI passes an Assets root to particle bindings, while the timestep/gravity
 reader expected a project root; normalize both forms and test the CLI-shaped
