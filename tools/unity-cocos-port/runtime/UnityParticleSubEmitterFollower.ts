@@ -31,6 +31,8 @@ type EmissionInstance = {
     entry: UnityParticleSubEmitterEntry;
     schedule: EmissionSchedule;
     particle: ParticleLike | null;
+    /** Birth instances: the parent's track; the instance ends once the sweep releases it. */
+    track: TrackedParticle | null;
     seed: number;
     position: Vec3;
     time: number;
@@ -40,6 +42,9 @@ type EmissionInstance = {
 };
 
 type TrackedParticle = { seed: number; position: Vec3; stamp: number };
+
+// Hoisted so lateUpdate allocates no closure per frame (zero-GC).
+const usesInstances = (entry: UnityParticleSubEmitterEntry): boolean => !!entry.unityInstances && !(entry.sourceDistanceRate > 0) && !!entry.subEmitter;
 
 // Keyed by target so birth and death entries sharing one sub system read its authored emission once.
 const schedules = new WeakMap<ParticleSystem, EmissionSchedule>();
@@ -158,6 +163,12 @@ export class UnityParticleSubEmitterFollower extends Component {
 
     protected onLoad (): void {
         this.prepareSubEmitters(this.getRuntimeEntries(), true);
+        // Instance-mode targets keep their authored emission in the prefab (it is the
+        // per-instance schedule); read and silence it now, so a helper that plays every child
+        // ParticleSystem cannot make the target emit at its own node before the first event.
+        if (!EDITOR_NOT_IN_PREVIEW) {
+            for (const entry of this.entries) if (usesInstances(entry)) this.captureSchedule(entry);
+        }
     }
 
     protected onEnable (): void {
@@ -192,7 +203,7 @@ export class UnityParticleSubEmitterFollower extends Component {
         const pool = this.getSourceParticlePool(this.source);
         if (!pool) return;
 
-        if (!EDITOR_NOT_IN_PREVIEW && entries.some((entry) => entry.unityInstances && !(entry.sourceDistanceRate > 0) && entry.subEmitter)) {
+        if (!EDITOR_NOT_IN_PREVIEW && entries.some(usesInstances)) {
             this.updateInstances(pool, this.source, entries, dt);
         }
 
@@ -428,7 +439,7 @@ export class UnityParticleSubEmitterFollower extends Component {
                 }
                 track.seed = seed;
                 track.position.set(this._worldPosition);
-                this.startInstances(entries, UnityParticleSubEmitterType.Birth, particle, this._worldPosition);
+                this.startInstances(entries, UnityParticleSubEmitterType.Birth, particle, this._worldPosition, track);
             }
             track.position.set(this._worldPosition);
             track.stamp = stamp;
@@ -451,17 +462,19 @@ export class UnityParticleSubEmitterFollower extends Component {
         this._freeTracks.push(track);
     };
 
-    private startInstances (entries: UnityParticleSubEmitterEntry[], type: UnityParticleSubEmitterType, particle: ParticleLike | null, position: Vec3): void {
+    private startInstances (entries: UnityParticleSubEmitterEntry[], type: UnityParticleSubEmitterType, particle: ParticleLike | null, position: Vec3, track: TrackedParticle | null = null): void {
         for (const entry of entries) {
             if (!entry.unityInstances || entry.sourceDistanceRate > 0 || entry.type !== type || !entry.subEmitter) continue;
             if (!this.shouldEmit(entry.emitProbability)) continue;
             const schedule = this.captureSchedule(entry);
+            this.ensureTargetRunning(entry);
             const instance = this._freeInstances.pop() || {
-                entry, schedule, particle: null, seed: 0, position: new Vec3(), time: 0, fresh: true, rateAccumulator: 0, cycles: [],
+                entry, schedule, particle: null, track: null, seed: 0, position: new Vec3(), time: 0, fresh: true, rateAccumulator: 0, cycles: [],
             };
             instance.entry = entry;
             instance.schedule = schedule;
             instance.particle = particle;
+            instance.track = track;
             instance.seed = particle?.randomSeed ?? 0;
             instance.position.set(position);
             instance.time = 0;
@@ -477,7 +490,11 @@ export class UnityParticleSubEmitterFollower extends Component {
     private advanceInstance (instance: EmissionInstance, source: ParticleSystem, dt: number): boolean {
         const { schedule, particle } = instance;
         if (particle) {
-            // Unity stops a birth sub-emitter when its parent particle dies.
+            // Unity stops a birth sub-emitter when its parent particle dies. Particles removed
+            // without a lifetime change (ParticleSystem.stop/clear resets the pool length,
+            // collision kill uses removeAt) are caught by the sweep releasing their track.
+            const track = instance.track;
+            if (track && (track.stamp !== this._stamp || track.seed !== instance.seed)) return false;
             if ((particle.randomSeed ?? 0) !== instance.seed || particle.remainingLifetime !== undefined && particle.remainingLifetime <= 0) return false;
             this.getParticleWorldPosition(source, particle, instance.position);
         }
@@ -512,10 +529,14 @@ export class UnityParticleSubEmitterFollower extends Component {
             const burst = bursts[b];
             if (time < burst.time) continue;
             const interval = Math.max(1e-4, burst.repeatInterval);
-            const due = Math.min(Math.max(1, burst.repeatCount), Math.floor((time - burst.time) / interval + 1e-6) + 1);
+            // Only cycles strictly inside the duration belong to this loop (a cycle landing on
+            // the duration is the next loop's t = 0), as in UnityParticleBurstEmission.
+            if (burst.time >= duration) continue;
+            const inside = Math.floor((duration - burst.time) / interval - 1e-6) + 1;
+            const due = Math.min(Math.max(1, burst.repeatCount), inside, Math.floor((time - burst.time) / interval + 1e-6) + 1);
             const last = Math.min(due, instance.cycles[b] + cap);
             for (let cycle = instance.cycles[b]; cycle < last; cycle += 1) {
-                const count = Math.round(burst.count.evaluate(Math.min(1, time / duration), Math.random()));
+                const count = Math.round(burst.count.evaluate(Math.min(1, (burst.time + cycle * interval) / duration), Math.random()));
                 if (count > 0) this.emitAtWorldPosition(instance.entry, instance.position, count);
             }
             instance.cycles[b] = Math.max(instance.cycles[b], due);
@@ -539,11 +560,16 @@ export class UnityParticleSubEmitterFollower extends Component {
         this.setCurveConstant(target.rateOverDistance, 0);
         target.bursts.length = 0;
         target.loop = true;
+        return schedule;
+    }
+
+    /** The silenced target simulates the particles instances emit: keep it active and playing. */
+    private ensureTargetRunning (entry: UnityParticleSubEmitterEntry): void {
+        const target = entry.subEmitter!;
         const emitterNode = entry.subEmitterNode || target.node;
         entry.subEmitterNode = emitterNode;
         if (!emitterNode.active) emitterNode.active = true;
         if (!(target as any)._isPlaying) target.play();
-        return schedule;
     }
 
     private releaseInstance (index: number): void {
@@ -551,6 +577,7 @@ export class UnityParticleSubEmitterFollower extends Component {
         const last = this._instances.pop()!;
         if (index < this._instances.length) this._instances[index] = last;
         instance.particle = null;
+        instance.track = null;
         this._freeInstances.push(instance);
     }
 

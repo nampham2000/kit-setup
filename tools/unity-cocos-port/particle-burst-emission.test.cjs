@@ -44,3 +44,13 @@ for(const sample of require('./fixtures/burst-cycles.json').cases)test(`native b
   assert.equal(mismatches,0,`${sample.name}: per-step counts drift from Unity`);
   assert.equal(count,sample.particles[sample.particles.length-1],`${sample.name}: total`);
 });
+test('a non-looping system does not replay its t=0 burst in the frame after its duration',()=>{
+  let count=0;
+  const burst={time:0,repeatCount:1,repeatInterval:0.01,count:{evaluate:()=>5},reset(){}};
+  const ps={bursts:[burst],time:0,duration:1,loop:false,startDelay:{evaluate:()=>0},emit(n){count+=n;}};
+  moduleResult.exports.installUnityParticleBurstEmission(ps);
+  burst.reset();
+  // Cocos keeps calling burst.update for about one frame past the duration before stopping.
+  for(let frame=1;frame<=62;frame++){ps.time=frame/60;burst.update(ps,1/60);}
+  assert.equal(count,5);
+});

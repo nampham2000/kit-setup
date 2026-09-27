@@ -107,3 +107,37 @@ test('edit mode never rewrites the authored sub system', () => {
   assert.equal(glow.loop, false);
   assert.equal(glow.total(), 0);
 });
+
+test('a birth instance ends when its parent leaves the pool without a lifetime change (stop/clear, collision kill)', () => {
+  const mod = load();
+  const trail = target('Trail', { duration: 5, loop: true, rate: 60 });
+  const { follower, pool, spawn } = rig(mod, [trail]);
+  spawn(0);
+  for (let i = 0; i < 10; i++) follower.lateUpdate(1 / 60);
+  const before = trail.total();
+  assert.ok(before > 0);
+  pool.length = 0; // ParticleSystem.clear(): the pool empties, particle objects keep their lifetime
+  for (let i = 0; i < 60; i++) follower.lateUpdate(1 / 60);
+  assert.ok(trail.total() - before <= 1, `looping birth sub-emitter kept emitting after the parent was cleared (${trail.total() - before})`);
+});
+
+test('a repeating burst landing exactly on the duration belongs to the next loop', () => {
+  const mod = load();
+  // Unity: burst at 0 x 8 every 0.25 s in a 1 s loop emits 4 cycles per loop, never 5.
+  const ring = target('Ring', { duration: 1, loop: true, bursts: [[0, 1, 8, 0.25]] });
+  const { follower, spawn } = rig(mod, [ring]);
+  spawn(0);
+  for (let i = 0; i <= 120; i++) follower.lateUpdate(1 / 60);
+  // Frames 0..120 cover t = 0..2 s: cycles at 0, .25, .5, .75 in each of two loops, plus t = 2's cycle 0.
+  assert.equal(ring.total(), 9);
+});
+
+test('instance-mode targets are silenced when the follower loads, before any parent event', () => {
+  const mod = load();
+  const trail = target('Trail', { duration: 2, loop: true, rate: 30, bursts: [[0, 5]] });
+  const { follower } = rig(mod, [trail]);
+  follower.onLoad();
+  assert.equal(trail.rateOverTime.constant, 0);
+  assert.equal(trail.bursts.length, 0);
+  assert.equal(trail.total(), 0);
+});

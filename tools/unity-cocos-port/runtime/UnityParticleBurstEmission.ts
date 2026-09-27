@@ -43,6 +43,9 @@ export function installUnityParticleBurstEmission(system: ParticleSystem): void 
             let local = time - currentLoop * ps.duration;
             // A step ending exactly on the duration still belongs to the current loop.
             if (local === 0 && currentLoop > 0) { currentLoop--; local = ps.duration; }
+            // A non-looping system keeps calling burst.update for about a frame past its
+            // duration; that is not a second loop (it would replay the t = 0 burst).
+            if (!ps.loop && currentLoop > 0) return;
             if (currentLoop !== loop) { loop = currentLoop; emitted = 0; }
             let due = emitted;
             while (due < burst.repeatCount) {
