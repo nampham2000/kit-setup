@@ -245,9 +245,10 @@
       ],
       "testPaths": [
         "tools/unity-cocos-port/particle-burst-emission.test.cjs",
-        "tools/unity-cocos-port/particle-burst-emission-binding.test.cjs"
+        "tools/unity-cocos-port/particle-burst-emission-binding.test.cjs",
+        "tools/unity-cocos-port/fixtures/burst-cycles.json"
       ],
-      "acceptance": "Porter binds the catch-up to every repeating burst; authored burst repetitions match Unity per-system counts (ReferenceCapture systems[]) under coarse frames, boundaries and loop replay."
+      "acceptance": "Repeating bursts follow native Unity per-step emission (fixtures/burst-cycles.json from fixtures/capture-burst-cycles.cs): at most one cycle per 1/60 s of the step, the other due cycles dropped, the burst still ending at its authored time; no Cocos stall when the interval is shorter than a frame. Sub-emitter instances apply the same rule. Per-system counts must match ReferenceCapture systems[] (Hovl Magic circle 3 Fire 164, not 271)."
     },
     {
       "id": "death-terminal-position",
@@ -376,6 +377,48 @@
         "tools/unity-cocos-port/particle-shape-distribution.test.cjs"
       ],
       "acceptance": "Birth radius quantiles within 0.02 of Unity for Circle, Cone Base/Volume, Sphere and Hemisphere with full and partial thickness (fixtures/shape-distribution-native.json), plus in-view camera-depth histogram of a wide emitter against Unity Play Mode."
+    },
+    {
+      "id": "sub-emitter-emission-instances",
+      "origin": "a1c98a7",
+      "applicability": "automatic",
+      "sharedPaths": [
+        "tools/unity-cocos-port/runtime-component-porter.js",
+        "tools/unity-cocos-port/runtime/UnityParticleSubEmitterFollower.ts"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/particle-sub-emitter-instances.test.cjs"
+      ],
+      "acceptance": "Birth/Death sub-emitters replay the sub system's authored bursts, repeat cycles, rate and duration once per parent event (birth instances follow and end with the parent); per-system particle counts match Unity Play Mode at a fixed frame (Hovl Magic shield 3: Glow/Stovb = parent count, not a fixed 36/s per parent)."
+    },
+    {
+      "id": "custom1-data-stream",
+      "origin": "5b5a8b9",
+      "applicability": "automatic",
+      "sharedPaths": [
+        "tools/unity-cocos-port/particle-custom-data-binding.js",
+        "tools/unity-cocos-port/runtime/UnityParticleCustomData.ts",
+        "tools/unity-cocos-port/runtime/UnityParticleCustomDataAdapter.ts"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/particle-custom-data-binding.test.cjs"
+      ],
+      "acceptance": "Custom1 curves for exactly the renderer-streamed components (m_VertexStreams kept as hex) reach the material per particle age; the material reads customDataTexture under UNITY_PARTICLE_CUSTOM_DATA. Shader-specific use of Custom1 (Hovl center glow, Lightning reveal/edge) still needs a Unity reference at a fixed frame."
+    },
+    {
+      "id": "shape-align-to-direction",
+      "origin": "216607a",
+      "applicability": "automatic",
+      "sharedPaths": [
+        "tools/unity-cocos-port/particle-align-to-direction-binding.js",
+        "tools/unity-cocos-port/runtime/UnityParticleAlignToDirection.ts",
+        "tools/unity-cocos-port/runtime/UnityParticleAlignToDirectionAdapter.ts"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/particle-align-to-direction.test.cjs",
+        "tools/unity-cocos-port/fixtures/align-to-direction.json"
+      ],
+      "acceptance": "Mesh particles with ShapeModule.alignToDirection match native Unity rotation3D within 0.05 deg for circle, rotated circle, 3D start rotation, cone and sphere (fixtures/align-to-direction.json); billboard and world-space variants stay reported until measured."
     },
     {
       "id": "short-emission-window-timestep",

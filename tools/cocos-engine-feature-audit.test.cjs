@@ -17,6 +17,9 @@ const {
   patchEngineProfile,
   restartCocosProject,
   sha256,
+  engineProfileDrift,
+  portabilityNextAction,
+  assertMcpProjectIdentity,
 } = require('./cocos-engine-feature-audit.cjs');
 
 function evidenceFor(text) {
@@ -418,4 +421,124 @@ test('direct fallback CAS refuses a concurrent engine.json edit', (t) => {
     }),
     (error) => error instanceof EngineFeatureError && error.code === 'ENGINE_FEATURE_CAS_CONFLICT',
   );
+});
+
+function gitIn(root, args) {
+  const { spawnSync } = require('node:child_process');
+  const run = spawnSync('git', ['-c', 'user.email=test@example.invalid', '-c', 'user.name=test', '-c', 'core.autocrlf=false', ...args], {
+    cwd: root, encoding: 'utf8', windowsHide: true,
+  });
+  assert.equal(run.status, 0, run.stderr);
+  return run.stdout;
+}
+
+function setAnimationModules(root, enabled) {
+  const engineFile = path.join(root, 'settings', 'v2', 'packages', 'engine.json');
+  const document = JSON.parse(fs.readFileSync(engineFile, 'utf8'));
+  const config = document.modules.configs.defaultConfig;
+  const names = ['animation', 'marionette', 'skeletal-animation'];
+  for (const name of names) config.cache[name] = { _value: enabled };
+  config.includeModules = config.includeModules.filter(name => !names.includes(name)).concat(enabled ? names : []);
+  fs.writeFileSync(engineFile, `${JSON.stringify(document, null, 2)}\n`);
+}
+
+const SKINNED_PREFAB = '[{"__type__":"cc.SkeletalAnimation"},{"__type__":"cc.animation.AnimationController"}]';
+
+test('a preview that works only from an uncommitted engine profile is reported as non-portable until it is staged', (t) => {
+  const root = makeProject(SKINNED_PREFAB);
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  setAnimationModules(root, false);
+  gitIn(root, ['init', '-q']);
+  gitIn(root, ['add', '-A']);
+  gitIn(root, ['commit', '-q', '-m', 'profile without animation modules']);
+
+  // The other PC: a tool enabled the modules in the working copy only.
+  setAnimationModules(root, true);
+  const local = auditCocosEngineFeatures(root);
+  assert.equal(local.profile.complete, true);
+  assert.equal(local.committedProfile.tracked, true);
+  assert.equal(local.committedProfile.complete, false);
+  assert.deepEqual(local.committedProfile.missing, ['animation', 'marionette', 'skeletal-animation']);
+  assert.deepEqual(local.committedProfile.driftFromWorkingCopy, ['+animation', '+marionette', '+skeletal-animation']);
+  assert.equal(local.portable, false);
+  assert.match(portabilityNextAction(local), /Stage and commit settings\/v2\/packages\/engine\.json/);
+
+  gitIn(root, ['add', 'settings/v2/packages/engine.json']);
+  const staged = auditCocosEngineFeatures(root);
+  assert.equal(staged.committedProfile.complete, true);
+  assert.deepEqual(staged.committedProfile.driftFromWorkingCopy, []);
+  assert.equal(staged.portable, true);
+  assert.equal(portabilityNextAction(staged), null);
+});
+
+test('an untracked engine profile is non-portable and a non-Git project stays unverified', (t) => {
+  const root = makeProject(SKINNED_PREFAB);
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  setAnimationModules(root, true);
+  const outsideGit = auditCocosEngineFeatures(root);
+  assert.equal(outsideGit.committedProfile.available, false);
+  assert.equal(outsideGit.portable, null);
+
+  gitIn(root, ['init', '-q']);
+  const untracked = auditCocosEngineFeatures(root);
+  assert.equal(untracked.committedProfile.available, true);
+  assert.equal(untracked.committedProfile.tracked, false);
+  assert.equal(untracked.portable, false);
+  assert.match(portabilityNextAction(untracked), /untracked/);
+});
+
+test('a tracked engine profile Git cannot show fails closed instead of reading as untracked', (t) => {
+  const root = makeProject(SKINNED_PREFAB);
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  setAnimationModules(root, true);
+  const runner = (listed) => (command, args) => {
+    if (args[0] === 'show') return { ok: false, stdout: '', error: 'timed out' };
+    if (args[0] === 'rev-parse') return { ok: true, stdout: 'true\n' };
+    return listed;
+  };
+  const conflicted = auditCocosEngineFeatures(root, { gitRunner: runner({ ok: true, stdout: '100644 abc 1\tsettings/v2/packages/engine.json\n' }) });
+  assert.equal(conflicted.committedProfile.tracked, true);
+  assert.deepEqual(conflicted.committedProfile.missing, ['engine-profile:unreadable']);
+  assert.equal(conflicted.portable, false);
+  const unlisted = auditCocosEngineFeatures(root, { gitRunner: runner({ ok: true, stdout: '' }) });
+  assert.equal(unlisted.committedProfile.tracked, false);
+  assert.deepEqual(unlisted.committedProfile.missing, ['engine-profile:untracked']);
+  const broken = auditCocosEngineFeatures(root, { gitRunner: runner({ ok: false, stdout: '', error: 'index.lock' }) });
+  assert.deepEqual(broken.committedProfile.missing, ['engine-profile:unreadable']);
+});
+
+test('the MCP project identity check sees through a junction to the same project', async (t) => {
+  const real = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-real-'));
+  const link = `${real}-link`;
+  t.after(() => { fs.rmSync(link, { force: true, recursive: true }); fs.rmSync(real, { recursive: true, force: true }); });
+  try { fs.symlinkSync(real, link, 'junction'); } catch (error) { t.skip(`junction unsupported: ${error.code}`); return; }
+  const client = { call: async () => ({ content: [{ type: 'text', text: JSON.stringify({ success: true, data: { path: link } }) }] }) };
+  await assertMcpProjectIdentity(client, real);
+});
+
+test('profile drift compares effective modules, not Cocos include normalization or key order', () => {
+  const tracked = engineDocument('physics-cannon').modules.configs.defaultConfig;
+  const normalized = JSON.parse(JSON.stringify(tracked));
+  normalized.includeModules = [...normalized.includeModules].reverse();
+  normalized.cache.spine._option = 'spine-4.2'; // parent disabled: its option is not an effective choice
+  assert.deepEqual(engineProfileDrift(tracked, normalized), []);
+  const switched = JSON.parse(JSON.stringify(tracked));
+  switched.cache.physics._option = 'physics-builtin';
+  switched.cache['physics-builtin']._value = true;
+  switched.cache['physics-cannon']._value = false;
+  switched.includeModules = ['base', 'physics-builtin'];
+  assert.deepEqual(engineProfileDrift(tracked, switched), ['+physics-builtin', '-physics-cannon', 'physics:physics-cannon->physics-builtin']);
+});
+
+test('the MCP client refuses a Profile API write to another project that shares the port', async () => {
+  const clientFor = projectPath => ({
+    call: async () => ({ content: [{ type: 'text', text: JSON.stringify({ success: true, data: { path: projectPath } }) }] }),
+  });
+  const root = path.resolve(os.tmpdir(), 'cc_playable_framework');
+  // Windows paths compare case-insensitively; a trailing separator is not a different project.
+  await assertMcpProjectIdentity(clientFor(`${process.platform === 'win32' ? root.toUpperCase() : root}${path.sep}`), root);
+  await assert.rejects(assertMcpProjectIdentity(clientFor(`${root}-combat-magic`), root),
+    error => error.code === 'ENGINE_FEATURE_MCP_PROJECT_MISMATCH' && error.details.editorProject === `${root}-combat-magic`);
+  await assert.rejects(assertMcpProjectIdentity({ call: async () => ({ content: [] }) }, root),
+    error => error.code === 'ENGINE_FEATURE_MCP_PROJECT_UNVERIFIED');
 });

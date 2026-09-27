@@ -6,6 +6,7 @@ const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 
 const { assertPortableRegistry, loadRegistry, portableFileList } = require('./port-regression-gate.cjs');
+const { parseEngineProfile, readTrackedEngineProfile, engineProfileDrift } = require('./cocos-engine-feature-audit.cjs');
 
 const DEFAULT_PROJECT_ROOT = path.resolve(__dirname, '..', '..');
 const REQUIRED_SCRIPTS = Object.freeze({
@@ -225,6 +226,51 @@ function inspectProjectPortableEvidence(projectRoot, runner = command) {
   };
 }
 
+// Feature Cropping is project state that only travels through Git. A tool (or the
+// Editor) can enable modules in the working copy; the preview here then works while
+// every other checkout fails with "Can not find class 'cc.SkeletalAnimation'".
+function inspectEngineProfilePortability(projectRoot, runner = command) {
+  const relative = 'settings/v2/packages/engine.json';
+  const file = path.join(projectRoot, relative);
+  if (!fs.existsSync(file)) {
+    return { ok: true, severity: 'info', summary: 'No engine profile; Cocos default Feature Cropping applies.', details: null, nextAction: null };
+  }
+  try {
+    const working = parseEngineProfile(fs.readFileSync(file), relative);
+    const tracked = readTrackedEngineProfile(projectRoot, { runner });
+    if (!tracked.available) {
+      return { ok: true, severity: 'info', summary: 'Engine profile is not in a Git work tree; portability unverified.', details: { reason: tracked.reason }, nextAction: null };
+    }
+    if (!tracked.tracked) {
+      return {
+        ok: false, severity: 'high', summary: 'Engine profile is not tracked by Git.', details: { file: relative },
+        nextAction: `Stage and commit ${relative} so every checkout enables the same engine modules.`,
+      };
+    }
+    if (tracked.unreadable) {
+      return {
+        ok: false, severity: 'high', summary: 'Git tracks the engine profile but it cannot be read from the index.', details: { file: relative, reason: tracked.reason },
+        nextAction: `Resolve the Git index state of ${relative} (conflict, lock or timeout), then re-run the doctor.`,
+      };
+    }
+    // A local drift is a pending decision (commit or revert); ai:verify's engine
+    // audit is what fails when the committed profile misses a required module.
+    const drift = engineProfileDrift(tracked.config, working.config);
+    return drift.length
+      ? {
+        ok: false, severity: 'medium', summary: 'Working-copy engine profile differs from the Git-tracked one (+ enabled only locally, - disabled only locally).',
+        details: { file: relative, drift },
+        nextAction: `Commit ${relative} (or revert the local drift), then re-run npm run ai:verify.`,
+      }
+      : { ok: true, severity: 'info', summary: 'Engine Feature Cropping matches the Git-tracked profile.', details: null, nextAction: null };
+  } catch (error) {
+    return {
+      ok: false, severity: 'high', summary: 'Engine profile cannot be compared with Git.', details: { error: error.message },
+      nextAction: `Repair ${relative} and commit it.`,
+    };
+  }
+}
+
 function addCheck(checks, id, ok, severity, summary, details = null, nextAction = null) {
   checks.push({ id, ok: Boolean(ok), severity, summary, ...(details ? { details } : {}), ...(nextAction ? { nextAction } : {}) });
 }
@@ -368,6 +414,10 @@ function runDoctor(options = {}, dependencies = {}) {
     portableEvidence.ok ? null
       : 'Repair the registry closure and add its matrices, eval/oracles, Unity references, and watchFiles to Git; regenerate local receipts.' );
 
+  const engineProfile = inspectEngineProfilePortability(projectRoot, runner);
+  addCheck(checks, 'engine-profile-committed', engineProfile.ok, engineProfile.severity, engineProfile.summary,
+    engineProfile.details, engineProfile.nextAction);
+
   const registryFile = path.join(projectRoot, 'tools', 'port-regressions.json');
   if (fs.existsSync(registryFile)) {
     try {
@@ -465,6 +515,7 @@ module.exports = {
   REQUIRED_SCRIPTS,
   compareGeneratedContract,
   findAbsolutePathTokens,
+  inspectEngineProfilePortability,
   inspectPackageScripts,
   inspectProjectPortableEvidence,
   gitTrackedFiles,
