@@ -4,7 +4,7 @@
     "source": "playable-shared-kit/ai/capabilities.def.cjs",
     "generatedBy": "npm run ai:sync",
     "contractCheck": "npm run ai:contract:verify",
-    "count": 68
+    "count": 69
   },
   "coreRules": [
     {
@@ -594,7 +594,7 @@
     },
     {
       "id": "portable-regression-registry",
-      "rule": "Mọi port phải có `tools/port-regressions.json` được commit, khai báo requiredRisks từ Unity preflight/bug history và mandatory suite cho từng risk. Matrix, eval/oracle, ảnh Unity reference và watchFiles phải cùng nằm trong Git. Sau mỗi fix hoặc thay đổi watched target, chạy `npm run ai:verify:regressions`; không reuse PASS cũ vì receipt bị khóa SHA-256. Risk input dùng gesture thật + semantic oracle; input-concurrency dùng `gestures[]` + pre/post overlap/reservation metrics; hold-drag dùng `gestureHoldBeforeMoveMs`; raycast có ca positive/negative; callback flow có `requiredTrace`; first-use-performance dùng cold-start real gesture, probe trước input, ordered trace, bounded long-task/frame-gap/feedback delay và ít nhất 2 runs; VFX có bounded visible-pixel screenshot metrics; runtime mesh có linear+curved cases cùng bounded metrics; lifecycle chạy ít nhất 2 rounds."
+      "rule": "Mọi port phải có `tools/port-regressions.json` được commit, khai báo requiredRisks từ Unity preflight/bug history và mandatory suite cho từng risk. Matrix, eval/oracle, ảnh Unity reference và watchFiles phải cùng nằm trong Git. Sau mỗi fix hoặc thay đổi watched target, chạy `npm run ai:verify:regressions`; không reuse PASS cũ vì receipt bị khóa SHA-256. Risk input dùng gesture thật + semantic oracle; input-concurrency dùng `gestures[]` + pre/post overlap/reservation metrics; hold-drag dùng `gestureHoldBeforeMoveMs`; raycast có ca positive/negative; callback flow có `requiredTrace`; first-use-performance dùng cold-start real gesture, probe trước input, ordered trace, bounded long-task/frame-gap/feedback delay và ít nhất 2 runs; VFX có bounded visible-pixel screenshot metrics; runtime mesh có linear+curved cases cùng bounded metrics; UI group bị bỏ/defer sibling dùng tag `ui-layout` với `centerOffsetPx` bounded ở >=2 viewport; lifecycle chạy ít nhất 2 rounds."
     },
     {
       "id": "first-use-runtime-warmup",
@@ -602,7 +602,11 @@
     },
     {
       "id": "interactive-affordance-parity",
-      "rule": "Mọi control nhìn có thể bấm/vuốt trong Cocos phải truy được về handler và state outcome của Unity source, rồi kiểm bằng gesture thật với `requireEvalOk: true`. Không được dựng button/icon visual-only. Nếu closure của control bị defer/replace trong playable-core (settings, shop, meta...), phải bỏ control khỏi HUD; chỉ cho xuất hiện lại sau khi port đủ hành vi."
+      "rule": "Mọi control nhìn có thể bấm/vuốt trong Cocos phải truy được về handler và state outcome của Unity source, rồi kiểm bằng gesture thật với `requireEvalOk: true`. Không được dựng button/icon visual-only. Nếu closure của control bị defer/replace trong playable-core (settings, shop, meta...), phải bỏ control khỏi HUD; chỉ cho xuất hiện lại sau khi port đủ hành vi. Bỏ control nào thì phải tính lại layout của sibling group chứa nó theo rule `ui-sibling-removal-rebalance`."
+    },
+    {
+      "id": "ui-sibling-removal-rebalance",
+      "rule": "Khi một control UI bị bỏ, defer hoặc ẩn trong playable (ví dụ HomeBtn của cặp Home/TryAgain trong popup Lose), các control còn lại KHÔNG được giữ anchoredPosition authored cho cả nhóm: một survivor đơn lẻ giữ x của cặp (TryAgain x=191 trong khi cặp cân quanh x≈0) sẽ lệch tâm, và tap regression vẫn PASS vì bấm theo vị trí runtime. Phải tính lại layout của sibling group: nếu source có LayoutGroup thì port đúng LayoutGroup đó (UnityFixedLayoutGroup) để survivors re-flow, không lấy anchoredPosition pre-layout/pre-removal; nếu không có LayoutGroup thì thêm adapter layout tường minh (re-centre hoặc re-flow) với reason + source values (vị trí/size gốc của cả nhóm) trong playable-config. Chạy `port.ui-sibling-audit` trên prefab nguồn với danh sách control removed/deferred; `UI_SIBLING_REMOVED_UNBALANCED`/`UI_SIBLING_REMOVED_LAYOUT_REFLOW` là high cho tới khi group có adapter declaration hợp lệ. Nghiệm thu bằng layout-balance metric runtime: case regression gắn tag `ui-layout`, eval dùng `evalHelpers` `playable-shared-kit/tools/qa/ui-layout-balance.js`, `requiredEvalMetrics` khóa `centerOffsetPx` (max <= 32 design px, thường <= 4) cùng `insideSafeRect` và `overlapCount`, chạy ở >=2 viewport (nguồn + thấp/rộng); ảnh đẹp hoặc tap PASS không thay thế metric này."
     },
     {
       "id": "raycast-first-hit-parity",
@@ -1406,6 +1410,37 @@
           "Tool thử đủ 48 signed-axis permutation và fail-closed khi runner-up quá gần, progress span thấp hoặc mesh/path lệch quá ngưỡng. `ambiguous`/`rejected` chặn extractor/config regeneration.",
           "Tool không suy scale/translation, hierarchy, skinning hay world/local parent. Nếu pipeline có các biến đổi đó, normalize về cùng local frame hoặc thêm runtime evidence riêng.",
           "Report bind SHA-256 của dữ liệu point thực dùng; thay đổi input phải chạy lại, không copy mapping cũ bằng tay."
+        ],
+        "verify": null,
+        "status": "partial"
+      },
+      {
+        "id": "port.ui-sibling-audit",
+        "title": "Tìm sibling group UI mất control (removed/deferred) mà survivor còn giữ offset của cả nhóm",
+        "run": "node playable-shared-kit/tools/unity-cocos-port/ui-sibling-removal-audit.cjs --config <audit.json> --unity-project <UnityProjectRoot>",
+        "command": "node playable-shared-kit/tools/unity-cocos-port/ui-sibling-removal-audit.cjs --config <audit.json> --unity-project <UnityProjectRoot>",
+        "optional": [
+          "--prefab <file.prefab>",
+          "--removed <nodePath>",
+          "--shown <nodePath>",
+          "--adapters <adapters.json>",
+          "--tolerance <px>",
+          "--row-tolerance <px>",
+          "--reference-resolution <WxH>",
+          "--check",
+          "--out <report.json>",
+          "--json"
+        ],
+        "when": "Ngay khi playable bỏ/defer một control UI (Home, Shop, Settings, IAP...) của popup/HUD Unity, trước khi viết layout Cocos cho các control còn lại; chạy lại với --check trước core verify.",
+        "outputs": [
+          "stdout: decision pass/fail, từng sibling group với removed, survivors, originalGroupCenter, survivorCenterOffsetPx, expectedReflow (LayoutGroup)",
+          "<report.json> khi có --out (bỏ qua ghi khi bytes không đổi); commit manifest audit.json cùng adapter declaration"
+        ],
+        "limits": [
+          "Phân tích tĩnh RectTransform: group = cùng parent + cùng hàng/cột (--row-tolerance) hoặc parent có Horizontal/Vertical/GridLayoutGroup. Không chạy UGUI layout thật; childControl/forceExpand/Grid chỉ báo cần re-flow, không tính vị trí.",
+          "Chỉ đọc trạng thái active serialized; control mà variant playable bật lúc runtime (ví dụ CoinBtnFree của revive miễn phí) phải khai báo qua --shown/shown[]. m_LocalScale 0 (pop-in Animator) được coi là 1 và ghi zeroScaleAssumedOne. Nested PrefabInstance chỉ dùng override trong prefab đang audit; size không override được coi là điểm.",
+          "Adapter declaration (removed|group + strategy source-layout|recenter|reflow|explicit-position + reason + sourceValues) chỉ chứng minh port có chủ đích; acceptance vẫn cần runtime centerOffsetPx bounded ở >=2 viewport qua tag ui-layout.",
+          "--help chỉ in usage; argument lạ/xung đột fail trước khi đọc/ghi; --check read-only và fail khi còn high hoặc --out stale."
         ],
         "verify": null,
         "status": "partial"
