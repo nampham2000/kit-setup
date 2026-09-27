@@ -749,3 +749,26 @@ test('native rendered animation requires complete sampled source and measured ru
  assert.equal(validateRegistry(root,source,{configFile:file}).suites.length,1);
  oracle.clips[0].frameCount=15;fs.writeFileSync(fileOracle,JSON.stringify(oracle));assert.throws(()=>validateRegistry(root,source,{configFile:file}),e=>e.code==='REGRESSION_ANIMATION_ORACLE_INVALID');
 });
+
+test('--preview-url swaps only the matrix origin and keeps path and query', () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const gate = require('./port-regression-gate.cjs');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gate-url-'));
+  fs.mkdirSync(path.join(root, 'm'));
+  fs.writeFileSync(path.join(root, 'm', 'matrix.json'), JSON.stringify({ url: 'http://127.0.0.1:7476/?level=3&tutorials=off', cases: [] }));
+  let seen = null;
+  gate.executeMatrix(root, { id: 's', matrix: 'm/matrix.json' }, 1, {
+    previewUrl: 'http://localhost:7457',
+    spawnSync: (_exe, args) => { seen = args; return { status: 0, stdout: '{"ok":true}' }; },
+  });
+  const url = seen[seen.indexOf('--url') + 1];
+  require('node:assert').strictEqual(url, 'http://localhost:7457/?level=3&tutorials=off');
+  require('node:assert').throws(() => gate.executeMatrix(root, { id: 's', matrix: 'm/matrix.json' }, 1, {
+    previewUrl: 'http://example.com:7457', spawnSync: () => ({ status: 0, stdout: '{}' }),
+  }), /loopback/);
+  const plain = [];
+  gate.executeMatrix(root, { id: 's', matrix: 'm/matrix.json' }, 1, { spawnSync: (_e, args) => { plain.push(...args); return { status: 0, stdout: '{"ok":true}' }; } });
+  require('node:assert').ok(!plain.includes('--url') || process.env.CC_PLAYABLE_PREVIEW_URL);
+});
