@@ -627,6 +627,24 @@ test and acceptance gate to that registry. The AOE source project runs
 - Text must be readable. Use the source font and its TMP effective size (never smaller), wrap
   inside the source rect and never break inside a word; a heading such as "CONTINUE?" should not
   split into "CONTIN / UE?". Check the source viewport and a short/wide viewport.
+- Text must sit at the TMP baseline, not the Cocos default. Cocos 3.8.8 web ignores font metrics
+  and places the baseline with a fixed `BASELINE_RATIO` of 0.26: CENTER puts it 0.37F below the
+  content centre (plus the outline width in `CacheMode.CHAR`), TOP puts it 0.87F below the top
+  (+m in CHAR), and BOTTOM puts it 0.26F above the bottom (0.13F - m in CHAR). TMP
+  (TextMeshProUGUI `anchorOffset`) uses the font asset FaceInfo `ascentLine`/`descentLine`/
+  `capLine` scaled by fontSize / pointSize * scale, plus `m_margin` and `m_VerticalAlignment`:
+  - Middle (512) centres [descent, ascent].
+  - Geometry/Midline (4096) centres the glyph boxes of the real string from `m_GlyphTable`.
+  - Capline (8192) centres the cap height.
+  - Baseline (2048) puts the baseline on the rect centre.
+  For Baloo (a = 1.05, d = -0.524) this left every centred label 0.107F + m too low, and a
+  Bottom label about 34 units too low. Fix it with
+  `tools/unity-cocos-port/tmp-label-baseline.cjs`: port.prefab now moves the Label content
+  through UITransform anchorY and sets `lineHeight = tmpLineAdvance`. For runtime-built labels,
+  use `playable-core/utils/text/TmpLabelBaseline.ts` (`tmpLabelBaselineShift`) and carry the
+  FaceInfo, glyph boxes, `vMode` and margins in config. Never tune the offset from a screenshot,
+  and never use the TMP lineHeight as an offset. Acceptance measures face ink top/bottom in a
+  tight ROI against the TMP ink derived from source, within ~2 px at design scale.
 - Acceptance:
   - a runtime assertion that the UI tree has no `cc.Graphics` outside an allowlist with reasons;
   - sprite and font UUIDs match a source oracle;

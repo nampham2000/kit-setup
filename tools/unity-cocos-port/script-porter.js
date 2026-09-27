@@ -5,6 +5,7 @@ const { cocosRef } = require('./core-utils');
 const { SCRIPT_SHAPE_MATCH_THRESHOLD } = require('./constants');
 const { mapUnityImageFill } = require('./ui-image-fill-mapper');
 const { emitUnityLayout } = require('./ui-layout-porter');
+const { TMP_VERTICAL, tmpLabelBaselineShift, tmpLineAdvance } = require('./tmp-label-baseline.cjs');
 
 module.exports = function createScriptPorter(deps) {
   const {
@@ -41,6 +42,50 @@ module.exports = function createScriptPorter(deps) {
   function finiteNumber(value, fallback = 0) {
     const number = Number(value);
     return Number.isFinite(number) ? number : fallback;
+  }
+
+  /**
+   * TMP places the baseline from the font asset FaceInfo + alignment + margins; Cocos 3.8.8 uses
+   * a fixed 0.26 baseline ratio (tmp-label-baseline.cjs). Move the Label content rect by the
+   * source-derived difference through the UITransform anchor so the node position, children and
+   * Widget-free layout stay untouched.
+   */
+  function alignTmpLabelBaseline(nodeId, tmpVertical, labelConfig, model, gameObject, builder, reporter) {
+    const where = gameObject?.name || '';
+    if (!tmpVertical.face) {
+      reporter.high('TMP_LABEL_BASELINE_FACEINFO_MISSING', model.file, where,
+        `TMP font asset ${tmpVertical.fontAsset || '(unresolved)'} has no readable m_FaceInfo; the Cocos baseline keeps the fixed 0.26 ratio and will not match TMP`);
+      return;
+    }
+    if (tmpVertical.mode === TMP_VERTICAL.GEOMETRY && !tmpVertical.glyphExtents) {
+      reporter.high('TMP_LABEL_BASELINE_GLYPHS_MISSING', model.file, where,
+        `TMP Geometry (Midline) alignment needs glyph metrics for the text; missing: ${JSON.stringify(tmpVertical.missingGlyphs || [])}`);
+      return;
+    }
+    if (tmpVertical.missingGlyphs?.length) {
+      reporter.medium('TMP_LABEL_BASELINE_GLYPHS_PARTIAL', model.file, where,
+        `Glyph boxes missing from the TMP font asset for ${JSON.stringify(tmpVertical.missingGlyphs)}; Midline centre uses the remaining glyphs`);
+    }
+    const transform = builder.uiTransformOf ? builder.uiTransformOf(nodeId) : null;
+    const height = finiteNumber(transform?._contentSize?.height, 0);
+    const outline = labelConfig.enableOutline ? finiteNumber(labelConfig.outlineWidth, 0) : 0;
+    const shift = tmpLabelBaselineShift(
+      { mode: tmpVertical.mode, face: tmpVertical.face, fontSize: labelConfig.fontSize, rectHeight: height,
+        margin: tmpVertical.margin, glyphExtents: tmpVertical.glyphExtents },
+      { cacheMode: 0, verticalAlign: labelConfig.verticalAlign, fontSize: labelConfig.fontSize, contentHeight: height,
+        lineHeight: labelConfig.lineHeight, outlineWidth: outline,
+        shadow: labelConfig.enableShadow ? { offsetY: finiteNumber(labelConfig.shadowOffset?.y, 0), blur: finiteNumber(labelConfig.shadowBlur, 0) } : null },
+      0,
+    );
+    if (Math.abs(shift) < 0.01) return;
+    if (!(height > 0) || !transform?._anchorPoint) {
+      reporter.medium('TMP_LABEL_BASELINE_UNAPPLIED', model.file, where,
+        `TMP baseline needs the Cocos label moved up ${shift.toFixed(2)} units but its rect height is resolved at runtime (stretch/Widget); apply TmpLabelBaseline at runtime`);
+      return;
+    }
+    transform._anchorPoint.y -= shift / height;
+    reporter.low('TMP_LABEL_BASELINE_ALIGNED', model.file, where,
+      `Label content moved up ${shift.toFixed(2)} units (TMP mode ${tmpVertical.mode}, font ${tmpVertical.fontAsset}) via UITransform anchorY; SHRINK below the authored size changes it`);
   }
 
   function resolveUnityLabelSizing(doc) {
@@ -171,14 +216,19 @@ module.exports = function createScriptPorter(deps) {
     if (hasField(doc, 'm_Text') || hasField(doc, 'm_text')) {
       const text = getField(doc, 'm_Text', getField(doc, 'm_text', ''));
       const labelSizing = resolveUnityLabelSizing(doc);
-      const fontConfig = resolveUnityLabelConfig(doc, gameObject, model, options, unityDb, cocosDb, reporter);
-      builder.addLabel(nodeId, componentId, text, `cmp-label-${componentId}`, {
+      const { tmpVertical, ...fontConfig } = resolveUnityLabelConfig(doc, gameObject, model, options, unityDb, cocosDb, reporter);
+      const lineHeight = tmpVertical?.face
+        ? tmpLineAdvance(labelSizing.fontSize, tmpVertical.face, tmpVertical.lineSpacing)
+        : labelSizing.lineHeight;
+      const labelConfig = {
         color: getField(doc, 'm_fontColor', getField(doc, 'm_Color', { r: 1, g: 1, b: 1, a: 1 })),
         fontSize: labelSizing.fontSize,
-        lineHeight: labelSizing.lineHeight,
+        lineHeight,
         overflow: labelSizing.overflow,
         ...fontConfig,
-      });
+      };
+      builder.addLabel(nodeId, componentId, text, `cmp-label-${componentId}`, labelConfig);
+      if (tmpVertical) alignTmpLabelBaseline(nodeId, tmpVertical, labelConfig, model, gameObject, builder, reporter);
       return;
     }
     if (hasField(doc, 'm_Sprite') && (hasField(doc, 'm_Type') || hasField(doc, 'm_FillCenter'))) {
