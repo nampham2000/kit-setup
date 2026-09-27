@@ -48,9 +48,7 @@ function generatedBlocks() {
  * Nếu file chưa có marker, chèn khối mới vào cuối file để không agent nào
  * bị bỏ đói thông tin chỉ vì template quên marker.
  */
-function injectGenerated(filePath, blocks) {
-  if (!fs.existsSync(filePath)) return { injected: 0, appended: 0 };
-  let text = fs.readFileSync(filePath, 'utf8');
+function renderGenerated(text, blocks) {
   let injected = 0;
   let appended = 0;
 
@@ -81,8 +79,13 @@ function injectGenerated(filePath, blocks) {
     text = insertGeneratedStamp(text, stamp);
   }
 
-  fs.writeFileSync(filePath, text, 'utf8');
-  return { injected, appended };
+  return { text, injected, appended };
+}
+function injectGenerated(filePath, blocks) {
+  if (!fs.existsSync(filePath)) return { injected: 0, appended: 0 };
+  const original=fs.readFileSync(filePath,'utf8'),result=renderGenerated(original,blocks);
+  if(result.text!==original)fs.writeFileSync(filePath,result.text,'utf8');
+  return {injected:result.injected,appended:result.appended};
 }
 
 function insertGeneratedStamp(text, stamp) {
@@ -92,7 +95,7 @@ function insertGeneratedStamp(text, stamp) {
   return `${match[0]}${stamp}\n${text.slice(match[0].length)}`;
 }
 
-function copyDirRecursive(src, dest) {
+function copyDirRecursive(src, dest, blocks = null) {
   if (!fs.existsSync(src)) return;
   if (!fs.existsSync(dest)) {
     fs.mkdirSync(dest, { recursive: true });
@@ -102,9 +105,9 @@ function copyDirRecursive(src, dest) {
     const srcPath = path.join(src, entry.name);
     const destPath = path.join(dest, entry.name);
     if (entry.isDirectory()) {
-      copyDirRecursive(srcPath, destPath);
+      copyDirRecursive(srcPath, destPath, blocks);
     } else {
-      fs.copyFileSync(srcPath, destPath);
+      copyFileSafe(srcPath,destPath,blocks&&entry.name==='SKILL.md'&&path.basename(src)==='unity-to-cocos-porting'?blocks:null);
     }
   }
 }
@@ -113,13 +116,15 @@ function shouldDeployUserHome(env = process.env) {
   return env.CC_PLAYABLE_AI_SYNC_PROJECT_ONLY !== '1';
 }
 
-function copyFileSafe(src, dest) {
+function copyFileSafe(src, dest, blocks = null) {
   if (!fs.existsSync(src)) return false;
+  const raw=fs.readFileSync(src),content=blocks?Buffer.from(renderGenerated(raw.toString('utf8'),blocks).text):raw;
+  if(fs.existsSync(dest)&&fs.readFileSync(dest).equals(content))return true;
   const parentDir = path.dirname(dest);
   if (!fs.existsSync(parentDir)) {
     fs.mkdirSync(parentDir, { recursive: true });
   }
-  fs.copyFileSync(src, dest);
+  fs.writeFileSync(dest,content);
   return true;
 }
 
@@ -160,32 +165,32 @@ function main() {
   // 1. Claude (CLAUDE.md)
   const claudeSrc = path.join(templatesDir, 'CLAUDE.md');
   const claudeDest = path.join(PROJECT_ROOT, 'CLAUDE.md');
-  if (copyFileSafe(claudeSrc, claudeDest)) {
+  if (copyFileSafe(claudeSrc, claudeDest, blocks)) {
     console.log('  [ok] Claude -> CLAUDE.md');
   }
 
   // 2. Codex / ChatGPT (AGENTS.md + ~/.codex/skills/)
   const agentsSrc = path.join(templatesDir, 'AGENTS.md');
   const agentsDest = path.join(PROJECT_ROOT, 'AGENTS.md');
-  copyFileSafe(agentsSrc, agentsDest);
+  copyFileSafe(agentsSrc, agentsDest, blocks);
 
   const deployUserHome = shouldDeployUserHome();
   const codexSkillsDest = path.join(HOME_DIR, '.codex', 'skills');
-  if (deployUserHome) copyDirRecursive(skillsDir, codexSkillsDest);
+  if (deployUserHome) copyDirRecursive(skillsDir, codexSkillsDest, blocks);
   console.log(deployUserHome
     ? '  [ok] Codex / ChatGPT -> AGENTS.md, ~/.codex/skills/'
     : '  [ok] Codex / ChatGPT -> AGENTS.md (user-home skills skipped by CC_PLAYABLE_AI_SYNC_PROJECT_ONLY=1)');
 
   // 3. Gemini / Antigravity (GEMINI.md, .gemini/GEMINI.md, ~/.gemini/antigravity/skills/)
   const geminiSrc = path.join(templatesDir, 'GEMINI.md');
-  copyFileSafe(geminiSrc, path.join(PROJECT_ROOT, 'GEMINI.md'));
-  copyFileSafe(geminiSrc, path.join(PROJECT_ROOT, '.gemini', 'GEMINI.md'));
+  copyFileSafe(geminiSrc, path.join(PROJECT_ROOT, 'GEMINI.md'), blocks);
+  copyFileSafe(geminiSrc, path.join(PROJECT_ROOT, '.gemini', 'GEMINI.md'), blocks);
 
   const antigravitySkillsDest = path.join(HOME_DIR, '.gemini', 'antigravity', 'skills');
-  if (deployUserHome) copyDirRecursive(skillsDir, antigravitySkillsDest);
+  if (deployUserHome) copyDirRecursive(skillsDir, antigravitySkillsDest, blocks);
 
   const workspaceAgentsSkills = path.join(PROJECT_ROOT, '.agents', 'skills');
-  copyDirRecursive(skillsDir, workspaceAgentsSkills);
+  copyDirRecursive(skillsDir, workspaceAgentsSkills, blocks);
   console.log(deployUserHome
     ? '  [ok] Gemini / Antigravity -> GEMINI.md, ~/.gemini/antigravity/skills/, .agents/skills/'
     : '  [ok] Gemini / Antigravity -> GEMINI.md, .agents/skills/ (user-home skills skipped)');
@@ -198,16 +203,16 @@ function main() {
   ];
   for (const src of copilotSrcCandidates) {
     if (fs.existsSync(src)) {
-      copyFileSafe(src, path.join(PROJECT_ROOT, '.github', 'copilot-instructions.md'));
+      copyFileSafe(src, path.join(PROJECT_ROOT, '.github', 'copilot-instructions.md'), blocks);
       break;
     }
   }
 
   const cursorSrc = path.join(templatesDir, '.cursorrules');
-  copyFileSafe(cursorSrc, path.join(PROJECT_ROOT, '.cursorrules'));
+  copyFileSafe(cursorSrc, path.join(PROJECT_ROOT, '.cursorrules'), blocks);
 
   const projectSkillsDest = path.join(PROJECT_ROOT, '.github', 'skills');
-  copyDirRecursive(skillsDir, projectSkillsDest);
+  copyDirRecursive(skillsDir, projectSkillsDest, blocks);
   console.log('  [ok] Copilot / Cursor / VSCode -> .github/copilot-instructions.md, .cursorrules, .github/skills/');
 
   // 5. Render lệnh từ manifest vào MỌI file hướng dẫn agent đã deploy.
@@ -245,4 +250,4 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { generatedBlocks, injectGenerated, insertGeneratedStamp, shouldDeployUserHome, main };
+module.exports = { generatedBlocks, injectGenerated, renderGenerated, copyFileSafe, copyDirRecursive, insertGeneratedStamp, shouldDeployUserHome, main };

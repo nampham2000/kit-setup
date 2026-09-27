@@ -186,8 +186,9 @@ keys are Unity paths relative to `Assets/`, values are maximum dimensions.
 keeps UUID metadata, and caches by source/output hashes plus the cap. Prefab cache
 also observes these settings, so subsequent ports cannot restore oversized copies.
 Do not apply this to sliced/UI sprites without remapping sprite rectangles and
-logical dimensions. Unconfigured images remain byte-identical; import caps are
-not inferred globally from one project's settings.
+logical dimensions. Unconfigured images keep their pixel bytes; import caps are
+not inferred globally from one project's settings. Resizes decode raw texels
+(`ignoreIcc`) because Unity ignores embedded colour profiles.
 
 Load independent prefab, audio and background groups concurrently. Keep one
 readiness barrier when immediate taps, popups and transitions need all assets;

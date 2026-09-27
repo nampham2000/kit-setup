@@ -43,6 +43,16 @@ test('linear projects flag every input Unity linearizes; mesh vertex colors stay
   assert.deepEqual(gamma._props[0].unityColorSpace, { __type__: 'cc.Vec4', x: 0, y: 0, z: 0, w: 0 });
 });
 
+test('particle materials carry the renderer Min/Max Particle Size; mesh materials do not', () => {
+  const shader = legacyPreviewShader('LegacyPreview/URP Effect');
+  const particle = legacyPreviewMaterialData({ ...base, shader, usage: 'particle', sourceRendererSize: [0, 5, 0, 1] });
+  assert.deepEqual(particle._props[0].sourceRendererSize, { __type__: 'cc.Vec4', x: 0, y: 5, z: 0, w: 1 });
+  const mesh = legacyPreviewMaterialData({ ...base, shader, usage: 'mesh', sourceRendererSize: [0, 5, 0, 1] });
+  assert.equal(mesh._props[0].sourceRendererSize, undefined);
+  const older = legacyPreviewMaterialData({ ...base, shader, usage: 'particle' });
+  assert.equal(older._props[0].sourceRendererSize, undefined, 'without renderer state the effect default (disabled) applies');
+});
+
 test('the embedded particle vertex program matches source-particle.effect', () => {
   const marker = '// Adapted from Cocos Creator 3.8.8';
   const read = file => fs.readFileSync(path.join(__dirname, file), 'utf8').replace(/\r\n/g, '\n');

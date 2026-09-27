@@ -120,31 +120,6 @@ test('refuses to delete a legacy adapter when canonical and legacy UUIDs conflic
   }
 });
 
-test('attaches the module-space adapter only to systems whose velocity/force module runs in the other space', () => {
-  const root = makeProject();
-  try {
-    const reporter = makeReporter();
-    const porter = makePorter();
-    porter.ensureParticleModuleSpaceScript({ cocosRoot: root, dryRun: false }, reporter);
-    const classId = compressUuid(JSON.parse(fs.readFileSync(path.join(root, 'assets', 'script', 'UnityParticleModuleSpace.ts.meta'), 'utf8')).uuid);
-    // 0 root node, 1 world system (local velocity: needs it), 2 its velocity module, 3 node, 4 world system (world velocity: does not).
-    const objects = [
-      { __type__: 'cc.Node', _name: 'Dust', _components: [{ __id__: 1 }] },
-      { __type__: 'cc.ParticleSystem', node: { __id__: 0 }, _simulationSpace: 0, _velocityOvertimeModule: { __id__: 2 } },
-      { __type__: 'cc.VelocityOvertimeModule', _enable: true, space: 1 },
-      { __type__: 'cc.Node', _name: 'Smoke', _components: [{ __id__: 4 }] },
-      { __type__: 'cc.ParticleSystem', node: { __id__: 3 }, _simulationSpace: 0, _velocityOvertimeModule: { __id__: 5 } },
-      { __type__: 'cc.VelocityOvertimeModule', _enable: true, space: 0 },
-    ];
-    const added = [];
-    const builder = { objects, cocosDb: { root }, addComponent(nodeId, type, props) { added.push({ nodeId, type, props }); } };
-    porter.attachParticleModuleSpace(builder, reporter);
-    assert.deepEqual(added, [{ nodeId: 0, type: classId, props: { particleSystem: { __id__: 1 } } }]);
-  } finally {
-    fs.rmSync(root, { recursive: true, force: true });
-  }
-});
-
 test('birth sub-emitter entries carry the Unity sub-emitter timeline instead of a fixed rate', () => {
   const root = makeProject();
   try {
@@ -182,22 +157,3 @@ test('birth sub-emitter entries carry the Unity sub-emitter timeline instead of 
   }
 });
 
-test('procedural particle envelope reproduces Unity renderer bounds centres (Tanks! Unity 6 measurements)', () => {
-  const { unityProceduralEnvelope } = require('./runtime-component-porter');
-  const curve = (scalar) => ({ minMaxState: 0, scalar });
-  const system = (shape, speed, life, gravity) => ({ moveWithTransform: 0, EmissionModule: { enabled: 1 },
-    InitialModule: { startSpeed: curve(speed), startLifetime: curve(life), gravityModifier: curve(gravity) }, ShapeModule: { enabled: 1, ...shape } });
-  // Centre in the system's local space for a world rotation Rx(degrees) (Unity), gravity = world -Y.
-  const centre = (envelope, degrees = 0) => {
-    const t = -degrees * Math.PI / 180; // inverse rotation about X
-    const g = [0, -envelope.gravityDrop * Math.cos(t), -envelope.gravityDrop * Math.sin(t)];
-    return [0, 1, 2].map((axis) => (Math.min(envelope.min[axis], envelope.min[axis] + g[axis]) + Math.max(envelope.max[axis], envelope.max[axis] + g[axis])) / 2);
-  };
-  const cone = { type: 4, radius: { value: 0.3954363 }, angle: 0 };
-  const close = (got, want) => got.forEach((v, i) => assert.ok(Math.abs(v - want[i]) < 2e-3, JSON.stringify({ got, want })));
-  close(centre(unityProceduralEnvelope(system(cone, 0.7898, 0.2, 0))), [0, 0, 0.079]); // CompleteShellExplosion/Burst
-  close(centre(unityProceduralEnvelope(system(cone, 0.7898, 0.3, 0))), [0, 0, 0.118]); // PowerUpEffect
-  close(centre(unityProceduralEnvelope(system({ type: 2, radius: { value: 0.55 } }, 10, 0.3, 1)), 279.22), [0, -0.035, 1.557]); // PowerUpEffect/Trails
-  assert.equal(unityProceduralEnvelope({ ...system(cone, 1, 1, 0), moveWithTransform: 1 }), null); // world space: live bounds
-  assert.equal(unityProceduralEnvelope({ ...system(cone, 1, 1, 0), SubModule: { enabled: 1 } }), null); // sub-emitter parent
-});

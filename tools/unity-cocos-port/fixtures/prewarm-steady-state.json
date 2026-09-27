@@ -1,0 +1,21 @@
+{
+  "source": "Unity 6000.3.1f1, PrefabUtility.LoadPrefabContents + ParticleSystem.Simulate(0, restart) then Simulate(1/60); script fixtures/capture-prewarm-ages.cs",
+  "cases": [
+    {
+      "emitter": "Assets/ARPG Effects/Prefabs/Loot/Orbs/DarkOrb.prefab/Glow",
+      "duration": 0.5,
+      "lifetime": 1.2,
+      "burst": { "time": 0, "count": 1 },
+      "agesAtStart": [1.0244, 0.5268],
+      "agesAfterFirstFrame": [1.0411, 0.5435, 0.0167]
+    },
+    {
+      "emitter": "Assets/ARPG Effects/Prefabs/Loot/Orbs/WaterOrb.prefab/Glow",
+      "duration": 0.8,
+      "lifetime": 1.2,
+      "burst": { "time": 0, "count": 1 },
+      "agesAtStart": [0.8195],
+      "agesAfterFirstFrame": [0.8362, 0.0167]
+    }
+  ]
+}

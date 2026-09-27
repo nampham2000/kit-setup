@@ -3,6 +3,9 @@
 const fs = require('fs');
 const path = require('path');
 const { toPosix, sanitizeFileId } = require('./core-utils');
+const { unityModelImportBasis, unityModelMeshName } = require('./model-import-basis');
+const { cocosSlotsForUnitySlots } = require('./fbx-submesh-order');
+const { requestModelMeshBasis } = require('./model-mesh-basis-binding');
 
 module.exports = function createRendererPorter(deps) {
   const {
@@ -19,6 +22,24 @@ module.exports = function createRendererPorter(deps) {
     unityRefGuid,
     fbxMeshOwnerNode = ({ nodeId }) => nodeId,
   } = deps;
+
+  // Two ports of the same Unity FBX basis diag(-k, k, -k) exist. The carrier child of fbxMeshOwnerNode
+  // applies Ry(180) plus the pivot the Cocos importer may bake (recovered from Unity mesh bounds) and keeps
+  // a MeshCollider of the same mesh on that basis (Tanks! LevelMoon, 233 renderers). The runtime vertex
+  // basis UnityModelMeshBasis applies ModelImporter.globalScale k (ARPG Effects). The carrier takes k = 1;
+  // any other k uses the runtime basis. Importer settings without a measured basis keep the carrier and
+  // are reported high by requestModelMeshBasis.
+  function fbxBasisRoute(modelAsset) {
+    const basis = unityModelImportBasis(modelAsset);
+    if (!basis) return { carrier: true, request: false };
+    if (!basis.supported) return { carrier: true, request: true };
+    return basis.scale === 1 ? { carrier: true, request: false } : { carrier: false, request: true };
+  }
+
+  function meshRendererOwner(args) {
+    const route = fbxBasisRoute(args.modelAsset);
+    return { ownerNodeId: route.carrier ? fbxMeshOwnerNode(args) : args.nodeId, requestBasis: route.request };
+  }
 
   function normalizeMaterialName(value) {
     return String(value || '')
@@ -66,6 +87,17 @@ module.exports = function createRendererPorter(deps) {
     return renderers[0].materials.map((material) => (material?.guid ? unityDb?.get(material.guid) || null : null));
   }
 
+  // Unity material slot i draws Unity sub-mesh i; the Cocos primitive order of the
+  // same FBX mesh differs (fbx-submesh-order.js). Returns the slots in Cocos order.
+  function cocosMaterialSlots(modelAsset, modelName, unitySlots, reporter, label) {
+    if (!modelAsset || String(modelAsset.ext || '').toLowerCase() !== '.fbx' || unitySlots.length < 1) return unitySlots;
+    const slots = cocosSlotsForUnitySlots(modelAsset.path, modelName, unitySlots);
+    if (!slots) return unitySlots;
+    reporter.low('FBX_SUBMESH_MATERIALS_REORDERED', modelAsset.relativePath || '', label,
+      `Unity sub-mesh material slots (${unitySlots.length}) were mapped onto ${slots.length} Cocos primitive(s) by FBX material object`);
+    return slots;
+  }
+
   function resolveSyntheticMaterialOverrides(gameObject, resolvedModel, options, unityDb, cocosDb, reporter) {
     const explicitAssets = gameObject.syntheticModelMaterialOverrideGroups?.[0]?.materialAssets || [];
     const evidenceAssets = explicitAssets.length ? [] : evidenceMaterialAssets(gameObject, options, unityDb);
@@ -74,7 +106,10 @@ module.exports = function createRendererPorter(deps) {
       : orderedExternalMaterialAssets(gameObject, resolvedModel);
     const assets = explicitAssets.length ? explicitAssets : evidenceAssets.some(Boolean) ? evidenceAssets.filter(Boolean) : externalAssets;
     if (!assets.length) return [];
-    const uuids = resolveUnityMaterialUuids(assets, options, unityDb, cocosDb, reporter, gameObject.name);
+    let uuids = resolveUnityMaterialUuids(assets, options, unityDb, cocosDb, reporter, gameObject.name);
+    if (explicitAssets.length) {
+      uuids = cocosMaterialSlots(gameObject.syntheticModelAsset, gameObject.syntheticModelName || gameObject.name, uuids, reporter, gameObject.name);
+    }
     if (externalAssets.length && uuids.length) {
       reporter.low(
         'MODEL_EXTERNAL_MATERIAL_REMAP_WIRED',
@@ -98,14 +133,16 @@ module.exports = function createRendererPorter(deps) {
       const overrideMaterialUuids = resolveSyntheticMaterialOverrides(
         gameObject, resolved, options, unityDb, cocosDb, reporter,
       );
-      builder.addMeshRenderer(
-        fbxMeshOwnerNode({ builder, nodeId, gameObject, modelAsset, meshUuid: resolved.meshUuid, meshNameHint, seed: componentId, reporter, options }),
+      const syntheticOwner = meshRendererOwner({ builder, nodeId, gameObject, modelAsset, meshUuid: resolved.meshUuid, meshNameHint, seed: componentId, reporter, options });
+      const rendererId = builder.addMeshRenderer(
+        syntheticOwner.ownerNodeId,
         componentId,
         resolved.meshUuid,
         overrideMaterialUuids.length ? overrideMaterialUuids : (resolved.materialUuids || (resolved.materialUuid ? [resolved.materialUuid] : [])),
         componentFileId,
         { castShadows: true, receiveShadows: true },
       );
+      if (syntheticOwner.requestBasis) requestModelMeshBasis(builder, reporter, options, nodeId, rendererId, modelAsset, gameObject.name);
       reporter.low('NESTED_MODEL_RENDERER_CREATED', modelAsset.relativePath, gameObject.name, 'Nested model asset resolved to Cocos MeshRenderer', resolved.source);
       return;
     }
@@ -115,14 +152,16 @@ module.exports = function createRendererPorter(deps) {
       const overrideMaterialUuids = resolveSyntheticMaterialOverrides(
         gameObject, missing.resolved, options, unityDb, cocosDb, reporter,
       );
-      builder.addMeshRenderer(
-        fbxMeshOwnerNode({ builder, nodeId, gameObject, modelAsset, meshUuid: missing.resolved.meshUuid, meshNameHint, seed: componentId, reporter, options }),
+      const syntheticOwner = meshRendererOwner({ builder, nodeId, gameObject, modelAsset, meshUuid: missing.resolved.meshUuid, meshNameHint, seed: componentId, reporter, options });
+      const rendererId = builder.addMeshRenderer(
+        syntheticOwner.ownerNodeId,
         componentId,
         missing.resolved.meshUuid,
         overrideMaterialUuids.length ? overrideMaterialUuids : (missing.resolved.materialUuids || (missing.resolved.materialUuid ? [missing.resolved.materialUuid] : [])),
         componentFileId,
         { castShadows: true, receiveShadows: true },
       );
+      if (syntheticOwner.requestBasis) requestModelMeshBasis(builder, reporter, options, nodeId, rendererId, modelAsset, gameObject.name);
       reporter.low(
         missing.pendingImport ? 'NESTED_MODEL_PENDING_MESH_WIRED' : 'NESTED_MODEL_RENDERER_CREATED',
         modelAsset.relativePath,
@@ -186,9 +225,12 @@ module.exports = function createRendererPorter(deps) {
       );
     }
 
+    // A multi-mesh FBX is addressed by mesh file ID; the GameObject name ("Lid")
+    // need not match the mesh name ("Object001") and would fall back to mesh 0.
+    const unityMeshName = meshAsset && !builtinMeshUuid ? unityModelMeshName(meshAsset, deps.unityRefFileId(meshRef)) : '';
     if (meshAsset && !meshUuid) {
       const requiredExt = meshAsset.ext === '.asset' ? '.fbx' : meshAsset.ext;
-      const resolved = cocosDb.resolveModelMeshByStem(meshAsset.stem, gameObject.name, requiredExt);
+      const resolved = cocosDb.resolveModelMeshByStem(meshAsset.stem, unityMeshName || gameObject.name, requiredExt);
       if (resolved) {
         meshUuid = resolved.meshUuid;
         if (hasExplicitMaterialSlots) {
@@ -221,7 +263,7 @@ module.exports = function createRendererPorter(deps) {
           }
         }
         if (!meshUuid) {
-          const missing = handleMissingModel(meshAsset, reporter, options, { autoCopy: true, meshNameHint: gameObject.name });
+          const missing = handleMissingModel(meshAsset, reporter, options, { autoCopy: true, meshNameHint: unityMeshName || gameObject.name });
           meshPendingImport = Boolean(missing.pendingImport);
           if (missing.resolved?.meshUuid) {
             meshUuid = missing.resolved.meshUuid;
@@ -244,12 +286,16 @@ module.exports = function createRendererPorter(deps) {
         .filter(Boolean);
     }
 
+    if (meshAsset && !builtinMeshUuid && materialUuids.length && !materialUuids.includes('')) {
+      materialUuids = cocosMaterialSlots(meshAsset, unityMeshName || gameObject.name, materialUuids, reporter, gameObject.name);
+    }
+
     if (!meshUuid && meshPendingImport && meshAsset) {
       recordPendingMeshRepair(options, options.out, componentFileId, meshAsset.stem, gameObject.name, meshAsset.relativePath);
     }
     if (!meshUuid && !meshPendingImport) reporter.high('MESH_UNRESOLVED', model.file, gameObject.name, 'MeshRenderer has no resolved Cocos mesh');
-    const ownerNodeId = meshUuid && !builtinMeshUuid && meshAsset
-      ? fbxMeshOwnerNode({
+    const fbxOwner = meshUuid && !builtinMeshUuid && meshAsset
+      ? meshRendererOwner({
         builder,
         nodeId,
         gameObject,
@@ -261,13 +307,19 @@ module.exports = function createRendererPorter(deps) {
         reporter,
         options,
       })
+      : null;
+    const ownerNodeId = fbxOwner
+      ? fbxOwner.ownerNodeId
       : builtinMeshUuid && deps.builtinPrimitiveOwnerNode
         ? deps.builtinPrimitiveOwnerNode({ builder, nodeId, meshRef, meshUuid, gameObject, seed: componentId, reporter })
         : nodeId;
-    builder.addMeshRenderer(ownerNodeId, componentId, meshUuid, materialUuids, componentFileId, {
+    const rendererId = builder.addMeshRenderer(ownerNodeId, componentId, meshUuid, materialUuids, componentFileId, {
       castShadows: Number(getField(doc, 'm_CastShadows', 1) || 0) !== 0,
       receiveShadows: Number(getField(doc, 'm_ReceiveShadows', 1) || 0) !== 0,
     });
+    if (meshAsset && !builtinMeshUuid && (meshUuid || meshPendingImport) && (fbxOwner ? fbxOwner.requestBasis : fbxBasisRoute(meshAsset).request)) {
+      requestModelMeshBasis(builder, reporter, options, nodeId, rendererId, meshAsset, gameObject.name);
+    }
   }
 
   return {

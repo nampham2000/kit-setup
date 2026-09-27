@@ -2,7 +2,7 @@
 
 const path = require('node:path');
 
-const SCRIPT_INDEX_SCHEMA_VERSION = 2;
+const SCRIPT_INDEX_SCHEMA_VERSION = 3;
 
 /**
  * Names which commonly occur in C# source but do not identify a project-owned
@@ -85,6 +85,45 @@ function extractResourceLoadPaths(text) {
   return sortedUnique(paths);
 }
 
+// Bounded resource-folder catalog, including the common vendor demo foreach over
+// a literal string array. Keep LoadAll distinct from single-key Load: a prefix
+// must never make Resources.Load("fire") pull in every fire prefab.
+function extractResourceLoadAllPaths(text) {
+  const source = stripCommentsPreserveStrings(text);
+  const literals = body => [...body.matchAll(/@?"((?:""|\\.|[^"\\])*)"/g)]
+    .map(m => normalizeAssetPath(m[1].replace(/""/g, '"').replace(/\\([\\"'])/g, '$1')).replace(/^\/+|\/+$/g, ''));
+  const arrays = new Map();
+  for (const m of source.matchAll(/\b(?:string\s*\[\s*\]|var)\s+(\w+)\s*=\s*(?:new\s*(?:string\s*)?\[\s*\]\s*)?\{([^{}]*)\}/g)) {
+    // Only literal lists; expressions and concatenations remain unresolved.
+    if (!m[2].replace(/@?"(?:""|\\.|[^"\\])*"/g, '').replace(/[\s,]/g, '')) arrays.set(m[1], literals(m[2]));
+  }
+  const paths = [];
+  for (const m of source.matchAll(/\bResources\s*\.\s*LoadAll(?:\s*<[^>{}]+>)?\s*\(\s*(@?"(?:""|\\.|[^"\\])*"|\w+)\s*\)/g)) {
+    if (/^@?"/.test(m[1])) paths.push(...literals(m[1]));
+    else {
+      const before = source.slice(0, m.index);
+      const loops = [...before.matchAll(/\bforeach\s*\(\s*(?:string|var)\s+(\w+)\s+in\s+(\w+)\s*\)/g)];
+      const loop = loops.at(-1);
+      if (loop && loop[1] === m[1] && arrays.has(loop[2])) {
+        const bodyStart = loop.index + loop[0].length;
+        const body = source.slice(bodyStart, m.index);
+        const masked = stripCommentsAndStrings(body).trimStart();
+        // Require the load to lie inside this foreach body, not a later method.
+        let inside = !masked.startsWith('{') && !masked.includes(';');
+        if (masked.startsWith('{')) {
+          let depth = 0; inside = true;
+          for (const ch of masked) {
+            if (ch === '{') depth++;
+            if (ch === '}' && --depth === 0) { inside = false; break; }
+          }
+        }
+        if (inside) paths.push(...arrays.get(loop[2]));
+      }
+    }
+  }
+  return sortedUnique(paths);
+}
+
 function splitTopLevelCommaList(value) {
   const parts = [];
   let start = 0;
@@ -152,6 +191,7 @@ function analyzeCSharpSource(text) {
     declaredTypeBases: extractDeclaredTypeBases(source),
     identifierCandidates: sortedUnique(identifierCandidates),
     resourceLoadPaths: extractResourceLoadPaths(text),
+    resourceLoadAllPaths: extractResourceLoadAllPaths(text),
   };
 }
 
@@ -204,6 +244,7 @@ function evidenceForScript(record) {
         (Array.isArray(evidence.resourceLoadPaths) ? evidence.resourceLoadPaths : [])
           .filter(value => typeof value === 'string' && value).map(normalizeAssetPath),
       ),
+      resourceLoadAllPaths: sortedUnique((evidence.resourceLoadAllPaths || []).filter(value => typeof value === 'string').map(normalizeAssetPath)),
     };
   }
   return analyzeCSharpSource(record && record.text);
@@ -356,6 +397,7 @@ function buildScriptIndex(inputRecords = []) {
       declaredTypeBases: evidence.declaredTypeBases,
       identifierCandidates: evidence.identifierCandidates,
       resourceLoadPaths: evidence.resourceLoadPaths,
+      resourceLoadAllPaths: evidence.resourceLoadAllPaths,
     };
     workingScripts.push(script);
     for (const typeName of script.declaredTypes) {
@@ -423,6 +465,7 @@ function buildScriptIndex(inputRecords = []) {
       declaredTypeBases: script.declaredTypeBases,
       scriptableObjectTypes: script.declaredTypes.filter(isScriptableObjectType),
       resourceLoadPaths: script.resourceLoadPaths,
+      resourceLoadAllPaths: script.resourceLoadAllPaths,
       referencedProjectTypes: sortedUnique(referencedProjectTypes),
     };
   });

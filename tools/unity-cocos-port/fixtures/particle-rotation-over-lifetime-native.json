@@ -1,0 +1,24 @@
+{
+  "schema": "particle-rotation-over-lifetime-native/1",
+  "source": {"unity":"6000.3.1f1","pipeline":"URP 17.3 (unity2cc_particles3d)","capturedAt":"2026-09-25","capture":"tools/unity-cocos-port/fixtures/capture-rotation-over-lifetime.cs","maximumParticleDeltaTime":0.03,"captureSha256Lf":"cf3a1eda9ca32b4f697ebb0b073373e9f9a9d7fe7a5e3c137a916008ef24647e"},
+  "meaning": "Unity Particle.rotation3D after Simulate steps and ParticleSystemRenderer.BakeMesh vertices (Unity frame). Mesh vertices come from the synthetic mesh below scaled by size 1; Local billboards are 1x1 quads.",
+  "mesh": [
+    [0,0,0],
+    [1,0,0],
+    [0,1,0],
+    [0,0,1]
+  ],
+  "cases": [
+    {"name":"mesh-sep0-z90-start3d","renderMode":"Mesh","alignment":"Local","separateAxes":false,"startRotation3D":[30,40,20],"angularVelocityDegPerSecond":[0,0,90],"lifetime":10,"steps":20,"dt":0.025,"rotation3D":[30.000002,40,65.000015],"vertices":[[0,0,0],[0.615026,0.784886,0.075482],[-0.558445,0.365998,0.744436],[0.55667,-0.5,0.663414]]},
+    {"name":"mesh-sep1-xyz","renderMode":"Mesh","alignment":"Local","separateAxes":true,"startRotation3D":[-20,75,135],"angularVelocityDegPerSecond":[60,90,120],"lifetime":10,"steps":10,"dt":0.025,"rotation3D":[-4.999999,97.50001,164.999969],"vertices":[[0,0,0],[0.103714,0.257835,0.960607],[0.117249,-0.96225,0.245617],[0.987672,0.087156,-0.13003]]},
+    {"name":"mesh-questzone1-verticalglow","renderMode":"Mesh","alignment":"Local","separateAxes":true,"startRotation3D":[270,0,360],"angularVelocityDegPerSecond":[0,60,0],"lifetime":10,"steps":20,"dt":0.025,"rotation3D":[270,30.000002,360],"vertices":[[0,0,0],[0.866025,0,-0.5],[-0.5,0,-0.866025],[0,1,0]]},
+    {"name":"mesh-questzone2-verticalglow","renderMode":"Mesh","alignment":"Local","separateAxes":true,"startRotation3D":[270,90,180],"angularVelocityDegPerSecond":[0,180,0],"lifetime":10,"steps":20,"dt":0.025,"rotation3D":[270,180.000031,180],"vertices":[[0,0,0],[1,0,0],[0,0,-1],[0,1,0]]},
+    {"name":"mesh-circleitem-verticalglow","renderMode":"Mesh","alignment":"Local","separateAxes":true,"startRotation3D":[270,0,144],"angularVelocityDegPerSecond":[0,60,0],"lifetime":10,"steps":20,"dt":0.025,"rotation3D":[270,30.000002,144],"vertices":[[0,0,0],[-0.994521,0,-0.104528],[-0.104528,0,0.994522],[0,1,0]]},
+    {"name":"mesh-channelrings","renderMode":"Mesh","alignment":"Local","separateAxes":false,"startRotation3D":[0,60,120],"angularVelocityDegPerSecond":[0,0,45],"lifetime":10,"steps":20,"dt":0.025,"rotation3D":[0,60.000004,142.500015],"vertices":[[0,0,0],[-0.396677,0.608761,0.687064],[-0.304381,-0.793354,0.527203],[0.866026,0,0.5]]},
+    {"name":"mesh-iconstar-x-only","renderMode":"Mesh","alignment":"Local","separateAxes":true,"startRotation3D":[0,-90,0],"angularVelocityDegPerSecond":[25,0,0],"lifetime":10,"steps":20,"dt":0.025,"rotation3D":[12.499998,-90,0],"vertices":[[0,0,0],[0,0,1],[-0.21644,0.976296,0],[-0.976296,-0.21644,0]]},
+    {"name":"billboard-local-sep1-xyz","renderMode":"Billboard","alignment":"Local","separateAxes":true,"startRotation3D":[30,40,50],"angularVelocityDegPerSecond":[60,90,120],"lifetime":10,"steps":10,"dt":0.025,"rotation3D":[44.999985,62.500008,79.999985],"vertices":[[0.550574,0.409576,0.170632],[0.013074,-0.286788,0.646206],[-0.550574,-0.409576,-0.170632],[-0.013074,0.286788,-0.646206]]},
+    {"name":"billboard-local-sep0-z","renderMode":"Billboard","alignment":"Local","separateAxes":false,"startRotation3D":[30,40,50],"angularVelocityDegPerSecond":[0,0,90],"lifetime":10,"steps":20,"dt":0.025,"rotation3D":[30.000002,40,95.000015],"vertices":[[0.561027,0.393625,0.174091],[0.174091,-0.469105,0.499633],[-0.561027,-0.393625,-0.174091],[-0.174091,0.469105,-0.499633]]}
+  ],
+  "timing": {"curve":"angular velocity z = 360 deg/s * normalized age (linear 0..1)","startOfStep40":175.5,"endOfStep40":184.5,"rows":[{"name":"timing-ramp-40x0.025","lifetime":1,"steps":40,"dt":0.025,"rotation3DZ":175.500046},{"name":"timing-ramp-1x1.0","lifetime":1.0001,"steps":1,"dt":1,"rotation3DZ":174.688385}]},
+  "sharedRandom": {"range":[0,360],"time":0.25,"rotation3D":[[88.17386,88.17386,88.17386],[77.03942,77.03942,77.03942],[5.049141,5.049141,5.049141],[16.088612,16.088612,16.088612],[12.152921,12.152921,12.152921],[24.323143,24.323143,24.323143],[73.24034,73.24034,73.24034],[74.54177,74.54177,74.54177],[60.014816,60.014816,60.014816],[32.202328,32.202328,32.202328],[2.919274,2.919274,2.919274],[77.41375,77.41375,77.41375]]}
+}

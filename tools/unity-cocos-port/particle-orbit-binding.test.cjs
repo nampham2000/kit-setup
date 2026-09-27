@@ -30,10 +30,16 @@ test('generic prefab porter binds native Orbit without any AOE controller or too
   assert.match(cli,/attachOrbitRuntime\(builder, reporter, options\)/);
 });
 for(const [name,mutate,limit] of [
- ['world space',s=>s.inWorldSpace=true,false],['custom simulation',s=>s.simulationSpace=2,false],['noise composition',s=>s.noiseEnabled=true,false],['offset',s=>s.velocity.orbitalOffsetX.scalar=1,false],['weighted curve',s=>s.velocity.orbitalY.maxCurve={m_Curve:[{weightedMode:1}]},false],['limit',s=>s.limitEnabled=true,true],
+ ['world space',s=>s.inWorldSpace=true,false],['custom simulation',s=>s.simulationSpace=2,false],['noise composition',s=>s.noiseEnabled=true,false],['offset',s=>s.velocity.orbitalOffsetX.scalar=1,false],['weighted curve',s=>s.velocity.orbitalY.maxCurve={m_Curve:[{weightedMode:1}]},false],['limit with a speed modifier',s=>{s.limitEnabled=true;s.velocity.speedModifier=constant(2);},true],
 ])test(`${name} cannot silently pass as native Orbit`,()=>{
   const source=spec();mutate(source);const result=run(source,limit);
   assert.equal(result.objects.length,3);assert.equal(result.issues[0].code,'PARTICLE_ORBIT_ADAPTER_REQUIRED');
+});
+test('a source limit binds through the measured animated-velocity composition',()=>{
+  const source=spec();source.limitEnabled=true;source.velocity.speedModifier=constant(1);
+  const result=run(source,true);
+  assert.deepEqual(result.issues,[]);assert.equal(result.objects.length,4);
+  assert.equal(JSON.parse(result.objects[3].sourceContract).limitEnabled,true);
 });
 test('unimported script blocks binding instead of inventing meta UUID',()=>{
   const result=run(spec(),false,false);
@@ -47,7 +53,7 @@ test('staging is idempotent and leaves metadata to AssetDB',()=>{
     const target=path.join(root,'assets/script/UnityParticleOrbitAdapter.ts');
     const before=fs.statSync(target).mtimeMs;stageOrbitRuntime({cocosRoot:root});
     assert.equal(fs.statSync(target).mtimeMs,before);assert.equal(fs.existsSync(target+'.meta'),false);
-    for(const name of ['UnityNoiseKernel','UnityParticleOrbit','UnityParticleOrbitAdapter'])assert.equal(fs.readFileSync(path.join(root,'assets/script',name+'.ts'),'utf8'),fs.readFileSync(path.join(__dirname,'runtime',name+'.ts'),'utf8'));
+    for(const name of ['UnityNoiseKernel','UnityParticleLimitVelocity','UnityParticleOrbit','UnityParticleOrbitAdapter'])assert.equal(fs.readFileSync(path.join(root,'assets/script',name+'.ts'),'utf8'),fs.readFileSync(path.join(__dirname,'runtime',name+'.ts'),'utf8'));
   }finally{
     assert.equal(path.dirname(fs.realpathSync(root)),fs.realpathSync(base));fs.rmSync(root,{recursive:true});
   }

@@ -138,8 +138,12 @@ function buildDependencyGraph(records, guidIndex, options = {}) {
           addToMapSet(incoming, targetPath, script.assetPath);
         }
       }
-      for (const resourcePath of script.resourceLoadPaths || []) {
-        for (const target of resourcesByKey.get(String(resourcePath).toLowerCase()) || []) {
+      const loads = (script.resourceLoadPaths || []).map(value => ({ value, all: false }));
+      loads.push(...(script.resourceLoadAllPaths || []).map(value => ({ value, all: true })));
+      for (const { value: resourcePath, all } of loads) {
+        const key = String(resourcePath).toLowerCase();
+        const targets = all ? [...resourcesByKey.entries()].filter(([candidate]) => !key || candidate === key || candidate.startsWith(key + '/')).flatMap(([, rows]) => rows) : resourcesByKey.get(key) || [];
+        for (const target of targets) {
           const targetPath = target.assetPath;
           const edgeKey = [script.assetPath, targetPath, target.guid || '', 'resource-load', '', resourcePath,
             'csharp-resource-load'].join('\0');

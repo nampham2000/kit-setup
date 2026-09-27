@@ -24,3 +24,6 @@ test('authored fixed system seed is retained as an unsigned value',()=>{
   const c=particleNoiseContract({autoRandomSeed:false,randomSeed:4294967295,NoiseModule:{enabled:1}});
   assert.equal(c.autoRandomSeed,false);assert.equal(c.randomSeed,4294967295);
 });
+test('Noise preserves authored scalar versus 3D size semantics',()=>{
+ for(const size3D of [0,1])assert.equal(particleNoiseContract({InitialModule:{size3D},NoiseModule:{enabled:1}}).size3D,!!size3D);
+});

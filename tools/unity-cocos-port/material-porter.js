@@ -2,6 +2,14 @@
 
 const fs = require('fs');
 const path = require('path');
+const { writeGeneratedAssetText } = require('./generated-asset-writer.cjs');
+
+// --keep-existing-imports: converted materials that already exist (with their
+// .meta) belong to another binding pipeline, for example Hovl materials rebound
+// to a shader port; the porter keeps them instead of rewriting.
+function keepExistingImport(options, file) {
+  return !!options.keepExistingImports && fs.existsSync(file) && fs.existsSync(`${file}.meta`);
+}
 const {
   BUILTIN_STANDARD_EFFECT_UUID,
   BUILTIN_UNLIT_EFFECT_UUID,
@@ -14,7 +22,6 @@ const {
   UNITY_MATERIAL_EMISSIVE_TEXTURE_KEYS,
 } = require('./constants');
 const {
-  copyAssetIfChanged,
   ensureDir,
   readJsonIfExists,
   stableUuid,
@@ -102,6 +109,7 @@ module.exports = function createMaterialPorter(deps) {
     resolveCurrentStandaloneMaterialUuid,
     firstSubMetaRecord,
     copyUnityAssetToCocos,
+    writePreparedUnityTexture,
     ensureDirectoryMetas,
     ensureMaterialAssetMeta,
     libraryJsonPathForUuid,
@@ -304,7 +312,7 @@ module.exports = function createMaterialPorter(deps) {
       // An already-imported texture is reused for its stable uuid, but its bytes still
       // have to track the Unity source. Without this the playable silently keeps the art
       // from the first port after Unity re-exports the texture, and nothing reports it.
-      if (!options.dryRun && copyAssetIfChanged(textureAsset.path, importedDest) === 'refreshed') {
+      if (!options.dryRun && writePreparedUnityTexture(textureAsset, importedDest, options, reporter) === 'refreshed') {
         reporter.low(
           'ASSET_REFRESHED',
           textureAsset.relativePath,
@@ -345,8 +353,7 @@ module.exports = function createMaterialPorter(deps) {
     if (!meta?.uuid || !materialData || options.dryRun) return false;
     const libraryFile = libraryJsonPathForUuid(options, meta.uuid);
     ensureDir(path.dirname(libraryFile));
-    fs.writeFileSync(libraryFile, `${JSON.stringify(materialData, null, 2)}\n`, 'utf8');
-    return true;
+    return writeGeneratedAssetText(libraryFile, `${JSON.stringify(materialData, null, 2)}\n`, options);
   }
 
   function ensureInvisibleShadowReceiverEffect(options, reporter) {
@@ -359,7 +366,7 @@ module.exports = function createMaterialPorter(deps) {
     ensureDirectoryMetas(path.dirname(effectFile), path.join(options.cocosRoot, 'assets'));
     const effectText = fs.readFileSync(INVISIBLE_SHADOW_RECEIVER_EFFECT_TEMPLATE, 'utf8');
     if (!fs.existsSync(effectFile) || fs.readFileSync(effectFile, 'utf8') !== effectText) {
-      fs.writeFileSync(effectFile, effectText, 'utf8');
+      writeGeneratedAssetText(effectFile, effectText, options);
     }
 
     const metaFile = `${effectFile}.meta`;
@@ -398,7 +405,7 @@ module.exports = function createMaterialPorter(deps) {
     ensureDirectoryMetas(path.dirname(effectFile), path.join(options.cocosRoot, 'assets'));
     const effectText = fs.readFileSync(config.template, 'utf8');
     if (!fs.existsSync(effectFile) || fs.readFileSync(effectFile, 'utf8') !== effectText) {
-      fs.writeFileSync(effectFile, effectText, 'utf8');
+      writeGeneratedAssetText(effectFile, effectText, options);
     }
 
     const metaFile = `${effectFile}.meta`;
@@ -654,6 +661,7 @@ module.exports = function createMaterialPorter(deps) {
       linear: unityProjectIsLinear(options.unityRoot),
       applyActiveColorSpace: extra.applyActiveColorSpace !== false,
       sourceRendererPivot: extra.sourceRendererPivot || null,
+      sourceRendererSize: extra.sourceRendererSize || null,
       name,
       effectUuid: ensureLegacyPreviewEffect(options, reporter),
     });
@@ -668,10 +676,11 @@ module.exports = function createMaterialPorter(deps) {
     const previous = readJsonIfExists(dest);
     if (previous?._defines?.[0]?.UNITY_LINEAR_OUTPUT === true) materialData._defines[0].UNITY_LINEAR_OUTPUT = true;
     if (options.dryRun) return { file: fs.existsSync(dest) ? dest : '', textureUuid };
+    if (keepExistingImport(options, dest)) return { file: dest, textureUuid };
     ensureDir(path.dirname(dest));
     ensureDirectoryMetas(path.dirname(dest), path.join(options.cocosRoot, 'assets'));
     const serialized = `${JSON.stringify(materialData, null, 2)}\n`;
-    if (!fs.existsSync(dest) || fs.readFileSync(dest, 'utf8') !== serialized) fs.writeFileSync(dest, serialized, 'utf8');
+    writeGeneratedAssetText(dest, serialized, options);
     const meta = ensureMaterialAssetMeta(dest, options);
     syncImportedMaterialLibraryCache(materialData, meta, options);
     return { file: dest, textureUuid };
@@ -910,10 +919,11 @@ module.exports = function createMaterialPorter(deps) {
     };
 
     if (options.dryRun) return fs.existsSync(convertedDest) ? convertedDest : '';
+    if (keepExistingImport(options, convertedDest)) return convertedDest;
 
     ensureDir(path.dirname(convertedDest));
     ensureDirectoryMetas(path.dirname(convertedDest), path.join(options.cocosRoot, 'assets'));
-    fs.writeFileSync(convertedDest, `${JSON.stringify(materialData, null, 2)}\n`, 'utf8');
+    writeGeneratedAssetText(convertedDest, `${JSON.stringify(materialData, null, 2)}\n`, options);
     const meta = ensureMaterialAssetMeta(convertedDest, options);
     syncImportedMaterialLibraryCache(materialData, meta, options);
     return convertedDest;
@@ -973,7 +983,8 @@ module.exports = function createMaterialPorter(deps) {
     const particleShaderName = readUnityShaderName(particleShaderAsset)
       || particleShaderAsset?.relativePath
       || particleShaderGuid;
-    const particleOnlyShader = isUnityParticleShader(particleShaderGuid, particleShaderName);
+    // LegacyPreview shaders are particle effect shaders (legacy-preview-material.js), never mesh materials.
+    const particleOnlyShader = isUnityParticleShader(particleShaderGuid, particleShaderName) || Boolean(legacyPreviewShader(particleShaderName));
 
     // A particle-only material (particle shader) owns the plain .mtl path. A material whose shader is a
     // mesh/surface shader (e.g. URP/Lit on Tanks! debris mesh particles) is also used by MeshRenderers,
@@ -986,14 +997,20 @@ module.exports = function createMaterialPorter(deps) {
     if (!convertedDest) return null;
     const sourceAdapter = materialUsage === 'particle' && rendererContract?.requiresMaterialAdapter;
     if (sourceAdapter) convertedDest = convertedDest.replace(/\.mtl$/i, `.renderer-${rendererContract.mode}-${rendererContract.sourceRendererPivot.join('_')}.mtl`);
+    // Min/max particle size is renderer state. Unity's default clamp (0, 0.5)
+    // keeps the shared file name; any other clamp gets its own variant so two
+    // renderers sharing one Unity material cannot overwrite each other.
+    const sizeClamp = materialUsage === 'particle' ? rendererContract?.sourceRendererSize || null : null;
+    const sizeVariant = sizeClamp && (sizeClamp[0] !== 0 || sizeClamp[1] !== 0.5) ? `.size-${sizeClamp[0]}_${sizeClamp[1]}.mtl` : '.mtl';
     const legacyShader = materialUsage === 'particle' ? legacyPreviewShader(particleShaderName) : null;
     if (legacyShader) {
       const applyActiveColorSpace = rendererContract?.applyActiveColorSpace !== false;
-      const dest = applyActiveColorSpace ? convertedDest : convertedDest.replace(/\.mtl$/i, '.gamma-vertex.mtl');
+      const dest = (applyActiveColorSpace ? convertedDest : convertedDest.replace(/\.mtl$/i, '.gamma-vertex.mtl')).replace(/\.mtl$/i, sizeVariant);
       return writeLegacyPreviewMaterial(materialAsset, materialDoc, legacyShader, 'particle', dest, options, unityDb, reporter, {
         spriteTextureAsset,
         applyActiveColorSpace,
         sourceRendererPivot: rendererContract?.sourceRendererPivot || null,
+        sourceRendererSize: sizeClamp,
       });
     }
     const tcp2ParticleMaterial = TCP2_HYBRID_SHADER_2_GUIDS.has(particleShaderGuid)
@@ -1127,7 +1144,7 @@ module.exports = function createMaterialPorter(deps) {
       if (!options.dryRun) {
         const content = fs.readFileSync(path.join(__dirname, 'source-particle.effect'), 'utf8');
         ensureDir(path.dirname(effectFile));
-        if (!fs.existsSync(effectFile) || fs.readFileSync(effectFile, 'utf8') !== content) fs.writeFileSync(effectFile, content);
+        writeGeneratedAssetText(effectFile, content, options);
       }
       const imported = readJsonIfExists(`${effectFile}.meta`);
       if (imported?.importer === 'effect') sourceEffectUuid = imported.uuid || '';
@@ -1135,9 +1152,17 @@ module.exports = function createMaterialPorter(deps) {
         'Import assets/effects/unity-source-particle.effect through Cocos AssetDB, then rerun porter to bind the source renderer adapter.');
       const [x,y,z,w] = rendererContract.sourceRendererPivot;
       props.sourceRendererPivot = { __type__: 'cc.Vec4', x,y,z,w };
+      if (sizeClamp) {
+        const [minSize, maxSize, unused, enabled] = sizeClamp;
+        props.sourceRendererSize = { __type__: 'cc.Vec4', x: minSize, y: maxSize, z: unused, w: enabled };
+        convertedDest = convertedDest.replace(/\.mtl$/i, sizeVariant);
+      }
     } else if (sourceAdapter) {
       reporter.high('PARTICLE_RENDERER_CUSTOM_EFFECT_ADAPTER_REQUIRED', materialAsset.relativePath, '',
         'TCP2 particle effect needs the source renderer frame/pivot ABI; builtin source adapter cannot replace its shading.');
+    } else if (sizeClamp && rendererContract.mode !== 4 && !tcp2ParticleMaterial) {
+      reporter.medium('PARTICLE_SIZE_CLAMP_UNBOUND', materialAsset.relativePath, '',
+        `Builtin particle effect cannot apply Unity Min/Max Particle Size (${sizeClamp[0]}/${sizeClamp[1]} of viewport width); route through the source particle effect if particles can reach that size.`);
     }
     const materialData = {
       __type__: 'cc.Material',
@@ -1164,10 +1189,12 @@ module.exports = function createMaterialPorter(deps) {
 
     ensureDir(path.dirname(convertedDest));
     ensureDirectoryMetas(path.dirname(convertedDest), path.join(options.cocosRoot, 'assets'));
-    const serialized = `${JSON.stringify(materialData, null, 2)}\n`;
-    if (!fs.existsSync(convertedDest) || fs.readFileSync(convertedDest, 'utf8') !== serialized) fs.writeFileSync(convertedDest, serialized, 'utf8');
-    const meta = ensureMaterialAssetMeta(convertedDest, options);
-    syncImportedMaterialLibraryCache(materialData, meta, options);
+    if (!keepExistingImport(options, convertedDest)) {
+      const serialized = `${JSON.stringify(materialData, null, 2)}\n`;
+      writeGeneratedAssetText(convertedDest, serialized, options);
+      const meta = ensureMaterialAssetMeta(convertedDest, options);
+      syncImportedMaterialLibraryCache(materialData, meta, options);
+    }
 
     const legacyDest = legacyUnityParticleMaterialAssetPath(materialAsset, options);
     if (!sourceAdapter && !spriteTextureAsset && particleOnlyShader && legacyDest && legacyDest !== convertedDest && fs.existsSync(legacyDest)) {
@@ -1251,10 +1278,11 @@ module.exports = function createMaterialPorter(deps) {
     };
 
     if (options.dryRun) return fs.existsSync(convertedDest) ? convertedDest : '';
+    if (keepExistingImport(options, convertedDest)) return convertedDest;
 
     ensureDir(path.dirname(convertedDest));
     ensureDirectoryMetas(path.dirname(convertedDest), path.join(options.cocosRoot, 'assets'));
-    fs.writeFileSync(convertedDest, `${JSON.stringify(materialData, null, 2)}\n`, 'utf8');
+    writeGeneratedAssetText(convertedDest, `${JSON.stringify(materialData, null, 2)}\n`, options);
     const meta = ensureMaterialAssetMeta(convertedDest, options);
     syncImportedMaterialLibraryCache(materialData, meta, options);
     return convertedDest;

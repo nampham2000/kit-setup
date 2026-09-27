@@ -26,6 +26,7 @@ namespace CcPlayable.UnityIntelligence.Capture
         [Serializable]
         public sealed class Request
         {
+            public string requestId = "";
             public string scenePath = "";
             public string outputDir = "";
             public string cameraPath = "";
@@ -37,14 +38,94 @@ namespace CcPlayable.UnityIntelligence.Capture
             public bool includeOverlayUi = false;
             /// <summary>Face size of an optional skybox-only panorama (0 = off).</summary>
             public int skyboxFaceSize = 0;
+            /// <summary>
+            /// Prefabs instantiated during the Update of a given frame, for demos that only
+            /// spawn effects on user input (click/keys). Keeps the prefab's own rotation
+            /// unless useRotation is set.
+            /// </summary>
+            public Spawn[] spawns = Array.Empty<Spawn>();
+            /// <summary>Disable demo cyclers in Play Mode before Start when isolating a spawned source prefab.</summary>
+            public string[] disableComponents = Array.Empty<string>();
+            /// <summary>
+            /// Field values set by reflection on every component of the named type once the
+            /// scene has loaded (after Awake/OnEnable, before Start), e.g. the effect index of
+            /// a demo cycler. Supports int, float, bool and string fields (public or private).
+            /// </summary>
+            public FieldOverride[] fields = Array.Empty<FieldOverride>();
         }
 
         [Serializable]
-        internal sealed class FrameRecord { public int frame; public float time; public string file = ""; public int activeParticles; }
+        public sealed class FieldOverride
+        {
+            public string component = "";
+            public string field = "";
+            public string value = "";
+        }
+
+        [Serializable]
+        public sealed class Spawn
+        {
+            public string prefab = "";
+            public int frame;
+            public Vector3 position;
+            public bool useRotation;
+            public Vector3 eulerAngles;
+        }
+
+        [Serializable]
+        internal sealed class FrameRecord { public int frame; public float time; public string file = ""; public int activeParticles; public bool shaderCompiling; public List<SystemRecord> systems = new List<SystemRecord>(); public List<TrailRecord> trails = new List<TrailRecord>(); public List<CollisionRecord> collisions = new List<CollisionRecord>(); public List<CollisionRecord> contactTrace = new List<CollisionRecord>(); public List<LightRecord> lights = new List<LightRecord>(); }
+
+        [Serializable]
+        internal sealed class TrailRecord { public string path; public float time; public float width; public float[] position; public float[] positions; public float[] vertices; public float[] uv; public float[] color; public int[] indices; }
+        [Serializable]
+        internal sealed class CollisionRecord { public string actor; public string collider; public string phase; public float time; public float fixedTime; public float[] position; public float[] velocity; public int contacts; public bool sleeping; public float[] contactPoint; public float[] contactNormal; public float separation; }
+        [Serializable]
+        internal sealed class LightRecord { public string path; public int type; public float[] position; public float[] color; public float intensity; public float range; public int renderMode; }
+
+        internal static List<LightRecord> Lights() {
+            var records = new List<LightRecord>();
+            foreach (var light in UnityEngine.Object.FindObjectsOfType<Light>()) {
+                if (!light.enabled || !light.gameObject.activeInHierarchy) continue;
+                var c = light.color;
+                records.Add(new LightRecord { path=HierarchyPath(light.transform),type=(int)light.type,position=VectorValues(light.transform.position),color=new[]{c.r,c.g,c.b,c.a},intensity=light.intensity,range=light.range,renderMode=(int)light.renderMode });
+            }
+            return records;
+        }
+
+        /// <summary>
+        /// Per-system particle oracle: live count plus a histogram of particle depth along
+        /// the capture camera's forward axis (bins split at DepthBins), so a port can tell
+        /// where particles are, not only how many exist.
+        /// </summary>
+        [Serializable]
+        internal sealed class ParticlePose {
+            public uint randomSeed;
+            public float[] position; public float[] velocity; public float[] size;
+            public float[] color; public float[] rotation; public float remainingLifetime; public float startLifetime;
+        }
+        [Serializable]
+        internal sealed class SystemRecord {
+            // Noise modifies rendered geometry after GetCurrentSize3D; use BakeMesh for that gate.
+            public string sizeMeasurement = "GetCurrentSize3D-excludes-Noise";
+            public uint randomSeed; public bool useAutoRandomSeed; public int simulationSpace; public int scalingMode;
+            public string path = ""; public int count; public int alive; public float simulationTime; public float simulationSpeed;
+            public int cullingMode; public bool rendererVisible; public float[] boundsCenter; public float[] boundsSize;
+            public int[] depth = Array.Empty<int>(); public int[] inView = Array.Empty<int>();
+            public float[] position; public float[] rotation; public float[] scale; public float[] matrix;
+            public float[] meanWorldPosition; public float[] meanSize; public float[] meanColor;
+            public List<ParticlePose> particles = new List<ParticlePose>();
+        }
+
+        internal static float[] VectorValues(Vector3 vector) { return new[] { vector.x, vector.y, vector.z }; }
+
+        internal static readonly float[] DepthBins = { 0.3f, 1f, 2f, 4f, 8f, 16f };
 
         [Serializable]
         internal sealed class Manifest
         {
+            public string requestId = "";
+            public string visibilityClock = "";
+            public int renderedFrames;
             public string scenePath = "";
             public string camera = "";
             public int width;
@@ -52,6 +133,13 @@ namespace CcPlayable.UnityIntelligence.Capture
             public int frameRate;
             public string unityVersion = "";
             public string colorSpace = "";
+            public string renderPipeline = "";
+            public int qualityLevel;
+            public string qualityName = "";
+            public int pixelLightCount;
+            public int antiAliasing;
+            public bool softParticles;
+            public bool lightsUseLinearIntensity;
             public List<FrameRecord> frames = new List<FrameRecord>();
             public string error = "";
             public bool complete;
@@ -60,6 +148,14 @@ namespace CcPlayable.UnityIntelligence.Capture
         static ReferenceCapture()
         {
             EditorApplication.playModeStateChanged += OnPlayModeChanged;
+            // A package refresh between Begin and the delayed Play Mode entry
+            // clears managed callbacks, but SessionState retains the request.
+            // Re-arm it instead of leaving the capture waiting until timeout.
+            if (!EditorApplication.isPlayingOrWillChangePlaymode && !string.IsNullOrEmpty(SessionState.GetString(PendingKey, "")))
+            {
+                enterPlayModeAfter = EditorApplication.timeSinceStartup + 1;
+                EditorApplication.update += EnterQueuedCapture;
+            }
         }
 
         /// <summary>Queue a capture and enter Play Mode. Returns immediately.</summary>
@@ -68,13 +164,25 @@ namespace CcPlayable.UnityIntelligence.Capture
             var request = JsonUtility.FromJson<Request>(requestJson);
             if (request == null || string.IsNullOrEmpty(request.scenePath) || string.IsNullOrEmpty(request.outputDir))
                 return "invalid request";
-            if (EditorApplication.isPlayingOrWillChangePlaymode) return "editor is already in play mode";
+            if (EditorApplication.isPlayingOrWillChangePlaymode || !string.IsNullOrEmpty(SessionState.GetString(PendingKey, ""))) return "editor has an active or queued capture";
             if (request.frames == null || request.frames.Length == 0) return "no frames requested";
             Directory.CreateDirectory(request.outputDir);
             File.Delete(Path.Combine(request.outputDir, "manifest.json"));
             SessionState.SetString(PendingKey, JsonUtility.ToJson(request));
-            EditorApplication.EnterPlaymode();
+            // Return the MCP RPC before domain reload destroys its executing
+            // thread. EnterPlaymode inside this method caused ThreadAbort and
+            // ten bridge retries even though a capture had already run.
+            enterPlayModeAfter = EditorApplication.timeSinceStartup + 1;
+            EditorApplication.update += EnterQueuedCapture;
             return "capture queued";
+        }
+
+        static double enterPlayModeAfter;
+        static void EnterQueuedCapture()
+        {
+            if (EditorApplication.timeSinceStartup < enterPlayModeAfter || EditorApplication.isCompiling || EditorApplication.isUpdating) return;
+            EditorApplication.update -= EnterQueuedCapture;
+            if (!EditorApplication.isPlayingOrWillChangePlaymode && !string.IsNullOrEmpty(SessionState.GetString(PendingKey, ""))) EditorApplication.EnterPlaymode();
         }
 
         static void OnPlayModeChanged(PlayModeStateChange change)
@@ -94,6 +202,7 @@ namespace CcPlayable.UnityIntelligence.Capture
 
         internal static void Finish(Request request, Manifest manifest)
         {
+            manifest.requestId = request.requestId;
             manifest.complete = string.IsNullOrEmpty(manifest.error);
             File.WriteAllText(Path.Combine(request.outputDir, "manifest.json"), JsonUtility.ToJson(manifest, true));
             Time.captureFramerate = 0;
@@ -108,12 +217,98 @@ namespace CcPlayable.UnityIntelligence.Capture
             frameRate = request.frameRate,
             unityVersion = Application.unityVersion,
             colorSpace = QualitySettings.activeColorSpace.ToString(),
+            renderPipeline = GraphicsSettings.currentRenderPipeline == null ? "Built-in" : GraphicsSettings.currentRenderPipeline.GetType().FullName,
+            qualityLevel = QualitySettings.GetQualityLevel(),
+            qualityName = QualitySettings.names[QualitySettings.GetQualityLevel()],
+            pixelLightCount = QualitySettings.pixelLightCount,
+            antiAliasing = QualitySettings.antiAliasing,
+            softParticles = QualitySettings.softParticles,
+            lightsUseLinearIntensity = GraphicsSettings.lightsUseLinearIntensity,
         };
 
-        internal static void Record(Manifest manifest, int frame, float time, string file, int particles, string camera)
+        internal static void Record(Manifest manifest, int frame, float time, string file, List<SystemRecord> systems, string camera, bool shaderCompiling)
         {
             manifest.camera = camera;
-            manifest.frames.Add(new FrameRecord { frame = frame, time = time, file = file, activeParticles = particles });
+            var particles = 0;
+            foreach (var system in systems) particles += system.count;
+            manifest.frames.Add(new FrameRecord { frame = frame, time = time, file = file, activeParticles = particles, shaderCompiling = shaderCompiling, systems = systems });
+        }
+
+        internal static string HierarchyPath(Transform t) => t.parent == null ? t.name : HierarchyPath(t.parent) + "/" + t.name;
+
+        internal static List<SystemRecord> ParticleSystems(Camera camera)
+        {
+            var records = new List<SystemRecord>();
+            var buffer = Array.Empty<ParticleSystem.Particle>();
+            var eye = camera.transform.position;
+            var forward = camera.transform.forward;
+            foreach (var system in UnityEngine.Object.FindObjectsByType<ParticleSystem>(FindObjectsSortMode.None))
+            {
+                var record = new SystemRecord { path = HierarchyPath(system.transform), count = system.particleCount, depth = new int[DepthBins.Length + 1], inView = new int[DepthBins.Length + 1] };
+                var transform = system.transform; var quaternion = transform.rotation; var matrix = transform.localToWorldMatrix;
+                record.position = VectorValues(transform.position); record.rotation = new[] { quaternion.x, quaternion.y, quaternion.z, quaternion.w };
+                record.scale = VectorValues(transform.lossyScale); record.matrix = new float[16];
+                for (var index = 0; index < 16; index++) record.matrix[index] = matrix[index];
+                if (buffer.Length < system.particleCount) buffer = new ParticleSystem.Particle[system.particleCount];
+                var n = system.GetParticles(buffer);
+                var main = system.main;
+                record.randomSeed=system.randomSeed;record.useAutoRandomSeed=system.useAutoRandomSeed;
+                record.simulationSpace=(int)main.simulationSpace;record.scalingMode=(int)main.scalingMode;
+                var renderer = system.GetComponent<ParticleSystemRenderer>();
+                record.cullingMode = (int)main.cullingMode;
+                record.rendererVisible = renderer != null && renderer.isVisible;
+                if (renderer != null) { record.boundsCenter = VectorValues(renderer.bounds.center); record.boundsSize = VectorValues(renderer.bounds.size); }
+                record.simulationTime=system.time;record.simulationSpeed=main.simulationSpeed;
+                var toWorld = main.simulationSpace == ParticleSystemSimulationSpace.World ? Matrix4x4.identity
+                    : main.simulationSpace == ParticleSystemSimulationSpace.Custom && main.customSimulationSpace != null ? main.customSimulationSpace.localToWorldMatrix
+                    : system.transform.localToWorldMatrix;
+                var meanPosition = Vector3.zero; var meanSize = Vector3.zero; var meanColor = Color.clear;
+                for (var i = 0; i < n; i++)
+                {
+                    if(buffer[i].remainingLifetime>0)record.alive++;
+                    var world = toWorld.MultiplyPoint3x4(buffer[i].position);
+                    var size = buffer[i].GetCurrentSize3D(system); Color color = buffer[i].GetCurrentColor(system);
+                    meanPosition += world; meanSize += size; meanColor += color;
+                    if (i < 8) record.particles.Add(new ParticlePose {
+                        randomSeed = buffer[i].randomSeed,
+                        position = VectorValues(buffer[i].position), velocity = VectorValues(buffer[i].velocity), size = VectorValues(size),
+                        color = new[] { color.r, color.g, color.b, color.a }, rotation = VectorValues(buffer[i].rotation3D),
+                        remainingLifetime = buffer[i].remainingLifetime, startLifetime = buffer[i].startLifetime,
+                    });
+                    var d = Vector3.Dot(world - eye, forward);
+                    var bin = 0;
+                    while (bin < DepthBins.Length && d >= DepthBins[bin]) bin++;
+                    record.depth[bin]++;
+                    // Particle centre inside the capture viewport, in front of the near plane.
+                    var v = camera.WorldToViewportPoint(world);
+                    if (v.z >= camera.nearClipPlane && v.x >= 0f && v.x <= 1f && v.y >= 0f && v.y <= 1f) record.inView[bin]++;
+                }
+                record.meanWorldPosition = VectorValues(n > 0 ? meanPosition / n : meanPosition);
+                record.meanSize = VectorValues(n > 0 ? meanSize / n : meanSize);
+                if (n > 0) meanColor /= n;
+                record.meanColor = new[] { meanColor.r, meanColor.g, meanColor.b, meanColor.a };
+                records.Add(record);
+            }
+            records.Sort((a, b) => string.CompareOrdinal(a.path, b.path));
+            return records;
+        }
+
+        internal static float[] Flatten(Vector3[] values) {
+            var flat = new float[values.Length * 3]; for(var i=0;i<values.Length;i++) { flat[i*3]=values[i].x;flat[i*3+1]=values[i].y;flat[i*3+2]=values[i].z; } return flat;
+        }
+        internal static List<TrailRecord> Trails(Camera camera) {
+            var records = new List<TrailRecord>();
+            foreach(var trail in UnityEngine.Object.FindObjectsByType<TrailRenderer>(FindObjectsSortMode.None)) {
+                var mesh=new Mesh();
+                try {
+                    trail.BakeMesh(mesh,camera,true);var positions=new Vector3[trail.positionCount];trail.GetPositions(positions);
+                    var uv=mesh.uv;var colors=mesh.colors;var flatUV=new float[uv.Length*2];var flatColor=new float[colors.Length*4];
+                    for(var i=0;i<uv.Length;i++){flatUV[i*2]=uv[i].x;flatUV[i*2+1]=uv[i].y;}
+                    for(var i=0;i<colors.Length;i++){flatColor[i*4]=colors[i].r;flatColor[i*4+1]=colors[i].g;flatColor[i*4+2]=colors[i].b;flatColor[i*4+3]=colors[i].a;}
+                    records.Add(new TrailRecord{path=HierarchyPath(trail.transform),time=trail.time,width=trail.widthMultiplier,position=VectorValues(trail.transform.position),positions=Flatten(positions),vertices=Flatten(mesh.vertices),uv=flatUV,color=flatColor,indices=mesh.triangles});
+                }finally{UnityEngine.Object.DestroyImmediate(mesh);}
+            }
+            records.Sort((a,b)=>string.CompareOrdinal(a.path,b.path));return records;
         }
 
         internal static void Fail(Request request, Manifest manifest, string error)
@@ -134,20 +329,88 @@ namespace CcPlayable.UnityIntelligence.Capture
         bool sceneReady;
         bool skyboxDone;
         Camera captureCamera = null;
+        readonly List<ReferenceCapture.CollisionRecord> collisionEvents = new List<ReferenceCapture.CollisionRecord>();
+        readonly List<ReferenceCapture.CollisionRecord> contactTrace = new List<ReferenceCapture.CollisionRecord>();
         RenderTexture target = null;
+        int batchCaptureFrame = -1;
+        static ReferenceCaptureRunner batchOwner;
+        sealed class BatchFrameHook { }
+
+        // WaitForEndOfFrame is not invoked in Editor batch mode. Capture after
+        // PostLateUpdate (including particle jobs) rather than earlier LateUpdate.
+        static void SetBatchHook(bool install)
+        {
+            var loop = UnityEngine.LowLevel.PlayerLoop.GetCurrentPlayerLoop();
+            for (var i = 0; i < loop.subSystemList.Length; i++)
+            {
+                if (loop.subSystemList[i].type != typeof(UnityEngine.PlayerLoop.PostLateUpdate)) continue;
+                var phase = loop.subSystemList[i];
+                var children = new List<UnityEngine.LowLevel.PlayerLoopSystem>(phase.subSystemList ?? Array.Empty<UnityEngine.LowLevel.PlayerLoopSystem>());
+                children.RemoveAll(child => child.type == typeof(BatchFrameHook));
+                if (install) children.Add(new UnityEngine.LowLevel.PlayerLoopSystem { type = typeof(BatchFrameHook), updateDelegate = BatchTick });
+                phase.subSystemList = children.ToArray();
+                loop.subSystemList[i] = phase;
+                UnityEngine.LowLevel.PlayerLoop.SetPlayerLoop(loop);
+                return;
+            }
+            throw new InvalidOperationException("PostLateUpdate missing from active PlayerLoop");
+        }
+
+        static void BatchTick()
+        {
+            var owner = batchOwner;
+            if (owner == null || owner.batchCaptureFrame < 0) return;
+            var captured = owner.batchCaptureFrame;
+            owner.batchCaptureFrame = -1;
+            // Batch Mode has no continuously rendered Game View. Unity's
+            // Pause/PauseAndCatchup particles still need camera visibility on
+            // every frame, including frames with no requested PNG.
+            if (owner.batchWriteFrame) owner.CaptureFrame(captured);
+            else owner.RenderVisibilityFrame();
+        }
 
         internal void Configure(ReferenceCapture.Request value)
         {
             request = value;
             manifest = ReferenceCapture.NewManifest(value);
+            manifest.visibilityClock = Application.isBatchMode ? "continuous-request-viewport-v1" : "game-view-and-request-viewport";
             foreach (var f in value.frames) { pending.Add(f); lastFrame = Math.Max(lastFrame, f); }
             SceneManager.sceneLoaded += OnSceneLoaded;
+            if (Application.isBatchMode) { batchOwner = this; SetBatchHook(true); }
         }
 
         void OnSceneLoaded(Scene scene, LoadSceneMode mode)
         {
             if (scene.path != request.scenePath) return;
             SceneManager.sceneLoaded -= OnSceneLoaded;
+            foreach (var type in request.disableComponents ?? Array.Empty<string>())
+            {
+                var found = false;
+                foreach (var root in scene.GetRootGameObjects())
+                    foreach (var component in root.GetComponentsInChildren<MonoBehaviour>(true))
+                        if (component != null && component.GetType().Name == type) { component.enabled = false; found = true; }
+                if (!found) { ReferenceCapture.Fail(request, manifest, "no component to disable: " + type); return; }
+            }
+            foreach (var entry in request.fields ?? Array.Empty<ReferenceCapture.FieldOverride>())
+            {
+                var applied = 0;
+                foreach (var root in scene.GetRootGameObjects())
+                    foreach (var component in root.GetComponentsInChildren<MonoBehaviour>(true))
+                    {
+                        if (component == null || component.GetType().Name != entry.component) continue;
+                        var field = component.GetType().GetField(entry.field, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
+                        if (field == null) continue;
+                        var type = field.FieldType;
+                        object value = type == typeof(int) ? int.Parse(entry.value, System.Globalization.CultureInfo.InvariantCulture)
+                            : type == typeof(float) ? float.Parse(entry.value, System.Globalization.CultureInfo.InvariantCulture)
+                            : type == typeof(bool) ? (object)bool.Parse(entry.value)
+                            : type == typeof(string) ? entry.value : null;
+                        if (value == null) { ReferenceCapture.Fail(request, manifest, $"unsupported field type {type.Name} for {entry.component}.{entry.field}"); return; }
+                        field.SetValue(component, value);
+                        applied++;
+                    }
+                if (applied == 0) { ReferenceCapture.Fail(request, manifest, $"no {entry.component}.{entry.field} in scene"); return; }
+            }
             captureCamera = FindCamera(scene);
             if (captureCamera == null) { ReferenceCapture.Fail(request, manifest, "camera not found"); return; }
             target = new RenderTexture(request.width, request.height, 24, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB) { antiAliasing = 1 };
@@ -178,7 +441,29 @@ namespace CcPlayable.UnityIntelligence.Capture
         {
             if (!sceneReady) return;
             frame++;
-            if (pending.Remove(frame)) StartCoroutine(CaptureAtEndOfFrame(frame));
+            foreach (var spawn in request.spawns ?? Array.Empty<ReferenceCapture.Spawn>())
+            {
+                if (spawn.frame != frame) continue;
+                var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(spawn.prefab);
+                if (prefab == null) { ReferenceCapture.Fail(request, manifest, "spawn prefab not found: " + spawn.prefab); return; }
+                var instance = Instantiate(prefab);
+                instance.transform.position = spawn.position;
+                if (spawn.useRotation) instance.transform.eulerAngles = spawn.eulerAngles;
+                foreach(var body in instance.GetComponentsInChildren<Rigidbody>()) {
+                    var observer=body.GetComponent<ReferenceCollisionObserver>() ?? body.gameObject.AddComponent<ReferenceCollisionObserver>();observer.owner=this;
+                }
+            }
+            var writeFrame = pending.Remove(frame);
+            if (Application.isBatchMode && frame <= lastFrame)
+            {
+                batchCaptureFrame = frame;
+                batchWriteFrame = writeFrame;
+            }
+            else if (writeFrame)
+            {
+                if (Application.isBatchMode) batchCaptureFrame = frame;
+                else StartCoroutine(CaptureAtEndOfFrame(frame));
+            }
             else if (frame > lastFrame) Done();
         }
 
@@ -186,23 +471,44 @@ namespace CcPlayable.UnityIntelligence.Capture
         IEnumerator CaptureAtEndOfFrame(int captured)
         {
             yield return new WaitForEndOfFrame();
-            if (!sceneReady) yield break;
+            CaptureFrame(captured);
+        }
+
+        void CaptureFrame(int captured)
+        {
+            if (!sceneReady) return;
             try
             {
                 var file = $"frame-{captured:D5}.png";
+                var shaderCompiling = ShaderUtil.anythingCompiling;
                 Capture(Path.Combine(request.outputDir, file));
-                var particles = 0;
-                foreach (var system in FindObjectsByType<ParticleSystem>(FindObjectsSortMode.None)) particles += system.particleCount;
-                ReferenceCapture.Record(manifest, captured, Time.time, file, particles, captureCamera.name);
+                ReferenceCapture.Record(manifest, captured, Time.time, file, ReferenceCapture.ParticleSystems(captureCamera), captureCamera.name, shaderCompiling);
+                var record=manifest.frames[manifest.frames.Count-1];record.trails=ReferenceCapture.Trails(captureCamera);record.collisions=new List<ReferenceCapture.CollisionRecord>(collisionEvents);record.contactTrace=new List<ReferenceCapture.CollisionRecord>(contactTrace);record.lights=ReferenceCapture.Lights();
                 if (request.skyboxFaceSize > 0 && !skyboxDone) { skyboxDone = true; CaptureSkyboxPanorama(); }
             }
             catch (Exception exception)
             {
                 sceneReady = false;
                 ReferenceCapture.Fail(request, manifest, exception.Message);
-                yield break;
+                return;
             }
             if (pending.Count == 0) Done();
+        }
+
+        bool batchWriteFrame;
+        void RenderVisibilityFrame()
+        {
+            if (!sceneReady) return;
+            try { Capture(null); }
+            catch (Exception exception) { sceneReady = false; ReferenceCapture.Fail(request, manifest, exception.Message); }
+        }
+
+        internal void ObserveCollision(Transform actor, Collision collision, string phase) {
+            var body=actor.GetComponent<Rigidbody>();var position=actor.position;var velocity=body!=null?body.velocity:Vector3.zero;
+            var contact=collision.contactCount>0?collision.GetContact(0):default(ContactPoint);
+            var record=new ReferenceCapture.CollisionRecord {actor=ReferenceCapture.HierarchyPath(actor),collider=ReferenceCapture.HierarchyPath(collision.collider.transform),phase=phase,time=Time.time,fixedTime=Time.fixedTime,position=ReferenceCapture.VectorValues(position),velocity=ReferenceCapture.VectorValues(velocity),contacts=collision.contactCount,sleeping=body!=null&&body.IsSleeping(),contactPoint=ReferenceCapture.VectorValues(contact.point),contactNormal=ReferenceCapture.VectorValues(contact.normal),separation=contact.separation};
+            if(phase=="enter")collisionEvents.Add(record);
+            contactTrace.Add(record);
         }
 
         void CaptureSkyboxPanorama()
@@ -301,6 +607,10 @@ namespace CcPlayable.UnityIntelligence.Capture
         {
             var previous = captureCamera.targetTexture;
             var previousActive = RenderTexture.active;
+            // The Editor draws variants that are still compiling with a flat cyan
+            // placeholder; a reference frame must show the real shader.
+            var previousAsync = ShaderUtil.allowAsyncCompilation;
+            ShaderUtil.allowAsyncCompilation = false;
             try
             {
                 var standard = new RenderPipeline.StandardRequest();
@@ -314,15 +624,20 @@ namespace CcPlayable.UnityIntelligence.Capture
                     captureCamera.targetTexture = target;
                     captureCamera.Render();
                 }
-                RenderTexture.active = target;
-                var texture = new Texture2D(request.width, request.height, TextureFormat.RGB24, false);
-                texture.ReadPixels(new Rect(0, 0, request.width, request.height), 0, 0);
-                texture.Apply();
-                File.WriteAllBytes(file, texture.EncodeToPNG());
-                Destroy(texture);
+                manifest.renderedFrames++;
+                if (file != null)
+                {
+                    RenderTexture.active = target;
+                    var texture = new Texture2D(request.width, request.height, TextureFormat.RGB24, false);
+                    texture.ReadPixels(new Rect(0, 0, request.width, request.height), 0, 0);
+                    texture.Apply();
+                    File.WriteAllBytes(file, texture.EncodeToPNG());
+                    Destroy(texture);
+                }
             }
             finally
             {
+                ShaderUtil.allowAsyncCompilation = previousAsync;
                 captureCamera.targetTexture = previous;
                 RenderTexture.active = previousActive;
             }
@@ -332,12 +647,27 @@ namespace CcPlayable.UnityIntelligence.Capture
         {
             if (!sceneReady) return;
             sceneReady = false;
+            var expected = new HashSet<int>(request.frames).Count;
+            if (manifest.frames.Count != expected)
+            {
+                ReferenceCapture.Fail(request, manifest, $"incomplete frame capture: expected {expected}, received {manifest.frames.Count}");
+                return;
+            }
             ReferenceCapture.Finish(request, manifest);
         }
 
         void OnDestroy()
         {
+            SceneManager.sceneLoaded -= OnSceneLoaded;
+            if (batchOwner == this) { batchOwner = null; SetBatchHook(false); }
             if (target != null) target.Release();
         }
+    }
+
+    public sealed class ReferenceCollisionObserver : MonoBehaviour {
+        internal ReferenceCaptureRunner owner;
+        void OnCollisionEnter(Collision collision) { if(owner!=null)owner.ObserveCollision(transform,collision,"enter"); }
+        void OnCollisionStay(Collision collision) { if(owner!=null)owner.ObserveCollision(transform,collision,"stay"); }
+        void OnCollisionExit(Collision collision) { if(owner!=null)owner.ObserveCollision(transform,collision,"exit"); }
     }
 }

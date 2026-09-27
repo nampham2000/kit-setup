@@ -13,6 +13,7 @@ const {
   decidePhysicsBackend,
   inferRequiredModules,
   auditCocosEngineFeatures,
+  ensureCocosEngineFeatures,
   patchEngineProfile,
   restartCocosProject,
   sha256,
@@ -82,6 +83,37 @@ function makeProject(sourceText, options = {}) {
   return root;
 }
 
+for (const complete of [false, true]) {
+  test(`ensure dry-run never contacts MCP or writes files (complete=${complete})`, async t => {
+    const root = makeProject('[{"__type__":"cc.Graphics"},{"__type__":"cc.MeshCollider"}]', {
+      backend: complete ? 'physics-cannon' : 'physics-builtin',
+      graphics: complete,
+      appliedFeatures: complete ? ['graphics', 'physics-cannon'] : undefined,
+    });
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const tree = () => fs.readdirSync(root, { recursive: true }).sort().map(relative => {
+      const file = path.join(root, relative);
+      return fs.statSync(file).isFile() ? [relative, fs.readFileSync(file).toString('hex'), fs.statSync(file).mtimeMs] : [relative];
+    });
+    const before = tree();
+    const result = await ensureCocosEngineFeatures(root, {
+      dryRun: true,
+      // Any attempted MCP connection makes this test fail rather than writing
+      // through a real running Editor on the test machine.
+      mcpUrl: 'invalid://must-not-contact-editor',
+      timeoutMs: 1,
+    });
+    assert.equal(result.dryRun, true);
+    assert.equal(result.ok, true);
+    assert.equal(result.complete, complete);
+    assert.equal(result.wouldChangeProfile, !complete);
+    assert.deepEqual(result.mcpAttempts, []);
+    assert.deepEqual(result.restartReceipts, []);
+    assert.equal(result.fallbackUsed, false);
+    assert.deepEqual(tree(), before);
+  });
+}
+
 test('simple box/sphere query stays on Builtin even though Unity source uses PhysX', () => {
   const decision = decidePhysicsBackend(evidenceFor('[{"__type__":"cc.BoxCollider"},{"__type__":"cc.SphereCollider"}]'));
   assert.equal(decision.backend, 'physics-builtin');
@@ -129,6 +161,19 @@ test('Cannon override fails closed when Capsule/CCD behavior would be lost', () 
     () => decidePhysicsBackend(evidence, { physicsBackend: 'physics-cannon' }),
     (error) => error instanceof EngineFeatureError && error.code === 'ENGINE_FEATURE_BACKEND_INCOMPATIBLE',
   );
+});
+
+test('a static capsule without bodies or queries does not force Bullet', () => {
+  // ARPG demo fountains: Unity's default CapsuleCollider on a Cylinder primitive, next to a MeshCollider floor.
+  const inert = decidePhysicsBackend(evidenceFor('[{"__type__":"cc.CapsuleCollider"},{"__type__":"cc.MeshCollider"}]'));
+  assert.equal(inert.backend, 'physics-cannon');
+  assert.ok(inert.reasons.includes('CAPSULE_COLLIDER_INERT_WITHOUT_BODY_OR_QUERY'), JSON.stringify(inert.reasons));
+  const alone = decidePhysicsBackend(evidenceFor('[{"__type__":"cc.CapsuleCollider"}]'));
+  assert.equal(alone.backend, 'physics-builtin');
+  const queried = decidePhysicsBackend(evidenceFor('[{"__type__":"cc.CapsuleCollider"}]\nPhysicsSystem.instance.raycast(ray);'));
+  assert.equal(queried.backend, 'physics-ammo', 'a raycast can hit the capsule');
+  const simulated = decidePhysicsBackend(evidenceFor('[{"__type__":"cc.RigidBody"},{"__type__":"cc.CapsuleCollider"}]'));
+  assert.equal(simulated.backend, 'physics-ammo');
 });
 
 test('Graphics and MeshCollider are audited against both profile and applied preview map', (t) => {
