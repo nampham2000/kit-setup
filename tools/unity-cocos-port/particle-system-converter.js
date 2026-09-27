@@ -1412,6 +1412,7 @@ function applyUnityParticleDataToCocos(builder, particleId, data = {}, rendererD
   Object.defineProperty(particle, 'unityOrbitContract', { value: particleOrbitContract(data), configurable: true });
   Object.defineProperty(particle, 'unityNoiseContract', { value: particleNoiseContract(data), configurable: true });
   Object.defineProperty(particle, 'unityInitialStateContract', { value: initialStateContract(data), configurable: true });
+  Object.defineProperty(particle, 'unityCapacityRetirement', { value: require('./particle-capacity-contract.cjs').capacityRetirementEligible(data), configurable: true });
   Object.defineProperty(particle, 'unityEdgeShapeContract', { value: edgeShapeContract(data), configurable: true });
   Object.defineProperty(particle, 'unityStartRotationContract', { value: startRotationContract(data), configurable: true });
   Object.defineProperty(particle, 'unityLimitVelocityContract', { value: particleLimitVelocityContract(data), configurable: true });

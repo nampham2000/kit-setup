@@ -1,5 +1,29 @@
 import { ParticleSystem, pseudoRandom, Vec3 } from 'cc';
 
+/** Retire end-of-step deaths before a saturated emitter allocates new births.
+ * Opt-in excludes sub-emitter, collision and trail callbacks in the source. */
+export function installUnityParticleCapacityRetirement(system:ParticleSystem):void {
+    const runtime=system as any,processor=runtime.processor;
+    if(runtime.unityCapacityRetirement||!processor?._particles?.removeAt)return;
+    runtime.unityCapacityRetirement=true;
+    const emission=runtime._emit,update=processor.updateParticles;
+    processor.updateParticles=function(dt:number):number {
+        const count=update.call(this,dt),pool=this._particles;
+        for(let i=0;i<pool.length;i++)pool.data[i].remainingLifetime=Math.fround(pool.data[i].remainingLifetime);
+        return count;
+    };
+    runtime._emit=function(dt:number):void {
+        const pool=processor._particles;
+        if(this._isEmitting&&pool.length>=system.capacity){
+            for(let i=pool.length-1;i>=0;i--){
+                const p=pool.data[i];
+                if(!p.unityBirthPending&&p.remainingLifetime-dt<0){p.remainingLifetime=-1;pool.removeAt(i);}
+            }
+        }
+        emission.call(this,dt);
+    };
+}
+
 /** Native assigns the newest crossing to lane zero, including capacity clipping. */
 export function unityContinuousBirthDelay(state:{first:number;interval:number;index:number;batchCount:number}):number {
     return state.first+(state.batchCount-1-state.index)*state.interval;

@@ -39,6 +39,7 @@ function attachSimulationStepRuntime(builder,reporter,options) {
       'Refresh AssetDB to register UnityParticleSimulationStepAdapter.ts, then rerun porter.');continue;}
     if(p.unityForceContract?.unsupported)reporter.high('PARTICLE_RANDOM_FORCE_UNVERIFIED',options.src||'',builder.objects[p.node.__id__]?._name||'',p.unityForceContract.unsupported);
     builder.addComponent(p.node.__id__,classId,{source:{__id__:id},maximumDeltaTime,...(gravityY!==null?{gravityY}:{}),
+      ...(p.unityCapacityRetirement?{sourceCapacityRetirement:true}:{}),
       ...(p.unityForceContract&&!p.unityForceContract.unsupported?{sourceForceContract:JSON.stringify(p.unityForceContract)}:{})},null,`cmp-unity-simulation-step-${id}`);
   }
 }

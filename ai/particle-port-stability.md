@@ -150,3 +150,18 @@ which repeat the source index. On a busy multi-project machine, avoid starting
 duplicate scans while an earlier scan is still active. The scan-cost and
 port-path-boundaries tests cover the filter and retained path safeguards.
 
+Electro saturated emitters exposed two separate lifecycle gaps. Cocos emits before
+retiring expired particles, which can skip native births at capacity; double
+lifetime subtraction can also shift an exact death boundary. Eligible source
+systems now opt into pre-emission retirement and float lifetime storage. Sources
+with enabled sub-emitter, collision, trail or trigger modules are excluded until
+their callback order is measured. Six independent native timelines cover capacity
+2/4, constant/random lifetime and two viewport seeds.
+
+An early adapter onLoad can run before ParticleSystem creates its CPU processor.
+Install capacity retirement again in start, idempotently, and verify the runtime
+marker on a naturally instantiated prefab before accepting a replay. Algorithm
+tests alone missed this integration gap. Check counts, birth seeds and lifetimes
+at late frames, not just visible startup frames; never reset a reference seed to
+hide saturated-pool divergence.
+
