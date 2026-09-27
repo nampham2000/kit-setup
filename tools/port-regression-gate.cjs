@@ -38,7 +38,17 @@ const MAX_REGISTRY_BYTES = 256 * 1024;
 const MAX_MATRIX_BYTES = 512 * 1024;
 const MAX_SUITES = 64;
 const MAX_WATCH_FILES = 512;
+// Default wall-clock budget for one preview-checkpoints run of one suite matrix.
+// Precedence for the effective per-suite timeout:
+//   1. CLI --suite-timeout-ms <ms> (machine-local run override, applies to every suite run)
+//   2. registry suites[].timeoutMs (tracked, hashed into the receipt snapshot)
+//   3. RUN_TIMEOUT_MS (10 min)
 const RUN_TIMEOUT_MS = 10 * 60 * 1000;
+const MIN_SUITE_TIMEOUT_MS = 60 * 1000;
+const MAX_SUITE_TIMEOUT_MS = 45 * 60 * 1000;
+// Duration estimate adds this per case for preview reload, browser session boot,
+// eval and screenshot I/O on top of the declared seconds/postActionSeconds/gesture waits.
+const CASE_RELOAD_OVERHEAD_MS = 8 * 1000;
 const RUN_MAX_BUFFER_BYTES = 2 * 1024 * 1024;
 
 const RISKS = Object.freeze([
@@ -105,12 +115,20 @@ Options:
   --preview-url <url>   Loopback preview origin for this machine (or CC_PLAYABLE_PREVIEW_URL);
                         replaces only each matrix URL origin, keeping path and query.
   --no-refresh          Intentionally skip Cocos AssetDB/preview refresh.
+  --suite-timeout-ms <ms>
+                        run only: wall-clock timeout per suite run, integer ${MIN_SUITE_TIMEOUT_MS}-${MAX_SUITE_TIMEOUT_MS}.
+                        Overrides suites[].timeoutMs; default ${RUN_TIMEOUT_MS}. Not part of the receipt digest.
   --json                Emit compact JSON.
   --help                Show this help.
 
 The tracked registry owns risk coverage; the ignored receipt owns one machine's
 current run. run fails closed when a mandatory suite lacks the oracle required by
-its risk. check never opens a browser: it only proves that an existing PASS still
+its risk. A suite may declare "timeoutMs" (integer ${MIN_SUITE_TIMEOUT_MS}-${MAX_SUITE_TIMEOUT_MS}); precedence is
+--suite-timeout-ms > suites[].timeoutMs > ${RUN_TIMEOUT_MS}. A run that exceeds it reports
+REGRESSION_SUITE_TIMEOUT; before running, a suite whose estimated duration (per case:
+seconds + postActionSeconds + gestureDelaysMs + gestureGapMs x (gestures-1) + ${CASE_RELOAD_OVERHEAD_MS / 1000}s reload
+overhead) exceeds the effective timeout emits the warning REGRESSION_SUITE_TIMEOUT_RISK.
+check never opens a browser: it only proves that an existing PASS still
 matches the current registry, matrices, and watched target bytes.
 
 Opt-in case tags: a case tagged "ui-layout" (a control group whose sibling was
@@ -125,6 +143,17 @@ function regressionError(code, message, details = null) {
   error.code = code;
   if (details) error.details = details;
   return error;
+}
+
+function validateSuiteTimeoutMs(value, label) {
+  const text = typeof value === 'string' ? value.trim() : value;
+  const number = typeof text === 'string' && /^\d+$/.test(text) ? Number(text) : text;
+  if (typeof number !== 'number' || !Number.isInteger(number)
+    || number < MIN_SUITE_TIMEOUT_MS || number > MAX_SUITE_TIMEOUT_MS) {
+    throw regressionError('REGRESSION_SUITE_TIMEOUT_INVALID',
+      `${label} phải là integer ms trong ${MIN_SUITE_TIMEOUT_MS}-${MAX_SUITE_TIMEOUT_MS} (60 s-45 min); nhận: ${JSON.stringify(value)}.`);
+  }
+  return number;
 }
 
 function parseArgs(argv) {
@@ -146,7 +175,7 @@ function parseArgs(argv) {
     if (argument === '--no-refresh') { options.refresh = false; continue; }
     const equal = /^--([a-z-]+)=(.*)$/.exec(argument);
     const name = equal ? equal[1] : argument.startsWith('--') ? argument.slice(2) : null;
-    if (!['project', 'config', 'receipt', 'output', 'risk', 'suite', 'preview-url'].includes(name)) {
+    if (!['project', 'config', 'receipt', 'output', 'risk', 'suite', 'preview-url', 'suite-timeout-ms'].includes(name)) {
       throw regressionError('REGRESSION_OPTION_INVALID', `Option không hỗ trợ: ${argument}`);
     }
     const value = equal ? equal[2] : argv[++index];
@@ -155,6 +184,15 @@ function parseArgs(argv) {
     }
     if (name === 'risk') options.risks.push(value);
     else if (name === 'suite') options.suites.push(value);
+    else if (name === 'suite-timeout-ms') {
+      if (options.command !== 'run') {
+        throw regressionError('REGRESSION_OPTION_INVALID', '--suite-timeout-ms chỉ áp dụng cho command run.');
+      }
+      if (options.suiteTimeoutMs !== undefined) {
+        throw regressionError('REGRESSION_OPTION_INVALID', '--suite-timeout-ms chỉ được khai báo một lần.');
+      }
+      options.suiteTimeoutMs = validateSuiteTimeoutMs(value, '--suite-timeout-ms');
+    }
     else options[name] = value;
   }
   return options;
@@ -638,8 +676,40 @@ function validateMatrixPolicy(projectRoot, suite, matrix, matrixFile) {
     value: matrix,
     hash: hashFile(matrixFile),
     caseCount: matrix.cases.length,
+    estimatedMs: estimateMatrixDurationMs(matrix),
     dependencies: [...dependencyMap.values()],
   };
+}
+
+/**
+ * Conservative wall-clock estimate of one preview-checkpoints run. Mirrors the
+ * preview-checkpoints defaults (seconds 4, postActionSeconds 0, matrix-level
+ * values as fallback) and adds CASE_RELOAD_OVERHEAD_MS per case.
+ */
+function estimateMatrixDurationMs(matrix) {
+  const finite = value => (Number.isFinite(Number(value)) ? Number(value) : 0);
+  const defaultSeconds = Math.max(1, Number(matrix.seconds) || 4);
+  const defaultPost = Math.max(0, Math.min(60, Number(matrix.postActionSeconds) || 0));
+  let total = 0;
+  for (const entry of matrix.cases || []) {
+    if (!entry || typeof entry !== 'object') continue;
+    const seconds = Number(entry.seconds) || defaultSeconds;
+    const post = entry.postActionSeconds === undefined ? defaultPost : Math.max(0, finite(entry.postActionSeconds));
+    const delays = Array.isArray(entry.gestureDelaysMs)
+      ? entry.gestureDelaysMs.reduce((sum, item) => sum + Math.max(0, finite(item)), 0) : 0;
+    const gestureCount = Array.isArray(entry.gestures) ? entry.gestures.length
+      : Array.isArray(entry.gestureDelaysMs) ? entry.gestureDelaysMs.length
+        : (entry.gesture || entry.gestureFromEvalBefore) ? 1 : 0;
+    const gap = Math.max(0, finite(entry.gestureGapMs));
+    total += seconds * 1000 + post * 1000 + delays + gap * Math.max(0, gestureCount - 1) + CASE_RELOAD_OVERHEAD_MS;
+  }
+  return Math.round(total);
+}
+
+function effectiveSuiteTimeout(suite, override) {
+  if (override !== undefined && override !== null) return { timeoutMs: override, source: 'cli' };
+  if (suite.timeoutMs !== undefined && suite.timeoutMs !== null) return { timeoutMs: suite.timeoutMs, source: 'registry' };
+  return { timeoutMs: RUN_TIMEOUT_MS, source: 'default' };
 }
 
 function validateRegistry(projectRoot, value, options = {}) {
@@ -677,7 +747,11 @@ function validateRegistry(projectRoot, value, options = {}) {
     const matrixRelative = String(entry.matrix || '').replace(/\\/g, '/');
     const matrixFile = resolveContained(projectRoot, matrixRelative, `${id}.matrix`, { mustExist: true });
     const matrix = readJsonBounded(matrixFile, MAX_MATRIX_BYTES, 'REGRESSION_MATRIX_INVALID');
-    const normalized = { id, risks, mandatory, runs, matrix: matrixRelative, watchFiles, watch };
+    if (entry.timeoutMs !== undefined && typeof entry.timeoutMs !== 'number') {
+      throw regressionError('REGRESSION_SUITE_TIMEOUT_INVALID', `${id}.timeoutMs phải là JSON number (integer ms); nhận: ${JSON.stringify(entry.timeoutMs)}.`);
+    }
+    const timeoutMs = entry.timeoutMs === undefined ? undefined : validateSuiteTimeoutMs(entry.timeoutMs, `${id}.timeoutMs`);
+    const normalized = { id, risks, mandatory, runs, matrix: matrixRelative, watchFiles, watch, ...(timeoutMs !== undefined ? { timeoutMs } : {}) };
     normalized.matrixEvidence = validateMatrixPolicy(projectRoot, normalized, matrix, matrixFile);
     return normalized;
   });
@@ -712,6 +786,9 @@ function registrySnapshot(projectRoot, registry) {
     ...(registry.catalogEvidence?.length?{particleCatalog:registry.catalogEvidence.map(item=>({path:item.relative,hash:hashFile(item.file)}))}:{}),
     suites: registry.suites.map(suite => ({
       id: suite.id,
+      // Only declared timeouts enter the digest so receipts of registries without
+      // timeoutMs stay valid; changing/adding/removing timeoutMs makes them stale.
+      ...(suite.timeoutMs !== undefined ? { timeoutMs: suite.timeoutMs } : {}),
       matrix: { path: suite.matrix, hash: hashFile(suite.matrixEvidence.file) },
       matrixDependencies: suite.matrixEvidence.dependencies.map(item => ({ path: item.relative, hash: hashFile(item.file) })),
       watchFiles: suite.watch.map(item => ({ path: item.relative, hash: hashFile(item.file) })),
@@ -894,6 +971,8 @@ function executeMatrix(projectRoot, suite, runNumber, options = {}) {
   const output = path.posix.join(outputRoot.replace(/\\/g, '/'), suite.id, `run-${runNumber}`);
   resolveContained(projectRoot, output, `${suite.id}.output`);
   const urlOverride = previewUrlFor(projectRoot, suite, options.previewUrl);
+  const timeoutMs = options.timeoutMs || RUN_TIMEOUT_MS;
+  const startedAt = Date.now();
   const child = (options.spawnSync || spawnSync)(process.execPath, [
     path.join(__dirname, 'preview-checkpoints.cjs'),
     '--config', suite.matrix,
@@ -904,11 +983,15 @@ function executeMatrix(projectRoot, suite, runNumber, options = {}) {
     cwd: projectRoot,
     encoding: 'utf8',
     windowsHide: true,
-    timeout: options.timeoutMs || RUN_TIMEOUT_MS,
+    timeout: timeoutMs,
     maxBuffer: RUN_MAX_BUFFER_BYTES,
     shell: false,
   });
-  const ok = child.status === 0 && !child.error;
+  const elapsedMs = Date.now() - startedAt;
+  const spawnErrorCode = child.error && child.error.code || undefined;
+  const timedOut = spawnErrorCode === 'ETIMEDOUT'
+    || !!(child.signal && (child.timedOut === true || elapsedMs >= timeoutMs));
+  const ok = child.status === 0 && !child.error && !timedOut;
   let payload = null;
   try { payload = parseJsonOutput(child.stdout); } catch (error) {
     if (ok) throw error;
@@ -917,13 +1000,27 @@ function executeMatrix(projectRoot, suite, runNumber, options = {}) {
     run: runNumber,
     ok: ok && payload && payload.ok === true,
     exitCode: Number.isInteger(child.status) ? child.status : null,
-    timedOut: !!(child.error && child.error.code === 'ETIMEDOUT') || undefined,
-    code: child.error && child.error.code || undefined,
+    timedOut: timedOut || undefined,
+    code: timedOut ? 'REGRESSION_SUITE_TIMEOUT' : spawnErrorCode,
+    ...(timedOut ? {
+      spawnErrorCode: spawnErrorCode || undefined,
+      signal: child.signal || undefined,
+      timeoutMs,
+      message: suiteTimeoutMessage(suite, timeoutMs),
+    } : {}),
     manifest: payload && payload.manifest,
     contactSheet: payload && payload.contactSheet,
     cases: payload && Array.isArray(payload.cases) ? payload.cases.map(entry => ({ name: entry.name, ok: entry.ok })) : [],
     output: ok ? undefined : redactOutput(`${child.stdout || ''}\n${child.stderr || ''}\n${child.error || ''}`, projectRoot),
   };
+}
+
+function suiteTimeoutMessage(suite, timeoutMs) {
+  const evidence = suite.matrixEvidence || {};
+  const caseCount = Number.isInteger(evidence.caseCount) ? evidence.caseCount : 'unknown';
+  const estimate = Number.isFinite(evidence.estimatedMs) ? `, estimated ${evidence.estimatedMs} ms` : '';
+  return `${suite.id}: matrix run exceeded the effective timeout ${timeoutMs} ms (${caseCount} cases${estimate}). `
+    + 'Split the matrix into smaller suites or raise suites[].timeoutMs (or pass --suite-timeout-ms).';
 }
 
 function redactOutput(value, projectRoot) {
@@ -979,6 +1076,8 @@ function checkRegressionReceipt(options = {}) {
 }
 
 async function runRegressionGate(options = {}, dependencies = {}) {
+  const suiteTimeoutOverride = options.suiteTimeoutMs === undefined || options.suiteTimeoutMs === null
+    ? undefined : validateSuiteTimeoutMs(options.suiteTimeoutMs, '--suite-timeout-ms');
   const projectRoot = validateProjectRoot(options.project);
   const registry = loadRegistry(projectRoot, options);
   const portable = dependencies.assertPortable
@@ -1019,20 +1118,49 @@ async function runRegressionGate(options = {}, dependencies = {}) {
     ? { ok: true, skipped: true, reason: 'explicit --no-refresh' }
     : await (dependencies.refreshPreview || refreshCocosPreview)(projectRoot, dependencies.refreshOptions || {});
   const results = [];
+  const warnings = [];
   const executionSuites = selectedSuiteIds.length
     ? registry.suites.filter(suite => selectedSuiteSet.has(suite.id))
     : registry.suites;
   for (const suite of executionSuites) {
+    const timeout = effectiveSuiteTimeout(suite, suiteTimeoutOverride);
+    const estimatedMs = suite.matrixEvidence.estimatedMs;
+    if (estimatedMs > timeout.timeoutMs) {
+      const warning = {
+        code: 'REGRESSION_SUITE_TIMEOUT_RISK',
+        suite: suite.id,
+        estimatedMs,
+        timeoutMs: timeout.timeoutMs,
+        timeoutSource: timeout.source,
+        caseCount: suite.matrixEvidence.caseCount,
+        message: `${suite.id}: estimated ${estimatedMs} ms for ${suite.matrixEvidence.caseCount} cases exceeds the effective timeout `
+          + `${timeout.timeoutMs} ms (${timeout.source}); split the matrix or raise suites[].timeoutMs.`,
+      };
+      warnings.push(warning);
+      if (typeof dependencies.onWarning === 'function') dependencies.onWarning(warning);
+    }
     const runs = [];
     for (let runNumber = 1; runNumber <= suite.runs; runNumber += 1) {
       const result = (dependencies.runMatrix || executeMatrix)(projectRoot, suite, runNumber, {
         output: options.output || DEFAULT_OUTPUT,
         previewUrl: options.previewUrl,
         ...(dependencies.matrixOptions || {}),
+        timeoutMs: timeout.timeoutMs,
       });
       runs.push(await Promise.resolve(result));
     }
-    results.push({ id: suite.id, risks: suite.risks, mandatory: suite.mandatory, runs, ok: runs.every(item => item.ok) });
+    const timedOutRun = runs.find(item => item && item.code === 'REGRESSION_SUITE_TIMEOUT');
+    results.push({
+      id: suite.id,
+      risks: suite.risks,
+      mandatory: suite.mandatory,
+      timeoutMs: timeout.timeoutMs,
+      timeoutSource: timeout.source,
+      estimatedMs,
+      runs,
+      ok: runs.every(item => item.ok),
+      ...(timedOutRun ? { code: 'REGRESSION_SUITE_TIMEOUT', message: suiteTimeoutMessage(suite, timeout.timeoutMs) } : {}),
+    });
   }
   const after = registrySnapshot(projectRoot, registry);
   if (before.digest !== after.digest) {
@@ -1056,6 +1184,8 @@ async function runRegressionGate(options = {}, dependencies = {}) {
     snapshot: after,
     requiredRisks: registry.requiredRisks,
     suites: mergedResults,
+    ...(suiteTimeoutOverride !== undefined ? { suiteTimeoutOverrideMs: suiteTimeoutOverride } : {}),
+    ...(warnings.length ? { warnings } : {}),
     ...(selectedSuiteIds.length ? {
       selectiveRerun: {
         suites: selectedSuiteIds,
@@ -1074,8 +1204,11 @@ async function runRegressionGate(options = {}, dependencies = {}) {
     refresh,
     requiredRisks: registry.requiredRisks,
     suites: mergedResults,
+    warnings,
     ...(selectedSuiteIds.length ? { selectiveRerun: selectedSuiteIds } : {}),
-    nextActions: mergedResults.filter(item => item.mandatory && !item.ok).map(item => `Fix/re-run ${item.id}`),
+    nextActions: mergedResults.filter(item => item.mandatory && !item.ok).map(item => (item.code === 'REGRESSION_SUITE_TIMEOUT'
+      ? `Split ${item.id} matrix or raise its timeoutMs (REGRESSION_SUITE_TIMEOUT at ${item.timeoutMs} ms)`
+      : `Fix/re-run ${item.id}`)),
   };
 }
 
@@ -1089,7 +1222,9 @@ async function main() {
   try {
     const options = parseArgs(process.argv.slice(2));
     if (options.help) { console.log(USAGE); return; }
-    const result = await execute(options);
+    const result = await execute(options, options.json ? {} : {
+      onWarning(warning) { console.error(`[${warning.code}] ${warning.message}`); },
+    });
     console.log(JSON.stringify(result, null, options.json ? 0 : 2));
     if (!result.ok) process.exitCode = 1;
   } catch (error) {
@@ -1115,7 +1250,14 @@ module.exports = {
   DEFAULT_RECEIPT,
   DEFAULT_OUTPUT,
   RISKS,
+  RUN_TIMEOUT_MS,
+  MIN_SUITE_TIMEOUT_MS,
+  MAX_SUITE_TIMEOUT_MS,
+  CASE_RELOAD_OVERHEAD_MS,
   parseArgs,
+  validateSuiteTimeoutMs,
+  estimateMatrixDurationMs,
+  effectiveSuiteTimeout,
   findHostProject,
   validateProjectRoot,
   resolveContained,
