@@ -130,7 +130,7 @@ function extractResourceLoadAllPaths(text) {
       }
     }
   }
-  return sortedUnique(paths);
+  return detachedStrings(sortedUnique(paths));
 }
 
 function splitTopLevelCommaList(value) {

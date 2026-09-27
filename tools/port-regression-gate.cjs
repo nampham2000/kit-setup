@@ -102,6 +102,8 @@ Options:
   --risk <id>           Required risk for init; repeatable.
   --suite <id>          Re-run one suite and merge it into a current hash-bound receipt; repeatable.
   --force               Replace an existing registry during init.
+  --preview-url <url>   Loopback preview origin for this machine (or CC_PLAYABLE_PREVIEW_URL);
+                        replaces only each matrix URL origin, keeping path and query.
   --no-refresh          Intentionally skip Cocos AssetDB/preview refresh.
   --json                Emit compact JSON.
   --help                Show this help.
@@ -137,7 +139,7 @@ function parseArgs(argv) {
     if (argument === '--no-refresh') { options.refresh = false; continue; }
     const equal = /^--([a-z-]+)=(.*)$/.exec(argument);
     const name = equal ? equal[1] : argument.startsWith('--') ? argument.slice(2) : null;
-    if (!['project', 'config', 'receipt', 'output', 'risk', 'suite'].includes(name)) {
+    if (!['project', 'config', 'receipt', 'output', 'risk', 'suite', 'preview-url'].includes(name)) {
       throw regressionError('REGRESSION_OPTION_INVALID', `Option không hỗ trợ: ${argument}`);
     }
     const value = equal ? equal[2] : argv[++index];
@@ -813,15 +815,37 @@ function parseJsonOutput(value) {
   throw regressionError('REGRESSION_MATRIX_OUTPUT_INVALID', 'verify.visual không trả JSON hợp lệ.');
 }
 
+/**
+ * Preview ports are machine-local (Cocos takes the next free port when 7456 is busy), so a
+ * tracked matrix URL cannot be portable. --preview-url / CC_PLAYABLE_PREVIEW_URL swaps only the
+ * origin and keeps each matrix's path and query (?level=, ?tutorials=off).
+ */
+function previewUrlFor(projectRoot, suite, previewUrl) {
+  const override = previewUrl || process.env.CC_PLAYABLE_PREVIEW_URL || '';
+  if (!override) return null;
+  const base = new URL(override);
+  if (!/^https?:$/.test(base.protocol) || !['localhost', '127.0.0.1', '[::1]'].includes(base.hostname)) {
+    throw regressionError('REGRESSION_PREVIEW_URL_INVALID', 'preview-url phải là loopback http(s) origin.');
+  }
+  resolveContained(projectRoot, suite.matrix, `${suite.id}.matrix`);
+  const matrix = JSON.parse(fs.readFileSync(path.resolve(projectRoot, suite.matrix), 'utf8'));
+  const target = new URL(String(matrix.url));
+  target.protocol = base.protocol;
+  target.host = base.host;
+  return target.href;
+}
+
 function executeMatrix(projectRoot, suite, runNumber, options = {}) {
   const outputRoot = options.output || DEFAULT_OUTPUT;
   const output = path.posix.join(outputRoot.replace(/\\/g, '/'), suite.id, `run-${runNumber}`);
   resolveContained(projectRoot, output, `${suite.id}.output`);
+  const urlOverride = previewUrlFor(projectRoot, suite, options.previewUrl);
   const child = (options.spawnSync || spawnSync)(process.execPath, [
     path.join(__dirname, 'preview-checkpoints.cjs'),
     '--config', suite.matrix,
     '--output', output,
     '--json',
+    ...(urlOverride ? ['--url', urlOverride] : []),
   ], {
     cwd: projectRoot,
     encoding: 'utf8',
@@ -949,6 +973,7 @@ async function runRegressionGate(options = {}, dependencies = {}) {
     for (let runNumber = 1; runNumber <= suite.runs; runNumber += 1) {
       const result = (dependencies.runMatrix || executeMatrix)(projectRoot, suite, runNumber, {
         output: options.output || DEFAULT_OUTPUT,
+        previewUrl: options.previewUrl,
         ...(dependencies.matrixOptions || {}),
       });
       runs.push(await Promise.resolve(result));

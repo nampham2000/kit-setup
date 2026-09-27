@@ -297,6 +297,8 @@ function makeSubEmitterEntry(script, type, entry, subEmitterParticleId, subEmitt
     maxSourceParticles: 32,
     deathBurstCount: 1,
     playSubEmitterOnEnable: type === SUB_EMITTER_TYPE.birth,
+    // The runtime replays the sub system's own bursts/rate per parent event (Unity semantics).
+    unityInstances: true,
   };
 }
 
@@ -583,12 +585,18 @@ function createRuntimeComponentPorter(deps) {
         if (!Array.isArray(followerComponent.entries)) followerComponent.entries = [];
         if (hasSubEmitterEntry(followerComponent, type, subEmitterParticleId)) continue;
 
-        subEmitterParticle._simulationSpace = distanceContract?.simulationSpace ?? 0;
         subEmitterParticle.playOnAwake = false;
-        if(!distanceContract)subEmitterParticle.loop = type === SUB_EMITTER_TYPE.birth;
+        if (distanceContract) {
+          // Native constant Birth distance emission: UnityParticleDistanceSubEmitter owns it.
+          subEmitterParticle._simulationSpace = distanceContract.simulationSpace ?? 0;
+          setCocosCurveConstant(builder.objects, subEmitterParticle, 'rateOverTime', 0);
+          setCocosCurveConstant(builder.objects, subEmitterParticle, 'rateOverDistance', 0);
+        } else {
+          // Duration, loop, bursts and rate stay authored: the follower (unityInstances) reads
+          // them as the per-instance emission schedule and silences the target at runtime.
+          subEmitterParticle._simulationSpace = 0;
+        }
         if (type === SUB_EMITTER_TYPE.death) subEmitterNode._active = false;
-        setCocosCurveConstant(builder.objects, subEmitterParticle, 'rateOverTime', 0);
-        setCocosCurveConstant(builder.objects, subEmitterParticle, 'rateOverDistance', 0);
 
         followerComponent.entries.push({...makeSubEmitterEntry(script, type, entry, subEmitterParticleId, subEmitterNodeId),
           ...(distanceContract?{sourceDistanceRate:distanceContract.rate,sourceSimulationSpace:distanceContract.simulationSpace,emitRatePerParticle:0}:{}),

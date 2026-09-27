@@ -22,6 +22,7 @@ const { spawn, spawnSync } = require('child_process');
 const { color } = require('./lib/term-color.cjs');
 const { createRuntimeProfile, closeRuntimeProfile } = require('./lib/runtime-profile.cjs');
 const { validateCheckpoints, captureRuntimeCheckpoints } = require('./lib/runtime-checkpoints.cjs');
+const { contentProbeClips } = require('./lib/runtime-content-probes.cjs');
 
 const WEBSOCKET_REEXEC_ENV = 'PLAYABLE_VERIFY_RUNTIME_WEBSOCKET_REEXEC';
 
@@ -779,11 +780,11 @@ async function runOne(target, options) {
     // nhau; nếu cả ba byte-identical thì khung hình gần như chắc chắn đơn sắc.
     const w = Math.max(1, Number(data.canvasWidth) || 720);
     const h = Math.max(1, Number(data.canvasHeight) || 1280);
-    const clips = [
-      { x: Math.floor(w * 0.15), y: Math.floor(h * 0.15), width: 16, height: 16, scale: 1 },
-      { x: Math.floor(w * 0.50), y: Math.floor(h * 0.50), width: 16, height: 16, scale: 1 },
-      { x: Math.floor(w * 0.80), y: Math.floor(h * 0.80), width: 16, height: 16, scale: 1 },
-    ];
+    // Narrow VFX can miss all three default locations. Callers may add source-
+    // derived locations; this supplements the blank-frame guard, never bypasses
+    // it. Record the exact rectangles so acceptance remains reviewable.
+    const clips = contentProbeClips(w,h,options.contentProbePoints);
+    result.contentProbeClips = clips;
     const patches = [];
     for (const clip of clips) {
       try {
@@ -861,15 +862,18 @@ async function runOne(target, options) {
 }
 
 /**
- * The pass/fail verdict of one target. Only what the page did counts: exceptions, console errors,
- * preview-device errors, frames/FPS and a monochrome frame. Temp-profile cleanup (`profileCleanup`)
- * is housekeeping after the session closed: on a loaded Windows machine Chrome's helper processes
- * can still hold `first_party_sets.db` (EBUSY) for a while and the directory is retained with a
- * warning. That used to fail otherwise-green regression cases (Screw glass-hold / tap-raycast) and
- * does not change any runtime evidence, so it is reported but never decides the verdict.
+ * The pass/fail verdict of one target. Only what the page did counts: exceptions, eval errors, failed
+ * runtime checkpoints, console errors, preview-device errors, frames/FPS and a monochrome frame.
+ * Temp-profile cleanup (`profileCleanup`) is housekeeping after the session closed: on a loaded
+ * Windows machine Chrome's helper processes can still hold `first_party_sets.db` (EBUSY) for a while
+ * and the directory is retained with a warning. That used to fail otherwise-green regression cases
+ * (Screw glass-hold / tap-raycast) and does not change any runtime evidence, so it is reported but
+ * never decides the verdict.
  */
 function runtimeVerdict(result, options) {
   return result.exceptions.length === 0
+    && !result.evalError && !result.evalBeforeError
+    && result.checkpoints?.ok !== false
     && result.consoleErrors.length === 0
     && !result.previewDeviceError
     && !result.previewDeviceRestoreError

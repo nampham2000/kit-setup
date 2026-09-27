@@ -180,6 +180,8 @@ const {
 const {
   emitSyntheticModelRenderer: emitSyntheticModelRendererImpl,
   emitMeshRenderer: emitMeshRendererImpl,
+  emitSkinnedMeshRenderer: emitSkinnedMeshRendererImpl,
+  attachRealtimeSkinning: attachRealtimeSkinningImpl,
 } = createRendererPorter({
   resolveUnityMaterialUuids,
   resolveUnityMaterialUuid,
@@ -270,6 +272,8 @@ const componentDispatcher = createComponentDispatcher({
   emitSyntheticModelRenderer,
   emitParticleSystem,
   emitMeshRenderer,
+  emitSkinnedMeshRenderer,
+  emitLineRenderer,
   emitMeshCollider,
   emitSpriteRenderer,
   emitLight,
@@ -1610,14 +1614,55 @@ function loadInheritedUnityAssetDatabase(key) {
   return db;
 }
 
-function scannedUnityAssetDatabase(unityRoot) {
+// The preflight receipt's stateFingerprint covers every Unity .meta of its project,
+// so the GUID index scanned under one fingerprint is reused across porter runs.
+// Walking a large project's metas took minutes per run on a loaded machine.
+// Bump GUID_INDEX_SCHEMA whenever UnityAssetDatabase records change shape.
+const GUID_INDEX_SCHEMA = 1;
+
+function guidIndexCacheFile(unityRoot, stateFingerprint) {
+  const { resolveDefaultCacheDir } = require('./unity-intel/cache.cjs');
+  const id = require('node:crypto').createHash('sha256')
+    .update(`guid-index/${GUID_INDEX_SCHEMA}\n${toPosix(unityRoot)}\n${stateFingerprint}`).digest('hex').slice(0, 32);
+  return path.join(resolveDefaultCacheDir(), 'guid-index', `${id}.json`);
+}
+
+// The fingerprint only vouches for sources inside the receipt's project root; a
+// staging root elsewhere is scanned every run.
+function guidIndexCacheable(unityRoot, projectRoot) {
+  if (!projectRoot) return false;
+  const relative = path.relative(path.resolve(projectRoot), path.resolve(unityRoot));
+  return !relative.startsWith('..') && !path.isAbsolute(relative);
+}
+
+function scannedUnityAssetDatabase(unityRoot, stateFingerprint = '', projectRoot = '') {
   const key = path.resolve(unityRoot);
   let db = unityAssetDatabases.get(key);
   if (!db) {
     db = loadInheritedUnityAssetDatabase(key);
+    const cacheFile = !db && stateFingerprint && guidIndexCacheable(key, projectRoot) ? guidIndexCacheFile(key, stateFingerprint) : '';
+    if (!db && cacheFile) {
+      let cached = null;
+      try { cached = readJsonIfExists(cacheFile); } catch (_) { cached = null; }
+      if (cached?.schema === GUID_INDEX_SCHEMA && cached.unityRoot === key && cached.stateFingerprint === stateFingerprint && Array.isArray(cached.records)) {
+        db = new UnityAssetDatabase(key, []);
+        for (const record of cached.records) db.byGuid.set(record.guid, record);
+      }
+    }
     if (!db) {
       db = new UnityAssetDatabase(key, unityPackageAssetRoots(key));
       db.scan();
+      if (cacheFile) {
+        // Best effort: a full or read-only cache dir must not fail the port.
+        const temp = `${cacheFile}.${process.pid}.tmp`;
+        try {
+          fs.mkdirSync(path.dirname(cacheFile), { recursive: true });
+          fs.writeFileSync(temp, JSON.stringify({ schema: GUID_INDEX_SCHEMA, unityRoot: key, stateFingerprint, records: [...db.byGuid.values()] }));
+          fs.renameSync(temp, cacheFile);
+        } catch (_) {
+          try { fs.rmSync(temp, { force: true }); } catch (__) { /* ignore */ }
+        }
+      }
     }
     unityAssetDatabases.set(key, db);
   }
@@ -1642,7 +1687,7 @@ function prepareUnityPortChildEnv(options, preflight) {
   }
   if (options.unityRoot) {
     const unityRoot = path.resolve(options.unityRoot);
-    const db = scannedUnityAssetDatabase(unityRoot);
+    const db = scannedUnityAssetDatabase(unityRoot, preflight?.receipt?.stateFingerprint || '', preflight?.projectRoot || '');
     const file = path.join(require('os').tmpdir(), `cc-playable-guid-index-${process.pid}.json`);
     fs.writeFileSync(file, JSON.stringify({ unityRoot, records: [...db.byGuid.values()] }));
     env[PARENT_GUID_INDEX_ENV] = JSON.stringify({ parentPid: process.pid, unityRoot, file });
@@ -1933,6 +1978,25 @@ class CocosAssetDatabase {
           source: record.relativePath,
           fallbackExt: record.ext,
         };
+      }
+    }
+    return null;
+  }
+
+  // Skeleton the Cocos model prefab pairs with this mesh (its SkinnedMeshRenderer),
+  // and the skeleton's joint paths, relative to the model root (skinningRoot).
+  resolveModelSkinByMesh(stem, meshUuid, requiredExt = '') {
+    const candidates = this.findModelRecordsByStem(stem).filter((record) => !requiredExt || record.ext === requiredExt);
+    for (const record of candidates) {
+      for (const scene of subMetaRecords(record.uuid, record.subMetas, 'gltf-scene')) {
+        const objects = readJsonIfExists(libraryJsonPathForUuid({ cocosRoot: this.root }, scene.uuid));
+        const renderer = (objects || []).find((object) => object?.__type__ === 'cc.SkinnedMeshRenderer'
+          && object._mesh?.__uuid__ === meshUuid);
+        const skeletonUuid = renderer?._skeleton?.__uuid__ || '';
+        if (!skeletonUuid) continue;
+        const skeleton = readJsonIfExists(libraryJsonPathForUuid({ cocosRoot: this.root }, skeletonUuid));
+        const asset = Array.isArray(skeleton) ? skeleton.find((object) => Array.isArray(object?._joints)) : skeleton;
+        return { skeletonUuid, joints: asset?._joints || [] };
       }
     }
     return null;
@@ -4981,7 +5045,7 @@ function applyNestedParticlePrefabOverrides(builder, nestedPrefab, reporter, opt
         const meshAsset = builtin ? null : unityDb.get(unityRefGuid(meshOverride[1]));
         const meshName = meshAsset ? unityModelMeshName(meshAsset, unityRefFileId(meshOverride[1])) : '';
         const resolved = meshAsset && cocosDb?.resolveModelMeshByStem
-          ? cocosDb.resolveModelMeshByStem(meshAsset.stem, meshName || meshAsset.stem, meshAsset.ext === '.asset' ? '.fbx' : meshAsset.ext)
+          ? cocosDb.resolveModelMeshByStem(meshAsset.stem, meshName || meshAsset.stem, meshAsset.ext === '.asset' ? '.fbx' : meshAsset.ext, unityRefFileId(meshOverride[1]))
           : null;
         const meshUuid = builtin || resolved?.meshUuid || '';
         renderer._mesh = meshUuid ? cocosUuid(meshUuid, 'cc.Mesh') : resolvedMesh;
@@ -5455,6 +5519,28 @@ class CocosPrefabBuilder {
       _reflectionProbeBlendWeight: 0,
       _enabledGlobalStandardSkinObject: false,
       _enableMorph: true,
+    }, unityComponentId, fileId);
+  }
+
+  addSkinnedMeshRenderer(nodeId, unityComponentId, meshUuid, materialUuids, skeletonUuid, skinningRootId, fileId, config = {}) {
+    return this.addComponent(nodeId, 'cc.SkinnedMeshRenderer', {
+      // Empty slots stay null so later slots keep their sub-mesh index.
+      _materials: materialUuids.map((uuid) => (uuid ? cocosUuid(uuid, 'cc.Material') : null)),
+      _visFlags: 0,
+      bakeSettings: cocosRef(this.addModelBakeSettings()),
+      _mesh: meshUuid ? cocosUuid(meshUuid, 'cc.Mesh') : null,
+      _shadowCastingMode: config.castShadows ? 1 : 0,
+      _shadowReceivingMode: config.receiveShadows === false ? 0 : 1,
+      _shadowBias: 0,
+      _shadowNormalBias: 0,
+      _reflectionProbeId: -1,
+      _reflectionProbeBlendId: -1,
+      _reflectionProbeBlendWeight: 0,
+      _enabledGlobalStandardSkinObject: false,
+      _enableMorph: true,
+      _skeleton: skeletonUuid ? cocosUuid(skeletonUuid, 'cc.Skeleton') : null,
+      _skinningRoot: Number.isInteger(skinningRootId) ? cocosRef(skinningRootId) : null,
+      _clip: null,
     }, unityComponentId, fileId);
   }
 
@@ -6170,6 +6256,8 @@ function buildCocosPrefabBuilder(model, outputFile, options, reporter, unityDb, 
   require('./unity-cocos-port/particle-noise-binding').attachNoiseRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-start-rotation-binding.cjs').attachStartRotationRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-initial-state-binding.cjs').attachInitialStateRuntime(builder, reporter, options);
+  require('./unity-cocos-port/particle-custom-data-binding').attachCustomDataRuntime(builder, reporter, options);
+  require('./unity-cocos-port/particle-align-to-direction-binding').attachAlignToDirectionRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-birth-state-binding').attachBirthStateRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-simulation-step-binding').attachSimulationStepRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-burst-spread-binding').attachBurstSpreadRuntime(builder, reporter, options);
@@ -6181,6 +6269,7 @@ function buildCocosPrefabBuilder(model, outputFile, options, reporter, unityDb, 
   require('./unity-cocos-port/particle-euler-rotation-binding').attachEulerRotationRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-mesh-frame-binding').attachMeshFrameRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-collision-binding').attachCollisionRuntime(builder, reporter, options);
+  attachRealtimeSkinningImpl(builder, reporter);
   attachModelMeshBasisRuntime(builder, reporter, options);
   if (builder.rootPrefabInfoId && builder.nestedPrefabInstanceRootIds.length) {
     const existing = Array.isArray(builder.objects[builder.rootPrefabInfoId].nestedPrefabInstanceRoots)
@@ -7280,6 +7369,46 @@ function emitMeshRenderer(gameObject, nodeId, componentId, doc, model, builder, 
   return emitMeshRendererImpl(gameObject, nodeId, componentId, doc, model, builder, reporter, options, unityDb, cocosDb);
 }
 
+function emitSkinnedMeshRenderer(gameObject, nodeId, componentId, doc, model, builder, reporter, options, unityDb, cocosDb) {
+  return emitSkinnedMeshRendererImpl(gameObject, nodeId, componentId, doc, model, builder, reporter, options, unityDb, cocosDb);
+}
+
+// Unity LineRenderer (class 120): runtime/UnityLineRenderer.ts rebuilds a camera-facing
+// strip each frame from the serialized points, width curve and gradient; the first
+// material slot is the line material (the Hovl material pass rebinds it later).
+function emitLineRenderer(gameObject, nodeId, componentId, doc, model, builder, reporter, options, unityDb, cocosDb) {
+  const { lineRendererContract, cocosLinePositions, stageLineRendererRuntime } = require('./unity-cocos-port/line-renderer-binding');
+  const parsed = parseUnityRendererDoc(doc);
+  const line = parsed.LineRenderer || parsed;
+  const contract = lineRendererContract(line);
+  const positions = cocosLinePositions(line);
+  const materialRef = getNestedList(doc, 'm_Materials')[0];
+  const materialAsset = unityDb.get(unityRefGuid(materialRef));
+  const materialUuid = materialAsset ? resolveUnityMaterialUuid(materialAsset, options, unityDb, cocosDb, reporter, gameObject.name) : '';
+  stageLineRendererRuntime(options);
+  let classId = cocosDb?.findScriptClass?.('UnityLineRenderer')?.classId;
+  const meta = path.join(options.cocosRoot, 'assets/script/UnityLineRenderer.ts.meta');
+  if (!classId && fs.existsSync(meta)) {
+    // A .meta AssetDB is still writing reads as not imported yet.
+    try { classId = compressUuid(JSON.parse(fs.readFileSync(meta, 'utf8')).uuid); } catch (_) { classId = ''; }
+  }
+  if (!classId) {
+    reporter.high('LINE_RENDERER_ADAPTER_REQUIRED', model.file, gameObject.name, 'AssetDB must import assets/script/UnityLineRenderer.ts; refresh and rerun porter.');
+    return;
+  }
+  if (contract.numCapVertices || contract.numCornerVertices) {
+    reporter.medium('LINE_RENDERER_CAPS_UNPORTED', model.file, gameObject.name, 'LineRenderer corner/cap vertices are not generated.');
+  }
+  if (contract.alignment !== 0) reporter.medium('LINE_RENDERER_ALIGNMENT', model.file, gameObject.name, 'LineRenderer TransformZ alignment spreads the width along cross(segment, node Z); unmeasured against Unity.');
+  if (!materialUuid) reporter.high('LINE_RENDERER_MATERIAL_UNRESOLVED', model.file, gameObject.name, 'LineRenderer material could not be resolved.');
+  builder.addComponent(nodeId, classId, {
+    material: materialUuid ? cocosUuid(materialUuid, 'cc.Material') : null,
+    sourceContract: JSON.stringify(contract),
+    positions,
+  }, componentId, `cmp-line-renderer-${componentId}`);
+  reporter.low('LINE_RENDERER_BOUND', model.file, gameObject.name, `LineRenderer strip runtime attached (${positions.length} points); live visual acceptance still required.`);
+}
+
 function emitMeshCollider(nodeId, componentId, doc, gameObject, model, builder, reporter, options, unityDb, cocosDb) {
   return emitMeshColliderImpl(nodeId, componentId, doc, gameObject, model, builder, reporter, options, unityDb, cocosDb);
 }
@@ -8337,10 +8466,7 @@ module.exports = {
   prepareUnityPortChildEnv,
   cleanupUnityPortChildEnv,
   inheritedPreflightStillValid,
-  scannedUnityAssetDatabase,
   parseUnityYamlText,
-  parsePrefabInstanceInfo,
   applyNestedParticlePrefabOverrides,
-  CocosPrefabBuilder,
   main,
 };

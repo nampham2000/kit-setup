@@ -1,0 +1,1832 @@
+{
+  "scope": "Unity 6000.3.1f1 original Built-in Linear, Play Mode capture, constant zero-size Box billboard subset. Does not certify randomized prewarm initialization.",
+  "sourceSha256": "d46da1ebdedad54af3810ae07e7fc1923297aab714b8d487493fa5ab7ab7c20c",
+  "producerSha256": "2f3b421ed784af1323ad2b56c8793744366c4d803e23a53a8706f35ff88a1e58",
+  "rows": [
+    {
+      "prefab": "Assets/Electricity VFX pack/ef_04.prefab",
+      "source": {
+        "prewarm": true,
+        "looping": true,
+        "startDelay": {
+          "minMaxState": 0,
+          "scalar": 0,
+          "minScalar": 0
+        },
+        "InitialModule": {
+          "size3D": false,
+          "rotation3D": false,
+          "randomizeRotationDirection": 0,
+          "startLifetime": {
+            "minMaxState": 0,
+            "scalar": 1,
+            "minScalar": 5
+          },
+          "startSpeed": {
+            "minMaxState": 0,
+            "scalar": 0,
+            "minScalar": 5
+          },
+          "startSize": {
+            "minMaxState": 0,
+            "scalar": 10,
+            "minScalar": 1
+          },
+          "startSizeY": {
+            "minMaxState": 0,
+            "scalar": 1,
+            "minScalar": 1
+          },
+          "startSizeZ": {
+            "minMaxState": 0,
+            "scalar": 1,
+            "minScalar": 1
+          },
+          "startRotation": {
+            "minMaxState": 0,
+            "scalar": 0,
+            "minScalar": 0
+          },
+          "startRotationX": {
+            "minMaxState": 0,
+            "scalar": 0,
+            "minScalar": 0
+          },
+          "startRotationY": {
+            "minMaxState": 0,
+            "scalar": 0,
+            "minScalar": 0
+          },
+          "gravityModifier": {
+            "minMaxState": 0,
+            "scalar": 0,
+            "minScalar": 0
+          },
+          "startColor": {
+            "minMaxState": 0,
+            "maxColor": {
+              "r": 1,
+              "g": 1,
+              "b": 1,
+              "a": 1
+            },
+            "minColor": {
+              "r": 1,
+              "g": 1,
+              "b": 1,
+              "a": 1
+            }
+          }
+        },
+        "ShapeModule": {
+          "enabled": true,
+          "type": 5,
+          "m_Scale": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "alignToDirection": false,
+          "randomDirectionAmount": 0,
+          "randomPositionAmount": 0,
+          "sphericalDirectionAmount": 0,
+          "m_Texture": {
+            "instanceID": 0
+          }
+        },
+        "EmissionModule": {
+          "enabled": true,
+          "rateOverTime": {
+            "minMaxState": 0,
+            "scalar": 1,
+            "minScalar": 10
+          },
+          "rateOverDistance": {
+            "minMaxState": 0,
+            "scalar": 0,
+            "minScalar": 0
+          },
+          "m_Bursts": []
+        },
+        "UVModule": {
+          "enabled": true,
+          "startFrame": {
+            "minMaxState": 0,
+            "scalar": 0,
+            "minScalar": 0
+          },
+          "frameOverTime": {
+            "minMaxState": 1,
+            "scalar": 0.9998999834060669,
+            "minScalar": 0.9998999834060669
+          }
+        },
+        "SizeModule": {
+          "enabled": false
+        },
+        "RotationModule": {
+          "enabled": false
+        },
+        "ColorModule": {
+          "enabled": false
+        },
+        "VelocityModule": {
+          "enabled": false
+        },
+        "InheritVelocityModule": {
+          "enabled": false
+        },
+        "LifetimeByEmitterSpeedModule": {
+          "enabled": false
+        },
+        "ForceModule": {
+          "enabled": false
+        },
+        "ExternalForcesModule": {
+          "enabled": false
+        },
+        "ClampVelocityModule": {
+          "enabled": false
+        },
+        "NoiseModule": {
+          "enabled": false
+        },
+        "SizeBySpeedModule": {
+          "enabled": false
+        },
+        "RotationBySpeedModule": {
+          "enabled": false
+        },
+        "ColorBySpeedModule": {
+          "enabled": false
+        },
+        "CollisionModule": {
+          "enabled": false
+        },
+        "TriggerModule": {
+          "enabled": false
+        },
+        "SubModule": {
+          "enabled": false
+        },
+        "LightsModule": {
+          "enabled": false
+        },
+        "TrailModule": {
+          "enabled": false
+        },
+        "CustomDataModule": {
+          "enabled": false
+        }
+      },
+      "nativeManifestSha256": "9c15d61aec286ee6f13196c0edaccb8425c2ba22c0601dcaea80965fddec9ca5",
+      "frames": [
+        {
+          "frame": 0,
+          "count": 1,
+          "particles": [
+            {
+              "randomSeed": 2321304981,
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "velocity": [
+                0,
+                0,
+                0
+              ],
+              "size": [
+                10,
+                10,
+                10
+              ],
+              "color": [
+                1,
+                1,
+                1,
+                1
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "remainingLifetime": 0.9833341240882874,
+              "startLifetime": 1
+            }
+          ]
+        },
+        {
+          "frame": 15,
+          "count": 1,
+          "particles": [
+            {
+              "randomSeed": 2321304981,
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "velocity": [
+                0,
+                0,
+                0
+              ],
+              "size": [
+                10,
+                10,
+                10
+              ],
+              "color": [
+                1,
+                1,
+                1,
+                1
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "remainingLifetime": 0.7333341240882874,
+              "startLifetime": 1
+            }
+          ]
+        },
+        {
+          "frame": 30,
+          "count": 1,
+          "particles": [
+            {
+              "randomSeed": 2321304981,
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "velocity": [
+                0,
+                0,
+                0
+              ],
+              "size": [
+                10,
+                10,
+                10
+              ],
+              "color": [
+                1,
+                1,
+                1,
+                1
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "remainingLifetime": 0.4833340048789978,
+              "startLifetime": 1
+            }
+          ]
+        },
+        {
+          "frame": 51,
+          "count": 1,
+          "particles": [
+            {
+              "randomSeed": 2321304981,
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "velocity": [
+                0,
+                0,
+                0
+              ],
+              "size": [
+                10,
+                10,
+                10
+              ],
+              "color": [
+                1,
+                1,
+                1,
+                1
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "remainingLifetime": 0.13333427906036377,
+              "startLifetime": 1
+            }
+          ]
+        },
+        {
+          "frame": 63,
+          "count": 1,
+          "particles": [
+            {
+              "randomSeed": 872059059,
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "velocity": [
+                0,
+                0,
+                0
+              ],
+              "size": [
+                10,
+                10,
+                10
+              ],
+              "color": [
+                1,
+                1,
+                1,
+                1
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "remainingLifetime": 0.9333343505859375,
+              "startLifetime": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "prefab": "Assets/Electricity VFX pack/ef_05.prefab",
+      "source": {
+        "prewarm": true,
+        "looping": true,
+        "startDelay": {
+          "minMaxState": 0,
+          "scalar": 0,
+          "minScalar": 0
+        },
+        "InitialModule": {
+          "size3D": false,
+          "rotation3D": false,
+          "randomizeRotationDirection": 0,
+          "startLifetime": {
+            "minMaxState": 0,
+            "scalar": 1,
+            "minScalar": 5
+          },
+          "startSpeed": {
+            "minMaxState": 0,
+            "scalar": 0,
+            "minScalar": 5
+          },
+          "startSize": {
+            "minMaxState": 0,
+            "scalar": 10,
+            "minScalar": 1
+          },
+          "startSizeY": {
+            "minMaxState": 0,
+            "scalar": 1,
+            "minScalar": 1
+          },
+          "startSizeZ": {
+            "minMaxState": 0,
+            "scalar": 1,
+            "minScalar": 1
+          },
+          "startRotation": {
+            "minMaxState": 0,
+            "scalar": 0,
+            "minScalar": 0
+          },
+          "startRotationX": {
+            "minMaxState": 0,
+            "scalar": 0,
+            "minScalar": 0
+          },
+          "startRotationY": {
+            "minMaxState": 0,
+            "scalar": 0,
+            "minScalar": 0
+          },
+          "gravityModifier": {
+            "minMaxState": 0,
+            "scalar": 0,
+            "minScalar": 0
+          },
+          "startColor": {
+            "minMaxState": 0,
+            "maxColor": {
+              "r": 1,
+              "g": 1,
+              "b": 1,
+              "a": 1
+            },
+            "minColor": {
+              "r": 1,
+              "g": 1,
+              "b": 1,
+              "a": 1
+            }
+          }
+        },
+        "ShapeModule": {
+          "enabled": true,
+          "type": 5,
+          "m_Scale": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "alignToDirection": false,
+          "randomDirectionAmount": 0,
+          "randomPositionAmount": 0,
+          "sphericalDirectionAmount": 0,
+          "m_Texture": {
+            "instanceID": 0
+          }
+        },
+        "EmissionModule": {
+          "enabled": true,
+          "rateOverTime": {
+            "minMaxState": 0,
+            "scalar": 1,
+            "minScalar": 10
+          },
+          "rateOverDistance": {
+            "minMaxState": 0,
+            "scalar": 0,
+            "minScalar": 0
+          },
+          "m_Bursts": []
+        },
+        "UVModule": {
+          "enabled": true,
+          "startFrame": {
+            "minMaxState": 0,
+            "scalar": 0,
+            "minScalar": 0
+          },
+          "frameOverTime": {
+            "minMaxState": 1,
+            "scalar": 0.9998999834060669,
+            "minScalar": 0.9998999834060669
+          }
+        },
+        "SizeModule": {
+          "enabled": false
+        },
+        "RotationModule": {
+          "enabled": false
+        },
+        "ColorModule": {
+          "enabled": false
+        },
+        "VelocityModule": {
+          "enabled": false
+        },
+        "InheritVelocityModule": {
+          "enabled": false
+        },
+        "LifetimeByEmitterSpeedModule": {
+          "enabled": false
+        },
+        "ForceModule": {
+          "enabled": false
+        },
+        "ExternalForcesModule": {
+          "enabled": false
+        },
+        "ClampVelocityModule": {
+          "enabled": false
+        },
+        "NoiseModule": {
+          "enabled": false
+        },
+        "SizeBySpeedModule": {
+          "enabled": false
+        },
+        "RotationBySpeedModule": {
+          "enabled": false
+        },
+        "ColorBySpeedModule": {
+          "enabled": false
+        },
+        "CollisionModule": {
+          "enabled": false
+        },
+        "TriggerModule": {
+          "enabled": false
+        },
+        "SubModule": {
+          "enabled": false
+        },
+        "LightsModule": {
+          "enabled": false
+        },
+        "TrailModule": {
+          "enabled": false
+        },
+        "CustomDataModule": {
+          "enabled": false
+        }
+      },
+      "nativeManifestSha256": "472bdfb89c09a2862b09035070fc54013ba4d684d1f893e9b4f22807529b42c3",
+      "frames": [
+        {
+          "frame": 0,
+          "count": 1,
+          "particles": [
+            {
+              "randomSeed": 4095497829,
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "velocity": [
+                0,
+                0,
+                0
+              ],
+              "size": [
+                10,
+                10,
+                10
+              ],
+              "color": [
+                1,
+                1,
+                1,
+                1
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "remainingLifetime": 0.9833341240882874,
+              "startLifetime": 1
+            }
+          ]
+        },
+        {
+          "frame": 15,
+          "count": 1,
+          "particles": [
+            {
+              "randomSeed": 4095497829,
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "velocity": [
+                0,
+                0,
+                0
+              ],
+              "size": [
+                10,
+                10,
+                10
+              ],
+              "color": [
+                1,
+                1,
+                1,
+                1
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "remainingLifetime": 0.7333341240882874,
+              "startLifetime": 1
+            }
+          ]
+        },
+        {
+          "frame": 30,
+          "count": 1,
+          "particles": [
+            {
+              "randomSeed": 4095497829,
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "velocity": [
+                0,
+                0,
+                0
+              ],
+              "size": [
+                10,
+                10,
+                10
+              ],
+              "color": [
+                1,
+                1,
+                1,
+                1
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "remainingLifetime": 0.4833340048789978,
+              "startLifetime": 1
+            }
+          ]
+        },
+        {
+          "frame": 51,
+          "count": 1,
+          "particles": [
+            {
+              "randomSeed": 4095497829,
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "velocity": [
+                0,
+                0,
+                0
+              ],
+              "size": [
+                10,
+                10,
+                10
+              ],
+              "color": [
+                1,
+                1,
+                1,
+                1
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "remainingLifetime": 0.13333427906036377,
+              "startLifetime": 1
+            }
+          ]
+        },
+        {
+          "frame": 63,
+          "count": 1,
+          "particles": [
+            {
+              "randomSeed": 3594269013,
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "velocity": [
+                0,
+                0,
+                0
+              ],
+              "size": [
+                10,
+                10,
+                10
+              ],
+              "color": [
+                1,
+                1,
+                1,
+                1
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "remainingLifetime": 0.9333343505859375,
+              "startLifetime": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "prefab": "Assets/Electricity VFX pack/ef_06.prefab",
+      "source": {
+        "prewarm": true,
+        "looping": true,
+        "startDelay": {
+          "minMaxState": 0,
+          "scalar": 0,
+          "minScalar": 0
+        },
+        "InitialModule": {
+          "size3D": false,
+          "rotation3D": false,
+          "randomizeRotationDirection": 0,
+          "startLifetime": {
+            "minMaxState": 0,
+            "scalar": 1,
+            "minScalar": 5
+          },
+          "startSpeed": {
+            "minMaxState": 0,
+            "scalar": 0,
+            "minScalar": 5
+          },
+          "startSize": {
+            "minMaxState": 0,
+            "scalar": 10,
+            "minScalar": 1
+          },
+          "startSizeY": {
+            "minMaxState": 0,
+            "scalar": 1,
+            "minScalar": 1
+          },
+          "startSizeZ": {
+            "minMaxState": 0,
+            "scalar": 1,
+            "minScalar": 1
+          },
+          "startRotation": {
+            "minMaxState": 0,
+            "scalar": 0,
+            "minScalar": 0
+          },
+          "startRotationX": {
+            "minMaxState": 0,
+            "scalar": 0,
+            "minScalar": 0
+          },
+          "startRotationY": {
+            "minMaxState": 0,
+            "scalar": 0,
+            "minScalar": 0
+          },
+          "gravityModifier": {
+            "minMaxState": 0,
+            "scalar": 0,
+            "minScalar": 0
+          },
+          "startColor": {
+            "minMaxState": 0,
+            "maxColor": {
+              "r": 1,
+              "g": 1,
+              "b": 1,
+              "a": 1
+            },
+            "minColor": {
+              "r": 1,
+              "g": 1,
+              "b": 1,
+              "a": 1
+            }
+          }
+        },
+        "ShapeModule": {
+          "enabled": true,
+          "type": 5,
+          "m_Scale": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "alignToDirection": false,
+          "randomDirectionAmount": 0,
+          "randomPositionAmount": 0,
+          "sphericalDirectionAmount": 0,
+          "m_Texture": {
+            "instanceID": 0
+          }
+        },
+        "EmissionModule": {
+          "enabled": true,
+          "rateOverTime": {
+            "minMaxState": 0,
+            "scalar": 1,
+            "minScalar": 10
+          },
+          "rateOverDistance": {
+            "minMaxState": 0,
+            "scalar": 0,
+            "minScalar": 0
+          },
+          "m_Bursts": []
+        },
+        "UVModule": {
+          "enabled": true,
+          "startFrame": {
+            "minMaxState": 0,
+            "scalar": 0,
+            "minScalar": 0
+          },
+          "frameOverTime": {
+            "minMaxState": 1,
+            "scalar": 0.9998999834060669,
+            "minScalar": 0.9998999834060669
+          }
+        },
+        "SizeModule": {
+          "enabled": false
+        },
+        "RotationModule": {
+          "enabled": false
+        },
+        "ColorModule": {
+          "enabled": false
+        },
+        "VelocityModule": {
+          "enabled": false
+        },
+        "InheritVelocityModule": {
+          "enabled": false
+        },
+        "LifetimeByEmitterSpeedModule": {
+          "enabled": false
+        },
+        "ForceModule": {
+          "enabled": false
+        },
+        "ExternalForcesModule": {
+          "enabled": false
+        },
+        "ClampVelocityModule": {
+          "enabled": false
+        },
+        "NoiseModule": {
+          "enabled": false
+        },
+        "SizeBySpeedModule": {
+          "enabled": false
+        },
+        "RotationBySpeedModule": {
+          "enabled": false
+        },
+        "ColorBySpeedModule": {
+          "enabled": false
+        },
+        "CollisionModule": {
+          "enabled": false
+        },
+        "TriggerModule": {
+          "enabled": false
+        },
+        "SubModule": {
+          "enabled": false
+        },
+        "LightsModule": {
+          "enabled": false
+        },
+        "TrailModule": {
+          "enabled": false
+        },
+        "CustomDataModule": {
+          "enabled": false
+        }
+      },
+      "nativeManifestSha256": "80555f83c693a322c4224d6d695baf3e736a79970dda5a68774973bbb76929ee",
+      "frames": [
+        {
+          "frame": 0,
+          "count": 1,
+          "particles": [
+            {
+              "randomSeed": 84328215,
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "velocity": [
+                0,
+                0,
+                0
+              ],
+              "size": [
+                10,
+                10,
+                10
+              ],
+              "color": [
+                1,
+                1,
+                1,
+                1
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "remainingLifetime": 0.9833341240882874,
+              "startLifetime": 1
+            }
+          ]
+        },
+        {
+          "frame": 15,
+          "count": 1,
+          "particles": [
+            {
+              "randomSeed": 84328215,
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "velocity": [
+                0,
+                0,
+                0
+              ],
+              "size": [
+                10,
+                10,
+                10
+              ],
+              "color": [
+                1,
+                1,
+                1,
+                1
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "remainingLifetime": 0.7333341240882874,
+              "startLifetime": 1
+            }
+          ]
+        },
+        {
+          "frame": 30,
+          "count": 1,
+          "particles": [
+            {
+              "randomSeed": 84328215,
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "velocity": [
+                0,
+                0,
+                0
+              ],
+              "size": [
+                10,
+                10,
+                10
+              ],
+              "color": [
+                1,
+                1,
+                1,
+                1
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "remainingLifetime": 0.4833340048789978,
+              "startLifetime": 1
+            }
+          ]
+        },
+        {
+          "frame": 51,
+          "count": 1,
+          "particles": [
+            {
+              "randomSeed": 84328215,
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "velocity": [
+                0,
+                0,
+                0
+              ],
+              "size": [
+                10,
+                10,
+                10
+              ],
+              "color": [
+                1,
+                1,
+                1,
+                1
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "remainingLifetime": 0.13333427906036377,
+              "startLifetime": 1
+            }
+          ]
+        },
+        {
+          "frame": 63,
+          "count": 1,
+          "particles": [
+            {
+              "randomSeed": 510064970,
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "velocity": [
+                0,
+                0,
+                0
+              ],
+              "size": [
+                10,
+                10,
+                10
+              ],
+              "color": [
+                1,
+                1,
+                1,
+                1
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "remainingLifetime": 0.9333343505859375,
+              "startLifetime": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "prefab": "Assets/Electricity VFX pack/ef_07.prefab",
+      "source": {
+        "prewarm": true,
+        "looping": true,
+        "startDelay": {
+          "minMaxState": 0,
+          "scalar": 0,
+          "minScalar": 0
+        },
+        "InitialModule": {
+          "size3D": false,
+          "rotation3D": false,
+          "randomizeRotationDirection": 0,
+          "startLifetime": {
+            "minMaxState": 0,
+            "scalar": 1,
+            "minScalar": 5
+          },
+          "startSpeed": {
+            "minMaxState": 0,
+            "scalar": 0,
+            "minScalar": 5
+          },
+          "startSize": {
+            "minMaxState": 0,
+            "scalar": 10,
+            "minScalar": 1
+          },
+          "startSizeY": {
+            "minMaxState": 0,
+            "scalar": 1,
+            "minScalar": 1
+          },
+          "startSizeZ": {
+            "minMaxState": 0,
+            "scalar": 1,
+            "minScalar": 1
+          },
+          "startRotation": {
+            "minMaxState": 0,
+            "scalar": 0,
+            "minScalar": 0
+          },
+          "startRotationX": {
+            "minMaxState": 0,
+            "scalar": 0,
+            "minScalar": 0
+          },
+          "startRotationY": {
+            "minMaxState": 0,
+            "scalar": 0,
+            "minScalar": 0
+          },
+          "gravityModifier": {
+            "minMaxState": 0,
+            "scalar": 0,
+            "minScalar": 0
+          },
+          "startColor": {
+            "minMaxState": 0,
+            "maxColor": {
+              "r": 1,
+              "g": 1,
+              "b": 1,
+              "a": 1
+            },
+            "minColor": {
+              "r": 1,
+              "g": 1,
+              "b": 1,
+              "a": 1
+            }
+          }
+        },
+        "ShapeModule": {
+          "enabled": true,
+          "type": 5,
+          "m_Scale": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "alignToDirection": false,
+          "randomDirectionAmount": 0,
+          "randomPositionAmount": 0,
+          "sphericalDirectionAmount": 0,
+          "m_Texture": {
+            "instanceID": 0
+          }
+        },
+        "EmissionModule": {
+          "enabled": true,
+          "rateOverTime": {
+            "minMaxState": 0,
+            "scalar": 1,
+            "minScalar": 10
+          },
+          "rateOverDistance": {
+            "minMaxState": 0,
+            "scalar": 0,
+            "minScalar": 0
+          },
+          "m_Bursts": []
+        },
+        "UVModule": {
+          "enabled": true,
+          "startFrame": {
+            "minMaxState": 0,
+            "scalar": 0,
+            "minScalar": 0
+          },
+          "frameOverTime": {
+            "minMaxState": 1,
+            "scalar": 0.9998999834060669,
+            "minScalar": 0.9998999834060669
+          }
+        },
+        "SizeModule": {
+          "enabled": false
+        },
+        "RotationModule": {
+          "enabled": false
+        },
+        "ColorModule": {
+          "enabled": false
+        },
+        "VelocityModule": {
+          "enabled": false
+        },
+        "InheritVelocityModule": {
+          "enabled": false
+        },
+        "LifetimeByEmitterSpeedModule": {
+          "enabled": false
+        },
+        "ForceModule": {
+          "enabled": false
+        },
+        "ExternalForcesModule": {
+          "enabled": false
+        },
+        "ClampVelocityModule": {
+          "enabled": false
+        },
+        "NoiseModule": {
+          "enabled": false
+        },
+        "SizeBySpeedModule": {
+          "enabled": false
+        },
+        "RotationBySpeedModule": {
+          "enabled": false
+        },
+        "ColorBySpeedModule": {
+          "enabled": false
+        },
+        "CollisionModule": {
+          "enabled": false
+        },
+        "TriggerModule": {
+          "enabled": false
+        },
+        "SubModule": {
+          "enabled": false
+        },
+        "LightsModule": {
+          "enabled": false
+        },
+        "TrailModule": {
+          "enabled": false
+        },
+        "CustomDataModule": {
+          "enabled": false
+        }
+      },
+      "nativeManifestSha256": "dd54304845c43a586ecb3334756c5d780ce0471440fc2b6736f8b4b3b3ddf5c7",
+      "frames": [
+        {
+          "frame": 0,
+          "count": 1,
+          "particles": [
+            {
+              "randomSeed": 3635976293,
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "velocity": [
+                0,
+                0,
+                0
+              ],
+              "size": [
+                10,
+                10,
+                10
+              ],
+              "color": [
+                1,
+                1,
+                1,
+                1
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "remainingLifetime": 0.9833341240882874,
+              "startLifetime": 1
+            }
+          ]
+        },
+        {
+          "frame": 15,
+          "count": 1,
+          "particles": [
+            {
+              "randomSeed": 3635976293,
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "velocity": [
+                0,
+                0,
+                0
+              ],
+              "size": [
+                10,
+                10,
+                10
+              ],
+              "color": [
+                1,
+                1,
+                1,
+                1
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "remainingLifetime": 0.7333341240882874,
+              "startLifetime": 1
+            }
+          ]
+        },
+        {
+          "frame": 30,
+          "count": 1,
+          "particles": [
+            {
+              "randomSeed": 3635976293,
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "velocity": [
+                0,
+                0,
+                0
+              ],
+              "size": [
+                10,
+                10,
+                10
+              ],
+              "color": [
+                1,
+                1,
+                1,
+                1
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "remainingLifetime": 0.4833340048789978,
+              "startLifetime": 1
+            }
+          ]
+        },
+        {
+          "frame": 51,
+          "count": 1,
+          "particles": [
+            {
+              "randomSeed": 3635976293,
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "velocity": [
+                0,
+                0,
+                0
+              ],
+              "size": [
+                10,
+                10,
+                10
+              ],
+              "color": [
+                1,
+                1,
+                1,
+                1
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "remainingLifetime": 0.13333427906036377,
+              "startLifetime": 1
+            }
+          ]
+        },
+        {
+          "frame": 63,
+          "count": 1,
+          "particles": [
+            {
+              "randomSeed": 1513054669,
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "velocity": [
+                0,
+                0,
+                0
+              ],
+              "size": [
+                10,
+                10,
+                10
+              ],
+              "color": [
+                1,
+                1,
+                1,
+                1
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "remainingLifetime": 0.9333343505859375,
+              "startLifetime": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "prefab": "Assets/Electricity VFX pack/ef_12.prefab",
+      "source": {
+        "prewarm": true,
+        "looping": true,
+        "startDelay": {
+          "minMaxState": 0,
+          "scalar": 0,
+          "minScalar": 0
+        },
+        "InitialModule": {
+          "size3D": false,
+          "rotation3D": false,
+          "randomizeRotationDirection": 0,
+          "startLifetime": {
+            "minMaxState": 0,
+            "scalar": 1,
+            "minScalar": 5
+          },
+          "startSpeed": {
+            "minMaxState": 0,
+            "scalar": 0,
+            "minScalar": 5
+          },
+          "startSize": {
+            "minMaxState": 0,
+            "scalar": 10,
+            "minScalar": 1
+          },
+          "startSizeY": {
+            "minMaxState": 0,
+            "scalar": 1,
+            "minScalar": 1
+          },
+          "startSizeZ": {
+            "minMaxState": 0,
+            "scalar": 1,
+            "minScalar": 1
+          },
+          "startRotation": {
+            "minMaxState": 0,
+            "scalar": 0,
+            "minScalar": 0
+          },
+          "startRotationX": {
+            "minMaxState": 0,
+            "scalar": 0,
+            "minScalar": 0
+          },
+          "startRotationY": {
+            "minMaxState": 0,
+            "scalar": 0,
+            "minScalar": 0
+          },
+          "gravityModifier": {
+            "minMaxState": 0,
+            "scalar": 0,
+            "minScalar": 0
+          },
+          "startColor": {
+            "minMaxState": 0,
+            "maxColor": {
+              "r": 1,
+              "g": 1,
+              "b": 1,
+              "a": 1
+            },
+            "minColor": {
+              "r": 1,
+              "g": 1,
+              "b": 1,
+              "a": 1
+            }
+          }
+        },
+        "ShapeModule": {
+          "enabled": true,
+          "type": 5,
+          "m_Scale": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "alignToDirection": false,
+          "randomDirectionAmount": 0,
+          "randomPositionAmount": 0,
+          "sphericalDirectionAmount": 0,
+          "m_Texture": {
+            "instanceID": 0
+          }
+        },
+        "EmissionModule": {
+          "enabled": true,
+          "rateOverTime": {
+            "minMaxState": 0,
+            "scalar": 1,
+            "minScalar": 10
+          },
+          "rateOverDistance": {
+            "minMaxState": 0,
+            "scalar": 0,
+            "minScalar": 0
+          },
+          "m_Bursts": []
+        },
+        "UVModule": {
+          "enabled": true,
+          "startFrame": {
+            "minMaxState": 0,
+            "scalar": 0,
+            "minScalar": 0
+          },
+          "frameOverTime": {
+            "minMaxState": 1,
+            "scalar": 0.9998999834060669,
+            "minScalar": 0.9998999834060669
+          }
+        },
+        "SizeModule": {
+          "enabled": false
+        },
+        "RotationModule": {
+          "enabled": false
+        },
+        "ColorModule": {
+          "enabled": false
+        },
+        "VelocityModule": {
+          "enabled": false
+        },
+        "InheritVelocityModule": {
+          "enabled": false
+        },
+        "LifetimeByEmitterSpeedModule": {
+          "enabled": false
+        },
+        "ForceModule": {
+          "enabled": false
+        },
+        "ExternalForcesModule": {
+          "enabled": false
+        },
+        "ClampVelocityModule": {
+          "enabled": false
+        },
+        "NoiseModule": {
+          "enabled": false
+        },
+        "SizeBySpeedModule": {
+          "enabled": false
+        },
+        "RotationBySpeedModule": {
+          "enabled": false
+        },
+        "ColorBySpeedModule": {
+          "enabled": false
+        },
+        "CollisionModule": {
+          "enabled": false
+        },
+        "TriggerModule": {
+          "enabled": false
+        },
+        "SubModule": {
+          "enabled": false
+        },
+        "LightsModule": {
+          "enabled": false
+        },
+        "TrailModule": {
+          "enabled": false
+        },
+        "CustomDataModule": {
+          "enabled": false
+        }
+      },
+      "nativeManifestSha256": "cfc41432ff098ef4a29718895e3aef8cd4749dfa790c84653169aa6bc01f2457",
+      "frames": [
+        {
+          "frame": 0,
+          "count": 1,
+          "particles": [
+            {
+              "randomSeed": 3501557433,
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "velocity": [
+                0,
+                0,
+                0
+              ],
+              "size": [
+                10,
+                10,
+                10
+              ],
+              "color": [
+                1,
+                1,
+                1,
+                1
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "remainingLifetime": 0.9833340644836426,
+              "startLifetime": 1
+            }
+          ]
+        },
+        {
+          "frame": 15,
+          "count": 1,
+          "particles": [
+            {
+              "randomSeed": 3501557433,
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "velocity": [
+                0,
+                0,
+                0
+              ],
+              "size": [
+                10,
+                10,
+                10
+              ],
+              "color": [
+                1,
+                1,
+                1,
+                1
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "remainingLifetime": 0.7333340644836426,
+              "startLifetime": 1
+            }
+          ]
+        },
+        {
+          "frame": 30,
+          "count": 1,
+          "particles": [
+            {
+              "randomSeed": 3501557433,
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "velocity": [
+                0,
+                0,
+                0
+              ],
+              "size": [
+                10,
+                10,
+                10
+              ],
+              "color": [
+                1,
+                1,
+                1,
+                1
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "remainingLifetime": 0.4833340048789978,
+              "startLifetime": 1
+            }
+          ]
+        },
+        {
+          "frame": 51,
+          "count": 1,
+          "particles": [
+            {
+              "randomSeed": 3501557433,
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "velocity": [
+                0,
+                0,
+                0
+              ],
+              "size": [
+                10,
+                10,
+                10
+              ],
+              "color": [
+                1,
+                1,
+                1,
+                1
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "remainingLifetime": 0.133334219455719,
+              "startLifetime": 1
+            }
+          ]
+        },
+        {
+          "frame": 63,
+          "count": 1,
+          "particles": [
+            {
+              "randomSeed": 1105901820,
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "velocity": [
+                0,
+                0,
+                0
+              ],
+              "size": [
+                10,
+                10,
+                10
+              ],
+              "color": [
+                1,
+                1,
+                1,
+                1
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "remainingLifetime": 0.9333344101905823,
+              "startLifetime": 1
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
