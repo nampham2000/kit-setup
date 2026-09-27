@@ -29,3 +29,10 @@ test('native BMP import preserves compressed pixels, mip levels and converted PN
  const stale=structuredClone(capture);stale.textures[0].sourceTextureSha256='stale';assert.throws(()=>normalize(stale,[{unityPath:'Assets/TextureImportRegression/Synthetic.bmp',cocosMeta:'converted.png.meta',output:'native.json'}],fixture,root,'fixture'),/changed after/);
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+test('native producer keeps the accepted Unity ASTC Graphics.Blit readback route',()=>{
+ const producer=fs.readFileSync(path.join(__dirname,'capture-imported-texture-mips.cs'),'utf8');
+ assert.match(producer,/StartsWith\("ASTC_"/);assert.match(producer,/Graphics\.Blit\(texture, target, material\)/);
+ assert.match(producer,/image\.ReadPixels/);assert.match(producer,/astcGpuReadbackFallback/);
+ assert.doesNotMatch(producer,/!SystemInfo\.SupportsTextureFormat\(texture\.format\)\)\s*throw/);
+});
