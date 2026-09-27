@@ -5,6 +5,7 @@ public static string Main(){
  var output="OUTPUT_FILE";var requestId="REQUEST_ID";
  if(System.IO.File.Exists(output)&&Newtonsoft.Json.Linq.JObject.Parse(System.IO.File.ReadAllText(output))["requestId"]?.ToString()==requestId)return "Existing atomic capture for this request";
  if(QualitySettings.activeColorSpace!=ColorSpace.Linear)throw new System.Exception("Linear reference required");
+ AssetDatabase.ImportAsset("SHADER_ASSET_PATH",ImportAssetOptions.ForceSynchronousImport);
  var shader=AssetDatabase.LoadAssetAtPath<Shader>("SHADER_ASSET_PATH");if(!shader||!shader.isSupported)throw new System.Exception("Native mip shader not ready");
  var material=new Material(shader);var textures=new List<object>();var previous=RenderTexture.active;var previousWrite=GL.sRGBWrite;
  try{foreach(var sourcePath in Newtonsoft.Json.JsonConvert.DeserializeObject<string[]>(System.Text.Encoding.UTF8.GetString(System.Convert.FromBase64String("ASSET_PATHS_BASE64")))){
