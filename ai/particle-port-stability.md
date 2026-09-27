@@ -175,3 +175,19 @@ prove UV orientation: seeded Electro Charge Arm replay exposed the width mirror
 (frame-15 foreground overlap improved from .243 to .902 after correcting it).
 Keep the residual thin-edge/radial approximation visible in the image report.
 
+Limit Velocity curve age is the beginning of the simulation step. Cocos decrements
+lifetime before module animation, so temporarily restore remainingLifetime by the
+effective particle delta while evaluating the limit, then restore it immediately.
+Do not shift size/color or other modules. Twenty-one clamped native Electro samples
+cover this phase; constant-limit and animated-velocity composition regressions
+remain required. Live sparks position error fell from .0086 to .000044 units.
+
+Validate native primary material links before visual capture. Two original Electro
+prefabs contained dangling material GUIDs despite same-name authored materials and
+textures in the pack. Null filtering in a material inventory hid this defect;
+native frames were magenta while Cocos retained template material. The porter must
+raise PARTICLE_PRIMARY_MATERIAL_UNRESOLVED instead of treating that template as a
+successful conversion. Repair only a documented source/reference mapping, retain
+before/after GUID and asset hashes, and recapture affected references. Never tune
+Cocos to match a pink error shader or silently infer a missing material by name.
+

@@ -459,6 +459,17 @@ namespace CcPlayable.UnityIntelligence.Capture
                 var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(spawn.prefab);
                 if (prefab == null) { ReferenceCapture.Fail(request, manifest, "spawn prefab not found: " + spawn.prefab); return; }
                 var instance = Instantiate(prefab);
+                foreach (var renderer in instance.GetComponentsInChildren<ParticleSystemRenderer>())
+                {
+                    if (!renderer.enabled || renderer.renderMode == ParticleSystemRenderMode.None) continue;
+                    var material = renderer.sharedMaterial;
+                    if (material == null || material.shader == null || !material.shader.isSupported
+                        || material.shader.name == "Hidden/InternalErrorShader" || material.passCount == 0)
+                    {
+                        ReferenceCapture.Fail(request, manifest, "Invalid primary particle material in native reference: " + spawn.prefab + " / " + renderer.name);
+                        return;
+                    }
+                }
                 instance.transform.position = spawn.position;
                 if (spawn.useRotation) instance.transform.eulerAngles = spawn.eulerAngles;
                 foreach(var body in instance.GetComponentsInChildren<Rigidbody>()) {

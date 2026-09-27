@@ -156,6 +156,11 @@ module.exports = function createParticlePorter(deps = {}) {
       const materialAsset = !usedBuiltInDefaultParticleMaterial && materialRef?.guid && unityDb?.get
         ? unityDb.get(String(materialRef.guid))
         : null;
+      if (!usedBuiltInDefaultParticleMaterial && !materialAsset) {
+        reporter.high('PARTICLE_PRIMARY_MATERIAL_UNRESOLVED', options.src || '', gameObject?.name || '',
+          'Unity primary particle material is missing or its GUID cannot be resolved. Do not treat a template/stale Cocos material as source parity; repair and recapture the native reference first.',
+          materialRef?.guid ? String(materialRef.guid) : 'empty primary material slot');
+      }
       // Unity sorts transparent renderers by render queue before camera distance.
       Object.defineProperty(builder.objects[particleId], 'unityRenderQueue', {
         value: usedBuiltInDefaultParticleMaterial ? 3000 : materialAsset ? unityMaterialRenderQueue(materialAsset, unityDb) : null,
