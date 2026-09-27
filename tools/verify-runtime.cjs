@@ -616,9 +616,12 @@ async function runOne(target, options) {
   const runtimeProfile = createRuntimeProfile(PROJECT_ROOT);
   const userDataDir = runtimeProfile.directory;
 
+  // PLAYABLE_RUNTIME_GPU=1 keeps the GPU (ANGLE) in headless Chrome: software GL on a loaded machine drops heavy
+  // scenes to a few fps, which frame-paced gameplay (Unity per-frame input) cannot pass. Default stays --disable-gpu.
+  const gpuArgs = process.env.PLAYABLE_RUNTIME_GPU === '1' ? [] : ['--disable-gpu'];
   const child = spawn(browser, [
     '--headless=new',
-    '--disable-gpu',
+    ...gpuArgs,
     '--no-first-run',
     '--no-default-browser-check',
     '--disable-extensions',
