@@ -35,11 +35,25 @@ export function installUnityParticleSimulationStep(system: ParticleSystem, maxim
         // Inactive prefabs can be staged before ParticleSystem.onLoad creates
         // the CPU processor. Initialize birth hooks before their first Update.
         installUnityParticleBirthTiming(system,gravityY);
-        if (!(dt > maximumDeltaTime) || !this._isPlaying) { update.call(this, dt); return; }
-        let remaining = dt;
-        while (remaining > 1e-9) {
-            const step = Math.min(remaining, maximumDeltaTime);
-            update.call(this, step); remaining -= step;
+        if (!(dt > maximumDeltaTime) || !this._isPlaying) update.call(this, dt);
+        else {
+            let remaining = dt;
+            while (remaining > 1e-9) {
+                const step = Math.min(remaining, maximumDeltaTime);
+                update.call(this, step); remaining -= step;
+            }
+        }
+        // Creator detaches an empty CPU model in beforeRender and only sets
+        // _needAttach in the next beforeRender after a birth. That is too late
+        // for update to reattach it: the first live frame is rendered blank.
+        // Match Unity's same-frame visibility without advancing simulation.
+        const processor = this.processor;
+        const model = processor?.getModel?.();
+        if (model && !model.scene && !this._isCulled && this.enabledInHierarchy !== false && this.getParticleCount() > 0) {
+            processor.attachToScene();
+            const trail = this.trailModule;
+            if (trail?.enable && !trail.getModel()?.scene) trail._attachToScene();
+            if (model.scene) this._needAttach = false;
         }
     };
 }
