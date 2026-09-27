@@ -4,13 +4,23 @@ import { Color, ParticleSystem } from 'cc';
 import { UnityStartRotationKernel, unityStartSpeedRandom } from './UnityParticleStartRotation';
 interface Curve {minMaxState:number;scalar:number;minScalar:number;}
 export interface UnityInitialStateSpec {
-    autoRandomSeed:boolean;randomSeed:number;size3D:boolean;rotation3D:boolean;
+    autoRandomSeed:boolean;randomSeed:number;size3D:boolean;rotation3D:boolean;meshScalarAxis?:boolean;
     lifetime:Curve;speed:Curve;size:Curve[];rotation:Curve[];signs:number[];
     color:{min:number[];max:number[];random:boolean};
 }
 export function sampleUnityInitialCurve(c:Curve,u:number,minimum=-Infinity):number {
     const max=Math.max(minimum,c.scalar),min=Math.max(minimum,c.minScalar);
     return c.minMaxState===0?max:Math.fround(min+Math.fround(Math.fround(max-min)*u));
+}
+/** Scalar Mesh rotation uses axisOfRotation, not Euler Z. The measured unrotated
+ * Sphere shape uses normalize(cross(+Z, birth direction)). Reflect that axial
+ * vector, then convert to the source shader's Z-X-Y Euler ABI without allocations. */
+export function packUnityScalarMeshRotation(out:any,angle:number,dx:number,dy:number):void {
+    const length=Math.hypot(dx,dy),s=Math.sin(angle*.5);
+    const x=length>1e-10?dy/length*s:0,y=length>1e-10?-dx/length*s:-s,w=Math.cos(angle*.5);
+    const sx=Math.max(-1,Math.min(1,2*w*x));
+    if(Math.abs(sx)<.9999999)out.set(Math.asin(sx),Math.atan2(2*w*y,1-2*(x*x+y*y)),Math.atan2(2*x*y,1-2*x*x));
+    else out.set(Math.asin(sx),Math.atan2(2*w*y,1-2*y*y),0);
 }
 /** Independent native birth channels; keep stock engine module seeds unsigned-safe. */
 export function installUnityParticleInitialState(system:ParticleSystem,spec:UnityInitialStateSpec):void {
@@ -25,6 +35,11 @@ export function installUnityParticleInitialState(system:ParticleSystem,spec:Unit
     runtime.unityStartRotation=state;
     installUnityParticleSizeRandom(system);
     const shape=installUnityParticleShapeRandom(system);
+    if(spec.meshScalarAxis){
+        if(!shape)throw new Error('Scalar mesh axis requires the measured native shape stream');
+        const module=system.shapeModule as any,emitShape=module.emit;
+        module.emit=function(p:any):void{emitShape.call(this,p);p.unityAxisDirectionX=p.velocity.x;p.unityAxisDirectionY=p.velocity.y;};
+    }
     let initialized=false,index=0,emitting=false;
     const emit=runtime.emit,born=processor.setNewParticle,clear=processor.clear;
     const bind=(target:any,curve:Curve,channel:number,sign=1,minimum=-Infinity):void=>{
@@ -64,6 +79,7 @@ export function installUnityParticleInitialState(system:ParticleSystem,spec:Unit
         if(emitting){
             p.unityNativeSeed=kernel.birthSeed(index);
             p.unityStartRotationSeed=p.unityNativeSeed;
+            if(spec.meshScalarAxis)packUnityScalarMeshRotation(p.rotation,p.startEuler.z,p.unityAxisDirectionX,p.unityAxisDirectionY);
             if(!spec.size3D){p.startSize.z=p.startSize.x;p.size.z=p.size.x;}
         }
         born.call(this,p);

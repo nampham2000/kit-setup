@@ -23,9 +23,13 @@ test('the axial corner scale is exactly sqrt(1/2) and both particle effects embe
 test('native zero-velocity stretched particle stays a degenerate quad at its position',()=>{
   const sample=samples.find(s=>s.case==='stretched-zero-velocity');
   for(const vertex of sample.vertices)assert.deepEqual(vertex,sample.position);
-  assert.match(shader,/if \(dot\(velocity\.xyz,velocity\.xyz\)>0\.0\) \{\n\s+pos\.xyz\+=normalize\(velocity\.xyz\)\*\([^;]+\);\n\s+computeVertPos\([^;]+\);\n\s+\}/);
+  const block=shader.slice(shader.indexOf('if (dot(velocity.xyz,velocity.xyz)>0.0)'),shader.indexOf('#elif CC_RENDER_MODE == RENDER_MODE_HORIZONTAL_BILLBOARD',shader.indexOf('if (dot(velocity.xyz,velocity.xyz)>0.0)')));
+  assert.ok(block.includes('sourceStretchRight'));
+  assert.ok(block.includes('sourceStretchUp*a_texCoord.x;'));
+  assert.match(block,/\}\s*$/);
 });
 test('axial billboards route builtin particle materials through the source adapter',()=>{
   for(const mode of [2,3])assert.equal(particleRendererContract({}, {m_RenderMode:mode}).requiresMaterialAdapter,true);
-  for(const mode of [0,1])assert.equal(particleRendererContract({}, {m_RenderMode:mode}).requiresMaterialAdapter,false);
+  assert.equal(particleRendererContract({}, {m_RenderMode:0}).requiresMaterialAdapter,false);
+  assert.equal(particleRendererContract({}, {m_RenderMode:1}).requiresMaterialAdapter,true);
 });

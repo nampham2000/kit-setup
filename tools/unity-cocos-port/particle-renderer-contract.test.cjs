@@ -38,3 +38,10 @@ test('Min/Max Particle Size keep Unity defaults and only the measured stretched 
   assert.ok(contract({}, {m_RenderMode:1,m_MinParticleSize:0.2}).unsupported.includes('stretched-min-particle-size'));
   assert.deepEqual(contract({}, {m_RenderMode:0,m_MinParticleSize:0.2}).unsupported,[]);
 });
+
+test('scalar mesh axis binding is bounded to measured local Sphere births',()=>{
+ const p={moveWithTransform:0,InitialModule:{rotation3D:false},ShapeModule:{enabled:true,type:0,radius:{value:.01},arc:{mode:0},m_Rotation:{x:0,y:0,z:0}}},r={m_RenderMode:4,m_RenderAlignment:2};
+ assert.equal(!!contract(p,r).meshScalarAxis,true);
+ for(const changed of [{...p,moveWithTransform:1},{...p,InitialModule:{rotation3D:true}},{...p,RotationModule:{enabled:true}},{...p,ShapeModule:{...p.ShapeModule,type:2}}])assert.equal(!!contract(changed,r).meshScalarAxis,false);
+ assert.equal(!!contract(p,{...r,m_RenderAlignment:1}).meshScalarAxis,false);
+});

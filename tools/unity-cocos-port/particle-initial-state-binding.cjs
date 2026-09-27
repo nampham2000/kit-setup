@@ -50,7 +50,7 @@ function attachInitialStateRuntime(builder,reporter,options){
    reporter.low('PARTICLE_INITIAL_STATE_CONSTANT_PREWARM',options.src||'',node,'Native-verified constant point billboard initialization; prewarm timing uses UnityParticlePrewarmAdapter. No initialization RNG claim.');continue;
   }
   if(reasons.length||!classId||signs?.length!==3){reporter.high('PARTICLE_INITIAL_STATE_ADAPTER_REQUIRED',options.src||'',node,reasons.join(', ')||(!classId?'Refresh AssetDB and rerun to import UnityParticleInitialStateAdapter':'Missing native renderer Euler signs'));continue;}
-  builder.addComponent(p.node.__id__,classId,{source:{__id__:id},sourceContract:JSON.stringify({...spec,signs})},null,`cmp-unity-initial-state-${id}`);
+  builder.addComponent(p.node.__id__,classId,{source:{__id__:id},sourceContract:JSON.stringify({...spec,signs,...(p.unityRendererContract?.meshScalarAxis?{meshScalarAxis:true}:{})})},null,`cmp-unity-initial-state-${id}`);
  }
 }
 module.exports={initialStateContract,constantPointPrewarm,stageInitialStateRuntime,attachInitialStateRuntime};
