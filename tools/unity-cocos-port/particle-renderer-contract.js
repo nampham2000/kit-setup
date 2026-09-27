@@ -48,7 +48,7 @@ function particleRendererContract(particle = {}, renderer = {}) {
     && Number(initial.startSpeed?.minMaxState) === 0 && Number(initial.startSpeed?.scalar) > 0
     && constant(initial.gravityModifier, 0)
     && ['VelocityModule', 'ForceModule', 'NoiseModule'].every(key => particle[key] && Number(particle[key].enabled) === 0);
-  const stretchedPivot = mode === 1 && Number(pivot.y || 0) !== 0;
+  const stretched = mode === 1;
   // BakeMesh (fixtures/particle-pivot-alignment-native.json): View billboards move by
   // pivot*size in their rotated camera plane and by pivot.z*size.x toward the camera;
   // Mesh vertices are offset by pivot*mesh bounds (Unity negates Z) before size and
@@ -91,11 +91,15 @@ function particleRendererContract(particle = {}, renderer = {}) {
     && sizeBound > sizeClamp.max * CLAMP_REFERENCE_VIEW_WIDTH;
   return {
     version: 4, sorting, mode, alignment, localBillboard, worldBillboard, straightBoxVelocity,
+    meshScalarAxis: mesh && alignment===2 && !initial.rotation3D && !particle.RotationModule?.enabled
+      && particle.moveWithTransform===0 && shape.enabled && shape.type===0 && shape.radius?.value>0
+      && !shape.alignToDirection && !shape.randomDirectionAmount && !shape.sphericalDirectionAmount && !shape.randomPositionAmount
+      && shape.arc?.mode===0 && (shape.arc.spread??0)===0 && ['x','y','z'].every(k=>shape.m_Rotation?.[k]===0),
     cocosAlignment: localBillboard || straightBoxVelocity || alignment === 2 ? 0 : alignment === 0 ? 2 : 1,
     eulerSigns: mesh ? [-1, -1, 1] : localBillboard || worldBillboard ? [1, 1, -1] : viewBillboard ? [-1, -1, -1] : [-1, 1, -1],
     // Horizontal/Vertical billboards need the source vertex program for Unity's
     // size/sqrt(2) corner geometry; builtin particle effects draw them at size.
-    requiresMaterialAdapter: localBillboard || worldBillboard || stretchedPivot || mesh || mode === 2 || mode === 3 || (viewBillboard && pivotSet) || clampReachable,
+    requiresMaterialAdapter: localBillboard || worldBillboard || stretched || mesh || mode === 2 || mode === 3 || (viewBillboard && pivotSet) || clampReachable,
     clampReachable,
     // w: 2 Local billboard; 3 Mesh rotation already in world space (World alignment,
     // or the Velocity frame written by UnityParticleMeshFrameAdapter).

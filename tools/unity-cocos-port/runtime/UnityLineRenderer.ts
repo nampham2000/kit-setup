@@ -19,7 +19,9 @@ export interface UnityLineRendererContract {
     useWorldSpace: boolean;
 }
 
-const MAX_POINTS = 64;
+/** Initial strip capacity; grows on demand (runtime trails) up to the 16-bit index limit. */
+const INITIAL_POINTS = 64;
+const MAX_POINTS = 32767;
 const segment = new Vec3(), toCamera = new Vec3(), side = new Vec3(), world = new Vec3(), prev = new Vec3(), next = new Vec3(), axisZ = new Vec3();
 /** sampleKeys output: [index a, index b, fraction]; module scratch keeps lateUpdate allocation-free. */
 const sample = { a: 0, b: 0, t: 0 };
@@ -38,6 +40,14 @@ function sampleKeys(keys: { time: number }[], t: number): void {
     }
 }
 
+/** Unity defaults for a LineRenderer added at runtime (AddComponent<LineRenderer>()). */
+function defaultContract(): UnityLineRendererContract {
+    return {
+        colorKeys: [{ time: 0, r: 1, g: 1, b: 1 }], alphaKeys: [{ time: 0, a: 1 }], widthMultiplier: 1, widthKeys: [{ time: 0, value: 1 }],
+        textureMode: 0, alignment: 0, numCapVertices: 0, numCornerVertices: 0, loop: false, useWorldSpace: true,
+    };
+}
+
 /**
  * Unity LineRenderer as a quad strip on a child node at world origin: the strip is rebuilt in
  * world space each frame through a dynamic mesh, so `setPosition` (Hovl_Laser writes positions
@@ -46,6 +56,10 @@ function sampleKeys(keys: { time: number }[], t: number): void {
  * widthMultiplier over the normalized line length; color follows the gradient; UVs follow
  * textureMode (Stretch: u 0..1 along the line). Corner/cap vertices are not generated.
  * The strip is hidden while this component (or its node) is disabled.
+ *
+ * Runtime-created lines (scripts calling AddComponent<LineRenderer>()) start from Unity's
+ * defaults and use the positionCount / startWidth / endWidth / startColor / endColor /
+ * useWorldSpace / sharedMaterial setters below; the strip grows past 64 points on demand.
  */
 @ccclass('UnityLineRenderer')
 export class UnityLineRenderer extends Component {
@@ -58,16 +72,21 @@ export class UnityLineRenderer extends Component {
     private renderer: MeshRenderer | null = null;
     private child: Node | null = null;
     private camera: Camera | null = null;
-    private readonly worldPoints: Vec3[] = Array.from({ length: MAX_POINTS }, () => new Vec3());
-    private readonly cumulative = new Float32Array(MAX_POINTS);
-    private readonly _positions = new Float32Array(MAX_POINTS * 2 * 3);
-    private readonly _uvs = new Float32Array(MAX_POINTS * 2 * 2);
-    private readonly _colors = new Float32Array(MAX_POINTS * 2 * 4);
-    private readonly _normals = new Float32Array(MAX_POINTS * 2 * 3);
-    private readonly _indices = new Uint16Array((MAX_POINTS - 1) * 6);
-    /** Geometry views per point count, built once (lines keep a fixed count in practice). */
+    private capacity = 0;
+    private worldPoints: Vec3[] = [];
+    private cumulative = new Float32Array(0);
+    private _positions = new Float32Array(0);
+    private _uvs = new Float32Array(0);
+    private _colors = new Float32Array(0);
+    private _normals = new Float32Array(0);
+    private _indices = new Uint16Array(0);
+    /** Geometry views per point count, built once per capacity (lines keep a fixed count in practice). */
     private readonly views = new Map<number, primitives.IDynamicGeometry>();
     private visible = true;
+    /** Unity draws nothing below two points. */
+    private drawable = true;
+    /** LineRenderer.positionCount; -1 keeps the serialized positions.length. */
+    private count = -1;
 
     /** Unity LineRenderer.enabled: the strip stays allocated, only drawing stops. */
     setVisible(visible: boolean): void {
@@ -82,7 +101,44 @@ export class UnityLineRenderer extends Component {
         return this.renderer ? this.renderer.material : null;
     }
 
-    /** Unity LineRenderer.SetPosition; local or world per useWorldSpace. Indices past the strip capacity are ignored. */
+    /** Unity `Renderer.sharedMaterial` setter. */
+    set sharedMaterial(material: Material | null) {
+        this.material = material;
+        if (this.renderer && material) this.renderer.setSharedMaterial(material, 0);
+    }
+
+    /** Unity LineRenderer.positionCount. */
+    get positionCount(): number { return this.count >= 0 ? this.count : this.positions.length; }
+    set positionCount(value: number) {
+        const n = Math.max(0, Math.min(MAX_POINTS, Math.floor(value)));
+        while (this.positions.length < n) this.positions.push(new Vec3());
+        this.count = n;
+        this.ensureCapacity(n);
+    }
+
+    set useWorldSpace(value: boolean) { this.ensureContract().useWorldSpace = value; }
+    get useWorldSpace(): boolean { return this.ensureContract().useWorldSpace; }
+
+    /** Unity LineRenderer.startWidth/endWidth: a two-key width curve, multiplier 1. */
+    setWidths(start: number, end: number): void {
+        const c = this.ensureContract();
+        c.widthMultiplier = 1;
+        if (c.widthKeys.length !== 2) c.widthKeys = [{ time: 0, value: 0 }, { time: 1, value: 0 }];
+        c.widthKeys[0].time = 0; c.widthKeys[0].value = start;
+        c.widthKeys[1].time = 1; c.widthKeys[1].value = end;
+    }
+
+    /** Unity LineRenderer.startColor/endColor (rgba 0..1): a two-key gradient. */
+    setColors(r0: number, g0: number, b0: number, a0: number, r1: number, g1: number, b1: number, a1: number): void {
+        const c = this.ensureContract();
+        if (c.colorKeys.length !== 2) c.colorKeys = [{ time: 0, r: 1, g: 1, b: 1 }, { time: 1, r: 1, g: 1, b: 1 }];
+        if (c.alphaKeys.length !== 2) c.alphaKeys = [{ time: 0, a: 1 }, { time: 1, a: 1 }];
+        const [k0, k1] = c.colorKeys, [a0k, a1k] = c.alphaKeys;
+        k0.time = 0; k0.r = r0; k0.g = g0; k0.b = b0; a0k.time = 0; a0k.a = a0;
+        k1.time = 1; k1.r = r1; k1.g = g1; k1.b = b1; a1k.time = 1; a1k.a = a1;
+    }
+
+    /** Unity LineRenderer.SetPosition; local or world per useWorldSpace. Indices past the strip limit are ignored. */
     setPosition(index: number, value: Vec3): void {
         if (index < 0 || index >= MAX_POINTS) return;
         while (this.positions.length <= index) this.positions.push(new Vec3());
@@ -90,22 +146,16 @@ export class UnityLineRenderer extends Component {
     }
 
     protected onLoad(): void {
-        this.contract = JSON.parse(this.sourceContract || '{}') as UnityLineRendererContract;
-        const c = this.contract;
-        c.colorKeys = c.colorKeys?.length ? c.colorKeys : [{ time: 0, r: 1, g: 1, b: 1 }];
-        c.alphaKeys = c.alphaKeys?.length ? c.alphaKeys : [{ time: 0, a: 1 }];
-        c.widthKeys = c.widthKeys?.length ? c.widthKeys : [{ time: 0, value: 1 }];
+        this.ensureContract();
         this.child = new Node(`${this.node.name} line`);
         this.child.layer = this.node.layer;
         this.node.scene.addChild(this.child);
         this.child.setWorldPosition(0, 0, 0);
-        this.mesh = utils.MeshUtils.createDynamicMesh(0, { positions: this._positions, uvs: this._uvs, colors: this._colors, normals: this._normals, indices16: this._indices, primitiveMode: gfx.PrimitiveMode.TRIANGLE_LIST },
-            undefined, { maxSubMeshes: 1, maxSubMeshVertices: MAX_POINTS * 2, maxSubMeshIndices: (MAX_POINTS - 1) * 6 });
         this.renderer = this.child.addComponent(MeshRenderer);
-        this.renderer.mesh = this.mesh;
         if (this.material) this.renderer.setSharedMaterial(this.material, 0);
         this.renderer.shadowCastingMode = MeshRenderer.ShadowCastingMode.OFF;
         this.renderer.receiveShadow = MeshRenderer.ShadowReceivingMode.OFF;
+        this.ensureCapacity(Math.max(INITIAL_POINTS, this.positionCount));
         this.syncRenderer();
     }
 
@@ -120,8 +170,37 @@ export class UnityLineRenderer extends Component {
         this.mesh = null;
     }
 
+    private ensureContract(): UnityLineRendererContract {
+        if (this.contract) return this.contract;
+        const c = this.contract = this.sourceContract ? JSON.parse(this.sourceContract) as UnityLineRendererContract : defaultContract();
+        c.colorKeys = c.colorKeys?.length ? c.colorKeys : [{ time: 0, r: 1, g: 1, b: 1 }];
+        c.alphaKeys = c.alphaKeys?.length ? c.alphaKeys : [{ time: 0, a: 1 }];
+        c.widthKeys = c.widthKeys?.length ? c.widthKeys : [{ time: 0, value: 1 }];
+        if (typeof c.widthMultiplier !== 'number') c.widthMultiplier = 1;
+        return c;
+    }
+
+    /** Buffers and the dynamic mesh for `points`; reallocated only when the strip outgrows them. */
+    private ensureCapacity(points: number): void {
+        if (!this.renderer || points <= this.capacity) return;
+        const capacity = Math.min(MAX_POINTS, Math.max(points, this.capacity * 2, INITIAL_POINTS));
+        this.capacity = capacity;
+        while (this.worldPoints.length < capacity) this.worldPoints.push(new Vec3());
+        this.cumulative = new Float32Array(capacity);
+        this._positions = new Float32Array(capacity * 2 * 3);
+        this._uvs = new Float32Array(capacity * 2 * 2);
+        this._colors = new Float32Array(capacity * 2 * 4);
+        this._normals = new Float32Array(capacity * 2 * 3);
+        this._indices = new Uint16Array((capacity - 1) * 6);
+        this.views.clear();
+        this.mesh?.destroy();
+        this.mesh = utils.MeshUtils.createDynamicMesh(0, { positions: this._positions, uvs: this._uvs, colors: this._colors, normals: this._normals, indices16: this._indices, primitiveMode: gfx.PrimitiveMode.TRIANGLE_LIST },
+            undefined, { maxSubMeshes: 1, maxSubMeshVertices: capacity * 2, maxSubMeshIndices: (capacity - 1) * 6 });
+        this.renderer.mesh = this.mesh;
+    }
+
     private syncRenderer(): void {
-        if (this.renderer) this.renderer.enabled = this.visible && this.enabledInHierarchy;
+        if (this.renderer) this.renderer.enabled = this.visible && this.drawable && this.enabledInHierarchy;
     }
 
     private geometryFor(count: number, indexCount: number): primitives.IDynamicGeometry {
@@ -137,9 +216,14 @@ export class UnityLineRenderer extends Component {
     }
 
     protected lateUpdate(): void {
-        if (!this.mesh || !this.renderer || !this.contract || this.positions.length < 2) return;
-        const count = Math.min(this.positions.length, MAX_POINTS);
         const c = this.contract;
+        if (!this.renderer || !c) return;
+        const count = Math.min(this.positionCount, MAX_POINTS);
+        const drawable = count >= 2;
+        if (drawable !== this.drawable) { this.drawable = drawable; this.syncRenderer(); }
+        if (!drawable) return;
+        this.ensureCapacity(count);
+        if (!this.mesh) return;
         for (let i = 0; i < count; i++) {
             if (c.useWorldSpace) this.worldPoints[i].set(this.positions[i]);
             else Vec3.transformMat4(this.worldPoints[i], this.positions[i], this.node.worldMatrix);

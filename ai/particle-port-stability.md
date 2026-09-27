@@ -83,6 +83,21 @@ catalog regression suites. Do not fabricate passing suites to clear this gate.
 
 # Large-project scan diagnostics
 
+Electro_Particles exposed a missing binding, not a missing RNG kernel: View
+billboards with 2D TwoConstants rotation over lifetime used Cocos randomness.
+The old gate selected Mesh/Local/3D renderers only. The native retained rotation
+channel already matched 217 native deltas, but was never installed here. Bind
+UnityParticleEulerRotationAdapter for View billboard TwoConstants as well; check
+both converter attachment and late-cycle images. Do not extend this evidence to
+TwoCurves or other renderer modes without native validation.
+
+Seeded Sphere/Hemisphere positions are intentionally approximate in
+UnityParticleShapeRandom. Existing native fixtures bound each source-axis error
+by radius * 0.007 plus float tolerance. Carry that limitation into pack reports;
+transform the bound conservatively with shape/world scale. A visual score does
+not make that radius implementation bit-identical. Other shapes/motion errors
+must not inherit a blanket loosened position threshold.
+
 Electricity adds a native-verified constant prewarm subset: billboard, looping,
 zero-size Box shape, constant initial values, no motion, random inputs or other
 enabled modules. Only this invariant may resolve the generic initialization RNG
@@ -135,3 +150,72 @@ which repeat the source index. On a busy multi-project machine, avoid starting
 duplicate scans while an earlier scan is still active. The scan-cost and
 port-path-boundaries tests cover the filter and retained path safeguards.
 
+Electro saturated emitters exposed two separate lifecycle gaps. Cocos emits before
+retiring expired particles, which can skip native births at capacity; double
+lifetime subtraction can also shift an exact death boundary. Eligible source
+systems now opt into pre-emission retirement and float lifetime storage. Sources
+with enabled sub-emitter, collision, trail or trigger modules are excluded until
+their callback order is measured. Six independent native timelines cover capacity
+2/4, constant/random lifetime and two viewport seeds.
+
+An early adapter onLoad can run before ParticleSystem creates its CPU processor.
+Install capacity retirement again in start, idempotently, and verify the runtime
+marker on a naturally instantiated prefab before accepting a replay. Algorithm
+tests alone missed this integration gap. Check counts, birth seeds and lifetimes
+at late frames, not just visible startup frames; never reset a reference seed to
+hide saturated-pool divergence.
+
+Stretched billboard acceptance must include an asymmetric texture and off-axis
+camera/particle positions. The native width axis is projected into the camera
+plane; reflect the cross-product order with the coordinate basis, otherwise the
+texture width is mirrored. Route all source stretched renderers through the source
+effect, including zero-pivot Mobile materials. Sixteen native BakeMesh cases cover
+parallel/oblique velocities and both camera projections. Geometry alone cannot
+prove UV orientation: seeded Electro Charge Arm replay exposed the width mirror
+(frame-15 foreground overlap improved from .243 to .902 after correcting it).
+Keep the residual thin-edge/radial approximation visible in the image report.
+
+Limit Velocity curve age is the beginning of the simulation step. Cocos decrements
+lifetime before module animation, so temporarily restore remainingLifetime by the
+effective particle delta while evaluating the limit, then restore it immediately.
+Do not shift size/color or other modules. Twenty-one clamped native Electro samples
+cover this phase; constant-limit and animated-velocity composition regressions
+remain required. Live sparks position error fell from .0086 to .000044 units.
+
+Validate native primary material links before visual capture. Two original Electro
+prefabs contained dangling material GUIDs despite same-name authored materials and
+textures in the pack. Null filtering in a material inventory hid this defect;
+native frames were magenta while Cocos retained template material. The porter must
+raise PARTICLE_PRIMARY_MATERIAL_UNRESOLVED instead of treating that template as a
+successful conversion. Repair only a documented source/reference mapping, retain
+before/after GUID and asset hashes, and recapture affected references. Never tune
+Cocos to match a pink error shader or silently infer a missing material by name.
+
+
+Electro FieldSphere needs native primitive topology/UVs and scalar rotation axes.
+The source Unity 6000.3.1f1 Sphere is 515 vertices; replacing it with Cocos's
+primitive changes the texture projection. The native mesh adapter preserves source
+vertices/UVs, reflects Z/winding and flips texture V once, with a source-version gate.
+More importantly, Particle.rotation3D alone does not describe scalar Mesh rotation:
+axisOfRotation is also required. An unrotated Sphere shape supplies the axis from
+cross(+Z, birth direction), even at zero startSpeed. The measured Local, scalar,
+rotation-over-lifetime-off subset now converts that axis-angle into the source
+shader Euler ABI at birth. Keep other shapes/spaces/modules outside that claim.
+Capture axisOfRotation with future particle samples. Independent native BakeMesh
+fixtures cover all 515 transformed vertices; all 18 seeded FieldSphere image/state
+cases pass strict acceptance after the fix. Capture layers separately when a
+composite image hides which renderer is wrong. Read actual Cocos enum values:
+ParticleAlignmentSpace.World is 0 and supplies emitter world rotation; Local is 1.
+
+Late looping emitters require two clocks: Unity wraps its float simulation clock,
+while Cocos keeps its engine time cumulative. Compute the emission fraction from
+the float delta before wrapping and retain cycles for delay calculations. Native
+ElectroDamage replay matches count/seed/age across 301 consecutive frames; isolated
+startup checkpoints had missed the first divergence at frame 263. Do not emulate
+a nonexistent Cocos engine wrap or reset the fraction at every duration boundary.
+
+### Native import and burst evidence
+
+- Before tint/alpha compensation, compare Unity imported texture format and mip pixels. PNG equality does not imply GPU sampling equality. Use `tools/unity-intel/IMPORTED_TEXTURE_MIPS.md` for the source-bound native sRGB mip route. Unity NPOT/max-size import can change dimensions; preserve native dimensions and bind by UUID rather than requiring equality with the source PNG. Refresh the scene through AssetDB and assert runtime bindings before capture.
+- Random burst counts are integer samples, not float lerps. The measured ordered TwoConstants bursts uses an independent xorshift stream, an inclusive unsigned modulo count and a wrapped float event clock. Source-gate probability, repeat count, start delay and emission-rate mode; retain a HIGH obligation for unsupported combinations. Native fixtures cover 12 seeds, zero/offset burst times, four loops and constant continuous emission. Test clear/replay and live particle identities; checking only capped particle counts can hide a wrong burst count.
+- Re-fetch shared main between completed features and before pushing. Audit changed files, integrate only when no running generator is loading those dependencies, then rerun affected regressions. Do not reset another project checkout or overwrite local work.

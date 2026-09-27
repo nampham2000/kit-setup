@@ -539,6 +539,27 @@ test and acceptance gate to that registry. The AOE source project runs
   Keep project layout overrides config-driven; existing approved overrides need a separate runtime
   comparison before removal. Re-port only after the normal Unity source gate passes.
 
+### UI must come from the game's own assets (no Graphics placeholders)
+
+- Build every popup, HUD element, button, ribbon, badge and frame from the source game's assets:
+  the Unity prefab/RectTransform, its Sprites (Simple or Sliced with the importer spriteBorder),
+  the TMP font asset or TTF, and the outline/shadow values from the TMP material keywords.
+- Do not draw frames, panels, buttons, ribbons, text outlines or icons with `cc.Graphics`,
+  solid-colour sprites or primitives to fill a gap. That is a placeholder, not a port. Graphics is
+  only valid when the source is procedural too (a LineRenderer or mask inside playable-core), or
+  for an invisible technical overlay such as a hit area or stencil.
+- When a popup is an adapter with no source equivalent (for example revive or continue replacing
+  IAP), assemble it from the same game's existing frames, ribbons, buttons, icons and fonts.
+  Record the reason and each source asset path in config. Do not invent a new visual style.
+- Text must be readable. Use the source font and its TMP effective size (never smaller), wrap
+  inside the source rect and never break inside a word; a heading such as "CONTINUE?" should not
+  split into "CONTIN / UE?". Check the source viewport and a short/wide viewport.
+- Acceptance:
+  - a runtime assertion that the UI tree has no `cc.Graphics` outside an allowlist with reasons;
+  - sprite and font UUIDs match a source oracle;
+  - a tight screenshot ROI per popup;
+  - a text-fit metric showing no clipped or mid-word-wrapped labels.
+
 ### Portable checkout / cross-PC bootstrap
 
 Shared kit chỉ portable khi source of truth đã được commit và checkout đúng exact submodule pointer. Trên một PC
@@ -1295,3 +1316,22 @@ render delta immediately at birth removes impacts early. The opt-in
 backend step, and resets its comparison origin with `resetAccumulator`.
 Native Combat Magic expiry fixtures keep the first impact at frame 180 and
 remove it at 181. Collision generation remains a separate verification gate.
+
+For scalar Mesh particle mismatches, capture `axisOfRotation` as well as
+`rotation3D`; the latter alone is not a complete orientation. Preserve native
+primitive topology and UVs with source-version evidence. The measured Sphere
+axis-angle subset and late wrapped emission-clock traps are documented in
+[particle-port-stability](../../particle-port-stability.md); do not generalize
+those fixtures to unmeasured shapes, spaces or rotation modules.
+
+### Native import and burst evidence
+
+- Before tint/alpha compensation, compare Unity imported texture format and mip pixels. PNG equality does not imply GPU sampling equality. Use `tools/unity-intel/IMPORTED_TEXTURE_MIPS.md` for the source-bound native sRGB mip route. Unity NPOT/max-size import can change dimensions; preserve native dimensions and bind by UUID rather than requiring equality with the source PNG. Refresh the scene through AssetDB and assert runtime bindings before capture.
+- Random burst counts are integer samples, not float lerps. The measured ordered TwoConstants bursts uses an independent xorshift stream, an inclusive unsigned modulo count and a wrapped float event clock. Source-gate probability, repeat count, start delay and emission-rate mode; retain a HIGH obligation for unsupported combinations. Native fixtures cover 12 seeds, zero/offset burst times, four loops and constant continuous emission. Test clear/replay and live particle identities; checking only capped particle counts can hide a wrong burst count.
+- Re-fetch shared main between completed features and before pushing. Audit changed files, integrate only when no running generator is loading those dependencies, then rerun affected regressions. Do not reset another project checkout or overwrite local work.
+
+### Imported texture contract (ASTC, BMP and PNG)
+
+Treat container extension, Unity importer output and shader sampling as three different contracts. Before claiming texture parity, record active build target, Unity texture/graphics format, sRGB/data role, dimensions, complete mip chain, filter/wrap/aniso/mip bias, alpha handling and the shader property/UV/channel using the texture. A PNG made from a BMP is not proof of equivalence; ASTC selected in a platform override is not proof that the current Editor GPU is sampling ASTC.
+
+Use `tools/unity-intel/IMPORTED_TEXTURE_MIPS.md` for the measured sRGB Texture2D route, including BMP inputs mapped to Cocos-imported PNG UUIDs. The producer must reject unsupported GPU sampling and linear/HDR/normal-map cases outside its measured scope. Do not replace unsupported ASTC with raw source PNG and call it equivalent; integrate a validated decoder or capture on a matching reference device. Preserve any future ASTC decoder from shared main and run native sampler/shader regressions before adoption. Do not apply an sRGB texture wrapper to linear masks/normals. Texture-byte equality alone cannot certify toon lighting, crystal refraction, channel swizzles, procedural UVs, premultiplied blend or double gamma conversion. Validate those in the actual effect. A 98–100% target requires measured image and semantic acceptance on named cases, not an importer success code.

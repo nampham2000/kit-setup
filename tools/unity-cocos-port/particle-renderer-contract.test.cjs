@@ -50,7 +50,14 @@ test('particles large enough to reach the Min/Max Particle Size clamp use the so
     assert.deepEqual(c.sourceRendererSize, [0, 0.3, 0, 1]);
   }
   assert.equal(contract(blast, { m_RenderMode: 1, m_MaxParticleSize: 0.3 }).requiresMaterialAdapter, true, 'stretched widths are clamped too');
-  assert.equal(contract(spark, { m_RenderMode: 1, m_RenderAlignment: 0, m_MaxParticleSize: 0.3 }).requiresMaterialAdapter, false, '0.25 m sparks keep the builtin effect');
+  assert.equal(contract(spark, { m_RenderMode: 0, m_RenderAlignment: 0, m_MaxParticleSize: 0.3 }).requiresMaterialAdapter, false, '0.25 m View billboards keep the builtin effect');
   assert.equal(contract(blast, { m_RenderMode: 4, m_MaxParticleSize: 0.3 }).clampReachable, false, 'mesh particles are never clamped');
   assert.equal(contract({ InitialModule: { startSize: { minMaxState: 0, scalar: 0.8 } } }, { m_RenderMode: 0 }).requiresMaterialAdapter, false, 'default 0.5 clamp needs over 1 m');
+});
+
+test('scalar mesh axis binding is bounded to measured local Sphere births',()=>{
+ const p={moveWithTransform:0,InitialModule:{rotation3D:false},ShapeModule:{enabled:true,type:0,radius:{value:.01},arc:{mode:0},m_Rotation:{x:0,y:0,z:0}}},r={m_RenderMode:4,m_RenderAlignment:2};
+ assert.equal(!!contract(p,r).meshScalarAxis,true);
+ for(const changed of [{...p,moveWithTransform:1},{...p,InitialModule:{rotation3D:true}},{...p,RotationModule:{enabled:true}},{...p,ShapeModule:{...p.ShapeModule,type:2}}])assert.equal(!!contract(changed,r).meshScalarAxis,false);
+ assert.equal(!!contract(p,{...r,m_RenderAlignment:1}).meshScalarAxis,false);
 });
