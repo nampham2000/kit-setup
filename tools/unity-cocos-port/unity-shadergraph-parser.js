@@ -263,9 +263,58 @@ float unity_inverse_lerp(float A, float B, float T) {
 // ShaderGraph JSON Parser & Node Transpiler
 // ============================================================================
 
+/**
+ * Splits a ShaderGraph file into its top-level JSON objects. Unity 2020.2+ (graph version 3)
+ * serializes one object per document, concatenated: GraphData, then every property, node, slot and
+ * target, each keyed by m_ObjectId and referenced elsewhere as { "m_Id": "<objectId>" }.
+ */
+function splitJsonDocuments(text) {
+  const docs = [];
+  let depth = 0, start = -1, inString = false, escape = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (escape) escape = false;
+      else if (ch === '\\') escape = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === '{') { if (depth === 0) start = i; depth++; }
+    else if (ch === '}') { depth--; if (depth === 0 && start >= 0) { docs.push(JSON.parse(text.slice(start, i + 1))); start = -1; } }
+  }
+  return docs;
+}
+
+/**
+ * Normalizes a graph-version-3 multi-document ShaderGraph into the single-object shape this parser
+ * reads: properties, nodes (with their slot objects inlined) and the active URP targets resolved from
+ * their { m_Id } references. Edges keep their { m_Node: { m_Id } } references (looked up by id).
+ * A single-document (legacy) graph is returned unchanged.
+ */
+function normalizeShaderGraph(text) {
+  const docs = splitJsonDocuments(text.replace(/^﻿/, ''));
+  if (docs.length <= 1) return docs[0] || JSON.parse(text);
+  const byId = new Map(docs.filter(doc => doc && doc.m_ObjectId).map(doc => [doc.m_ObjectId, doc]));
+  const graph = docs.find(doc => String(doc.m_Type || '').endsWith('.GraphData')) || docs[0];
+  const deref = ref => (ref && typeof ref === 'object' && typeof ref.m_Id === 'string' && byId.has(ref.m_Id) ? byId.get(ref.m_Id) : ref);
+  const nodes = (graph.m_Nodes || []).map(deref).map(node => ({
+    ...node,
+    m_Slots: Array.isArray(node.m_Slots) ? node.m_Slots.map(deref) : node.m_Slots,
+  }));
+  const targets = (graph.m_ActiveTargets || []).map(deref);
+  const subTargets = targets.map(target => deref(target && target.m_ActiveSubTarget)).filter(Boolean);
+  return {
+    ...graph,
+    m_Properties: (graph.m_Properties || []).map(deref),
+    m_Nodes: nodes,
+    m_TargetObjects: [...targets, ...subTargets].filter(Boolean),
+  };
+}
+
 class ShaderGraphParser {
   constructor(jsonContent, options = {}) {
-    this.raw = typeof jsonContent === 'string' ? JSON.parse(jsonContent) : jsonContent;
+    this.raw = typeof jsonContent === 'string' ? normalizeShaderGraph(jsonContent) : jsonContent;
     this.options = options;
     this.properties = [];
     this.nodes = new Map();
@@ -391,9 +440,19 @@ class ShaderGraphParser {
       if (name.includes('AlphaClip') || name.includes('Alpha Clip') || typeStr.includes('AlphaClip')) {
         this.hasAlphaClip = true;
       }
-      if (node.m_SurfaceType === 1 || node.m_SurfaceType === 'Transparent' || node.m_BlendMode !== 0) {
+      // Legacy master nodes carry the surface type; a node without m_BlendMode is not transparent.
+      if (node.m_SurfaceType === 1 || node.m_SurfaceType === 'Transparent'
+        || (node.m_BlendMode !== undefined && node.m_BlendMode !== 0 && node.m_SurfaceType !== undefined && node.m_SurfaceType !== 0)) {
         this.isTransparent = true;
       }
+    }
+    // Graph version 3: surface, alpha clip and the Lit/Unlit choice live on the URP target objects.
+    for (const target of this.raw.m_TargetObjects || []) {
+      const typeStr = String(target.m_Type || '');
+      if (typeStr.endsWith('UniversalLitSubTarget')) this.targetShadingModel = 'lit';
+      if (typeStr.endsWith('UniversalUnlitSubTarget')) this.targetShadingModel = 'unlit';
+      if (target.m_SurfaceType === 1) this.isTransparent = true;
+      if (target.m_AlphaClip === true) this.hasAlphaClip = true;
     }
   }
 
