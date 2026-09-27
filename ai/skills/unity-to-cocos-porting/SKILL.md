@@ -26,8 +26,11 @@ and direction across seeds/radii/thickness/arcs and288 continuous-emission rows
 including capacity clipping. Manual Emit uses a different lane schedule and
 cannot validate automatic bursts. This helper rejects nonzero arcSpread,
 nonrandom arc, alignment, direction/position jitter and unsupported shapes.
-Sphere/Hemisphere radius and stream matching remain unresolved; do not label
-their stock positions as matched merely because the Circle/Cone fixtures pass.
+Sphere/Hemisphere use three draws per lane, with matching native directions
+and seed identity across288 continuous-emission rows. Their volume radius uses
+analytic cbrt: the native radial approximation remains unresolved. Matrix tests
+bound component position error to .007*radius; this is not exact radius parity
+or whole-effect visual acceptance. The runtime marks radialApproximation=true.
 
 Identify the active render pipeline from GraphicsSettings.currentRenderPipeline,
 not Camera.actualRenderingPath: URP cameras can report Forward. Never restore
