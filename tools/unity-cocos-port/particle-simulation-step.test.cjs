@@ -51,7 +51,7 @@ test('replay resets the native delay clock after a completed effect',()=>{
   system.update(.27);assert.equal(system.emitted,first);
 });
 
-const {maximumParticleDeltaTime,attachSimulationStepRuntime}=require('./particle-simulation-step-binding');
+const {maximumParticleDeltaTime,sourceGravityY,attachSimulationStepRuntime}=require('./particle-simulation-step-binding');
 test('porter binds the real project timestep and reports missing source/AssetDB registration',()=>{
   const base=path.resolve(__dirname,'../../.ai/simulation-step-tests');fs.mkdirSync(base,{recursive:true});
   const root=fs.mkdtempSync(path.join(base,'project-'));
@@ -59,12 +59,16 @@ test('porter binds the real project timestep and reports missing source/AssetDB 
     assert.equal(maximumParticleDeltaTime(root),null);
     fs.mkdirSync(path.join(root,'ProjectSettings'));fs.writeFileSync(path.join(root,'ProjectSettings/TimeManager.asset'),'TimeManager:\n  Maximum Particle Timestep: 0.017\n');
     assert.equal(maximumParticleDeltaTime(root),.017);
+    fs.mkdirSync(path.join(root,'Assets'));
+    assert.equal(maximumParticleDeltaTime(path.join(root,'Assets')),.017,'CLI passes the Assets root, not the project root');
+    fs.writeFileSync(path.join(root,'ProjectSettings/DynamicsManager.asset'),'PhysicsManager:\n  m_Gravity: {x: 0, y: -4.25, z: 0}\n');
+    assert.equal(sourceGravityY(path.join(root,'Assets')),-4.25);
     for(const imported of [false,true]) {
       const calls=[],issues=[],builder={objects:[{__type__:'cc.Node',_name:'emitter'},{__type__:'cc.ParticleSystem',node:{__id__:0}}],
         cocosDb:{findScriptClass:()=>imported?{classId:'actual-assetdb-class'}:null},addComponent:(...args)=>calls.push(args)};
-      attachSimulationStepRuntime(builder,{high:code=>issues.push(code)},{unityRoot:root,cocosRoot:root});
+      attachSimulationStepRuntime(builder,{high:code=>issues.push(code)},{unityRoot:path.join(root,'Assets'),cocosRoot:root});
       assert.deepEqual(issues,imported?[]:['PARTICLE_TIMESTEP_ADAPTER_REQUIRED']);
-      if(imported)assert.deepEqual(calls[0].slice(0,3),[0,'actual-assetdb-class',{source:{__id__:1},maximumDeltaTime:.017}]);
+      if(imported)assert.deepEqual(calls[0].slice(0,3),[0,'actual-assetdb-class',{source:{__id__:1},maximumDeltaTime:.017,gravityY:-4.25}]);
       assert.equal(fs.existsSync(path.join(root,'assets/script/UnityParticleSimulationStepAdapter.ts.meta')),false);
     }
     assert.match(fs.readFileSync(path.join(__dirname,'../unity-cocos-port.cjs'),'utf8'),/attachSimulationStepRuntime\(builder, reporter, options\)/);

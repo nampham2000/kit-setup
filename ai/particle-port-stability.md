@@ -83,6 +83,21 @@ catalog regression suites. Do not fabricate passing suites to clear this gate.
 
 # Large-project scan diagnostics
 
+Electricity VFX pack exposed two integration gaps despite existing unit coverage:
+the CLI passes an Assets root to particle bindings, while the timestep/gravity
+reader expected a project root; normalize both forms and test the CLI-shaped
+input. Also include UnityParticlePrewarmAdapter in the Editor lifecycle audit.
+Its absence was reproduced on ef_04; after the opt-in, all five prewarmed
+Electricity emitters installed the hook in a natural Scene instantiation.
+Keep the initial-state prewarm/RNG obligation until native samples establish
+that contract; a working prewarm hook does not certify RNG equivalence.
+
+A targeted `preflight --intent prefab` is an analysis view and does not issue a
+mutation receipt. For an asset-pack conversion, run project-intent preflight
+with `--profile full-project` before invoking the porter. Check
+`decision.mutationReceiptIssued` and `receiptId`, not only the CLI's successful
+JSON-file write. Run it after the reference Editor finishes importing assets.
+
 Before treating a silent porter as an import or shader failure, establish its
 active phase. Unity GUID indexing includes Assets and PackageCache. Directory
 entry filtering now excludes irrelevant files before expensive filesystem

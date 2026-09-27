@@ -2,14 +2,18 @@
 const fs=require('node:fs'),path=require('node:path');
 const {compressUuid}=require('./core-utils');
 const {writeGeneratedAssetText}=require('./generated-asset-writer.cjs');
+function projectRoot(unityRoot) {
+  const root=path.resolve(unityRoot||'');
+  return path.basename(root).toLowerCase()==='assets'?path.dirname(root):root;
+}
 function maximumParticleDeltaTime(unityRoot) {
-  const file=path.join(unityRoot||'','ProjectSettings/TimeManager.asset');
+  const file=path.join(projectRoot(unityRoot),'ProjectSettings/TimeManager.asset');
   if(!fs.existsSync(file))return null;
   const match=/^\s*Maximum Particle Timestep:\s*([^\r\n]+)/m.exec(fs.readFileSync(file,'utf8'));
   const value=Number(match?.[1]);return value>0&&Number.isFinite(value)?value:null;
 }
 function sourceGravityY(unityRoot) {
-  const file=path.join(unityRoot||'','ProjectSettings/DynamicsManager.asset');
+  const file=path.join(projectRoot(unityRoot),'ProjectSettings/DynamicsManager.asset');
   if(!fs.existsSync(file))return null;
   const match=/m_Gravity:\s*\{[^}]*\by:\s*([^,}]+)/.exec(fs.readFileSync(file,'utf8'));
   const value=Number(match?.[1]);return match&&Number.isFinite(value)?value:null;
