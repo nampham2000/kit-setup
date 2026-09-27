@@ -1295,3 +1295,10 @@ render delta immediately at birth removes impacts early. The opt-in
 backend step, and resets its comparison origin with `resetAccumulator`.
 Native Combat Magic expiry fixtures keep the first impact at frame 180 and
 remove it at 181. Collision generation remains a separate verification gate.
+
+For scalar Mesh particle mismatches, capture `axisOfRotation` as well as
+`rotation3D`; the latter alone is not a complete orientation. Preserve native
+primitive topology and UVs with source-version evidence. The measured Sphere
+axis-angle subset and late wrapped emission-clock traps are documented in
+[particle-port-stability](../../particle-port-stability.md); do not generalize
+those fixtures to unmeasured shapes, spaces or rotation modules.

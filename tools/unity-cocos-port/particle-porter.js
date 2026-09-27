@@ -120,6 +120,7 @@ module.exports = function createParticlePorter(deps = {}) {
       }
       const meshRef = firstRendererMeshRef(rendererDoc);
       const mesh = resolveParticleRendererMesh(meshRef, gameObject, componentId, reporter, options, unityDb, cocosDb);
+      if (meshRef?.guid === '0000000000000000e000000000000000') Object.defineProperty(builder.objects[particleId], 'unityBuiltinMeshFileId', { value: String(meshRef.fileID), configurable: true });
       if (mesh.meshUuid && applyParticleRendererMesh(builder, particleId, mesh.meshUuid)) {
         if (mesh.meshAsset) requestModelMeshBasis(builder, reporter, options, nodeId, particleId, mesh.meshAsset, gameObject?.name || '');
         reporter.low(

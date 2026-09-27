@@ -191,3 +191,25 @@ successful conversion. Repair only a documented source/reference mapping, retain
 before/after GUID and asset hashes, and recapture affected references. Never tune
 Cocos to match a pink error shader or silently infer a missing material by name.
 
+
+Electro FieldSphere needs native primitive topology/UVs and scalar rotation axes.
+The source Unity 6000.3.1f1 Sphere is 515 vertices; replacing it with Cocos's
+primitive changes the texture projection. The native mesh adapter preserves source
+vertices/UVs, reflects Z/winding and flips texture V once, with a source-version gate.
+More importantly, Particle.rotation3D alone does not describe scalar Mesh rotation:
+axisOfRotation is also required. An unrotated Sphere shape supplies the axis from
+cross(+Z, birth direction), even at zero startSpeed. The measured Local, scalar,
+rotation-over-lifetime-off subset now converts that axis-angle into the source
+shader Euler ABI at birth. Keep other shapes/spaces/modules outside that claim.
+Capture axisOfRotation with future particle samples. Independent native BakeMesh
+fixtures cover all 515 transformed vertices; all 18 seeded FieldSphere image/state
+cases pass strict acceptance after the fix. Capture layers separately when a
+composite image hides which renderer is wrong. Read actual Cocos enum values:
+ParticleAlignmentSpace.World is 0 and supplies emitter world rotation; Local is 1.
+
+Late looping emitters require two clocks: Unity wraps its float simulation clock,
+while Cocos keeps its engine time cumulative. Compute the emission fraction from
+the float delta before wrapping and retain cycles for delay calculations. Native
+ElectroDamage replay matches count/seed/age across 301 consecutive frames; isolated
+startup checkpoints had missed the first divergence at frame 263. Do not emulate
+a nonexistent Cocos engine wrap or reset the fraction at every duration boundary.

@@ -6268,6 +6268,7 @@ function buildCocosPrefabBuilder(model, outputFile, options, reporter, unityDb, 
   require('./unity-cocos-port/particle-prewarm-binding').attachPrewarmRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-euler-rotation-binding').attachEulerRotationRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-mesh-frame-binding').attachMeshFrameRuntime(builder, reporter, options);
+  require('./unity-cocos-port/particle-builtin-mesh-binding.cjs').attachBuiltinMeshRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-collision-binding').attachCollisionRuntime(builder, reporter, options);
   attachRealtimeSkinningImpl(builder, reporter);
   attachModelMeshBasisRuntime(builder, reporter, options);

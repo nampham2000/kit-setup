@@ -42,3 +42,18 @@ test('source contract explicitly rejects unmeasured initialization modes',()=>{
  const {initialStateContract}=require('./particle-initial-state-binding.cjs'),c={minMaxState:3,minScalar:1,scalar:2},source={InitialModule:{startLifetime:c,startSpeed:c,startSize:c,startRotation:c,startColor:{minMaxState:0,maxColor:{r:1,g:1,b:1,a:1}}}};
  assert.deepEqual(initialStateContract(source).reasons,[]);assert.ok(initialStateContract({...source,ShapeModule:{alignToDirection:true}}).reasons.length);assert.ok(initialStateContract({...source,prewarm:true}).reasons.length);
 });
+
+test('scalar Sphere mesh axis and rotated vertices match independent native BakeMesh',()=>{
+ const f=require('./fixtures/scalar-mesh-axis-native.json'),mesh=require('./fixtures/builtin-meshes-native.json').meshes.find(m=>m.fileID===10207);
+ assert.equal(f.axes.length,3);
+ for(const p of f.axes){const [x,y]=p.position,length=Math.hypot(x,y);assert.ok(Math.abs(-y/length-p.axis[0])<2e-6);assert.ok(Math.abs(x/length-p.axis[1])<2e-6);assert.equal(p.axis[2],0);}
+ const p=f.rows[1].particles[0],e=new V();runtime.packUnityScalarMeshRotation(e,p.rotation[2]*Math.PI/180,p.position[0],p.position[1]);
+ const sx=Math.sin(e.x/2),cx=Math.cos(e.x/2),sy=Math.sin(e.y/2),cy=Math.cos(e.y/2),sz=Math.sin(e.z/2),cz=Math.cos(e.z/2);
+ const q=[sx*cy*cz+cx*sy*sz,cx*sy*cz-sx*cy*sz,cx*cy*sz-sx*sy*cz,cx*cy*cz+sx*sy*sz];
+ const rotate=(v)=>{const [x,y,z,w]=q,[a,b,c]=v,tx=2*(y*c-z*b),ty=2*(z*a-x*c),tz=2*(x*b-y*a);return [a+w*tx+y*tz-z*ty,b+w*ty+z*tx-x*tz,c+w*tz+x*ty-y*tx];};
+ for(let i=0;i<f.vertices.length;i++){
+  const v=mesh.positions.slice(i*3,i*3+3).map((x,j)=>4*x*(j===2?-1:1)),r=rotate(v);
+  const world=[r[0]+p.position[0],-r[2]+p.position[2],r[1]+p.position[1]];
+  world.forEach((x,j)=>assert.ok(Math.abs(x-f.vertices[i][j]*(j===2?-1:1))<2e-6));
+ }
+});

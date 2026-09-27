@@ -54,6 +54,10 @@ function particleRendererContract(particle = {}, renderer = {}) {
   if (mode === 1 && sizeClamp.min > 0) unsupported.push('stretched-min-particle-size');
   return {
     version: 4, sorting, mode, alignment, localBillboard, worldBillboard, straightBoxVelocity,
+    meshScalarAxis: mesh && alignment===2 && !initial.rotation3D && !particle.RotationModule?.enabled
+      && particle.moveWithTransform===0 && shape.enabled && shape.type===0 && shape.radius?.value>0
+      && !shape.alignToDirection && !shape.randomDirectionAmount && !shape.sphericalDirectionAmount && !shape.randomPositionAmount
+      && shape.arc?.mode===0 && (shape.arc.spread??0)===0 && ['x','y','z'].every(k=>shape.m_Rotation?.[k]===0),
     cocosAlignment: localBillboard || straightBoxVelocity || alignment === 2 ? 0 : alignment === 0 ? 2 : 1,
     eulerSigns: mesh ? [-1, -1, 1] : localBillboard || worldBillboard ? [1, 1, -1] : viewBillboard ? [-1, -1, -1] : [-1, 1, -1],
     // Horizontal/Vertical billboards need the source vertex program for Unity's

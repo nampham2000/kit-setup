@@ -272,7 +272,7 @@ namespace CcPlayable.UnityIntelligence.Capture
                     if (i < 8) record.particles.Add(new ParticlePose {
                         randomSeed = buffer[i].randomSeed,
                         position = VectorValues(buffer[i].position), velocity = VectorValues(buffer[i].velocity), size = VectorValues(size),
-                        color = new[] { color.r, color.g, color.b, color.a }, rotation = VectorValues(buffer[i].rotation3D),
+                        color = new[] { color.r, color.g, color.b, color.a }, rotation = VectorValues(buffer[i].rotation3D), axisOfRotation = VectorValues(buffer[i].axisOfRotation),
                         remainingLifetime = buffer[i].remainingLifetime, startLifetime = buffer[i].startLifetime,
                     });
                     var d = Vector3.Dot(world - eye, forward);
