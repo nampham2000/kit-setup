@@ -1,6 +1,6 @@
 'use strict';
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),ts=require('typescript');
-const names=['UnityParticleInitialStateAdapter','UnityParticleStartRotationAdapter','UnityParticleSimulationStepAdapter','UnityParticleEulerRotationAdapter','UnityParticleShapeDistributionAdapter','UnityParticleBirthStateAdapter','UnityParticleNoiseAdapter'];
+const names=['UnityParticleInitialStateAdapter','UnityParticleStartRotationAdapter','UnityParticleSimulationStepAdapter','UnityParticleEulerRotationAdapter','UnityParticleShapeDistributionAdapter','UnityParticleBirthStateAdapter','UnityParticleNoiseAdapter','UnityParticlePrewarmAdapter'];
 test('generated semantic adapters opt into Editor lifecycle and preserve installer order',()=>{
  const calls=[],classes=[];
  const cc={Component:class{},ParticleSystem:class{},_decorator:{ccclass:()=>c=>c,executeInEditMode:c=>{c.editor=true;return c;},playOnFocus:c=>{c.focus=true;return c;},executionOrder:n=>c=>{c.order=n;return c;},property:(...args)=>args.length>1?undefined:()=>{}}};
@@ -16,5 +16,5 @@ test('generated semantic adapters opt into Editor lifecycle and preserve install
  for(const c of classes)c.onLoad?.();for(const c of classes)c.start?.();
  assert.ok(calls.indexOf('installUnityParticleInitialState')<calls.indexOf('installUnityParticleStartRotation'));
  assert.ok(calls.indexOf('installUnityParticleRandomForce')<calls.indexOf('installUnityParticleBirthState'));
- for(const name of ['installUnityParticleSimulationStep','installUnityShapeDistribution','installUnityParticleEulerRotation','installUnityParticleNoise'])assert.ok(calls.includes(name),name);
+ for(const name of ['installUnityParticleSimulationStep','installUnityShapeDistribution','installUnityParticleEulerRotation','installUnityParticleNoise','installUnityParticlePrewarm'])assert.ok(calls.includes(name),name);
 });

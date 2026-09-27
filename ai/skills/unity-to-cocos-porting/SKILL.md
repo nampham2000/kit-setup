@@ -17,6 +17,13 @@ This skill provides step-by-step guidance and architectural rules for converting
 
 ### Reuse the measured VFX fixes
 
+Before a new particle pack, follow ai/particle-port-stability.md: inventory source
+feature signatures, probe representative combinations in both Editor and Preview,
+then bind a particleCatalog to the regression registry for every prefab and phase.
+New particle-vfx registries request this catalog by default. Include all renderer
+and module gaps; generation/compile success must never be reported as visual
+acceptance. Lock the actual reference pipeline/material choice before color work.
+
 For Combat Magic regressions, read ai/combat-magic-issue-coverage.md alongside
 ai/particle-port-fixes.json. It maps user reports to shared fixes and records
 unresolved visual/reference issues. ai/combat-magic-porting-lessons.json archives

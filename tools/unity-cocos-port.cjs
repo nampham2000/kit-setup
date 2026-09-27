@@ -1489,6 +1489,13 @@ function walkContainedFiles(root, predicate, options = {}) {
 
     for (const entry of entries) {
       const full = path.join(dir, entry.name);
+      // Dirents are only a cheap exclusion filter. Every candidate we traverse
+      // or return still passes lstat + realpath containment below. PackageCache
+      // contains many non-meta files; probing them cannot contribute to a GUID
+      // index and is particularly expensive on a busy Windows volume.
+      if (entry.isSymbolicLink()) continue;
+      if (entry.isDirectory() && (!recursive || skipDirectories.has(entry.name))) continue;
+      if (entry.isFile() && !predicate(full)) continue;
       const inspected = inspectContainedPath(boundary, full);
       if (!inspected) continue;
 

@@ -23,6 +23,7 @@ const { spawnSync } = require('node:child_process');
 
 const { createMcpClient, unwrapToolResult } = require('./cocos-engine-feature-audit.cjs');
 const { PORTABLE_HASH_CONTRACT, hashPortableFile } = require('./lib/portable-content-hash.cjs');
+const { auditParticleCatalog } = require('./particle-catalog-policy.cjs');
 
 const REGISTRY_SCHEMA_VERSION = 1;
 const REGISTRY_KIND = 'cc-playable-port-regression-registry';
@@ -628,7 +629,23 @@ function validateRegistry(projectRoot, value, options = {}) {
   if (uncovered.length) {
     throw regressionError('REGRESSION_RISK_UNCOVERED', `Mandatory suite chưa cover: ${uncovered.join(', ')}`);
   }
-  return { schemaVersion: REGISTRY_SCHEMA_VERSION, kind: REGISTRY_KIND, requiredRisks, suites, raw: value, configFile: options.configFile };
+  const catalogEvidence=[];
+  if(value.particleCatalog!==undefined){
+    const load=(relative)=>{
+      const file=resolveContained(projectRoot,relative,'particleCatalog dependency',{mustExist:true});
+      catalogEvidence.push({relative,file});
+      return readJsonBounded(file,MAX_MATRIX_BYTES,'PARTICLE_CATALOG_INVALID');
+    };
+    const catalog=load(value.particleCatalog),bindings=load(catalog.bindingReport);
+    load(catalog.referenceState);
+    for(const relative of catalog.prefabs||[]){
+      const file=resolveContained(projectRoot,relative,'particleCatalog prefab',{mustExist:true});
+      catalogEvidence.push({relative,file});
+    }
+    const coverage=auditParticleCatalog(catalog,bindings,suites,caseHasBoundedParticlePixels);
+    if(!coverage.ok)throw regressionError('REGRESSION_PARTICLE_CATALOG_UNACCEPTED',coverage.errors.join('; '),coverage);
+  }
+  return { schemaVersion: REGISTRY_SCHEMA_VERSION, kind: REGISTRY_KIND, requiredRisks, suites, raw: value, configFile: options.configFile,catalogEvidence };
 }
 
 function registrySnapshot(projectRoot, registry) {
@@ -636,6 +653,7 @@ function registrySnapshot(projectRoot, registry) {
   const snapshot = {
     hashContract: PORTABLE_HASH_CONTRACT,
     registry: { path: relative(registry.configFile), hash: hashFile(registry.configFile) },
+    ...(registry.catalogEvidence?.length?{particleCatalog:registry.catalogEvidence.map(item=>({path:item.relative,hash:hashFile(item.file)}))}:{}),
     suites: registry.suites.map(suite => ({
       id: suite.id,
       matrix: { path: suite.matrix, hash: hashFile(suite.matrixEvidence.file) },
@@ -648,6 +666,7 @@ function registrySnapshot(projectRoot, registry) {
 
 function portableFileList(projectRoot, registry) {
   const values = [path.relative(projectRoot, registry.configFile).replace(/\\/g, '/')];
+  for(const item of registry.catalogEvidence||[])values.push(item.relative);
   for (const suite of registry.suites) {
     values.push(suite.matrix, ...suite.watchFiles, ...suite.matrixEvidence.dependencies.map(item => item.relative));
   }
@@ -708,12 +727,14 @@ function initialRegistry(risks = []) {
     schemaVersion: REGISTRY_SCHEMA_VERSION,
     kind: REGISTRY_KIND,
     requiredRisks: selected,
+    ...(selected.includes('particle-vfx')?{particleCatalog:'tools/particle-catalog.json'}:{}),
     suites: [],
     instructions: {
       matrix: 'Mỗi suite trỏ tới một verify.visual matrix được commit cùng project.',
       watchFiles: 'Liệt kê TS/config/effect/font/prefab quyết định hành vi; đổi byte nào receipt cũng stale.',
       next: 'Thêm mandatory suites cover mọi requiredRisks rồi chạy npm run ai:verify:regressions.',
       supportedRisks: RISKS,
+      particleCatalog: 'For particle-vfx create the named catalog with prefab paths, bindingReport, referenceState, explicit referenceDecision, phases and referenceMetrics. See ai/particle-port-stability.md. Do not reuse another pack coverage.',
     },
   };
 }
