@@ -1576,24 +1576,37 @@ function loadInheritedUnityAssetDatabase(key) {
   return db;
 }
 
-// The preflight receipt's stateFingerprint covers every Unity .meta, so the GUID
-// index scanned under one fingerprint is reused across porter runs. Walking a
-// large project's metas took minutes per run on a loaded machine.
+// The preflight receipt's stateFingerprint covers every Unity .meta of its project,
+// so the GUID index scanned under one fingerprint is reused across porter runs.
+// Walking a large project's metas took minutes per run on a loaded machine.
+// Bump GUID_INDEX_SCHEMA whenever UnityAssetDatabase records change shape.
+const GUID_INDEX_SCHEMA = 1;
+
 function guidIndexCacheFile(unityRoot, stateFingerprint) {
   const { resolveDefaultCacheDir } = require('./unity-intel/cache.cjs');
-  const id = require('node:crypto').createHash('sha256').update(`${toPosix(unityRoot)}\n${stateFingerprint}`).digest('hex').slice(0, 32);
+  const id = require('node:crypto').createHash('sha256')
+    .update(`guid-index/${GUID_INDEX_SCHEMA}\n${toPosix(unityRoot)}\n${stateFingerprint}`).digest('hex').slice(0, 32);
   return path.join(resolveDefaultCacheDir(), 'guid-index', `${id}.json`);
 }
 
-function scannedUnityAssetDatabase(unityRoot, stateFingerprint = '') {
+// The fingerprint only vouches for sources inside the receipt's project root; a
+// staging root elsewhere is scanned every run.
+function guidIndexCacheable(unityRoot, projectRoot) {
+  if (!projectRoot) return false;
+  const relative = path.relative(path.resolve(projectRoot), path.resolve(unityRoot));
+  return !relative.startsWith('..') && !path.isAbsolute(relative);
+}
+
+function scannedUnityAssetDatabase(unityRoot, stateFingerprint = '', projectRoot = '') {
   const key = path.resolve(unityRoot);
   let db = unityAssetDatabases.get(key);
   if (!db) {
     db = loadInheritedUnityAssetDatabase(key);
-    const cacheFile = !db && stateFingerprint ? guidIndexCacheFile(key, stateFingerprint) : '';
+    const cacheFile = !db && stateFingerprint && guidIndexCacheable(key, projectRoot) ? guidIndexCacheFile(key, stateFingerprint) : '';
     if (!db && cacheFile) {
-      const cached = readJsonIfExists(cacheFile);
-      if (cached?.unityRoot === key && cached.stateFingerprint === stateFingerprint && Array.isArray(cached.records)) {
+      let cached = null;
+      try { cached = readJsonIfExists(cacheFile); } catch (_) { cached = null; }
+      if (cached?.schema === GUID_INDEX_SCHEMA && cached.unityRoot === key && cached.stateFingerprint === stateFingerprint && Array.isArray(cached.records)) {
         db = new UnityAssetDatabase(key, []);
         for (const record of cached.records) db.byGuid.set(record.guid, record);
       }
@@ -1602,10 +1615,15 @@ function scannedUnityAssetDatabase(unityRoot, stateFingerprint = '') {
       db = new UnityAssetDatabase(key, unityPackageAssetRoots(key));
       db.scan();
       if (cacheFile) {
-        fs.mkdirSync(path.dirname(cacheFile), { recursive: true });
+        // Best effort: a full or read-only cache dir must not fail the port.
         const temp = `${cacheFile}.${process.pid}.tmp`;
-        fs.writeFileSync(temp, JSON.stringify({ unityRoot: key, stateFingerprint, records: [...db.byGuid.values()] }));
-        fs.renameSync(temp, cacheFile);
+        try {
+          fs.mkdirSync(path.dirname(cacheFile), { recursive: true });
+          fs.writeFileSync(temp, JSON.stringify({ schema: GUID_INDEX_SCHEMA, unityRoot: key, stateFingerprint, records: [...db.byGuid.values()] }));
+          fs.renameSync(temp, cacheFile);
+        } catch (_) {
+          try { fs.rmSync(temp, { force: true }); } catch (__) { /* ignore */ }
+        }
       }
     }
     unityAssetDatabases.set(key, db);
@@ -1631,7 +1649,7 @@ function prepareUnityPortChildEnv(options, preflight) {
   }
   if (options.unityRoot) {
     const unityRoot = path.resolve(options.unityRoot);
-    const db = scannedUnityAssetDatabase(unityRoot, preflight?.receipt?.stateFingerprint || '');
+    const db = scannedUnityAssetDatabase(unityRoot, preflight?.receipt?.stateFingerprint || '', preflight?.projectRoot || '');
     const file = path.join(require('os').tmpdir(), `cc-playable-guid-index-${process.pid}.json`);
     fs.writeFileSync(file, JSON.stringify({ unityRoot, records: [...db.byGuid.values()] }));
     env[PARENT_GUID_INDEX_ENV] = JSON.stringify({ parentPid: process.pid, unityRoot, file });
@@ -5432,7 +5450,8 @@ class CocosPrefabBuilder {
 
   addSkinnedMeshRenderer(nodeId, unityComponentId, meshUuid, materialUuids, skeletonUuid, skinningRootId, fileId, config = {}) {
     return this.addComponent(nodeId, 'cc.SkinnedMeshRenderer', {
-      _materials: materialUuids.filter(Boolean).map((uuid) => cocosUuid(uuid, 'cc.Material')),
+      // Empty slots stay null so later slots keep their sub-mesh index.
+      _materials: materialUuids.map((uuid) => (uuid ? cocosUuid(uuid, 'cc.Material') : null)),
       _visFlags: 0,
       bakeSettings: cocosRef(this.addModelBakeSettings()),
       _mesh: meshUuid ? cocosUuid(meshUuid, 'cc.Mesh') : null,
@@ -7280,7 +7299,10 @@ function emitLineRenderer(gameObject, nodeId, componentId, doc, model, builder, 
   stageLineRendererRuntime(options);
   let classId = cocosDb?.findScriptClass?.('UnityLineRenderer')?.classId;
   const meta = path.join(options.cocosRoot, 'assets/script/UnityLineRenderer.ts.meta');
-  if (!classId && fs.existsSync(meta)) classId = compressUuid(JSON.parse(fs.readFileSync(meta, 'utf8')).uuid);
+  if (!classId && fs.existsSync(meta)) {
+    // A .meta AssetDB is still writing reads as not imported yet.
+    try { classId = compressUuid(JSON.parse(fs.readFileSync(meta, 'utf8')).uuid); } catch (_) { classId = ''; }
+  }
   if (!classId) {
     reporter.high('LINE_RENDERER_ADAPTER_REQUIRED', model.file, gameObject.name, 'AssetDB must import assets/script/UnityLineRenderer.ts; refresh and rerun porter.');
     return;
@@ -7288,7 +7310,7 @@ function emitLineRenderer(gameObject, nodeId, componentId, doc, model, builder, 
   if (contract.numCapVertices || contract.numCornerVertices) {
     reporter.medium('LINE_RENDERER_CAPS_UNPORTED', model.file, gameObject.name, 'LineRenderer corner/cap vertices are not generated.');
   }
-  if (contract.alignment !== 0) reporter.medium('LINE_RENDERER_ALIGNMENT', model.file, gameObject.name, 'LineRenderer TransformZ alignment uses the node up axis; unmeasured.');
+  if (contract.alignment !== 0) reporter.medium('LINE_RENDERER_ALIGNMENT', model.file, gameObject.name, 'LineRenderer TransformZ alignment spreads the width along cross(segment, node Z); unmeasured against Unity.');
   if (!materialUuid) reporter.high('LINE_RENDERER_MATERIAL_UNRESOLVED', model.file, gameObject.name, 'LineRenderer material could not be resolved.');
   builder.addComponent(nodeId, classId, {
     material: materialUuid ? cocosUuid(materialUuid, 'cc.Material') : null,

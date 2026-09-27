@@ -20,7 +20,7 @@ function hierarchy() {
   return { objects, hero, geo };
 }
 
-function run(skin, extra = {}) {
+function run(skin, extra = {}, materials = [{ guid: 'material' }]) {
   const { objects, hero, geo } = hierarchy();
   const added = [], codes = [];
   const builder = { objects, addSkinnedMeshRenderer: (...args) => added.push(args) };
@@ -36,12 +36,12 @@ function run(skin, extra = {}) {
     ...extra,
   });
   const cocosDb = {
-    resolveModelMeshByStem: () => ({ meshUuid: 'fbx@torso', materialUuids: ['fbx@mat'] }),
+    resolveModelMeshByStem: () => ({ meshUuid: 'fbx@torso', materialUuids: ['fbx@mat', 'fbx@mat2'] }),
     resolveModelSkinByMesh: () => skin,
   };
-  const unityDb = { get: (guid) => (guid === 'material' ? {} : meshAsset) };
+  const unityDb = { get: (guid) => ({ material: {}, mesh: meshAsset })[guid] };
   porter.emitSkinnedMeshRenderer({ name: 'Alpha_HighTorsoGeo' }, geo, '137',
-    { m_Mesh: { guid: 'mesh', fileID: 4300000 }, m_Materials: [{ guid: 'material' }] }, { file: 'scene' }, builder, reporter, {}, unityDb, cocosDb);
+    { m_Mesh: { guid: 'mesh', fileID: 4300000 }, m_Materials: materials }, { file: 'scene' }, builder, reporter, {}, unityDb, cocosDb);
   return { added, codes, hero };
 }
 
@@ -74,4 +74,15 @@ test('skinning roots get real-time skinning: the ported Animation becomes a Skel
   assert.equal(objects[1]._useBakedAnimation, false);
   assert.deepEqual(added.map((a) => [a.node, a.type, a.body._useBakedAnimation]), [[3, 'cc.SkeletalAnimation', false]]);
   assert.deepEqual(codes, ['SKINNED_MESH_REALTIME_SKINNING', 'SKINNED_MESH_REALTIME_SKINNING']);
+});
+
+test('an unresolved Unity slot keeps its index with the model material of that slot', () => {
+  const joints = { skeletonUuid: 'fbx@skeleton', joints: ['Alpha:Hips'] };
+  const { added } = run(joints, {}, [{ guid: 'missing' }, { guid: 'material' }]);
+  assert.deepEqual(added[0][3], ['fbx@mat', 'gray-material']);
+  const none = run(joints, {}, []);
+  assert.deepEqual(none.added[0][3], ['fbx@mat', 'fbx@mat2']);
+  const empty = run(joints, { resolveUnityMaterialUuid: () => '' }, [{ guid: 'material' }, { guid: 'material' }, { guid: 'material' }]);
+  assert.deepEqual(empty.added[0][3], ['fbx@mat', 'fbx@mat2', '']);
+  assert.ok(empty.codes.includes('SKINNED_MESH_MATERIAL_SLOT_EMPTY'));
 });

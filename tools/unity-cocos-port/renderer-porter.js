@@ -309,7 +309,7 @@ module.exports = function createRendererPorter(deps) {
         return;
       }
     }
-    const skin = cocosDb.resolveModelSkinByMesh(meshAsset.stem, resolved.meshUuid, meshAsset.ext);
+    const skin = cocosDb.resolveModelSkinByMesh(meshAsset.stem, resolved.meshUuid, resolved.fallbackExt || meshAsset.ext);
     if (!skin?.skeletonUuid || !skin.joints.length) {
       reporter.high('SKINNED_MESH_SKELETON_UNRESOLVED', meshAsset.relativePath, gameObject.name,
         'The imported Cocos model has no skeleton for this mesh; refresh AssetDB and rerun the porter.');
@@ -324,18 +324,27 @@ module.exports = function createRendererPorter(deps) {
         `No ancestor resolves every skeleton joint path (first: ${skin.joints[0]}); the ported bone hierarchy differs from the model.`);
       return;
     }
+    // Slot i stays slot i: an unresolved Unity slot falls back to the model's own
+    // material at that index (as for MeshRenderer), then FBX sub-mesh order is remapped.
+    const modelMaterials = resolved.materialUuids || [];
     const materialRefs = getNestedList(doc, 'm_Materials');
-    const materialUuids = materialRefs.map((materialRef) => {
+    let materialUuids = materialRefs.length ? materialRefs.map((materialRef, index) => {
       const materialAsset = unityDb.get(unityRefGuid(materialRef));
-      return materialAsset ? resolveUnityMaterialUuid(materialAsset, options, unityDb, cocosDb, reporter, gameObject.name) : '';
+      return (materialAsset ? resolveUnityMaterialUuid(materialAsset, options, unityDb, cocosDb, reporter, gameObject.name) : '') || modelMaterials[index] || '';
+    }) : modelMaterials.slice();
+    if (materialUuids.length && !materialUuids.includes('')) {
+      materialUuids = cocosMaterialSlots(meshAsset, meshName, materialUuids, reporter, gameObject.name);
+    } else if (materialUuids.includes('')) {
+      reporter.medium('SKINNED_MESH_MATERIAL_SLOT_EMPTY', meshAsset.relativePath, gameObject.name,
+        'A SkinnedMeshRenderer material slot resolved to no Unity or model material; the slot renders with the default material.');
+    }
+    builder.addSkinnedMeshRenderer(nodeId, componentId, resolved.meshUuid, materialUuids, skin.skeletonUuid, skinningRoot, componentFileId, {
+      castShadows: Number(getField(doc, 'm_CastShadows', 1) || 0) !== 0,
+      receiveShadows: Number(getField(doc, 'm_ReceiveShadows', 1) || 0) !== 0,
     });
-    builder.addSkinnedMeshRenderer(nodeId, componentId, resolved.meshUuid,
-      materialUuids.some(Boolean) ? materialUuids : (resolved.materialUuids || []), skin.skeletonUuid, skinningRoot, componentFileId, {
-        castShadows: Number(getField(doc, 'm_CastShadows', 1) || 0) !== 0,
-        receiveShadows: Number(getField(doc, 'm_ReceiveShadows', 1) || 0) !== 0,
-      });
-    reporter.low('SKINNED_MESH_BOUND', meshAsset.relativePath, gameObject.name,
-      `SkinnedMeshRenderer bound to the imported skeleton (${skin.joints.length} joints) under ${builder.objects[skinningRoot]?._name || 'root'}.`);
+    // Bone basis and bind pose are carried over structurally; skinning parity needs a visual check.
+    reporter.medium('SKINNED_MESH_BOUND', meshAsset.relativePath, gameObject.name,
+      `SkinnedMeshRenderer bound to the imported skeleton (${skin.joints.length} joints) under ${builder.objects[skinningRoot]?._name || 'root'}; verify the deformation visually.`);
   }
 
   // Cocos SkinnedMeshRenderer defaults to BakedSkinningModel, which samples joint
