@@ -1,0 +1,13 @@
+{
+  "checkedMain": "7d80009ea66985a101fd47fdd7173bb68eb3aaf9",
+  "registryEntries": 50,
+  "canonicalImplementationAndTestPaths": 159,
+  "missingFromMain": [],
+  "unpublishedToolChanges": [],
+  "tests": {
+    "passed": 324,
+    "failed": 0
+  },
+  "projectRuntimeDifferences": [],
+  "provenanceNote": "Older AOE origin hashes identify source-project commits, not necessarily shared-kit commits. Main publication is checked by canonical paths and diff, not by treating all source origins as shared commits."
+}

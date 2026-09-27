@@ -17,6 +17,12 @@ This skill provides step-by-step guidance and architectural rules for converting
 
 ### Reuse the measured VFX fixes
 
+For Combat Magic regressions, read ai/combat-magic-issue-coverage.md alongside
+ai/particle-port-fixes.json. It maps user reports to shared fixes and records
+unresolved visual/reference issues. ai/combat-magic-porting-lessons.json archives
+the discovered lessons; current guards and the coverage status supersede older
+investigation statements. Shared integration does not imply whole-pack fidelity.
+
 For a radial crystal core collapsing into a solid lump, inspect ShapeModule
 alignToDirection before adjusting opacity or lighting. Creator 3.8.8 serializes
 this flag but does not apply it at emission. The measured Local Sphere Mesh

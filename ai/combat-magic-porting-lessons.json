@@ -1,0 +1,201 @@
+{
+  "schemaVersion": 1,
+  "scope": "Historical source discoveries, not blanket fidelity acceptance. See combat-magic-issue-coverage.md for superseding evidence and unresolved issues.",
+  "lessons": [
+    {
+      "sourceFile": "birth-order-lessons.json",
+      "title": "Native continuous birth seed-age order and float fraction clock",
+      "content": "Unity continuous emission assigns lane zero to the newest crossing, then older births. Capacity clips the full scheduled batch, retaining newest times. Reverse UnityParticleBirthTiming delay and share the helper with Edge shape. Constant rate emission uses float32 clock deltas multiplied by rate (rounded), added to a float32 fractional count (rounded), then floor/subtract. floor(totalClock/floatInterval) misses boundary births at rate120 frame9 and rate1000 frame6. Fixtures birth-order-native.json bind actual particle seed to age and position across144 automatic PostLateUpdate rows at rates60,100,120,200,1000,2000, capacities16/128. Existing rate-clock-native.json now asserts exact counts for9rates x32frames instead of allowing one boundary birth. Sorted age comparisons alone miss wrong RNG-to-age assignment. This is not proof of random/curve rates, rotating emitter interpolation, shape RNG or whole-effect visual fidelity."
+    },
+    {
+      "sourceFile": "birth-timing-lessons.json",
+      "title": "Within-frame Unity particle birth timing controls alpha, size, gravity and moving emitters",
+      "content": "Cocos CPU emit(count,dt) inflates startLifetime and then gives every rate birth the same full-frame module/motion dt. Native Unity rate-200 births in the first 1/60 frame have ages .01166667/.00666667/.00166667. Rate-60 newborns have age zero and native float cadence 1/2/3/4/4/5 across six steps. UnityParticleBirthTiming preserves authored lifetime, per-particle integration dt, source gravityY, uniform Z start size, and translating World emitter positions. Native fixtures cover12 static/moving cases and9 rates/32 frames; rate60 count matches exactly, other tested rates differ by at most1 precision-boundary particle. This is not exact count parity for all rates, rotating-emitter or nested-birth proof, or whole-effect95% acceptance. Stage the runtime dependency together with SimulationStep and bind DynamicsManager gravityY; refresh AssetDB rather than fabricate metas. Await real scene-ready state before runtime probes as well as checkpoints: probing after a fixed10-second sleep can falsely report no scene/uniform frame even when later captures are valid."
+    },
+    {
+      "sourceFile": "capture-identity-lessons.json",
+      "title": "Unity capture request identity survives lost Play Mode RPC acknowledgement",
+      "content": "A Unity Play Mode capture can finish after script-execute loses its acknowledgement during domain reload. Blind retries enqueue duplicates and may delete a completed capture. Shared unity-reference-capture now assigns a UUID, requires the loaded Request type to support requestId, and observes only the matching manifest after transport loss. Unity Begin alone clears an old manifest after accepting the request. Busy and nontransport failures preserve outputs and fail normally. Stale loaded capture assemblies are rejected before queueing. Thirteen regression tests cover lost acknowledgement, busy preservation, wrong/stale IDs, old protocols and existing capture contracts. A fresh fire-fireball-impact native 17-frame landscape capture completed with matching requestId on 2026-09-27; unit tests simulate acknowledgement loss, not a claim that this live case lost its RPC. Combat Magic --resume validates existing cases and captures missing/stale cases, preventing full-catalog rework. Resumed counters include cached cases."
+    },
+    {
+      "sourceFile": "edge-shape-lessons.json",
+      "title": "Unity SingleSidedEdge is not Cocos Box edge; jitter is a sphere surface",
+      "content": "Unity shape 12 uses local X segment and initial +Y direction. Continuous Loop traverses 2*speed units/sec independent of radius: -radius + (2*speed*birthTime) modulo 2*radius. A radius1-only probe hides this distinction; test multiple radii. Native random/spherical direction blends normalize once before jitter; jitter does not change radial direction. randomPositionAmount offsets have fixed radius on a sphere before nonuniform shape scale (8192 native samples). Birth timing may initialize only on first Update after CPU processor creation: require the SimulationStep marker during Start and actual timing at emission. Keep exact wrap endpoints and RNG identity unaccepted, and gate burst/distance/prewarm/align/curves. Frost-wave live width is restored but size/lifetime correlation and color/lighting still need refinement."
+    },
+    {
+      "sourceFile": "emission-window-lessons.json",
+      "title": "Unity non-looping emission excludes the terminal timestep",
+      "content": "Native 54-case probes show rate emission stops before the step reaching duration, not after integrating a clipped final step. At 60 Hz duration .1 and rate 5000 gives 416 particles, not 500. Preserve float32 delay clock and active clock, partial delay crossing, and reset on replay. Fixture assertions reject any terminal dispatch exactly; separate birth counter quantization has a known +/-1 particle limit. Do not extend this evidence to looping boundaries or bursts."
+    },
+    {
+      "sourceFile": "feature-dry-run-lessons.json",
+      "title": "Feature ensure dry-run must bypass the Editor mutation API",
+      "content": "Combat Magic revealed that cocos-engine-feature-audit ensure --dry-run still opened MCP and called engineFeature_ensure_features, persisting PhysX and rebuilding the engine. Only the filesystem fallback honored dryRun. Fix ensure with an early audit-only return before MCP, report writes and restart. Two regression cases cover incomplete and already complete profiles, assert no client attempts, restarts or file bytes/mtime/tree changes. A dry-run receipt must explicitly separate proposed profile changes from an applied Preview backend. Profile selection alone does not prove import-map/runtime application."
+    },
+    {
+      "sourceFile": "fidelity-threshold-lessons.json",
+      "title": "Core port gates must honor stricter user fidelity thresholds",
+      "content": "Combat Magic requested at least 95 percent, but core manifest validation only accepted the exact default 80/90 values. The validator now supports numeric ordered minimum/target thresholds at least 80/90 and at most 100, including 95/95. It still rejects weakened, reversed, excessive or nonnumeric thresholds and preserves the weighted evidence rubric. Thirty-one core-port tests pass. A core evidence score is not image similarity and cannot establish whole-pack visual parity. Explicit preview-only verification avoids builds while retaining runtime/evidence gates."
+    },
+    {
+      "sourceFile": "fixed-force-lessons.json",
+      "title": "Unity fixed Force uses independent salted particle-seed XYZ draws",
+      "content": "Cocos 3.8.8 ForceOvertimeModule reuses one pseudoRandom factor for X/Y/Z, correlating motion unlike Unity. For measured World-space XYZ two-constant Force, unityFixedForceRandom initializes the native four-word xorshift generator from uint32(particle.randomSeed + 0x12460f3b), then takes three consecutive low-23-bit normalized draws. particle-random-force-contract binds randomized:false to UnityParticleRandomForce. Reflect the sampled Z, preserve independent axes and avoid pool-order/system-RNG dependence. particle-fixed-force-native.test.cjs validates 196 original and 64 held-out native cases including asymmetric ranges, high and wrapping seeds, 17 particles and staggered births. This is kernel/adapter evidence; local/curve Force and whole-effect visual parity need separate validation."
+    },
+    {
+      "sourceFile": "forward-light-selection-lessons.json",
+      "title": "Unity Forward Auto light ranking uses gamma luminance and overlapping slot fades",
+      "content": "Native 90 ForwardBase/ForwardAdd uniform probes establish Auto point lights at pixelLightCount4: score = gamma authored luminance(.3R+.59G+.11B)*intensity/(1+25*d2/range2), centered per renderer. It is not max linear RGB and not a hard 3pixel+4vertex partition. Last pixel overlaps first vertex; pixel fade=(score3-score4)/(score2-score4+.001). Last vertex fade uses preceding ranked neighbors; near ties need float tolerance1e-5 weighted linear RGB. Native has four pixel passes even when last pass weight0. Shared UnityForwardAutoLights is a tested recipe, not automatically bound yet. Raw gamma luminance goes in ParticleLightKernel sample channel7 separately from linearRGB. More than8 light SH overflow, other quality budgets/renderModes, exact tie ordering and full lit-renderer visual parity remain unverified. Never globally force all lights to pixel or adjust exposure to hide selection errors."
+    },
+    {
+      "sourceFile": "forward-sh-lessons.json",
+      "title": "Unity Forward overflow SH belongs to renderer bounds",
+      "content": "Native Auto quality4 with one main directional adds SH from sorted light index8 onward, not after slot7. UnityForwardAutoLights packs Lambert L2 with16/17 normalization; attenuation=1/(1+25*max(centerDistanceSquared,boundsRadiusSquared)/rangeSquared)*min(1,rangeSquared/boundsRadiusSquared). Use linear RGB contributions and gamma luminance only for importance ranking. 204 valid native shader-uniform rows (126lit plus78ambient baselines) cover RGB/intensity/counts, bounds/ranges, arbitrary directions and zero-distance. Probe camera must cover every diagnostic pixel: tiny-plane old bounds rows were incomplete and are explicitly excluded; corrected directional probe covers small bounds. Allocate per-renderer light textures and SH vectors at binding, reuse at update; material instances own UBOs. Other quality, dynamic particle bounds, mixed overflow ordering and whole-effect fidelity are not established by these fixtures. Cocos utils.createMesh does not calculate bounds by default. Provide min/max or calculateBounds:true for lit meshes and assert live model.worldBounds; otherwise per-renderer selection silently skips although material import is clean."
+    },
+    {
+      "sourceFile": "generation-idempotence-lessons.json",
+      "title": "Unchanged AI/config generation must preserve Editor-watched asset mtimes",
+      "content": "Combat Magic catalog capture lost its CDP target during AI sync. The configuration typings generator always rewrote the same asset; instruction deployment copied raw templates then injected blocks, rewriting unchanged files twice. Compare final rendered bytes before writing, normalize CRLF only for comparison, and preserve unchanged mtimes. Check/verify and help/invalid arguments are read-only. Ten regression tests cover changed/unchanged output, stale read-only checks, frontmatter and final-template copying. Integration reruns verify bytes and mtimes in the actual project and home skill mirrors. Do not run asset-changing generation during capture; Preview navigation invalidates evidence."
+    },
+    {
+      "sourceFile": "grab-tie-lessons.json",
+      "title": "Stained GrabPass must include equal-key legacy particle renderers",
+      "content": "Combat Magic chaotic explosion had matching counts but a dark core because a strict less-than priority test excluded main-flash from the grabbed image. Unity Built-in Stained BumpDistort draws after tied Legacy Particles Additive, Alpha Blended, Additive Soft and Alpha Blended Premultiply. 192 native cases cover perspective/orthographic, order offsets -1/0/+1 and renderer/material/sibling permutations. Same-key glow is captured; higher-order glow behind the glass is depth-occluded. UnityStainedGrabOrdering preserves this measured tie contract. Do not infer arbitrary custom-shader tie behavior or whole-pack visual parity."
+    },
+    {
+      "sourceFile": "initial-state-lessons.json",
+      "title": "Native particle initialization needs independent channels and unsigned-safe seed ownership",
+      "content": "Cocos shares one random draw across life/speed/size/rotation/color, creating correlated large long-lived particles. Unity four-lane xorshift initialization draws particle seed, lifetime, size X/Y/Z (when 3D), rotation Z/X/Y (when 3D), color; pad unused SIMD lanes per batch. Start speed uses separate particle-seed salt 0x96aa4de3. Native proof: 272 plain +544 held-out automatic births, plus272 units/lifetime clamp samples. Clamp lifetime endpoints to .0001 before interpolation. Shared InitialState adapter intercepts engine evaluators during emit, installs before legacy StartRotation and delegates its marker, preserves birth timing/packing. Store native full uint32 separately in unityNativeSeed; overwriting Cocos randomSeed breaks signed XOR module samplers. Noise/Force read native seed where available. Clear resets kernel and Noise coherently. Source gates reject prewarm/shape-align/flip/negative-size/unmeasured curve/color modes. All 520 supported Combat Magic emitters attach; frost-crystal shape alignment is still explicit gap. These fixtures do not prove shape RNG or continuous batch schedule identity."
+    },
+    {
+      "sourceFile": "legacy-intensity-lessons.json",
+      "title": "Linear color space and linear light intensity are independent source settings",
+      "content": "Historical Combat Magic GraphicsSettings has Built-in, lightsUseLinearIntensity0 and lightsUseColorTemperature0; ProjectSettings still uses Linear color space. Reference preparation incorrectly synthesized intensity1. Preserve/hash the historical GraphicsSettings file, not just its pipeline. Native POINT probe: legacy RGB = sRGBDecode(gammaRGB * effectiveIntensity), modern RGB = sRGBDecode(gammaRGB) * effectiveIntensity. Effective intensity includes particle alpha. Example blue1 at intensity.5 produces .214041144 legacy versus .5 modern, explaining materially brighter floor illumination. Shared UnityParticleLightKernel takes the explicit flag through LightsAdapter; defaults remain modern for existing callers. The new fixture has72 raw rows, only36 POINT rows valid for color assertions; ForceVertex rows have no verified VERTEXLIGHT_ON variant and are excluded. Keep these limitations explicit. The user's working URP project is preserved; this correction applies to the isolated original Built-in reference and its Cocos lighting implementation."
+    },
+    {
+      "sourceFile": "light-phase-lessons.json",
+      "title": "Native Unity particle-light color and range contracts",
+      "content": "Native GPU readback proves Use Particle Color replaces template RGB; selected RGB is sRGB-decoded then multiplied by template intensity, constant intensity multiplier and optionally particle Color32 alpha. Range uses template range times multiplier, uniform emitter world scale and sqrt(abs(current size X*Y)) when size affects range. Size Z is ignored. Portable fixtures cover36 ForcePixel color and8 range cases. ForceVertex zero readbacks are experimental and do not prove vertex-light selection. Unsupported random ratios/curves, shadows, color temperature and nonuniform scale must remain explicit. Actual scene light ranking and per-renderer selection require separate visual evidence."
+    },
+    {
+      "sourceFile": "light-phase-lessons.json",
+      "title": "Cocos material defaults and animated instance UBOs need live verification",
+      "content": "Effect property defaults can leave Material.getProperty null, so clone(default) may crash scene startup. Serialize/initialize values before save/restore. Updating parent Material uniforms does not guarantee MeshRenderer or ParticleSystemRenderer MaterialInstance UBO changes. Track current valid instances and bind animated values/textures directly. Verify visible lighting/refraction with receiving-surface pixels; an AssetDB shader import PASS alone is insufficient."
+    },
+    {
+      "sourceFile": "light-phase-lessons.json",
+      "title": "Unity fixed-physics ordering needs post-Update transform synchronization in Cocos",
+      "content": "For native Unity scripts that move transforms in Update, fixed physics executes before behaviour Update. An explicit scene adapter may run the Cocos physics postUpdate once before director.tick and suppress its later simulation. It must still syncSceneToPhysics after Update before render clears node transform flags; otherwise next frame physics overwrites movement with stale body poses. Single-owner installation and method restoration are required. Matching movement and simulation phase is not PhysX/Cannon collision-event parity."
+    },
+    {
+      "sourceFile": "light-phase-lessons.json",
+      "title": "Fixed-step Preview capture can starve the Editor socket heartbeat",
+      "content": "Long synchronous director.tick loops block browser heartbeat processing and cause socket.io WebSocket CLOSING/CLOSED errors during heavy VFX captures. Pause automatic game clock and yield requestAnimationFrame between small groups of native float32 ticks. Preserve simulation step and frame count. Record console URL/line/stack to distinguish the preview infrastructure from shader/logic errors. Do not ignore/filter errors to claim a passing capture."
+    },
+    {
+      "sourceFile": "local-scale-lessons.json",
+      "title": "Local particle scaling must preserve the authored transform hierarchy",
+      "content": "The porter misnamed Unity scalingMode=1 as World and divided node.localScale by parent scale, while the particle converter correctly selected Cocos scaleSpace=Local. Cocos CPU renderer already uses node.getScale for Local. Frost impact trail-mist local .5 under parent1.2 became .416667/world .5 instead of local.5/world.6. Remove transform compensation, keep Local particle mapping, and compare native live node transforms. A full prefab-port regression with a scaled parent rejects this bug and 26 porting regressions pass. Particle-only scaling semantics must not rewrite source hierarchy."
+    },
+    {
+      "sourceFile": "material-baseline-lessons.json",
+      "title": "URP migrated particle BaseColor is not the legacy TintColor reference",
+      "content": "Combat Magic black-arc-circle appeared darker in Cocos than the working URP Unity preview. A source-bound static audit found four materials across six renderers: URP Particles/Unlit actively uses white BaseColor in Multiply mode while saved gray TintColor is dormant. The original legacy Additive/Alpha Blended shader uses twice GPU-linear TintColor: Color .5 uploads as .214041144, giving RGB coefficient .428082288 versus URP1, with alpha coefficient1 in both. This is not a final screenshot brightness ratio. Preserve the user-selected original appearance; do not silently switch to the migrated preview or apply a global exposure multiplier. Shared particle-material-reference.cjs compares bounded active multiply contracts, blend factors and alpha-clamp semantics, rejecting unmeasured keywords. Four tests cover baseline mismatch, alpha/additive ownership, unsupported modes and incomplete evidence. The Unity scanner was responsive but script-execute timed out; no new live visual acceptance or appearance fix is claimed. Native matching-pipeline captures remain required; never restore Built-in materials directly into URP."
+    },
+    {
+      "sourceFile": "module-frame-lessons.json",
+      "title": "Cocos 3.8.8 CPU particle modules do not refresh World Local frames",
+      "content": "Cocos 3.8.8 CPU renderer comments out module update, leaving World/Local velocity, force and limit frames stale. Shared BirthState refreshes each enabled frame with a fresh matrix. The subsequent Hierarchy scaling adapter preserves native module transforms: local-to-world R*S, world-to-world S, world-to-local inverse(S)*inverse(R)*S, local-to-local identity. All 72 native constant velocity/force cases now pass, including nonuniform scale and Z reflection. Keep existing module sampling and speed modifier; Orbit already handles its full matrix and must not be scaled twice. This does not scale startSpeed: 108 plain and 18 automatic shapeless births prove it stays unchanged across all scaling modes. Local/Shape module scaling, parent shear, singular scales, prewarm and general limit-space fidelity remain separate gates. Refresh prefab imports and verify actual runtime hooks, not just source hashes."
+    },
+    {
+      "sourceFile": "native-frame-lessons.json",
+      "title": "Native particle billboard frames: View columns, World ownership and axial size order",
+      "content": "Symptom: a ported 3D whirl looks like a dark dense ball and World billboards rotate with the camera. Root cause: builtin quaternion composition differs from Unity Z-X-Y; inverse-view rows invert camera pitch/yaw; World Billboard was unbound; axial rotation happened after anisotropic scale. Fix: particle-renderer-contract/source-particle.effect/applyParticleStartRotation and Euler adapter binding. Native Unity 6000.3.1f1 BakeMesh fixtures billboard-frames-native and billboard-spin-native bind capture-script SHA256 and verify four UV corners under rotated camera/emitter plus Euler integration. View signs (-X,-Y,-Z); World signs (+X,+Y,-Z), vertex w=4 ignores emitter/camera; Horizontal rotates corner before sizing. Vertical pitched/yawed camera remains unverified. Static fixture/native geometry tests and one Combat Magic live Preview pass do not prove full-pack 95% visual fidelity."
+    },
+    {
+      "sourceFile": "native-frame-lessons.json",
+      "title": "Batch native-frame Preview checkpoints without resetting the browser for every image",
+      "content": "Use verify-runtime.cjs runOne programmatic checkpoints [{name,expression,requireOk:true}], viewportSize and onCheckpoint. One isolated browser target captures evidence and PNG SHA256 per case, verifies canvas and PNG dimensions and fails closed on exceptions/missing evidence. Each case must reset its own gameplay state. Pause game and call director.tick(1/frameRate) for actual physics/component/render order; Unity capture frame 0 is the first Update, not initial unstepped state. Do not bootstrap with tick(0): per-frame movement still runs and can create a collision. Keep live replay/input tests and compare all impact systems with native all-scene counts. Random generators differ, so deterministic timestep does not prove pixel-exact random births."
+    },
+    {
+      "sourceFile": "noise-random-lessons.json",
+      "title": "Native Noise random strength and scalar particle size require distinct contracts",
+      "content": "Unity two-constant Noise strength uses three stable xorshift draws from uint32(particle.randomSeed + 0x3edcba94), independent XYZ when separateAxes is enabled and shared X otherwise. Apply the same strength to displacement, size and rotation. The 312-case native oracle covers held-out/wrapping seeds, all qualities, frequency/damping, separate axes and scalar/3D particles. True scalar particles use Noise X size factor for every rendered axis; preserve InitialModule.size3D. A probe assigning Particle.startSize3D sets a particle flag even if main.startSize3D is false, so main flags alone cannot establish scalar semantics. BakeMesh is required because GetCurrentSize3D omits Noise size. Two-curve random, random amount/scroll and remap remain unsupported; do not silently substitute Cocos noise or claim whole-effect parity from kernel tests."
+    },
+    {
+      "sourceFile": "noise-size-lessons.json",
+      "title": "Unity Noise size is visible in BakeMesh, not GetCurrentSize3D",
+      "content": "A nonzero Noise sizeAmount previously blocked the entire shared Noise adapter, so motion and size were both missing. Native Unity 6000.3.1f1 measured 48 cases with system seed12345, billboard/cube mesh, 2D/3D start size, 1/2/20 steps and size-over-lifetime. Noise applies each axis factor 1+0.5*fieldAxis*strengthAxis*sizeAmount without dt, even with 2D start size. GetCurrentSize3D omits this factor; verify BakeMesh extents. Runtime must rebase from startSize when size-over-lifetime is disabled and compose after freshly evaluated size otherwise; multiplying prior frame size causes exponential drift. particle-noise-size.test.cjs checks rendered extents plus trajectories to8e-5. Remap/random curve channels remain blocking and source-specific full visual acceptance is still required."
+    },
+    {
+      "sourceFile": "noise-size-lessons.json",
+      "title": "Native float timestep and spawn Update phase in particle comparison",
+      "content": "Cocos3.8.8 rate-over-time emission checks counter>1. A diagnostic tick with double1/60 gives exactly1 at rate60 and emits zero on frame0, unlike Unity float deltaTime1f/60. Use Math.fround(1/frameRate) for source-matched fixed ticks, without altering authored emission rates. ReferenceCapture instantiates in its Update: particles simulate on that frame but the newly spawned fly.Update begins next frame. Capture-only defer-first-projectile-update restores root frame0x0/frame6x-2.4/frame36x-14.4 and native first count9; never change live per-frame fly movement into dt-based24m/s. Unity fixedDeltaTime also comes from the native TimeManager (Unity6 rational time can differ slightly from0.02). Matching these contracts does not resolve PhysX/Cannon contact-event differences or prove whole-pack visual parity."
+    },
+    {
+      "sourceFile": "planar-contact-lessons.json",
+      "title": "Tiny native Plane residuals can cause frozen projectile contact re-entry",
+      "content": "Combat Magic missed a second floor impact despite correct transforms and clocks. Native Enter/Stay/Exit probes reproduced contact loss from Z offsets around 1e-7. The original Unity Plane has Y residuals around 1e-16; float32 triangle front-face signs change as the source local-Z trajectory drifts. UnityPlanarMeshContactGate uses the original mesh and float32 normals/plane distances and matches 1248 frozen-sphere interior contact samples across 3 uniform scales and 12 signed Z offsets. Its accepted scope is a static axis-aligned near-XZ plane and on-plane frozen sphere center; borders/off-plane return null to the backend. The application must process backend Stay events and emit only on gated false-to-true transitions. Fireball live Preview restores 3 impacts and native expiry 3/2/1/0 at frames 180/181/187/217. Do not hardcode impact time, flatten source geometry, or generalize this to full PhysX parity."
+    },
+    {
+      "sourceFile": "procedural-bounds-lessons.json",
+      "title": "Unity procedural particle bounds are independent of live random positions",
+      "content": "Symptom: black streaks and flashes composite on the wrong side of distortion despite matching native particle counts, seeds and positions. Native renderer.bounds for procedural emitters are analytic, not the AABB of currently living random particles. Combat Magic chaotic-explosion Cone centers use startSpeed*maxLifetime/2 along local Z; full Sphere/Circle centers are the shape origin; stationary Hemisphere center is shape radius*shapeScaleZ/2. The shared particle-procedural-sort-center.cjs gates Local/Hierarchy, full random arcs, unrotated shapes and disabled unmeasured motion modules. SortingAdapter and CombatMagic GrabPass classification receive the same source-derived center. The runtime reflects native local Z once through the Cocos world matrix and returns no point for an empty emitter. Native automatic source-bound fixtures cover204 emitters and2484 samples across five effect families, including held-out emitters beyond the initial chaotic-explosion diagnosis, error below2e-6. Unsupported procedural contracts retain dynamic fallback but are not thereby proven faithful. The16-checkpoint chaotic-explosion Preview is clean; arc-zaps and arc-lightnings-black now precede GrabPass as the native bounds imply. Whole-effect visual acceptance remains pending."
+    },
+    {
+      "sourceFile": "projectile-clock-lessons.json",
+      "title": "Native local-Z translation and fixed-birth impact deadlines",
+      "content": "Unity Transform.Translate local Z uses float32 direction and position arithmetic; 90-degree rotation retains a tiny transverse component absent from Cocos q*v*q inverse. UnityLocalZTranslation matches five 180-frame source traces exactly, reflected and unreflected; arbitrary XYZ/changing parents are not accepted. Preserve authored frozen rotation when backends renormalize quaternions. Destroy(impact,3) in OnCollisionEnter uses fixed callback time; rendering checks the deadline later. The measured first impact survives frame180 and expires181, second187, wall217. UnityPhysicsBeforeUpdate exports per-step fixed/render clocks and resets both with resetAccumulator. Matching trajectory/deadlines does not prove missing contact generation is fixed."
+    },
+    {
+      "sourceFile": "reference-clock-delay-lessons.json",
+      "title": "Batch Unity particle references need a continuously rendered camera",
+      "content": "ReferenceCapture rendered only requested PNG frames in Batch Mode. PauseAndCatchup emitters paused between those renders, creating false port discrepancies. A continuous requested-viewport render on every PostLateUpdate frame fixes the visibility clock without changing source assets. Native Combat Magic beam frame 437 flash-glow changed from zero to 12 particles. Sparse 2-sample and 40-sample schedules both now report 12 and identical emitter time; manifests bind renderedFrames 438/918 and culling/visibility/bounds. Require continuous-request-viewport-v1 and renderedFrames=lastFrame+1 for Batch acceptance. Old sparse Batch references remain diagnostic and must be recaptured. Enter Play Mode after the MCP reply rather than inside the RPC, which aborted the thread and triggered long retries. Whole-effect stochastic counts and visual acceptance remain separate."
+    },
+    {
+      "sourceFile": "reference-clock-delay-lessons.json",
+      "title": "Sub-emitter start delay is relative to each parent birth",
+      "content": "Controlled native Birth distance probes cover target delays 0, .25, 1 and 7 in World/Local over 600 ticks. A 7-second target delay with 2-second parents emits zero children. Combat Magic beam has 7-second target delays and parent lifetimes at most 2.5 seconds; direct Cocos emit previously bypassed that delay and added hundreds of children. Portable distance runtime now preserves complete suppression when constant target delay is at least maximum constant/two-constant parent lifetime. Zero delay and complete suppression are accepted; partial delays show native boundary quantization and remain explicit errors, as do random/curve delays. Do not claim those combinations from this fix."
+    },
+    {
+      "sourceFile": "reference-state-lessons.json",
+      "title": "Forward camera does not identify Built-in; preserve URP compatibility and source quality",
+      "content": "A live URP camera reports actualRenderingPath Forward. Identify GraphicsSettings.currentRenderPipeline instead. Restoring 47 legacy materials in a working URP project regressed to black geometry; all 47 were immediately restored byte-for-byte from the saved backup, then refreshed. Do not repeat that restoration; keep working pipeline-compatible materials and use an isolated Built-in reference for original pack behavior. Original Combat Magic commit b381973 has QualitySettings pixelLightCount150, antiAliasing4 and softParticles true. The reference preparation omitted QualitySettings, silently defaulted to4, and invalidated lighting comparisons. Now quality file is source-hash-bound, ReferenceCapture records pipeline/quality, reference-render-state rejects missing or mismatched settings. Native budget150 probe has32 rows;24 non-overflow regular/particle cases establish all1..150 point lights as pixel lights, no vertex lights. Shared selection supports this scope; >150 remains explicitly unsupported. Both shader loops and light texture width must expand with the CPU budget. Package reload can drop a queued capture callback while SessionState persists; ReferenceCapture re-arms pending capture on domain reload, verified by the previously queued capture completing."
+    },
+    {
+      "sourceFile": "shader-precision-lessons.json",
+      "title": "Cocos effect import does not prove WebGL cross-stage uniform precision compatibility",
+      "content": "Combat Magic full-catalog capture found fire-flaming-explosion's particle trail shader failed WebGL linking: inherited trail vertex default mediump float differed from fragment highp float for PointLightCounts.sourceLightCounts. Explicit highp vec4 members in both stages repair the ABI; shared sampler/varying declarations also use matching highp. Shared kit effect-property-bindings now checks recognizable shared UBO member precision across each selected pass, resolves nested chunks and tracks default declarations in textual order. Conditional duplicate blocks and unspecified fragment defaults remain explicit evidence gaps. Native effect import/property declarations alone do not prove live linking; render all particle/trail/world-space variants and retain console source stacks."
+    },
+    {
+      "sourceFile": "shape-stream-lessons.json",
+      "title": "Automatic Circle/Cone shape randomness belongs to independent four-lane system stream",
+      "content": "Unity particle shape positions depend on emission index/system seed, not particle randomSeed: reversing manual EmitParams seeds leaves positions unchanged by index. Automatic Circle/Cone Base batches consume two xorshift draws per lane, four lanes initialized without salt; pad unused lanes in the last group. Circle radius uses sqrt(inner^2+v*(1-inner^2)), Cone radius sqrt(1-v*min(thickness,.999)); Cone direction is normalized(cos(theta)*r*sin(angle),sin(theta)*r*sin(angle),R*cos(angle)). InitialState installs shared UnityParticleShapeRandom with native seed reset and actual available batch size; ShapeDistribution must not adjust radius again. Native gameplay, matrix, velocity and continuous fixtures include288 continuous rows at six rates and two capacities. Gate arcSpread, arc mode, alignment and all direction/position jitter. Sphere/Hemisphere are now enabled with three draws per lane; 288 held-out continuous rows preserve seed identity and bounded position error, while 144 matrix rows verify native directions within2e-6 and positions within.007*radius. Analytic cbrt radius remains an explicitly marked approximation, not exact native parity; manually emitted lane0 evidence cannot prove automatic scheduling. This is not whole-effect visual acceptance."
+    },
+    {
+      "sourceFile": "size-measurement-lessons.json",
+      "title": "Do not compare Unity GetCurrentSize3D against Noise-deformed Cocos size",
+      "content": "Native noise-size-native.json proves GetCurrentSize3D excludes Noise even though BakeMesh has deformed extents. ReferenceCapture now labels sizeMeasurement. Diagnostic comparisons must remove Noise from Cocos measured size (startSize + SizeOverLifetime), retain renderedSize separately, and compare actual Noise through baked geometry or images. Matched actual-seed chaotic-explosion apparent size errors .1-.4 disappear with matching measurement: 227 seed pairs at frames18/36/60 differ by at most1.94e-5; counts/lifetimes also match. Never change runtime from a false API mismatch. Separate reusable SizeOverLifetime random salt0x8d2c8431 has512nativefixedseed samples, four fit and508heldout; sharedXYZ, install only random Cocos curve modes2/3. Combat Magic haszero suchcontracts; not a visualfix for thispack. Automatic rendered acceptance remains separate."
+    },
+    {
+      "sourceFile": "start-rotation-lessons.json",
+      "title": "Unity random 3D start rotation must use independent axes and verify imported runtime",
+      "content": "Cocos 3.8.8 shares one random value across startRotation XYZ, biasing Unity ring/spike orientations. Shared UnityParticleStartRotation kernel uses four padded xorshift lanes; automatic births and plain Emit draw Z-X-Y after seed/speed/size channels. Explicit EmitParams is a different path and cannot stand in for gameplay. Native Play Mode fixtures cover 240 seed/mask/batch cases, 64 initialization options, four automatic cases and repeated bursts across twelve frames. Bind before birth-state quaternion packing, preserve renderer signs/source radians, reset on replay. Rotation-only correction does not establish full RNG/visual parity. After assembler writes prefabs, refresh their AssetDB imports as well as scripts. Check actual instantiated adapter count and active runtime hooks; source-file hashes plus clean console alone can incorrectly accept stale imported prefabs."
+    },
+    {
+      "sourceFile": "sub-emitter-force-lessons.json",
+      "title": "Birth distance sub-emitters need source travel cursors and partial child ages",
+      "content": "The generic follower used 36 particles/second per parent and capped parents at 32, moving authored nodes. Combat Magic's 14 bindings instead use constant rate-over-distance. Native 24-case fixtures establish static transforms and same-space translation, source target spaces, position and partial birth ages. The portable kernel maintains preallocated parent travel cursors and emits at interval crossings without moving nodes. Local distance excludes emitter translation. Moving cross-space transforms, random rates, inheritance and combined burst/time emissions remain explicit gaps. Original target loop state is preserved."
+    },
+    {
+      "sourceFile": "sub-emitter-force-lessons.json",
+      "title": "Randomized Unity force cannot use a fixed Cocos per-particle acceleration",
+      "content": "Corrected native oracle: gameplay Randomized Force uses four SIMD lanes, system seed plus lane*367, xorshift initialization 1812433253 and low-23-bit float draws, ONE XYZ pass per ceil(pre-update pool count/4) per tick. The earlier TWO-pass result came from Edit Mode; rerunning its 392-case producer in Edit Mode reproduces the old fixture exactly while Play Mode consumes one pass. Capture producers now require and record Application.isPlaying and tests reject Edit Mode evidence. 196 randomized Play Mode traces cover up to 17 particles and staggered births; 12 held-out cases cover deaths, zero-life trail parents, native swaps and late births using pre-update pool indices. Preserve sampled Z reflection and share Noise system seed. Local/curve Force, target trail pool expiry and whole-effect visual parity remain separate gates. Independent automatic PostLateUpdate capture without Simulate confirms one-pass gameplay at 1 and 5 particles over 12 ticks, velocity errors below 1e-7."
+    },
+    {
+      "sourceFile": "trail-lessons.json",
+      "title": "Standalone TrailRenderer View/Stretch needs native playback geometry",
+      "content": "Standalone TrailRenderer is not a ParticleSystem trail. Native fireball Play Mode BakeMesh at frames0/6/18/36/60/120/180 proves View alignment uses camera forward plane, width/gradient/Stretch UV by normalized path distance, duplicate head and expired endpoints. Same-time AddPositions baked zero width and gave a misleading age interpretation; use real playback as authority. Native GetPositions retains80 points at1.3s/60Hz; BakeMesh clamps the extra oldest endpoint to the visible tail. UnityTrailRendererGeometry and Adapter plus trail-renderer-binding implement measured View/Stretch subset with explicit unsupported features and AssetDB-owned component/material IDs. The colored mesh effect must read a_color; PS-trail attributes cannot be reused. Preallocate typed views and update GPU buffer/draw counts to avoid Mesh.updateSubMesh and prefix-buffer slice allocations. 70 Cocos snapshots cover5 missiles/two viewports;14 fireball meshes match native to0.00013world units, but this does not prove all missile impacts or full visual parity."
+    }
+  ]
+}

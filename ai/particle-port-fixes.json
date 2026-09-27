@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceProject": "cc_playable_framework / AOE VFX port",
+  "sourceProject": "cc_playable_framework / AOE and Combat Magic VFX ports",
   "meaning": {
     "automatic": "Generic porter binds the shared contract when its exact source conditions are supported; inspect the generated prefab and preview.",
     "conditional": "Shared implementation exists; a new port must bind it from source evidence and pass its own oracle.",
@@ -519,7 +519,7 @@
     },
     {
       "id": "native-edge-shape-sphere-jitter",
-      "origin": "fd52b45",
+      "origin": "67388e3",
       "applicability": "conditional",
       "sharedPaths": [
         "tools/unity-cocos-port/particle-edge-shape-binding.cjs",
@@ -534,7 +534,7 @@
     },
     {
       "id": "native-independent-initial-particle-channels",
-      "origin": "67388e3",
+      "origin": "3f4fe1c",
       "applicability": "conditional",
       "sharedPaths": [
         "tools/unity-cocos-port/particle-initial-state-binding.cjs",
@@ -551,7 +551,7 @@
     },
     {
       "id": "native-forward-auto-light-selection",
-      "origin": "3de05b1",
+      "origin": "7b6deb8,e81f17f",
       "applicability": "recipe",
       "sharedPaths": [
         "tools/unity-cocos-port/runtime/UnityForwardAutoLights.ts",
@@ -562,6 +562,150 @@
         "tools/unity-cocos-port/particle-lights-native.test.cjs"
       ],
       "acceptance": "90 native ForwardBase/ForwardAdd uniform cases cover Auto point lights at pixelLightCount=4. Importance uses gamma luminance .3R+.59G+.11B and attenuation 1/(1+25*d2/r2). Pixel/vertex overlap uses neighboring score differences, not a fixed 3+4 split. Weighted linear RGB tolerance 1e-5 for near ties. Packed overflow SH starts at ranked index8; 204 valid native rows cover RGB/intensity, bounds/range, directions and zero distance. Use normalized Lambert L2 (16/17), clamp distance squared to bounds radius squared, and scale by min(1,rangeSquared/boundsRadiusSquared). Small-plane bounds rows lacking shader pixel coverage are excluded; direction probes independently cover small bounds. Dynamic particle bounds, mixed overflow ordering, other quality budgets/modes, spots and full rendered acceptance remain separate gates; this is a kernel, not automatic wiring."
+    },
+    {
+      "id": "effect-property-publication",
+      "origin": "3dc14a6",
+      "applicability": "automatic",
+      "sharedPaths": [
+        "tools/shader-compiler/effect-property-bindings.cjs",
+        "tools/unity-cocos-port/generated-asset-writer.cjs"
+      ],
+      "testPaths": [
+        "tools/shader-compiler/effect-property-bindings.test.cjs",
+        "tools/unity-cocos-port/generated-asset-writer.test.cjs"
+      ],
+      "acceptance": "Reject orphan properties per selected pass and publish complete assets idempotently. Live AssetDB compile is required; import UUID failures may be secondary to EFX3302."
+    },
+    {
+      "id": "effect-cross-stage-precision",
+      "origin": "ff73019",
+      "applicability": "automatic",
+      "sharedPaths": [
+        "tools/shader-compiler/effect-property-bindings.cjs"
+      ],
+      "testPaths": [
+        "tools/shader-compiler/effect-stage-precision.test.cjs"
+      ],
+      "acceptance": "Cross-stage uniform precision must agree for WebGL linking. Import success is not GPU runtime acceptance."
+    },
+    {
+      "id": "native-particle-module-frames-scale",
+      "origin": "4d71d1f,cdeea08,3de05b1",
+      "applicability": "conditional",
+      "sharedPaths": [
+        "tools/unity-cocos-port/runtime/UnityParticleBirthState.ts",
+        "tools/unity-cocos-port/runtime/UnityParticleModuleScale.ts"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/particle-module-frame-native.test.cjs",
+        "tools/unity-cocos-port/particle-module-scale-native.test.cjs"
+      ],
+      "acceptance": "Refresh CPU World/Local module frames and measured Hierarchy transforms before simulation. Reject singular and unsupported spaces; verify downward matched-seed world displacement, not screen direction."
+    },
+    {
+      "id": "particle-editor-semantic-lifecycle",
+      "origin": "84db2d1",
+      "applicability": "automatic",
+      "sharedPaths": [
+        "tools/unity-cocos-port/runtime/UnityParticleInitialStateAdapter.ts",
+        "tools/unity-cocos-port/runtime/UnityParticleBirthStateAdapter.ts",
+        "tools/unity-cocos-port/runtime/UnityParticleEulerRotationAdapter.ts"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/particle-editor-lifecycle.test.cjs"
+      ],
+      "acceptance": "Seven semantic adapters require executeInEditMode/playOnFocus and existing execution order. Probe installed markers after class compilation; passing browser Preview cannot establish Editor behavior."
+    },
+    {
+      "id": "native-angular-random-endpoints",
+      "origin": "ae76f98,bd7c69f",
+      "applicability": "conditional",
+      "sharedPaths": [
+        "tools/unity-cocos-port/runtime/UnityParticleEulerRotation.ts",
+        "tools/unity-cocos-port/particle-system-converter.js"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/particle-rotation-random.test.cjs"
+      ],
+      "acceptance": "Use retained native birth seed and measured rotation RNG; preserve TwoConstants endpoint order after reflection. TwoCurves and unbound particles remain unsupported for exact random parity."
+    },
+    {
+      "id": "native-sphere-mesh-birth-alignment",
+      "origin": "add6ffb",
+      "applicability": "conditional",
+      "sharedPaths": [
+        "tools/unity-cocos-port/particle-euler-rotation-binding.js",
+        "tools/unity-cocos-port/runtime/UnityParticleEulerRotation.ts"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/particle-shape-alignment.test.cjs"
+      ],
+      "acceptance": "Local Sphere Mesh with Euler module only: capture direction before zero speed and add native Euler alignment. Other spaces, shape jitter RNG and full visual parity remain unverified."
+    },
+    {
+      "id": "native-procedural-transparent-sort-bounds",
+      "origin": "68b3c6f",
+      "applicability": "conditional",
+      "sharedPaths": [
+        "tools/unity-cocos-port/particle-procedural-sort-center.cjs",
+        "tools/unity-cocos-port/runtime/UnityParticleSorting.ts"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/particle-procedural-sort-center.test.cjs"
+      ],
+      "acceptance": "Native procedural bounds can be independent of random live-particle AABB. Verify supported Local/Hierarchy subset, reflection and GrabPass sorting; unsupported Noise/motion retains evidence gaps."
+    },
+    {
+      "id": "reference-pipeline-quality-material-baseline",
+      "origin": "db8479b,84e6d4e,7d80009",
+      "applicability": "conditional",
+      "sharedPaths": [
+        "tools/unity-intel/reference-render-state.cjs",
+        "tools/unity-intel/particle-material-reference.cjs"
+      ],
+      "testPaths": [
+        "tools/unity-intel/reference-render-state.test.cjs",
+        "tools/unity-intel/particle-material-reference.test.cjs"
+      ],
+      "acceptance": "Identify GraphicsSettings.currentRenderPipeline; preserve working URP materials. Bind source quality and chosen material baseline. Legacy tint and soft-additive equations differ from migrated URP white additive."
+    },
+    {
+      "id": "unity-capture-lost-ack-identity",
+      "origin": "da03460",
+      "applicability": "automatic",
+      "sharedPaths": [
+        "tools/unity-intel/unity-reference-capture.cjs"
+      ],
+      "testPaths": [
+        "tools/unity-intel/unity-reference-capture.test.cjs"
+      ],
+      "acceptance": "After lost Play Mode RPC acknowledgement, accept only the matching requestId manifest. Preserve busy captures; resume only hash-validated cases, not an assumed completed catalog."
+    },
+    {
+      "id": "native-shape-random-streams",
+      "origin": "a04a4f9,f2b92df",
+      "applicability": "conditional",
+      "sharedPaths": [
+        "tools/unity-cocos-port/runtime/UnityParticleShapeRandom.ts"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/particle-shape-random-native.test.cjs"
+      ],
+      "acceptance": "Independent four-lane automatic Circle/Cone/Sphere streams. Sphere volume radius remains a bounded cbrt approximation; manual Emit, alignment and jitter do not inherit exact RNG acceptance."
+    },
+    {
+      "id": "native-legacy-light-intensity",
+      "origin": "5c3057f",
+      "applicability": "conditional",
+      "sharedPaths": [
+        "tools/unity-cocos-port/runtime/UnityParticleLightKernel.ts",
+        "tools/unity-cocos-port/runtime/UnityParticleLightsAdapter.ts"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/particle-lights-native.test.cjs"
+      ],
+      "acceptance": "Linear color space does not imply linear light intensity. Bind GraphicsSettings.lightsUseLinearIntensity and validate source particle light uploads; do not assume intensity and sRGB decoding commute."
     }
   ]
 }
