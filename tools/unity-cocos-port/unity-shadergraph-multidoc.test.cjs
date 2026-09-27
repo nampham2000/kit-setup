@@ -51,3 +51,35 @@ test('single-document (legacy) graphs still parse unchanged', () => {
   const parser = new ShaderGraphParser(legacy, {});
   assert.equal(parser.nodes.size, 0);
 });
+
+// SampleTexture2DNode slots are Texture 1, UV 2 (inputs) and RGBA 0, R 4, G 5, B 6, A 7 (outputs).
+// Reading the texture from slot 0 left every graph sampling an undeclared `mainTexture` with the
+// texture property as its UV (Cocos EFX2300: JellyCubeRun2048 EnergyShield/TintMask/Lava/WarningWall).
+test('Sample Texture 2D reads its Texture/UV inputs and publishes RGBA on slot 0', () => {
+  const docs = [
+    {
+      m_SGVersion: 3, m_Type: 'UnityEditor.ShaderGraph.GraphData', m_ObjectId: 'g',
+      m_Properties: [{ m_Id: 'p-tex' }],
+      m_Nodes: [{ m_Id: 'n-tex' }, { m_Id: 'n-uv' }, { m_Id: 'n-sample' }, { m_Id: 'n-base' }],
+      m_Edges: [
+        { m_OutputSlot: { m_Node: { m_Id: 'n-tex' }, m_SlotId: 0 }, m_InputSlot: { m_Node: { m_Id: 'n-sample' }, m_SlotId: 1 } },
+        { m_OutputSlot: { m_Node: { m_Id: 'n-uv' }, m_SlotId: 3 }, m_InputSlot: { m_Node: { m_Id: 'n-sample' }, m_SlotId: 2 } },
+        { m_OutputSlot: { m_Node: { m_Id: 'n-sample' }, m_SlotId: 0 }, m_InputSlot: { m_Node: { m_Id: 'n-base' }, m_SlotId: 0 } },
+      ],
+      m_ActiveTargets: [{ m_Id: 't-urp' }],
+    },
+    { m_SGVersion: 0, m_Type: 'UnityEditor.ShaderGraph.Internal.Texture2DShaderProperty', m_ObjectId: 'p-tex', m_Name: 'Pattern', m_DefaultReferenceName: 'Pattern', m_Value: {} },
+    { m_SGVersion: 0, m_Type: 'UnityEditor.ShaderGraph.PropertyNode', m_ObjectId: 'n-tex', m_Name: 'Property', m_Slots: [{ m_Id: 's-tex-out' }], m_Property: { m_Id: 'p-tex' } },
+    { m_SGVersion: 0, m_Type: 'UnityEditor.ShaderGraph.Texture2DMaterialSlot', m_ObjectId: 's-tex-out', m_Id: 0, m_DisplayName: 'Pattern', m_SlotType: 1 },
+    { m_SGVersion: 0, m_Type: 'UnityEditor.ShaderGraph.TilingAndOffsetNode', m_ObjectId: 'n-uv', m_Name: 'Tiling And Offset', m_Slots: [] },
+    { m_SGVersion: 0, m_Type: 'UnityEditor.ShaderGraph.SampleTexture2DNode', m_ObjectId: 'n-sample', m_Name: 'Sample Texture 2D', m_Slots: [] },
+    { m_SGVersion: 0, m_Type: 'UnityEditor.ShaderGraph.BlockNode', m_ObjectId: 'n-base', m_Name: 'SurfaceDescription.BaseColor', m_Slots: [{ m_Id: 's-base-in' }], m_SerializedDescriptor: 'SurfaceDescription.BaseColor' },
+    { m_SGVersion: 0, m_Type: 'UnityEditor.ShaderGraph.ColorRGBMaterialSlot', m_ObjectId: 's-base-in', m_Id: 0, m_DisplayName: 'Base Color', m_SlotType: 0, m_Value: { x: 0.5, y: 0.5, z: 0.5 } },
+    { m_SGVersion: 1, m_Type: 'UnityEditor.Rendering.Universal.ShaderGraph.UniversalTarget', m_ObjectId: 't-urp', m_ActiveSubTarget: { m_Id: 't-unlit' }, m_SurfaceType: 0 },
+    { m_SGVersion: 2, m_Type: 'UnityEditor.Rendering.Universal.ShaderGraph.UniversalUnlitSubTarget', m_ObjectId: 't-unlit' },
+  ];
+  const parser = new ShaderGraphParser(docs.map(doc => JSON.stringify(doc, null, 4)).join('\n\n'), {});
+  const glsl = String(parser._transpileGraphToGLSL());
+  assert.match(glsl, /texture\(Pattern, _sg_tilingOffset_\d+\)/, 'samples the texture property with the tiling UV');
+  assert.doesNotMatch(glsl, /texture\(mainTexture/);
+});

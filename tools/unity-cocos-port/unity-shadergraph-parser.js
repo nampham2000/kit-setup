@@ -750,15 +750,17 @@ ${fragmentCode}
 
       // 4. SampleTexture2DNode
       if (typeStr.includes('SampleTexture2DNode') || name === 'Sample Texture 2D') {
-        const texExpr = getInputExpr(nodeId, 0, 'mainTexture');
-        const uvExpr = getInputExpr(nodeId, 1, 'uv');
+        // SampleTexture2DNode slot ids (Unity ShaderGraph): outputs RGBA 0, R 4, G 5, B 6, A 7;
+        // inputs Texture 1, UV 2, Sampler 3.
+        const texExpr = getInputExpr(nodeId, 1, 'mainTexture');
+        const uvExpr = getInputExpr(nodeId, 2, 'uv');
         const outVar = getVarName('texColor');
         codeLines.push(`    vec4 ${outVar} = texture(${texExpr}, ${uvExpr});`);
-        evaluatedNodes.set(`${nodeId}_4`, `${outVar}.rgba`);
-        evaluatedNodes.set(`${nodeId}_5`, `${outVar}.r`);
-        evaluatedNodes.set(`${nodeId}_6`, `${outVar}.g`);
-        evaluatedNodes.set(`${nodeId}_7`, `${outVar}.b`);
-        evaluatedNodes.set(`${nodeId}_8`, `${outVar}.a`);
+        evaluatedNodes.set(`${nodeId}_0`, `${outVar}.rgba`);
+        evaluatedNodes.set(`${nodeId}_4`, `${outVar}.r`);
+        evaluatedNodes.set(`${nodeId}_5`, `${outVar}.g`);
+        evaluatedNodes.set(`${nodeId}_6`, `${outVar}.b`);
+        evaluatedNodes.set(`${nodeId}_7`, `${outVar}.a`);
         continue;
       }
 
