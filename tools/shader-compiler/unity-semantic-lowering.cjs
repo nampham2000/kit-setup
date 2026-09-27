@@ -331,6 +331,10 @@ function lowerHlslToGlsl(code, options = {}) {
   out = out.replace(/\b(?:UNITY_MATRIX_MV|unity_MatrixMV)\b/g, '(cc_matView * cc_matWorld)');
   out = out.replace(/\b(?:UNITY_MATRIX_M|unity_MatrixM|unity_ObjectToWorld|_UCST_MatWorld)\b/g, 'cc_matWorld');
   out = out.replace(/\b(?:unity_WorldToObject|unity_MatrixInvM|UNITY_MATRIX_I_M|_UCST_MatWorldIT)\b/g, 'cc_matWorldIT');
+  // unity_WorldTransformParams.w: -1 for an odd-negative-scale (mirrored) object, else 1. The
+  // sign of det(mat3(world)) without determinant(), which GLSL ES 1.0 lacks.
+  out = out.replace(/\bunity_WorldTransformParams\b/g,
+    'vec4(0.0, 0.0, 0.0, dot(cross(cc_matWorld[0].xyz, cc_matWorld[1].xyz), cc_matWorld[2].xyz) < 0.0 ? -1.0 : 1.0)');
   out = out.replace(/\b(?:UNITY_MATRIX_V|unity_MatrixV|unity_WorldToCamera|_UCST_MatView|_UCST_MatWorldToCamera)\b/g, 'cc_matView');
   out = out.replace(/\b(?:unity_CameraToWorld)\b/g, 'inverse(cc_matView)');
   out = out.replace(/\b(?:UNITY_MATRIX_P|unity_MatrixP|_UCST_MatProj)\b/g, 'cc_matProj');

@@ -17,6 +17,8 @@ const { buildStd140Ubo } = require('./ubo-layout-builder.cjs');
 const { lowerHlslToGlsl } = require('./unity-semantic-lowering.cjs');
 const { allocateBindings } = require('./binding-allocator.cjs');
 const { renameReservedInEffect } = require('./glsl-reserved-identifiers.cjs');
+const { promoteIntLiterals } = require('./glsl-int-literals.cjs');
+const { glslEs1Compat } = require('./glsl-es1-compat.cjs');
 const { extractSurfaceShaderIntent, detectPackedMaps } = require('./surface-shader-intent-extractor.cjs');
 const {
   SRGB_SAMPLE_HELPER,
@@ -837,6 +839,7 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
   const vsLines = [
     'CCProgram vs %{',
     '  precision highp float;',
+    '  precision highp int;',
     ...vsIncludes,
     '',
     '  ' + attributes.join('\n  '),
@@ -862,7 +865,10 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
       // only from a helper still needs declaring here.
       return `${body}\n${helperFunctions.join('\n')}`;
     })();
-    const vsSamplers = samplers.filter(s => new RegExp(`\\b${s.name}\\b`).test(vertProbe));
+    // The probe is lowered but not yet renamed: Unity `_TurbulenceMask` becomes
+    // `turbulenceMask` only later, so match either spelling.
+    const vsSamplers = samplers.filter(s => [s.name, s.originalName].filter(Boolean)
+      .some(name => new RegExp(`\\b${name}\\b`).test(vertProbe)));
     if (vsSamplers.length > 0) {
       // Same allocator as the fragment stage: a sampler must carry the same
       // set/binding in both stages or Cocos rejects the pipeline layout.
@@ -1001,7 +1007,8 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
       // thành `a_position += ...` là GHI VÀO ATTRIBUTE — `in` trong GLSL ES 3.0 chỉ
       // đọc, shader không compile. Prologue đã có `vec4 pos = vec4(a_position, 1.0);`
       // và chính `pos` mới là thứ được biến đổi ở cuối, nên đó là đích đúng.
-      vBody = vBody.replace(new RegExp(`\\b${pName}\\.(?:vertex|pos|position|positionOS)\\.xyz\\s*([-+*/]?=)\\s*`, 'g'), 'pos.xyz $1 ');
+      // Any component write (`v.vertex.x += ...`, `.xz`), not only `.xyz`.
+      vBody = vBody.replace(new RegExp(`\\b${pName}\\.(?:vertex|pos|position|positionOS)\\.([xyzw]{1,4})\\s*([-+*/]?=)(?!=)\\s*`, 'g'), 'pos.$1 $2 ');
       vBody = vBody.replace(new RegExp(`\\b${pName}\\.(?:vertex|pos|position|positionOS)\\s*([-+*/]?=)\\s*`, 'g'), 'pos $1 ');
 
       vBody = vBody.replace(new RegExp(`\\b${pName}\\.vertex\\.xyz\\b`, 'g'), 'a_position');
@@ -1051,6 +1058,15 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
       vBody = vBody.replace(new RegExp(`\\b${pName}\\.position\\b`, 'g'), 'vec4(a_position, 1.0)');
       vBody = vBody.replace(new RegExp(`\\b${pName}\\.(?:uv0|texcoord0)\\b`, 'g'), 'a_texCoord');
       vBody = vBody.replace(new RegExp(`\\b${pName}\\.tangentOS\\b`, 'g'), 'a_tangent');
+      // Built-in appdata spells it `tangent`; any field carrying TANGENT/NORMAL
+      // semantics is the same attribute whatever the struct calls it.
+      if (vertexInputStruct) {
+        for (const field of vertexInputStruct.fields || []) {
+          const target = /^TANGENT$/i.test(field.semantic || '') ? 'a_tangent' : /^NORMAL$/i.test(field.semantic || '') ? 'a_normal' : '';
+          if (target) vBody = vBody.replace(new RegExp(`\\b${pName}\\.${escapeRegExp(field.name)}\\b`, 'g'), target);
+        }
+      }
+      vBody = vBody.replace(new RegExp(`\\b${pName}\\.tangent\\b`, 'g'), 'a_tangent');
     }
 
     // Clean any residual vec4(vec4(a_position, 1.0).xyz, 1.0)
@@ -1128,7 +1144,10 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
     // so using highp in VS and mediump in FS makes an otherwise identical
     // `Constant` block fail at runtime (WebGL: precisions differ between
     // shaders). Keep both stages highp; an optimizer may lower both together.
+    // Integer members follow the same rule: GLSL ES defaults int to highp in the
+    // vertex stage but mediump in the fragment stage.
     '  precision highp float;',
+    '  precision highp int;',
     ...fsIncludes,
     '',
     '  ' + fsVaryings.join('\n  '),
@@ -1259,9 +1278,10 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
   fsLines.push('  }');
   fsLines.push('}%');
 
+  // GLSL ES 1.0 has no implicit int->float conversion (HLSL does).
   return {
-    vsCode: vsLines.join('\n'),
-    fsCode: fsLines.join('\n'),
+    vsCode: glslEs1Compat(promoteIntLiterals(vsLines.join('\n'))),
+    fsCode: glslEs1Compat(promoteIntLiterals(fsLines.join('\n'))),
     ubo,
   };
 }
