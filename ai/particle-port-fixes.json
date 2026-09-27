@@ -25,6 +25,7 @@
         "tools/unity-cocos-port/particle-renderer-contract.test.cjs",
         "tools/unity-cocos-port/particle-renderer-native.test.cjs",
         "tools/unity-cocos-port/particle-euler-rotation.test.cjs",
+        "tools/unity-cocos-port/particle-shape-alignment.test.cjs",
         "tools/unity-cocos-port/particle-pivot-alignment-native.test.cjs",
         "tools/unity-cocos-port/particle-mesh-frame-binding.test.cjs"
       ],

@@ -15,6 +15,38 @@ const ROTATION_SEED = 125292; // cc ParticleModuleRandSeed.ROTATION
 
 interface Settable { set(x: number, y: number, z: number): unknown; }
 
+/** Native Sphere alignment adds Euler angles, not a LookRotation quaternion.
+ * Direction is in reflected Cocos local coordinates, before startSpeed. */
+export function addUnityShapeAlignment(e: any, x: number, y: number, z: number, signs: number[]): void {
+    const length = Math.hypot(x, y, z);
+    if (length < 1e-10) return;
+    e.x += signs[0] * -Math.asin(Math.max(-1, Math.min(1, y / length)));
+    e.y += signs[1] * Math.atan2(x, z);
+}
+
+export function installUnityParticleShapeAlignment(system: ParticleSystem, signs: number[]): boolean {
+    const runtime = system as any, shape = system.shapeModule as any, processor = runtime.processor;
+    if (runtime.unityShapeAlignment) return true;
+    if (!shape?.enable || !shape.alignToDirection || !processor || !runtime.unityEulerRotation) return false;
+    // Narrow measured contract: local Sphere mesh with rotation-over-lifetime.
+    // Other spaces/shapes must not silently inherit this evidence.
+    if (system.simulationSpace !== 1 || shape.shapeType !== 3) return false;
+    runtime.unityShapeAlignment = true;
+    const emit = shape.emit, born = processor.setNewParticle;
+    shape.emit = function (p: any): void {
+        emit.call(this, p);
+        p.unityAlignmentX = p.velocity.x;
+        p.unityAlignmentY = p.velocity.y;
+        p.unityAlignmentZ = p.velocity.z;
+    };
+    processor.setNewParticle = function (p: any): void {
+        addUnityShapeAlignment(p.startEuler, p.unityAlignmentX, p.unityAlignmentY, p.unityAlignmentZ, signs);
+        packUnityEulerRotation(p.rotation, p.startEuler.x, p.startEuler.y, p.startEuler.z);
+        born.call(this, p);
+    };
+    return true;
+}
+
 function pseudoRandom(seed: number): number {
     return ((seed * 9301 + 49297) % 233280) / 233280;
 }

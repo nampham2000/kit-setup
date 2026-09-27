@@ -17,6 +17,17 @@ This skill provides step-by-step guidance and architectural rules for converting
 
 ### Reuse the measured VFX fixes
 
+For a radial crystal core collapsing into a solid lump, inspect ShapeModule
+alignToDirection before adjusting opacity or lighting. Creator 3.8.8 serializes
+this flag but does not apply it at emission. The measured Local Sphere Mesh
+subset uses UnityParticleEulerRotationAdapter: capture direction inside shape.emit
+before startSpeed can zero it, add native Euler X/Y alignment at birth, then
+integrate rotation over lifetime. Unity's result is additive Euler, not
+LookRotation multiplied by the initial quaternion. The native fixture covers
+48 directions/start-angle combinations; the live frost-crystal Editor probe
+checks the hook with zero speed. This does not establish native shape jitter/RNG,
+other shapes/spaces, or whole-effect visual parity. Retain their evidence gaps.
+
 For spikes that should retract into the ground but instead drift toward the
 camera, inspect the authored VelocityModule space and emitter world rotation
 before changing curves. World Y under a rotated local emitter must pass through

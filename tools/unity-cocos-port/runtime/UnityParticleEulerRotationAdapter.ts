@@ -1,5 +1,5 @@
 import { _decorator, Component, ParticleSystem } from 'cc';
-import { installUnityParticleEulerRotation } from './UnityParticleEulerRotation';
+import { installUnityParticleEulerRotation, installUnityParticleShapeAlignment } from './UnityParticleEulerRotation';
 
 const { executeInEditMode, playOnFocus,  ccclass, property, executionOrder } = _decorator;
 
@@ -16,5 +16,11 @@ export class UnityParticleEulerRotationAdapter extends Component {
     protected onLoad(): void {
         if (!this.source) throw new Error('Missing Unity Euler rotation particle system');
         if (!installUnityParticleEulerRotation(this.source)) throw new Error('Unity Euler rotation requires a rotation-over-lifetime module');
+    }
+    protected start(): void {
+        const spec = this.sourceContract ? JSON.parse(this.sourceContract) : {};
+        if (spec.shapeAlignment && this.source && !installUnityParticleShapeAlignment(this.source, spec.eulerSigns)) {
+            throw new Error('Unity shape alignment requires the measured local Sphere mesh contract');
+        }
     }
 }
