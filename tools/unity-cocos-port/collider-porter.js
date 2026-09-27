@@ -12,10 +12,7 @@ module.exports = function createColliderPorter(deps) {
     resolveUnityPhysicsMaterialUuid,
     resolveUnityBuiltinMeshUuid,
     resolveBuiltinPrimitiveMeshUuid,
-    importedUnityAssetPath,
-    copyUnityAssetToCocos,
     handleMissingModel,
-    resolveLibraryAssetUuid,
   } = deps;
 
   function unityRefEquals(left, right) {
@@ -51,32 +48,18 @@ module.exports = function createColliderPorter(deps) {
       : null;
     if (resolved?.meshUuid) return resolved.meshUuid;
 
-    if (meshAsset.ext === '.asset') {
-      const importedDest = importedUnityAssetPath ? importedUnityAssetPath(meshAsset, options) : '';
-      if (importedDest) {
-        const existingUuid = resolveLibraryAssetUuid(importedDest, options, 'cc.Mesh', { forceReload: true });
-        if (existingUuid) return existingUuid;
-      }
-      if (copyUnityAssetToCocos) {
-        const copiedDest = copyUnityAssetToCocos(meshAsset, options, reporter, 'model', 'medium', {
-          deferNeedsImportReport: true,
-          meshNameHint: gameObject.name,
-        });
-        if (copiedDest) {
-          const copiedUuid = resolveLibraryAssetUuid(copiedDest, options, 'cc.Mesh', { forceReload: true });
-          if (copiedUuid) return copiedUuid;
-        }
-      }
-      if (resolveBuiltinPrimitiveMeshUuid) {
-        const primitiveUuid = resolveBuiltinPrimitiveMeshUuid(gameObject.name, meshAsset.stem);
-        if (primitiveUuid) return primitiveUuid;
-      }
-    }
-
+    // A Unity Mesh .asset is serialized YAML that no Cocos importer reads, so it is exported
+    // straight to FBX (handleMissingModel). A name-matched built-in primitive is only used when
+    // that export fails: it approximates the collider shape, the exported mesh reproduces it.
     const missing = handleMissingModel
       ? handleMissingModel(meshAsset, reporter, options, { autoCopy: true, severity: 'low', meshNameHint: gameObject.name })
       : null;
-    return missing?.resolved?.meshUuid || '';
+    if (missing?.resolved?.meshUuid) return missing.resolved.meshUuid;
+    if (meshAsset.ext === '.asset' && !missing?.pendingImport && resolveBuiltinPrimitiveMeshUuid) {
+      const primitiveUuid = resolveBuiltinPrimitiveMeshUuid(gameObject.name, meshAsset.stem);
+      if (primitiveUuid) return primitiveUuid;
+    }
+    return '';
   }
 
   function unityRigidBody2DTypeToCocosType(unityBodyType) {

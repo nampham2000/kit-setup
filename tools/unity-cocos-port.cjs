@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 
+const { matchUnitySubAssetName } = require('./unity-cocos-port/unity-file-id.js');
+
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
@@ -322,7 +324,11 @@ Options:
   --no-engine-feature-restart Cho phép sửa Profile/engine.json nhưng để trạng thái pending, không restart Editor.
   --physics-backend <name>  Override có kiểm tra: physics-builtin | physics-cannon | physics-ammo | physics-physx.
   --force-physics-backend   Chấp nhận override dù tool phát hiện mất hành vi (được ghi rõ trong report).
+  --skip-physics            Không emit Rigidbody/Collider/Joint/CharacterController (report low PHYSICS_COMPONENT_SKIPPED)
+                            khi playable tự thay physics bằng logic riêng; collider mesh không bị export/import.
   --jobs <n>                Chạy song song n tiến trình con cho batch prefab.
+  --only-prefabs <names>    Batch từ folder: chỉ port các prefab trong danh sách (tên không đuôi hoặc
+                            path tương đối với --src; phân tách bằng dấu phẩy hoặc @file JSON/dòng).
   --quiet                   Chỉ in tổng kết (ít token hơn cho AI agent).
   --strip-private-prefix    Map Unity serialized _field to Cocos field when wiring custom scripts. Default.
   --no-strip-private-prefix Preserve leading underscore in custom script fields.
@@ -467,6 +473,7 @@ function parseArgs(argv) {
     engineFeatureRestart: true,
     physicsBackend: '',
     forcePhysicsBackend: false,
+    skipPhysics: false,
   };
 
   const optionStartIndex = command === 'help' && argv[0] && String(argv[0]).startsWith('-') ? 0 : 1;
@@ -556,6 +563,10 @@ function parseArgs(argv) {
       options.engineFeatureRestart = false;
       continue;
     }
+    if (arg === '--skip-physics') {
+      options.skipPhysics = true;
+      continue;
+    }
     if (arg === '--physics-backend') {
       options.physicsBackend = readValue(arg);
       continue;
@@ -566,6 +577,23 @@ function parseArgs(argv) {
     }
     if (arg === '--force-physics-backend') {
       options.forcePhysicsBackend = true;
+      continue;
+    }
+    if (arg === '--only-prefabs' || arg.startsWith('--only-prefabs=')) {
+      // Folder batches only: keep the listed prefabs (base names without .prefab, or paths relative
+      // to --src), comma separated or @file (JSON array or one name per line).
+      const raw = String(arg.startsWith('--only-prefabs=') ? arg.slice('--only-prefabs='.length) : readValue(arg));
+      let names;
+      if (raw.startsWith('@')) {
+        const text = fs.readFileSync(path.resolve(raw.slice(1)), 'utf8').trim();
+        names = text.startsWith('[') ? JSON.parse(text) : text.split(/\r?\n/);
+      } else {
+        names = raw.split(',');
+      }
+      options.onlyPrefabs = new Set(names
+        .map(name => String(name).trim().split(path.sep).join('/').replace(/\.prefab$/i, ''))
+        .filter(Boolean));
+      if (!options.onlyPrefabs.size) fail('--only-prefabs needs at least one prefab name');
       continue;
     }
     if (arg === '--jobs' || arg.startsWith('--jobs=')) {
@@ -655,6 +683,9 @@ function parseArgs(argv) {
   }
   if (options.physicsBackend && !['physics-builtin', 'physics-cannon', 'physics-ammo', 'physics-physx'].includes(options.physicsBackend)) {
     fail('--physics-backend must be physics-builtin, physics-cannon, physics-ammo, or physics-physx');
+  }
+  if (options.skipPhysics && (options.physicsBackend || options.forcePhysicsBackend)) {
+    fail('--skip-physics conflicts with --physics-backend/--force-physics-backend');
   }
 
   if (options.src) options.src = path.resolve(options.src);
@@ -1927,10 +1958,13 @@ class CocosAssetDatabase {
     return null;
   }
 
-  resolveModelMeshByStem(stem, meshNameHint = '', requiredExt = '') {
+  resolveModelMeshByStem(stem, meshNameHint = '', requiredExt = '', unityFileId = '') {
     const candidates = this.findModelRecordsByStem(stem).filter((record) => !requiredExt || record.ext === requiredExt);
     for (const record of candidates) {
-      const meshRecord = firstImportedSubMetaRecord(record.uuid, record.subMetas, 'gltf-mesh', meshNameHint);
+      // Unity references FBX meshes by a deterministic fileID (xxHash64 of "Type:Mesh-><name><i>");
+      // match it exactly before falling back to the GameObject-name heuristic.
+      const meshRecord = (unityFileId && firstImportedSubMetaRecordByUnityFileId(record.uuid, record.subMetas, 'gltf-mesh', 'Mesh', unityFileId))
+        || firstImportedSubMetaRecord(record.uuid, record.subMetas, 'gltf-mesh', meshNameHint);
       const mesh = meshRecord?.uuid || '';
       const materials = subMetaRecords(record.uuid, record.subMetas, 'gltf-material');
       if (mesh) {
@@ -2163,6 +2197,18 @@ function findSubMetaRecordByName(baseUuid, subMetas, importer, nameHint = '') {
     if (normalizeKey(record.subMeta.name || record.subMeta.displayName || '').includes(hint)) return record;
   }
   return null;
+}
+
+function firstImportedSubMetaRecordByUnityFileId(parentUuid, subMetas, importer, unityClassName, unityFileId) {
+  const records = subMetaRecords(parentUuid, subMetas, importer)
+    .filter(({ subMeta }) => !isPendingGeneratedSubMeta(subMeta));
+  if (!records.length) return null;
+  const names = records.map(({ subMeta }) => String(subMeta.name || subMeta.displayName || '').replace(/.mesh$/i, ''));
+  const match = matchUnitySubAssetName(unityClassName, [...new Set(names)], unityFileId);
+  if (!match) return null;
+  // Duplicate names: Unity suffixes the n-th object with index n (import order).
+  const sameName = records.filter((_, i) => names[i] === match.name);
+  return sameName[match.index] || sameName[0] || null;
 }
 
 function firstImportedSubMetaRecord(baseUuid, subMetas, importer, nameHint = '') {
@@ -4230,6 +4276,27 @@ function describeNestedPrefabAsset(options, sourceAsset, unityDb, reporter, recu
   };
 }
 
+// Unity wraps long flow mappings in PrefabInstance modifications, e.g.
+//     - target: {fileID: 6808614170226160139, guid: 6d49d5e42220fa64bbf7326459e67788,
+//         type: 3}
+// (19-digit fileIDs make this the norm). Join such reference mappings back into one line before the
+// line-based parsers below match them; otherwise the whole override is silently dropped.
+const WRAPPED_REFERENCE_START = /^\s*(?:-\s+)?(?:(?:target|objectReference|addedObject)\s*:\s*)?\{[^}]*$/;
+function joinWrappedReferenceLines(lines) {
+  const joined = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    let line = String(lines[index] ?? '');
+    if (WRAPPED_REFERENCE_START.test(line)) {
+      while (!line.includes('}') && index + 1 < lines.length) {
+        index += 1;
+        line = `${line} ${String(lines[index] ?? '').trim()}`;
+      }
+    }
+    joined.push(line);
+  }
+  return joined;
+}
+
 function parsePrefabInstanceInfo(doc) {
   const info = {
     fileId: doc.fileId,
@@ -4242,7 +4309,7 @@ function parsePrefabInstanceInfo(doc) {
   };
 
   let current = null;
-  for (const line of doc.lines) {
+  for (const line of joinWrappedReferenceLines(doc.lines)) {
     const targetMatch = /^\s*-\s+target:\s*(\{.*\})\s*$/.exec(line);
     if (targetMatch) {
       const target = parseUnityScalar(targetMatch[1]);
@@ -4281,7 +4348,7 @@ function parsePrefabInstanceInfo(doc) {
 
 function parsePrefabInstanceAddedGameObjectIds(doc) {
   const result = [];
-  const lines = doc?.lines || [];
+  const lines = joinWrappedReferenceLines(doc?.lines || []);
   const start = lines.findIndex((line) => /^\s*m_AddedGameObjects:\s*$/.test(line));
   if (start < 0) return result;
   const fieldIndent = String(lines[start]).match(/^\s*/)?.[0]?.length || 0;
@@ -4300,7 +4367,7 @@ function parsePrefabInstanceAddedGameObjectIds(doc) {
 
 function parsePrefabInstanceReferenceList(doc, fieldName) {
   const result = [];
-  const lines = doc?.lines || [];
+  const lines = joinWrappedReferenceLines(doc?.lines || []);
   const start = lines.findIndex((line) => new RegExp(`^\\s*${fieldName}:\\s*$`).test(line));
   if (start < 0) return result;
   const fieldIndent = String(lines[start]).match(/^\s*/)?.[0]?.length || 0;
@@ -4978,7 +5045,7 @@ function applyNestedParticlePrefabOverrides(builder, nestedPrefab, reporter, opt
         const meshAsset = builtin ? null : unityDb.get(unityRefGuid(meshOverride[1]));
         const meshName = meshAsset ? unityModelMeshName(meshAsset, unityRefFileId(meshOverride[1])) : '';
         const resolved = meshAsset && cocosDb?.resolveModelMeshByStem
-          ? cocosDb.resolveModelMeshByStem(meshAsset.stem, meshName || meshAsset.stem, meshAsset.ext === '.asset' ? '.fbx' : meshAsset.ext)
+          ? cocosDb.resolveModelMeshByStem(meshAsset.stem, meshName || meshAsset.stem, meshAsset.ext === '.asset' ? '.fbx' : meshAsset.ext, unityRefFileId(meshOverride[1]))
           : null;
         const meshUuid = builtin || resolved?.meshUuid || '';
         renderer._mesh = meshUuid ? cocosUuid(meshUuid, 'cc.Mesh') : resolvedMesh;
@@ -6617,8 +6684,23 @@ function buildPrefabBatchPlan(options) {
 
   const sourceRoot = path.resolve(options.src);
   const outputRoot = path.resolve(options.out);
-  const prefabFiles = findUnityPrefabFiles(sourceRoot);
+  let prefabFiles = findUnityPrefabFiles(sourceRoot);
   if (!prefabFiles.length) fail(`No Unity .prefab files found under: ${sourceRoot}`);
+  if (options.onlyPrefabs) {
+    const keyOf = file => toPosix(path.relative(sourceRoot, file)).replace(/\.prefab$/i, '');
+    const matched = new Set();
+    prefabFiles = prefabFiles.filter((file) => {
+      const key = keyOf(file);
+      const base = path.posix.basename(key);
+      const hit = options.onlyPrefabs.has(key) ? key : options.onlyPrefabs.has(base) ? base : null;
+      if (hit) matched.add(hit);
+      return !!hit;
+    });
+    const missing = [...options.onlyPrefabs].filter(name => !matched.has(name));
+    if (missing.length) {
+      fail(`--only-prefabs names not found under ${sourceRoot}: ${missing.slice(0, 10).join(', ')}${missing.length > 10 ? ` (+${missing.length - 10})` : ''}`);
+    }
+  }
 
   const plan = prefabFiles.map((sourceFile) => {
     const relative = path.relative(sourceRoot, sourceFile);
@@ -8350,6 +8432,8 @@ module.exports = {
   CocosAssetDatabase,
   portPrefab,
   portPrefabBatch,
+  buildPrefabBatchPlan,
+  scannedUnityAssetDatabase,
   findFiles,
   runScriptScaffold,
   runSmartPort,
@@ -8359,6 +8443,8 @@ module.exports = {
   findPendingImporterStates,
   convertUnityPhysicsMaterialToCocos,
   resolveUnityPhysicsMaterialUuid,
+  convertUnityMaterialToCocos,
+  emitMeshRenderer,
   emitCanvas,
   resolveTransformLayout,
   resolveNestedPrefabEffectiveTransform,
@@ -8371,6 +8457,8 @@ module.exports = {
   buildNestedPrefabPropertyOverrides,
   rebaseNestedModelMountedChildTransform,
   hasExplicitNestedModelForwardBasisRotation,
+  parsePrefabInstanceInfo,
+  parsePrefabInstanceReferenceList,
   cocosQuaternionToEuler,
   convertRotation,
   parseArgs,
@@ -8378,10 +8466,7 @@ module.exports = {
   prepareUnityPortChildEnv,
   cleanupUnityPortChildEnv,
   inheritedPreflightStillValid,
-  scannedUnityAssetDatabase,
   parseUnityYamlText,
-  parsePrefabInstanceInfo,
   applyNestedParticlePrefabOverrides,
-  CocosPrefabBuilder,
   main,
 };

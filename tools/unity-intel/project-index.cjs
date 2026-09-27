@@ -18,7 +18,7 @@ const {
 } = require('./diagnostics.cjs');
 const {
   extractGuidFromMeta,
-  extractGuidReferences,
+  summarizeGuidReferences,
   buildGuidIndex,
 } = require('./guid-index.cjs');
 const { buildDependencyGraph } = require('./dependency-graph.cjs');
@@ -241,12 +241,15 @@ function scanAssetFile(file, metaFile) {
   const yaml = extension === '.unity' || extension === '.prefab'
     ? countYamlDocs(text)
     : { gameObjects: 0, materials: 0 };
+  // Records are retained for the whole scan and persisted in the index cache,
+  // so keep one grouped entry per GUID + field path instead of one per
+  // occurrence (large level prefabs repeat the same reference thousands of times).
   const referenceEvidence = [
-    ...extractGuidReferences(text, {
+    ...summarizeGuidReferences(text, {
       provider: evidence.format === 'binary' ? 'binary' : 'asset',
       allowBareGuid: extension === '.shadergraph',
     }),
-    ...extractGuidReferences(metaText, { provider: 'meta', excludeGuids: guid ? [guid] : [] }),
+    ...summarizeGuidReferences(metaText, { provider: 'meta', excludeGuids: guid ? [guid] : [] }),
   ];
 
   return {

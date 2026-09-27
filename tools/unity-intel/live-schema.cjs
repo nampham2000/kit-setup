@@ -39,6 +39,82 @@ function sha256Hex(value) {
   return crypto.createHash('sha256').update(String(value)).digest('hex');
 }
 
+const STABLE_HASH_CHUNK_CHARS = 64 * 1024;
+const ARRAY_INDEX_KEY = /^(?:0|[1-9]\d{0,9})$/;
+
+function isArrayIndexKey(key) {
+  return ARRAY_INDEX_KEY.test(key) && Number(key) < 4294967295;
+}
+
+// stableValue() builds an ordinary object, so JSON.stringify enumerates its
+// array-index keys first in numeric order, then the remaining sorted keys.
+function stableKeys(value) {
+  const keys = Object.keys(value).sort();
+  if (!keys.some(isArrayIndexKey)) return keys;
+  return [
+    ...keys.filter(isArrayIndexKey).sort((left, right) => Number(left) - Number(right)),
+    ...keys.filter(key => !isArrayIndexKey(key)),
+  ];
+}
+
+function omittedFromJson(value) {
+  return value === undefined || typeof value === 'function' || typeof value === 'symbol';
+}
+
+/**
+ * Same digest as sha256Hex(stableStringify(value)) for JSON data, but streams
+ * the canonical text into the hash instead of materializing a canonical copy
+ * and the full JSON string. Snapshot fingerprints cover every indexed record;
+ * the copy + string tripled peak memory on large Unity projects.
+ */
+function stableHashHex(value) {
+  const hash = crypto.createHash('sha256');
+  if (omittedFromJson(value)) return hash.update(String(JSON.stringify(value))).digest('hex');
+  let pending = '';
+  // Callers write whole JSON tokens, so a flush never splits a surrogate pair.
+  const write = text => {
+    pending += text;
+    if (pending.length >= STABLE_HASH_CHUNK_CHARS) {
+      hash.update(pending);
+      pending = '';
+    }
+  };
+  const ancestors = new Set();
+  const emit = current => {
+    if (current === null || typeof current !== 'object') {
+      write(JSON.stringify(current));
+      return;
+    }
+    if (ancestors.has(current)) throw new TypeError('Cannot canonicalize a circular value');
+    ancestors.add(current);
+    if (Array.isArray(current)) {
+      write('[');
+      for (let index = 0; index < current.length; index += 1) {
+        if (index) write(',');
+        const item = current[index];
+        if (omittedFromJson(item)) write('null');
+        else emit(item);
+      }
+      write(']');
+    } else {
+      write('{');
+      let separator = '';
+      for (const key of stableKeys(current)) {
+        const item = current[key];
+        if (omittedFromJson(item)) continue;
+        write(`${separator}${JSON.stringify(key)}:`);
+        separator = ',';
+        emit(item);
+      }
+      write('}');
+    }
+    ancestors.delete(current);
+  };
+  emit(value);
+  if (pending) hash.update(pending);
+  return hash.digest('hex');
+}
+
 /**
  * Cross-language project identity contract. Unity can reproduce this without a
  * JSON canonicalizer: SHA-256 over NUL-delimited UTF-8 fields, beginning with
@@ -277,6 +353,7 @@ module.exports = {
   MAX_CANDIDATE_REFERENCES_TOTAL,
   MAX_CANDIDATE_DISPOSITIONS_BYTES,
   stableStringify,
+  stableHashHex,
   sha256Hex,
   computeStaticProjectFingerprint,
   computeProjectFingerprint,
