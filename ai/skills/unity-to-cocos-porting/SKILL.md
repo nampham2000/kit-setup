@@ -17,6 +17,18 @@ This skill provides step-by-step guidance and architectural rules for converting
 
 ### Reuse the measured VFX fixes
 
+For spikes that should retract into the ground but instead drift toward the
+camera, inspect the authored VelocityModule space and emitter world rotation
+before changing curves. World Y under a rotated local emitter must pass through
+the module-frame adapter and the measured scale adapter. Compare matched birth
+seeds in world coordinates at two late-life frames; screen displacement alone
+mixes motion with the camera. Also establish whether the report is from browser
+Preview or Scene/Prefab Editor. A Component without executeInEditMode does not
+provide its runtime patch in the editor; a passing browser capture cannot prove
+Scene/Prefab behavior. Check exact project and preview URL, and do not rewrite
+world-space source curves to compensate for an inactive adapter. Record an
+unreproduced report explicitly instead of calling an unrelated patch its fix.
+
 Unity Play Mode entry can lose the RPC acknowledgement after accepting a capture.
 Bind requests and manifests with requestId; on transport timeout, observe only
 that request's result before retrying. Never delete a manifest client-side before
