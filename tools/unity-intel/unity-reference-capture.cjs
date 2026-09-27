@@ -8,6 +8,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const {randomUUID}=require('node:crypto');
 const { readUnityMcpConnection } = require('./unity-mcp-config.cjs');
 const { mcpCall } = require('./unity-mcp-script.cjs');
 
@@ -73,14 +74,14 @@ function readSpawns(file) {
 
 function captureScript(request) {
   const json = JSON.stringify(request).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-  return `public class Script { public static string Main() { return CcPlayable.UnityIntelligence.Capture.ReferenceCapture.Begin("${json}"); } }`;
+  return `public class Script { public static string Main() { if(typeof(CcPlayable.UnityIntelligence.Capture.ReferenceCapture.Request).GetField("requestId")==null)return "capture package requires refresh: requestId protocol unavailable"; return CcPlayable.UnityIntelligence.Capture.ReferenceCapture.Begin("${json}"); } }`;
 }
 
-async function waitForManifest(file, timeoutMs, sleep = ms => new Promise(r => setTimeout(r, ms))) {
+async function waitForManifest(file, requestId, timeoutMs, sleep = ms => new Promise(r => setTimeout(r, ms))) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (fs.existsSync(file)) {
-      try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { /* still being written */ }
+      try { const manifest=JSON.parse(fs.readFileSync(file, 'utf8'));if(manifest.requestId===requestId)return manifest; } catch { /* still being written */ }
     }
     await sleep(1000);
   }
@@ -94,8 +95,10 @@ async function captureUnityReference(options, dependencies = {}) {
   const outputDir = path.resolve(options.out);
   fs.mkdirSync(outputDir, { recursive: true });
   const manifestFile = path.join(outputDir, 'manifest.json');
-  if (fs.existsSync(manifestFile)) fs.unlinkSync(manifestFile);
+  // Only Unity Begin may clear the output after accepting this request. A busy
+  // rejection or lost acknowledgement must not delete another capture's result.
   const request = {
+    requestId: randomUUID(),
     scenePath: options.scene,
     outputDir: outputDir.replace(/\\/g, '/'),
     cameraPath: options.camera,
@@ -109,11 +112,19 @@ async function captureUnityReference(options, dependencies = {}) {
     disableComponents: options.disableComponents || [],
     fields: options.fields || [],
   };
-  const result = await mcpCall(connection, 'script-execute', { csharpCode: captureScript(request), className: 'Script', methodName: 'Main' },
-    60000, dependencies.fetch);
+  let result,acknowledgementLost=false;
+  try {
+    result = await (dependencies.callMcp||mcpCall)(connection, 'script-execute', { csharpCode: captureScript(request), className: 'Script', methodName: 'Main' },60000, dependencies.fetch);
+  } catch(error) {
+    // Entering Play Mode can destroy the RPC before its queued response arrives.
+    // Observe this exact request's output instead of enqueueing a duplicate.
+    acknowledgementLost=error.code==='UNITY_MCP_TIMEOUT'||/fetch failed|ECONNRESET|socket|ThreadAbort|domain reload/i.test(error.message||'');
+    if(!acknowledgementLost)throw error;
+  }
   const text = (result?.content || []).map(item => item.text || '').join('\n');
-  if (!/capture queued/.test(text)) throw Object.assign(new Error(`Unity refused the capture: ${text.slice(0, 400)}`), { code: 'UNITY_CAPTURE_REJECTED' });
-  const manifest = await waitForManifest(manifestFile, options.timeoutMs, dependencies.sleep);
+  if(/requestId protocol unavailable/.test(text))throw Object.assign(new Error('Refresh the Unity intelligence capture package before queueing captures.'),{code:'UNITY_CAPTURE_PROTOCOL_UNVERIFIED'});
+  if (!acknowledgementLost&&!/capture queued/.test(text)) throw Object.assign(new Error(`Unity refused the capture: ${text.slice(0, 400)}`), { code: 'UNITY_CAPTURE_REJECTED' });
+  const manifest = await waitForManifest(manifestFile, request.requestId, options.timeoutMs, dependencies.sleep);
   if (!manifest.complete) throw Object.assign(new Error(`Unity capture failed: ${manifest.error}`), { code: 'UNITY_CAPTURE_FAILED' });
   validateManifestFrames(manifest, options.frames, outputDir, dependencies.readFile || fs.readFileSync);
   validateCaptureClock(manifest, options.frames);

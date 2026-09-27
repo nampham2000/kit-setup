@@ -26,6 +26,7 @@ namespace CcPlayable.UnityIntelligence.Capture
         [Serializable]
         public sealed class Request
         {
+            public string requestId = "";
             public string scenePath = "";
             public string outputDir = "";
             public string cameraPath = "";
@@ -122,6 +123,7 @@ namespace CcPlayable.UnityIntelligence.Capture
         [Serializable]
         internal sealed class Manifest
         {
+            public string requestId = "";
             public string visibilityClock = "";
             public int renderedFrames;
             public string scenePath = "";
@@ -200,6 +202,7 @@ namespace CcPlayable.UnityIntelligence.Capture
 
         internal static void Finish(Request request, Manifest manifest)
         {
+            manifest.requestId = request.requestId;
             manifest.complete = string.IsNullOrEmpty(manifest.error);
             File.WriteAllText(Path.Combine(request.outputDir, "manifest.json"), JsonUtility.ToJson(manifest, true));
             Time.captureFramerate = 0;

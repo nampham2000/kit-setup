@@ -17,6 +17,14 @@ This skill provides step-by-step guidance and architectural rules for converting
 
 ### Reuse the measured VFX fixes
 
+Unity Play Mode entry can lose the RPC acknowledgement after accepting a capture.
+Bind requests and manifests with requestId; on transport timeout, observe only
+that request's result before retrying. Never delete a manifest client-side before
+Unity accepts the request: busy rejection must preserve another capture's output.
+Refresh stale live capture assemblies when the requestId protocol probe fails.
+Resume catalog work by validating each cached case and recapturing only missing
+or stale cases. A resumed counter includes reused captures, not only new renders.
+
 Transparent sorting must use the same bounds ownership as Unity. Procedurally
 simulated emitters can have analytic bounds independent of the current random
 particle distribution. Using the live-particle AABB can move black streaks or

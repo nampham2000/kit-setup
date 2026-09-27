@@ -5,6 +5,42 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { parseArgs, captureScript, validateManifestFrames, validateCaptureClock } = require('./unity-reference-capture.cjs');
+const {captureUnityReference}=require('./unity-reference-capture.cjs');
+
+function captureFixture(t){
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'capture-request-'));
+ t.after(()=>{assert.equal(path.dirname(path.resolve(dir)),path.resolve(os.tmpdir()));fs.rmSync(dir,{recursive:true,force:true});});
+ const file=path.join(dir,'manifest.json'),old=JSON.stringify({complete:true,requestId:'unrelated'});fs.writeFileSync(file,old);
+ const options={project:dir,scene:'Assets/Demo.unity',out:dir,width:1280,height:720,frameRate:60,frames:[0,30],timeoutMs:2000};
+ const request=args=>JSON.parse(JSON.parse('"'+args.csharpCode.match(/Begin\("((?:\\.|[^"\\])*)"\)/)[1]+'"'));
+ const write=id=>fs.writeFileSync(file,JSON.stringify({...manifestFrames([0,30]),requestId:id,complete:true,visibilityClock:'continuous-request-viewport-v1',renderedFrames:31}));
+ return {file,old,options,request,write,dependencies:{readConnection:()=>({url:'http://localhost/mock'}),readFile:()=>imageHeader()}};
+}
+test('lost Play Mode RPC acknowledgement consumes only its own completed request',async t=>{
+ const f=captureFixture(t);let calls=0;
+ const got=await captureUnityReference(f.options,{...f.dependencies,callMcp:async(c,n,args)=>{calls++;assert.equal(fs.readFileSync(f.file,'utf8'),f.old);f.write(f.request(args).requestId);throw Object.assign(new Error('RPC lost during reload'),{code:'UNITY_MCP_TIMEOUT'});}});
+ assert.equal(got.complete,true);assert.notEqual(got.requestId,'unrelated');assert.equal(calls,1);
+});
+test('busy rejection preserves a pre-existing capture manifest',async t=>{
+ const f=captureFixture(t);
+ await assert.rejects(captureUnityReference(f.options,{...f.dependencies,callMcp:async()=>({content:[{text:'editor has an active or queued capture'}]})}),{code:'UNITY_CAPTURE_REJECTED'});
+ assert.equal(fs.readFileSync(f.file,'utf8'),f.old);
+});
+test('queued capture ignores a stale manifest even when its frames would pass',async t=>{
+ const f=captureFixture(t);let id,sleeps=0;f.write('unrelated');
+ const got=await captureUnityReference(f.options,{...f.dependencies,callMcp:async(c,n,args)=>{id=f.request(args).requestId;return {content:[{text:'capture queued'}]};},sleep:async()=>{sleeps++;f.write(id);}});
+ assert.equal(got.requestId,id);assert.equal(sleeps,1);
+});
+test('non-transport failures are not hidden behind a manifest wait',async t=>{
+ const f=captureFixture(t);
+ await assert.rejects(captureUnityReference(f.options,{...f.dependencies,callMcp:async()=>{throw Object.assign(new Error('compiler error'),{code:'UNITY_MCP_TOOL_ERROR'});},sleep:async()=>assert.fail('must not wait')}),{code:'UNITY_MCP_TOOL_ERROR'});
+ assert.equal(fs.readFileSync(f.file,'utf8'),f.old);
+});
+test('stale live capture package is rejected before a request can be queued',async t=>{
+ const f=captureFixture(t);assert.match(captureScript({}),/GetField\("requestId"\)/);
+ await assert.rejects(captureUnityReference(f.options,{...f.dependencies,callMcp:async()=>({content:[{text:'capture package requires refresh: requestId protocol unavailable'}]})}),{code:'UNITY_CAPTURE_PROTOCOL_UNVERIFIED'});
+ assert.equal(fs.readFileSync(f.file,'utf8'),f.old);
+});
 
 const base = ['--project', 'U', '--scene', 'Assets/Demo.unity', '--out', 'o', '--frames', '0,30'];
 
