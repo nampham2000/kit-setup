@@ -1,3 +1,5 @@
+import * as fs from 'fs';
+
 const DEFAULT_DIRECTORY = 'db://assets';
 const FBX_EXTENSION = /\.fbx$/i;
 const MAX_MODELS_PER_SCAN = 10_000;
@@ -8,6 +10,15 @@ export const PLAYABLE_FBX_IMPORT_SETTINGS = Object.freeze({
     meshSimplify: Object.freeze({ enable: true, targetRatio: 1, autoErrorRate: false, errorRate: 1, lockBoundary: false }),
     meshCluster: Object.freeze({ enable: false, generateBounding: false }),
     meshCompress: Object.freeze({ enable: true, encode: false, compress: true, quantize: false }),
+});
+
+// Cocos 3.8.8 Mesh Compress repacks the vertex/index data but keeps the morph target displacement
+// views at their uncompressed offsets: StdMorphRendering then builds Float32Arrays past the end of the
+// buffer ("Invalid typed array length", KriptoFX Chal_Rig2 beard blend shape) and the mesh fails to
+// load. A model with morph targets keeps every setting except Mesh Compress, which stays off.
+export const MORPH_FBX_IMPORT_SETTINGS = Object.freeze({
+    ...PLAYABLE_FBX_IMPORT_SETTINGS,
+    meshCompress: Object.freeze({ enable: false, encode: false, compress: false, quantize: false }),
 });
 
 type ModelPolicyOptions = { directory?: string; dryRun?: boolean };
@@ -48,9 +59,28 @@ export function isFbxModelUrl(value: unknown): boolean {
     return FBX_EXTENSION.test(String(value || '').split(/[?#]/, 1)[0]);
 }
 
-export function hasPlayableFbxImportSettings(meta: any): boolean {
+function structHasMorph(value: any, depth = 0): boolean {
+    if (!value || typeof value !== 'object' || depth > 8) return false;
+    if (Array.isArray(value.vertexBundles) && 'morph' in value) return !!value.morph;
+    return Object.values(value).some((child) => structHasMorph(child, depth + 1));
+}
+
+/** True when an imported mesh sub-asset of the model carries morph targets (read from its library JSON). */
+export function modelHasMorphTargets(info: any): boolean {
+    for (const sub of Object.values<any>(info?.subAssets || {})) {
+        if (sub?.type !== 'cc.Mesh') continue;
+        const file = sub?.library?.['.json'];
+        if (!file || !fs.existsSync(file)) continue;
+        try {
+            if (structHasMorph(JSON.parse(fs.readFileSync(file, 'utf8')))) return true;
+        } catch { /* a mesh being re-imported is checked again on its asset-change broadcast */ }
+    }
+    return false;
+}
+
+export function hasPlayableFbxImportSettings(meta: any, morph = false): boolean {
     const data = meta?.userData || {};
-    const expected: any = PLAYABLE_FBX_IMPORT_SETTINGS;
+    const expected: any = morph ? MORPH_FBX_IMPORT_SETTINGS : PLAYABLE_FBX_IMPORT_SETTINGS;
     for (const section of Object.keys(expected)) {
         for (const [key, value] of Object.entries(expected[section])) {
             if (data?.[section]?.[key] !== value) return false;
@@ -59,10 +89,10 @@ export function hasPlayableFbxImportSettings(meta: any): boolean {
     return true;
 }
 
-export function applyPlayableFbxImportSettings(meta: any): any {
+export function applyPlayableFbxImportSettings(meta: any, morph = false): any {
     const next = deepClone(meta);
     next.userData ||= {};
-    for (const [section, settings] of Object.entries<any>(PLAYABLE_FBX_IMPORT_SETTINGS)) {
+    for (const [section, settings] of Object.entries<any>(morph ? MORPH_FBX_IMPORT_SETTINGS : PLAYABLE_FBX_IMPORT_SETTINGS)) {
         next.userData[section] = { ...(next.userData[section] || {}), ...settings };
     }
     return next;
@@ -141,13 +171,14 @@ export class ModelImportPolicy {
             if (!meta || meta.importer !== 'fbx') {
                 return { status: 'failed', url, uuid: info.uuid, error: 'Asset has .fbx extension but Cocos did not return FBX importer metadata.' };
             }
-            if (hasPlayableFbxImportSettings(meta)) return { status: 'unchanged', url, uuid: info.uuid };
+            const morph = modelHasMorphTargets(info);
+            if (hasPlayableFbxImportSettings(meta, morph)) return { status: 'unchanged', url, uuid: info.uuid };
             if (dryRun) return { status: 'updated', url, uuid: info.uuid };
 
-            const next = applyPlayableFbxImportSettings(meta);
+            const next = applyPlayableFbxImportSettings(meta, morph);
             await Editor.Message.request('asset-db', 'save-asset-meta', info.uuid || identity, JSON.stringify(next, null, 2));
             const verified: any = await Editor.Message.request('asset-db', 'query-asset-meta', info.uuid || identity);
-            if (!hasPlayableFbxImportSettings(verified)) throw new Error('Asset DB accepted save-asset-meta but the FBX settings did not persist.');
+            if (!hasPlayableFbxImportSettings(verified, morph)) throw new Error('Asset DB accepted save-asset-meta but the FBX settings did not persist.');
             return { status: 'updated', url, uuid: info.uuid };
         } catch (error: any) {
             return { status: 'failed', url: identity, error: error?.message || String(error) };
