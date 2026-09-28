@@ -375,3 +375,27 @@ test('contentProbePoints are validated and passed as normalized [x,y] pairs', ()
   assert.throws(() => validateConfig({ ...base, cases: [{ name: 'bad', contentProbePoints: [[1.5, 0.5]] }] }), /normalized/);
   assert.throws(() => validateConfig({ ...base, cases: [{ name: 'bad', contentProbePoints: [0.5, 0.5] }] }), /normalized/);
 });
+
+test('verify.visual guards the preview project once per session (match, mismatch, unknown, opt-out)', async () => {
+  const { guardPreviewProject } = require('./preview-checkpoints.cjs');
+  assert.equal(parseArgs(['--config', 'x.json', '--allow-foreign-preview']).allowForeignPreview, true);
+  const base = { origin: 'http://localhost:7457', url: 'http://localhost:7457/', expectedProjectRoot: 'D:/games/screw',
+    signal: 'import-map-project-root', strength: 'strong' };
+  const match = await guardPreviewProject(base.url, { probe: async () => ({ ...base, status: 'match', servedProjectRoot: 'D:/games/screw' }) });
+  assert.equal(match.status, 'match');
+  const probeMismatch = async () => ({ ...base, status: 'mismatch', servedProjectRoot: 'C:/cc_worktrees/harvest-full-port',
+    message: 'served by harvest' });
+  await assert.rejects(guardPreviewProject(base.url, { probe: probeMismatch, scanOnMismatch: false }),
+    error => error.code === 'PREVIEW_PROJECT_MISMATCH' && /harvest-full-port/.test(error.message));
+  const warnings = [];
+  const unknown = await guardPreviewProject(base.url, {
+    probe: async () => ({ ...base, status: 'unknown', signal: null, strength: null, message: 'no import map' }),
+    retries: 0,
+    onWarning: message => warnings.push(message),
+  });
+  assert.equal(unknown.status, 'unknown');
+  assert.match(warnings[0], /PREVIEW_PROJECT_UNKNOWN/);
+  const allowed = await guardPreviewProject(base.url, { probe: probeMismatch, allowForeignPreview: true });
+  assert.equal(allowed.overridden, true);
+  assert.equal(allowed.allowForeignPreview, true);
+});

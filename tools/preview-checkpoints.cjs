@@ -17,6 +17,7 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { runOne, parseGesture, normalizeEnvironmentHosts } = require('./verify-runtime.cjs');
 const { contentProbeClips } = require('./lib/runtime-content-probes.cjs');
+const { assertPreviewProjectIdentity, identityReceipt, MISMATCH_CODE } = require('./preview-project-identity.cjs');
 
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
 const REEXEC_ENV = 'PLAYABLE_PREVIEW_CHECKPOINTS_WEBSOCKET_REEXEC';
@@ -32,6 +33,9 @@ Options:
   --output <dir>       Ghi đè thư mục output.
   --case <name>        Chỉ chạy một checkpoint (có thể lặp lại).
   --browser <path>     Ghi đè Chrome/Edge executable.
+  --allow-foreign-preview
+                       Chủ ý chạy trên preview của project khác (bỏ qua
+                       PREVIEW_PROJECT_MISMATCH; được ghi vào manifest).
   --json               Xuất JSON compact.
   --help               Hiện trợ giúp.
 
@@ -93,7 +97,12 @@ mỗi lần chạy và regression gate hash chúng như evalFile.
 Mỗi case reload preview trong browser session riêng. Tool sinh từng PNG,
 manifest.json và index.html dạng contact sheet. Khi khai báo
 requiredReferenceMetrics, tool crop/resize reference về đúng ROI candidate và
-fail-closed theo metric; nếu không khai báo thì reference chỉ là contact sheet.`;
+fail-closed theo metric; nếu không khai báo thì reference chỉ là contact sheet.
+
+Trước case đầu, tool chứng minh URL preview thuộc đúng project này qua
+/scripting/x/import-map.json (key file:///<projectRoot>/assets/...). Preview của
+project khác (port bị editor khác chiếm) fail ngay với PREVIEW_PROJECT_MISMATCH;
+không xác định được (editor cũ) chỉ cảnh báo rồi chạy tiếp.`;
 
 function slugify(value) {
   const slug = String(value || '').trim().toLowerCase()
@@ -859,6 +868,7 @@ function parseArgs(argv) {
     const arg = argv[index];
     if (arg === '--help' || arg === '-h') { result.help = true; continue; }
     if (arg === '--json') { result.json = true; continue; }
+    if (arg === '--allow-foreign-preview') { result.allowForeignPreview = true; continue; }
     if (arg === '--config') { result.config = argv[++index]; continue; }
     if (arg.startsWith('--config=')) { result.config = arg.slice('--config='.length); continue; }
     if (arg === '--url') { result.url = argv[++index]; continue; }
@@ -917,6 +927,26 @@ function ensureWebSocket() {
   return false;
 }
 
+/**
+ * Session-level guard: prove the preview URL is served by this project before the first case.
+ * mismatch throws PREVIEW_PROJECT_MISMATCH (unless allowForeignPreview); unknown only warns.
+ */
+async function guardPreviewProject(url, options = {}) {
+  const record = await assertPreviewProjectIdentity({
+    url,
+    projectRoot: options.projectRoot || PROJECT_ROOT,
+    allowForeign: options.allowForeignPreview === true,
+    fetchImpl: options.fetchImpl,
+    probe: options.probe,
+    scanOnMismatch: options.scanOnMismatch,
+    scanPorts: options.scanPorts,
+    retries: options.retries,
+    retryDelayMs: options.retryDelayMs,
+  });
+  if (record.warning && typeof options.onWarning === 'function') options.onWarning(record.warning);
+  return identityReceipt(record);
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) { console.log(USAGE); return; }
@@ -924,6 +954,23 @@ async function main() {
   const configFile = resolveInsideProject(args.config, 'config');
   const raw = JSON.parse(fs.readFileSync(configFile, 'utf8').replace(/^\uFEFF/, ''));
   const config = validateConfig(raw, args);
+  let previewIdentity;
+  try {
+    previewIdentity = await guardPreviewProject(config.url, {
+      allowForeignPreview: args.allowForeignPreview === true,
+      onWarning: message => console.error(`[preview-checkpoints] WARN ${message}`),
+    });
+  } catch (error) {
+    if (error.code !== MISMATCH_CODE) throw error;
+    if (args.json) {
+      console.log(JSON.stringify({
+        ok: false, tool: 'preview-checkpoints', code: error.code, message: error.message,
+        previewIdentity: identityReceipt(error.details), candidates: error.details && error.details.candidates,
+      }, null, 2));
+    } else console.error(`[preview-checkpoints] ERROR ${error.message}`);
+    process.exitCode = 1;
+    return;
+  }
   const outputDir = resolveInsideProject(config.outputDir, 'outputDir');
   fs.mkdirSync(outputDir, { recursive: true });
 
@@ -1020,6 +1067,8 @@ async function main() {
     tool: 'preview-checkpoints',
     generatedAt: new Date().toISOString(),
     url: config.url,
+    previewIdentity,
+    ...(args.allowForeignPreview === true ? { allowForeignPreview: true } : {}),
     ok: results.every(entry => entry.ok),
     note: 'Runtime-clean screenshots prove visual parity only when an explicit reference metric contract passes.',
     cases: results,
@@ -1060,6 +1109,7 @@ module.exports = {
   resolveInsideProject,
   validateConfig,
   parseArgs,
+  guardPreviewProject,
   readExpression,
   evaluateEvalAssertion,
   evaluateTraceAssertion,

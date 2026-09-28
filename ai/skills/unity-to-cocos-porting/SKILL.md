@@ -478,6 +478,7 @@ values and texture sampler states from the project; they are reported medium, no
 
 ### Preview combat and filesystem pitfalls
 
+- Several Cocos editors on one machine share preview ports 7456+ first-come; after an editor restart the port you used may serve ANOTHER project (worktrees of one repo even share package.json names). verify.visual, verify.regressions and verify.runtime --url now prove the preview origin serves this project from /scripting/x/import-map.json (file:///<projectRoot>/assets/... keys) and fail fast with PREVIEW_PROJECT_MISMATCH. Treat that as a wrong-port error, not a gameplay failure: find the right origin with Cocos MCP server_query_server_port or node playable-shared-kit/tools/preview-project-identity.cjs --scan and rerun with --preview-url/--url. Never pass --allow-foreign-preview to silence it; it is only for intentionally testing another project and is recorded in the receipt.
 - Keep gameplay delivery first. For explicit preview-only acceptance use core verify with --preview-only --preview-url; keep all runtime, regression and evidence gates, exclude only packaged build. Never invent a build receipt.
 - The default core rubric is 80/90. Preserve a stricter user acceptance target
   in the manifest (e.g. minimum/target 95/95); do not silently replace it with
