@@ -131,7 +131,7 @@ export class UnityUIParticleBridge extends Component {
         // disabled in the source; the ported UnityParticleRendererVisibility would keep them hidden.
         for (const visibility of source.getComponentsInChildren('UnityParticleRendererVisibility') as unknown as { rendererVisible: boolean; trailsVisible: boolean; node: Node }[]) {
             visibility.rendererVisible = true;
-            visibility.trailsVisible = !this.hiddenTrails.includes(visibility.node.name);
+            visibility.trailsVisible = this.hiddenTrails.indexOf(visibility.node.name) < 0;
         }
         for (const system of source.getComponentsInChildren(ParticleSystem)) premultiplyMembers(system);
         for (const system of source.getComponentsInChildren(ParticleSystem)) {
@@ -161,8 +161,10 @@ export class UnityUIParticleBridge extends Component {
         frame.texture = texture;
         sprite.spriteFrame = frame;
         transform.setContentSize(this.viewWidth, this.viewHeight);
-        sprite.srcBlendFactor = gfx.BlendFactor.ONE;
-        sprite.dstBlendFactor = gfx.BlendFactor.ONE_MINUS_SRC_ALPHA;
+        // UIRenderer keeps these setters out of the public typings in 3.8.
+        const blend = sprite as unknown as { srcBlendFactor: number; dstBlendFactor: number };
+        blend.srcBlendFactor = gfx.BlendFactor.ONE;
+        blend.dstBlendFactor = gfx.BlendFactor.ONE_MINUS_SRC_ALPHA;
         sim.active = false;
     }
 
