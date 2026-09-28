@@ -81,6 +81,7 @@ const { PortCache } = require('./unity-cocos-port/port-cache');
 const createUiSpriteAlphaPorter = require('./unity-cocos-port/ui-sprite-alpha-porter');
 const createComponentDispatcher = require('./unity-cocos-port/component-dispatcher');
 const createRuntimeComponentPorter = require('./unity-cocos-port/runtime-component-porter');
+const { unityModelMayHaveRenderers } = require('./unity-cocos-port/mirrored-culling-detect.cjs');
 const { unityModelImportBasis, unityModelMeshName, unityModelRendererName } = require('./unity-cocos-port/model-import-basis');
 const { unitySlotIndexForCocosPrimitive } = require('./unity-cocos-port/fbx-submesh-order');
 const {
@@ -6029,6 +6030,8 @@ class CocosPrefabBuilder {
     this.uiTransformByNode = new Map();
     this.nodePrefabInfoMap = new Map();
     this.nestedPrefabInstanceByNode = new Map();
+    // nodeId -> whether the nested source may hold mesh renderers (mirrored-culling pass).
+    this.nestedPrefabRendererHint = new Map();
     this.mountedChildrenByInstanceTarget = new Map();
     this.mountedComponentsByInstanceTarget = new Map();
     this.prefabInfoIds = [];
@@ -7057,6 +7060,7 @@ function buildCocosPrefabBuilder(model, outputFile, options, reporter, unityDb, 
   runtimeComponentPorter.attachParticleRateOverDistanceEmitters(model, builder, reporter);
   runtimeComponentPorter.attachParticleHierarchyTransformSync(builder, reporter);
   runtimeComponentPorter.attachParticleRendererVisibility(builder, reporter);
+  runtimeComponentPorter.attachMirroredCulling(builder, reporter, options);
   require('./unity-cocos-port/particle-sorting-binding').attachSortingRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-orbit-binding').attachOrbitRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-noise-binding').attachNoiseRuntime(builder, reporter, options);
@@ -7481,6 +7485,7 @@ function portPrefab(options, reporter) {
   runtimeComponentPorter.ensureParticleSubEmitterFollowerScript(options, reporter);
   runtimeComponentPorter.ensureParticleHierarchyTransformSyncScript(options, reporter);
   runtimeComponentPorter.ensureParticleRendererVisibilityScript(options, reporter);
+  runtimeComponentPorter.ensureMirroredCullingScript(options, reporter);
   runtimeComponentPorter.ensureParticleRateOverDistanceEmitterScript(options, reporter);
   runtimeComponentPorter.ensureSpriteRendererColorAdapterScript(options, reporter);
   runtimeComponentPorter.ensureSpriteRendererColorAssets(options, reporter);
@@ -7995,6 +8000,7 @@ function emitNodeRecursive(transform, parentNodeId, model, builder, layerResolve
       gameObject.nestedPrefab.rootLocalId,
       nestedOverrides,
     );
+    builder.nestedPrefabRendererHint.set(nodeId, unityModelMayHaveRenderers(gameObject.nestedPrefab.model));
     builder.nodeMapByGameObject.set(gameObject.fileId, nodeId);
     builder.nodeMapByTransform.set(transform.fileId, nodeId);
     // The outer file addresses the linked instance's root by derived id (e.g. m_RemovedGameObjects of a variant).
