@@ -2180,7 +2180,13 @@ class CocosAssetDatabase {
     }
     const classes = [];
     for (const match of source.matchAll(/@ccclass\(['"]([^'"]+)['"]\)/g)) classes.push(match[1]);
-    for (const match of source.matchAll(/export\s+class\s+([A-Za-z0-9_]+)/g)) classes.push(match[1]);
+    // Only a decorated class is a registered Cocos class. A plain exported helper that shares a Unity
+    // MonoBehaviour's name (Blast Shooter's `export class ConveyorBall` model) must not be bound as its
+    // component: the prefab would reference the file's class id and fail with "Can not find class".
+    for (const match of source.matchAll(/export\s+(?:default\s+)?(?:abstract\s+)?class\s+([A-Za-z0-9_]+)/g)) {
+      const decorators = /((?:@[\w.]+(?:\((?:[^()]|\([^()]*\))*\))?\s*)+)$/.exec(source.slice(Math.max(0, match.index - 2000), match.index));
+      if (decorators && /@ccclass\b/.test(decorators[1])) classes.push(match[1]);
+    }
     // Unity writes bools as 0/1 and vectors as bare {x,y[,z]}. Knowing which Cocos
     // fields are declared boolean / Vec2 / Vec3 lets the porter emit the right types
     // instead of a number where the inspector expects a checkbox.
