@@ -81,6 +81,7 @@ const { PortCache } = require('./unity-cocos-port/port-cache');
 const createUiSpriteAlphaPorter = require('./unity-cocos-port/ui-sprite-alpha-porter');
 const createComponentDispatcher = require('./unity-cocos-port/component-dispatcher');
 const createRuntimeComponentPorter = require('./unity-cocos-port/runtime-component-porter');
+const { unityModelMayHaveRenderers } = require('./unity-cocos-port/mirrored-culling-detect.cjs');
 const { unityModelImportBasis, unityModelMeshName, unityModelRendererName } = require('./unity-cocos-port/model-import-basis');
 const { unitySlotIndexForCocosPrimitive } = require('./unity-cocos-port/fbx-submesh-order');
 const {
@@ -107,6 +108,7 @@ const {
   copyUnityAssetToCocos: copyUnityAssetToCocosImpl,
   writePreparedUnityTexture: writePreparedUnityTextureImpl,
   handleMissingModel: handleMissingModelImpl,
+  refreshExportedUnityMesh: refreshExportedUnityMeshImpl,
 } = createAssetImportPorter({
   ensureDirectoryMetas,
   ensurePreparedAssetMeta,
@@ -190,6 +192,7 @@ const {
   importedUnityAssetPath: importedUnityAssetPathImpl,
   copyUnityAssetToCocos: copyUnityAssetToCocosImpl,
   handleMissingModel: handleMissingModelImpl,
+  refreshExportedUnityMesh: refreshExportedUnityMeshImpl,
   resolveLibraryAssetUuid,
   fbxMeshOwnerNode: (...args) => fbxMeshOwnerNode(...args),
   builtinPrimitiveOwnerNode: (...args) => builtinPrimitiveOwnerNode(...args),
@@ -208,6 +211,7 @@ const {
   importedUnityAssetPath: importedUnityAssetPathImpl,
   copyUnityAssetToCocos: copyUnityAssetToCocosImpl,
   handleMissingModel: handleMissingModelImpl,
+  refreshExportedUnityMesh: refreshExportedUnityMeshImpl,
   resolveLibraryAssetUuid,
   recordPendingMeshRepair,
   getField,
@@ -220,6 +224,7 @@ const {
 
 const { emitParticleSystem: emitParticleSystemImpl } = createParticlePorter({
   handleMissingModel: handleMissingModelImpl,
+  refreshExportedUnityMesh: refreshExportedUnityMeshImpl,
   recordPendingMeshRepair,
   resolveUnityBuiltinMeshUuid,
   resolveUnityParticleMaterial,
@@ -1293,6 +1298,56 @@ const UNITY_MONOBEHAVIOUR_HEADER_FIELDS = new Set([
   'm_Enabled', 'm_EditorHideFlags', 'm_Script', 'm_Name', 'm_EditorClassIdentifier',
 ]);
 
+// Unity YAML block value under a key (struct, list, list of structs, nested lists) as plain JS.
+// Unity writes a list either deeper than its key or at the key's own indent ("m_Curve:" then
+// "- serializedVersion: 2" at the same column); a "- key: value" item opens a mapping whose other keys sit
+// two columns further in. Flow values ({fileID: ...}, [a, b]) and scalars go through parseUnityScalar.
+const UNITY_YAML_KEY = /^([A-Za-z_][A-Za-z0-9_ ]*?)\s*:(?:\s+(.*))?$/;
+function unityLineIndent(line) { return line.match(/^\s*/)[0].length; }
+function nextUnityYamlLine(lines, j) { while (j < lines.length && !lines[j].trim()) j++; return j; }
+
+function parseUnityYamlSequence(lines, i, indent) {
+  const items = [];
+  let j = nextUnityYamlLine(lines, i);
+  while (j < lines.length && unityLineIndent(lines[j]) === indent && lines[j].trim().startsWith('- ')) {
+    const content = lines[j].trim().slice(2).trim();
+    const key = !content.startsWith('{') && !content.startsWith('[') ? UNITY_YAML_KEY.exec(content) : null;
+    if (!key) { items.push(parseUnityScalar(content)); j = nextUnityYamlLine(lines, j + 1); continue; }
+    // "- key: value" opens a mapping item; its remaining keys sit at indent + 2.
+    const synthetic = [' '.repeat(indent + 2) + content, ...lines.slice(j + 1)];
+    const item = parseUnityYamlMapping(synthetic, 0, indent + 2);
+    items.push(item.value);
+    j = nextUnityYamlLine(lines, j + item.next);
+  }
+  return { value: items, next: j };
+}
+
+function parseUnityYamlMapping(lines, i, indent) {
+  const out = {};
+  let j = nextUnityYamlLine(lines, i);
+  while (j < lines.length && unityLineIndent(lines[j]) === indent && !lines[j].trim().startsWith('- ')) {
+    const key = UNITY_YAML_KEY.exec(lines[j].trim());
+    if (!key) break;
+    const raw = (key[2] || '').trim();
+    if (raw !== '') { out[key[1]] = parseUnityScalar(raw, key[1]); j = nextUnityYamlLine(lines, j + 1); continue; }
+    const child = parseUnityYamlBlockValue(lines, j + 1, indent);
+    out[key[1]] = child.value;
+    j = child.next;
+  }
+  return { value: out, next: j };
+}
+
+// Value of a key at keyIndent whose inline value is empty: the following deeper block, or a list at keyIndent.
+function parseUnityYamlBlockValue(lines, i, keyIndent) {
+  const j = nextUnityYamlLine(lines, i);
+  if (j >= lines.length) return { value: null, next: j };
+  const indent = unityLineIndent(lines[j]);
+  const isItem = lines[j].trim().startsWith('- ');
+  if (isItem && indent >= keyIndent) return parseUnityYamlSequence(lines, j, indent);
+  if (!isItem && indent > keyIndent) return parseUnityYamlMapping(lines, j, indent);
+  return { value: null, next: j };
+}
+
 function getTopLevelSerializedFields(doc, options) {
   const fields = {};
   for (let i = 0; i < doc.lines.length; i++) {
@@ -1309,28 +1364,12 @@ function getTopLevelSerializedFields(doc, options) {
       fields[key] = parseUnityScalar(raw);
       continue;
     }
-
-    const items = [];
-    const nested = {};
-    for (let j = i + 1; j < doc.lines.length; j++) {
-      const next = doc.lines[j];
-      if (!next.trim()) continue;
-      const indent = next.match(/^\s*/)[0].length;
-      const trimmed = next.trim();
-      if (indent < 2) break;
-      if (indent === 2 && !trimmed.startsWith('- ')) break;
-      if (trimmed.startsWith('- ')) {
-        items.push(parseUnityScalar(trimmed.slice(2)));
-        continue;
-      }
-      // Unity writes structs on their own indented lines: LayerMask as
-      // `serializedVersion` + `m_Bits`, Vector2/Vector3 as `x`/`y`/`z`. Collecting them
-      // keeps the field instead of dropping it for having no inline value.
-      const child = /^([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(.+)$/.exec(trimmed);
-      if (child && indent >= 4) nested[child[1]] = parseUnityScalar(child[2]);
-    }
-    if (items.length) fields[key] = items;
-    else if (Object.keys(nested).length) fields[key] = nested;
+    // Structs (LayerMask serializedVersion + m_Bits, Vector3 x/y/z), lists of references and lists of
+    // structs (AnimationCurve m_Curve keys: KriptoFX RFX4_LightCurves serialized as
+    // ["serializedVersion: 2", ...] and every effect light stayed at intensity 0) parse recursively.
+    const block = parseUnityYamlBlockValue(doc.lines, i + 1, 2);
+    const value = block.value;
+    if (Array.isArray(value) ? value.length : value && Object.keys(value).length) fields[key] = value;
   }
   return fields;
 }
@@ -6029,6 +6068,8 @@ class CocosPrefabBuilder {
     this.uiTransformByNode = new Map();
     this.nodePrefabInfoMap = new Map();
     this.nestedPrefabInstanceByNode = new Map();
+    // nodeId -> whether the nested source may hold mesh renderers (mirrored-culling pass).
+    this.nestedPrefabRendererHint = new Map();
     this.mountedChildrenByInstanceTarget = new Map();
     this.mountedComponentsByInstanceTarget = new Map();
     this.prefabInfoIds = [];
@@ -6604,10 +6645,28 @@ class CocosPrefabBuilder {
     }, unityComponentId, fileId);
   }
 
+  // Unity Light m_Enabled (a disabled Light component renders nothing; an enabled cc.DirectionalLight
+  // would also become the scene main light) and m_Shadows {m_Type 0 None / 1 Hard / 2 Soft, m_Strength,
+  // m_Bias, m_NormalBias}. getField reads the nested block as an object ('m_Shadows.m_Type' never matched).
+  unityLightState(doc) {
+    const shadows = getField(doc, 'm_Shadows', null);
+    const block = shadows && typeof shadows === 'object' ? shadows : {};
+    const type = Number(block.m_Type ?? 0) || 0;
+    return {
+      enabled: Number(getField(doc, 'm_Enabled', 1) ?? 1) !== 0,
+      shadowType: type,
+      shadowStrength: Number.isFinite(Number(block.m_Strength)) ? Number(block.m_Strength) : 1,
+      shadowBias: Number.isFinite(Number(block.m_Bias)) ? Number(block.m_Bias) : 0.05,
+      shadowNormalBias: Number.isFinite(Number(block.m_NormalBias)) ? Number(block.m_NormalBias) : 0.4,
+    };
+  }
+
   addDirectionalLight(nodeId, unityComponentId, doc, fileId) {
     const intensity = Number(getField(doc, 'm_Intensity', 1) || 1);
+    const state = this.unityLightState(doc);
     const staticSettings = this.add({ __type__: 'cc.StaticLightSettings', _baked: false, _editorOnly: false, _castShadow: false });
     return this.addComponent(nodeId, 'cc.DirectionalLight', {
+      _enabled: state.enabled,
       _color: unityColorToCocos(getField(doc, 'm_Color', { r: 1, g: 1, b: 1, a: 1 })),
       _useColorTemperature: false,
       _colorTemperature: 6570,
@@ -6616,11 +6675,12 @@ class CocosPrefabBuilder {
       _illuminanceHDR: intensity * 65000,
       _illuminance: intensity * 65000,
       _illuminanceLDR: intensity * 1.6927083333333333,
-      _shadowEnabled: Number(getField(doc, 'm_Shadows.m_Type', 0) || 0) !== 0,
-      _shadowPcf: 0,
-      _shadowBias: 0.05,
-      _shadowNormalBias: 0.4,
-      _shadowSaturation: 1,
+      _shadowEnabled: state.shadowType !== 0,
+      // Unity Soft shadows filter with a wide PCF tent; SOFT_4X is the widest Cocos kernel.
+      _shadowPcf: state.shadowType === 2 ? 3 : 0,
+      _shadowBias: state.shadowBias,
+      _shadowNormalBias: state.shadowNormalBias,
+      _shadowSaturation: Math.min(1, Math.max(0, state.shadowStrength)),
       _shadowDistance: 50,
       _shadowInvisibleOcclusionRange: 200,
       _csmLevel: 4,
@@ -6641,6 +6701,7 @@ class CocosPrefabBuilder {
     const range = Number(getField(doc, 'm_Range', 10) || 10);
     const staticSettings = this.add({ __type__: 'cc.StaticLightSettings', _baked: false, _editorOnly: false, _castShadow: false });
     return this.addComponent(nodeId, 'cc.SphereLight', {
+      _enabled: this.unityLightState(doc).enabled,
       _color: unityColorToCocos(getField(doc, 'm_Color', { r: 1, g: 1, b: 1, a: 1 })),
       _useColorTemperature: false,
       _colorTemperature: 6570,
@@ -6660,7 +6721,9 @@ class CocosPrefabBuilder {
     const spotAngleDeg = Number(getField(doc, 'm_SpotAngle', 30) || 30);
     const spotAngleRad = (spotAngleDeg * Math.PI) / 180;
     const staticSettings = this.add({ __type__: 'cc.StaticLightSettings', _baked: false, _editorOnly: false, _castShadow: false });
+    const state = this.unityLightState(doc);
     return this.addComponent(nodeId, 'cc.SpotLight', {
+      _enabled: state.enabled,
       _color: unityColorToCocos(getField(doc, 'm_Color', { r: 1, g: 1, b: 1, a: 1 })),
       _useColorTemperature: false,
       _colorTemperature: 6570,
@@ -6672,7 +6735,7 @@ class CocosPrefabBuilder {
       _range: range,
       _size: 0.15,
       _spotAngle: spotAngleRad,
-      _shadowEnabled: Number(getField(doc, 'm_Shadows.m_Type', 0) || 0) !== 0,
+      _shadowEnabled: state.shadowType !== 0,
     }, unityComponentId, fileId);
   }
 
@@ -7057,6 +7120,7 @@ function buildCocosPrefabBuilder(model, outputFile, options, reporter, unityDb, 
   runtimeComponentPorter.attachParticleRateOverDistanceEmitters(model, builder, reporter);
   runtimeComponentPorter.attachParticleHierarchyTransformSync(builder, reporter);
   runtimeComponentPorter.attachParticleRendererVisibility(builder, reporter);
+  runtimeComponentPorter.attachMirroredCulling(builder, reporter, options);
   require('./unity-cocos-port/particle-sorting-binding').attachSortingRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-orbit-binding').attachOrbitRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-noise-binding').attachNoiseRuntime(builder, reporter, options);
@@ -7481,6 +7545,7 @@ function portPrefab(options, reporter) {
   runtimeComponentPorter.ensureParticleSubEmitterFollowerScript(options, reporter);
   runtimeComponentPorter.ensureParticleHierarchyTransformSyncScript(options, reporter);
   runtimeComponentPorter.ensureParticleRendererVisibilityScript(options, reporter);
+  runtimeComponentPorter.ensureMirroredCullingScript(options, reporter);
   runtimeComponentPorter.ensureParticleRateOverDistanceEmitterScript(options, reporter);
   runtimeComponentPorter.ensureSpriteRendererColorAdapterScript(options, reporter);
   runtimeComponentPorter.ensureSpriteRendererColorAssets(options, reporter);
@@ -7995,6 +8060,7 @@ function emitNodeRecursive(transform, parentNodeId, model, builder, layerResolve
       gameObject.nestedPrefab.rootLocalId,
       nestedOverrides,
     );
+    builder.nestedPrefabRendererHint.set(nodeId, unityModelMayHaveRenderers(gameObject.nestedPrefab.model));
     builder.nodeMapByGameObject.set(gameObject.fileId, nodeId);
     builder.nodeMapByTransform.set(transform.fileId, nodeId);
     // The outer file addresses the linked instance's root by derived id (e.g. m_RemovedGameObjects of a variant).
@@ -9292,6 +9358,8 @@ if (require.main === module) {
 module.exports = {
   collectUnityModelExternalMaterialRemaps,
   parseUnityYaml,
+  parseUnityScalar,
+  getIndentedBlock,
   getField,
   getNestedList,
   unityRefGuid,

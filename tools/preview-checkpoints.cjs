@@ -17,6 +17,7 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { runOne, parseGesture, normalizeEnvironmentHosts } = require('./verify-runtime.cjs');
 const { contentProbeClips } = require('./lib/runtime-content-probes.cjs');
+const { assertPreviewProjectIdentity, identityReceipt, MISMATCH_CODE } = require('./preview-project-identity.cjs');
 
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
 const REEXEC_ENV = 'PLAYABLE_PREVIEW_CHECKPOINTS_WEBSOCKET_REEXEC';
@@ -28,10 +29,16 @@ Usage:
 
 Options:
   --config <file>      JSON manifest. Bắt buộc.
-  --url <url>          Ghi đè URL preview trong manifest.
+  --url <url>          Ghi đè URL preview trong manifest. Chỉ origin loopback
+                       (vd http://localhost:7458) thì chỉ đổi origin, giữ path/query
+                       của matrix (?tutorials=off); URL có path/query thay toàn bộ và
+                       cảnh báo PREVIEW_URL_QUERY_DROPPED khi bỏ query của matrix.
   --output <dir>       Ghi đè thư mục output.
   --case <name>        Chỉ chạy một checkpoint (có thể lặp lại).
   --browser <path>     Ghi đè Chrome/Edge executable.
+  --allow-foreign-preview
+                       Chủ ý chạy trên preview của project khác (bỏ qua
+                       PREVIEW_PROJECT_MISMATCH; được ghi vào manifest).
   --json               Xuất JSON compact.
   --help               Hiện trợ giúp.
 
@@ -93,7 +100,12 @@ mỗi lần chạy và regression gate hash chúng như evalFile.
 Mỗi case reload preview trong browser session riêng. Tool sinh từng PNG,
 manifest.json và index.html dạng contact sheet. Khi khai báo
 requiredReferenceMetrics, tool crop/resize reference về đúng ROI candidate và
-fail-closed theo metric; nếu không khai báo thì reference chỉ là contact sheet.`;
+fail-closed theo metric; nếu không khai báo thì reference chỉ là contact sheet.
+
+Trước case đầu, tool chứng minh URL preview thuộc đúng project này qua
+/scripting/x/import-map.json (key file:///<projectRoot>/assets/...). Preview của
+project khác (port bị editor khác chiếm) fail ngay với PREVIEW_PROJECT_MISMATCH;
+không xác định được (editor cũ) chỉ cảnh báo rồi chạy tiếp.`;
 
 function slugify(value) {
   const slug = String(value || '').trim().toLowerCase()
@@ -620,9 +632,44 @@ function normalizeDynamicGestureSpec(dynamic, label) {
   };
 }
 
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+/**
+ * Resolve the effective preview URL like the regression gate's previewUrlFor(): an origin-only
+ * loopback --url (no path/query/hash) swaps only the origin and keeps the matrix path + query
+ * (?level=, ?tutorials=off). A full --url still replaces the whole URL, with a warning when it
+ * drops matrix query parameters.
+ */
+function resolvePreviewUrl(matrixUrl, overrideUrl) {
+  if (!overrideUrl) return { url: matrixUrl, mode: 'matrix', warnings: [] };
+  let override;
+  try { override = new URL(String(overrideUrl)); } catch (_) {
+    return { url: overrideUrl, mode: 'replace', warnings: [] };
+  }
+  const raw = String(overrideUrl).trim();
+  const originOnly = /^https?:\/\/[^/?#]+\/?$/i.test(raw);
+  let matrix = null;
+  try { matrix = new URL(String(matrixUrl || '')); } catch (_) { matrix = null; }
+  if (originOnly && LOOPBACK_HOSTS.has(override.hostname) && matrix && /^https?:$/.test(matrix.protocol)) {
+    matrix.protocol = override.protocol;
+    matrix.host = override.host;
+    return { url: matrix.href, mode: 'origin-swap', warnings: [] };
+  }
+  const warnings = [];
+  if (matrix && matrix.search) {
+    const dropped = [...matrix.searchParams.keys()].filter(key => !override.searchParams.has(key));
+    if (dropped.length) {
+      warnings.push(`PREVIEW_URL_QUERY_DROPPED: --url ${override.href} thay toàn bộ URL matrix ${matrix.href} và bỏ query ${dropped.join(', ')}; `
+        + 'dùng --url chỉ gồm origin (vd http://localhost:7458) để giữ path/query của matrix.');
+    }
+  }
+  return { url: override.href, mode: 'replace', warnings };
+}
+
 function validateConfig(config, overrides = {}) {
   if (!config || typeof config !== 'object' || Array.isArray(config)) throw new Error('Manifest phải là JSON object');
-  const url = overrides.url || config.url;
+  const urlResolution = resolvePreviewUrl(config.url, overrides.url);
+  const url = urlResolution.url;
   if (!/^https?:\/\//i.test(String(url || ''))) {
     throw new Error('Preview checkpoint bắt buộc URL http(s); tool không build và không tự tìm build HTML');
   }
@@ -849,6 +896,7 @@ function validateConfig(config, overrides = {}) {
     // exact hostnames of machine-injected scripts (antivirus web injection); their errors are reported separately
     environmentHosts: normalizeEnvironmentHosts(config.environmentHosts, url),
     browser: overrides.browser || config.browser || undefined,
+    urlResolution: { mode: urlResolution.mode, matrixUrl: config.url, warnings: urlResolution.warnings },
     cases: selected,
   };
 }
@@ -859,6 +907,7 @@ function parseArgs(argv) {
     const arg = argv[index];
     if (arg === '--help' || arg === '-h') { result.help = true; continue; }
     if (arg === '--json') { result.json = true; continue; }
+    if (arg === '--allow-foreign-preview') { result.allowForeignPreview = true; continue; }
     if (arg === '--config') { result.config = argv[++index]; continue; }
     if (arg.startsWith('--config=')) { result.config = arg.slice('--config='.length); continue; }
     if (arg === '--url') { result.url = argv[++index]; continue; }
@@ -917,6 +966,26 @@ function ensureWebSocket() {
   return false;
 }
 
+/**
+ * Session-level guard: prove the preview URL is served by this project before the first case.
+ * mismatch throws PREVIEW_PROJECT_MISMATCH (unless allowForeignPreview); unknown only warns.
+ */
+async function guardPreviewProject(url, options = {}) {
+  const record = await assertPreviewProjectIdentity({
+    url,
+    projectRoot: options.projectRoot || PROJECT_ROOT,
+    allowForeign: options.allowForeignPreview === true,
+    fetchImpl: options.fetchImpl,
+    probe: options.probe,
+    scanOnMismatch: options.scanOnMismatch,
+    scanPorts: options.scanPorts,
+    retries: options.retries,
+    retryDelayMs: options.retryDelayMs,
+  });
+  if (record.warning && typeof options.onWarning === 'function') options.onWarning(record.warning);
+  return identityReceipt(record);
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) { console.log(USAGE); return; }
@@ -924,6 +993,24 @@ async function main() {
   const configFile = resolveInsideProject(args.config, 'config');
   const raw = JSON.parse(fs.readFileSync(configFile, 'utf8').replace(/^\uFEFF/, ''));
   const config = validateConfig(raw, args);
+  for (const warning of config.urlResolution.warnings) console.error(`[preview-checkpoints] WARN ${warning}`);
+  let previewIdentity;
+  try {
+    previewIdentity = await guardPreviewProject(config.url, {
+      allowForeignPreview: args.allowForeignPreview === true,
+      onWarning: message => console.error(`[preview-checkpoints] WARN ${message}`),
+    });
+  } catch (error) {
+    if (error.code !== MISMATCH_CODE) throw error;
+    if (args.json) {
+      console.log(JSON.stringify({
+        ok: false, tool: 'preview-checkpoints', code: error.code, message: error.message,
+        previewIdentity: identityReceipt(error.details), candidates: error.details && error.details.candidates,
+      }, null, 2));
+    } else console.error(`[preview-checkpoints] ERROR ${error.message}`);
+    process.exitCode = 1;
+    return;
+  }
   const outputDir = resolveInsideProject(config.outputDir, 'outputDir');
   fs.mkdirSync(outputDir, { recursive: true });
 
@@ -1020,6 +1107,9 @@ async function main() {
     tool: 'preview-checkpoints',
     generatedAt: new Date().toISOString(),
     url: config.url,
+    urlResolution: config.urlResolution,
+    previewIdentity,
+    ...(args.allowForeignPreview === true ? { allowForeignPreview: true } : {}),
     ok: results.every(entry => entry.ok),
     note: 'Runtime-clean screenshots prove visual parity only when an explicit reference metric contract passes.',
     cases: results,
@@ -1059,7 +1149,9 @@ module.exports = {
   normalizeWindowSize,
   resolveInsideProject,
   validateConfig,
+  resolvePreviewUrl,
   parseArgs,
+  guardPreviewProject,
   readExpression,
   evaluateEvalAssertion,
   evaluateTraceAssertion,

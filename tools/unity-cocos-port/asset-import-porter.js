@@ -28,6 +28,9 @@ function unitySpriteImportData(text) {
   };
 }
 
+// Per-port-run memo (keyed by the options object) so each exported mesh is refreshed once.
+const refreshedUnityMeshFbx = new WeakMap();
+
 module.exports = function createAssetImportPorter(deps) {
   const {
     ensureDirectoryMetas,
@@ -237,6 +240,33 @@ module.exports = function createAssetImportPorter(deps) {
     };
   }
 
+  // A Unity Mesh .asset exported by an earlier port resolves as an existing FBX, so
+  // handleMissingModel never runs again and exporter fixes (e.g. UnitScaleFactor 100) never
+  // reach it: Candy Pop Sort kept 1/100-size board corners and funnel bumpers. Re-export on
+  // every port; identical bytes are left untouched, changed ones are reimported by the
+  // unity_imported AssetDB refresh while the .meta (and so every sub-asset UUID) is kept.
+  function refreshExportedUnityMesh(meshAsset, reporter, options) {
+    if (!meshAsset || meshAsset.ext !== '.asset' || options.dryRun) return false;
+    const dest = extractedUnityMeshFbxPath(meshAsset, options);
+    if (!dest || !fs.existsSync(dest) || !fs.existsSync(meshAsset.path)) return false;
+    let seen = refreshedUnityMeshFbx.get(options);
+    if (!seen) refreshedUnityMeshFbx.set(options, seen = new Map());
+    if (seen.has(dest)) return seen.get(dest);
+    let changed = false;
+    try {
+      changed = Boolean(exportUnityMeshAssetToFbx(meshAsset.path, dest)?.changed);
+    } catch (error) {
+      reporter.add('medium', 'UNITY_MESH_ASSET_FBX_REFRESH_FAILED', meshAsset.relativePath, toPosix(path.relative(options.cocosRoot, dest)),
+        'Previously exported FBX could not be refreshed from the Unity Mesh .asset; the existing export is kept', error?.message || String(error));
+    }
+    if (changed) {
+      reporter.low('UNITY_MESH_ASSET_FBX_REFRESHED', meshAsset.relativePath, toPosix(path.relative(options.cocosRoot, dest)),
+        'Previously exported FBX differed from the current exporter output and was rewritten; AssetDB refresh reimports it');
+    }
+    seen.set(dest, changed);
+    return changed;
+  }
+
   function handleMissingModel(meshAsset, reporter, options, config = {}) {
     const { autoCopy = false, severity = 'medium', meshNameHint = '' } = config;
     if (meshAsset?.ext === '.asset' && (options.copyAssets || autoCopy)) {
@@ -307,6 +337,7 @@ module.exports = function createAssetImportPorter(deps) {
     copyUnityAssetToCocos,
     writePreparedUnityTexture,
     handleMissingModel,
+    refreshExportedUnityMesh,
   };
 };
 

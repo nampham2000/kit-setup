@@ -1,6 +1,6 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),ts=require('typescript');
-const out={};new Function('exports',ts.transpileModule(fs.readFileSync(path.join(__dirname,'runtime/UnityParticleLimitVelocity.ts'),'utf8'),{compilerOptions:{module:1}}).outputText)(out);
+const out={};new Function('exports','require',ts.transpileModule(fs.readFileSync(path.join(__dirname,'runtime/UnityParticleLimitVelocity.ts'),'utf8'),{compilerOptions:{module:1}}).outputText)(out,()=>({}));
 const fixture=require('./fixtures/limit-curve-phase-native.json');
 test('native limit curve samples start-of-step age without changing other module ages',()=>{
  assert.equal(fixture.rows.length,21);
