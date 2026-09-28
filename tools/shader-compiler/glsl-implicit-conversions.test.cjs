@@ -41,3 +41,35 @@ test('already-valid GLSL is unchanged', () => {
   const src = 'vec4 frag () {\n  vec3 a = texture(t, uv).rgb;\n  vec4 b = texture(t, uv);\n  float c = 1.0;\n  vec3 d = vec3(1.0);\n  return b;\n}';
   assert.equal(glslImplicitConversions(src), src);
 });
+
+test('RFX4_CutoutBorder helper: CRLF lines are rewritten; an int call argument stays int', () => {
+  const src = 'vec3 ShadeCustomLights(vec4 vertex, vec3 normal, int lightCount)\r\n{\r\n\t\t\tvec3 worldPos = (cc_matWorld * vertex);\r\n\t\t\treturn worldPos;\r\n}\r\nvoid main() {\r\n  int RFX4_LightCount;\r\n  vec3 finalLight = ShadeCustomLights(vec4(a_position, 1.0), a_normal, RFX4_LightCount);\r\n}';
+  const out = glslImplicitConversions(src);
+  assert.match(out, /vec3 worldPos = \(\(cc_matWorld \* vertex\)\)\.xyz;\r\n/);
+  assert.match(out, /ShadeCustomLights\(vec4\(a_position, 1\.0\), a_normal, RFX4_LightCount\);/);
+});
+
+test('RFX4_ParallaxDecal: max(scalar literal, vec) broadcasts, also in a return', () => {
+  const out = glslImplicitConversions('vec4 f() {\n  vec4 col;\n  vec4 a = max(col, 0.5);\n  return max(0.00001, col);\n}');
+  assert.match(out, /vec4 a = max\(col, vec4\(0\.5\)\);/);
+  assert.match(out, /return max\(vec4\(0\.00001\), col\);/);
+});
+
+test('RFX4_ParallaxDecal: subscripts in a capped loop use the loop index (ES 1.0 constant-index rule)', () => {
+  const out = glslImplicitConversions('void f() {\n  int idx;\n  for (idx = 0; idx < lightCount; idx++) {\n    if (lights[idx].w > 0.5) a += lights[ idx ].rgb * float(idx);\n  }\n  b = lights[idx].w;\n}');
+  assert.match(out, /if \(lights\[idx_es\]\.w > 0\.5\)/);
+  assert.match(out, /lights\[idx_es\]\.rgb \* float\(idx\)/);
+  assert.match(out, /\n  b = lights\[idx\]\.w;/, 'subscripts after the loop are untouched');
+});
+
+test('RFX4_CutoutBorder: compound vec4 into .rgb, products, one-line if/else', () => {
+  const src = 'vec4 frag () {\n  vec4 c;\n  if (c.a < cutoff) c.rgb += borderColor;\n  else c.rgb += CCDecodeColorSample(texture2D(emissionTex, v_uv2)) * emissionColor;\n  return c;\n}\n  uniform Constant { vec4 borderColor; vec4 emissionColor; float cutoff; };';
+  const out = glslImplicitConversions(src);
+  assert.match(out, /if \(c\.a < cutoff\) c\.rgb \+= \(borderColor\)\.xyz;/);
+  assert.match(out, /else c\.rgb \+= \(CCDecodeColorSample\(texture2D\(emissionTex, v_uv2\)\) \* emissionColor\)\.xyz;/);
+});
+
+test('unchanged statements keep their exact spacing', () => {
+  const src = 'void f() {\n  float a=b*2.0;\n  vec3 x  =  y.xyz;\n}';
+  assert.equal(glslImplicitConversions(src), src);
+});
