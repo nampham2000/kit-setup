@@ -2,6 +2,12 @@
 'use strict';
 
 const { matchUnitySubAssetName } = require('./unity-cocos-port/unity-file-id.js');
+const {
+  sceneMeshNodes,
+  meshUuidByUnitySceneNode,
+  meshUuidBySceneNodeName,
+  reportModelMeshResolution,
+} = require('./unity-cocos-port/model-mesh-resolution.js');
 
 const fs = require('fs');
 const path = require('path');
@@ -177,6 +183,7 @@ const {
   parseUnityPolygonColliderPaths,
   boundsForUnityPolygonPaths,
   unityRefGuid,
+  unityRefFileId,
   resolveUnityPhysicsMaterialUuid,
   resolveUnityBuiltinMeshUuid,
   resolveBuiltinPrimitiveMeshUuid,
@@ -2298,18 +2305,96 @@ class CocosAssetDatabase {
     return null;
   }
 
+  // Imported scene prefab of a model record: ordered [{ nodeName, meshUuid }] (see model-mesh-resolution).
+  modelSceneMeshNodes(record) {
+    for (const scene of subMetaRecords(record.uuid, record.subMetas, 'gltf-scene')) {
+      if (isPendingGeneratedSubMeta(scene.subMeta)) continue;
+      const nodes = sceneMeshNodes(readJsonIfExists(libraryJsonPathForUuid({ cocosRoot: this.root }, scene.uuid)));
+      if (nodes.length) return nodes;
+    }
+    return [];
+  }
+
+  // Resolution contract: `meshMatch` says which evidence bound the mesh:
+  //   'mesh-file-id'   Unity fileID hashes to a Cocos mesh sub-asset name
+  //   'scene-file-id'  Unity fileID hashes to a node name of the imported Cocos scene prefab
+  //                    (Cocos names unnamed FBX geometry "Scene-<n>.mesh")
+  //   'name' / 'scene-name' / 'single' / 'hint'  name evidence, or a model with one mesh
+  //   'first-fallback' no evidence, several meshes: the first mesh is bound (callers report high)
+  //   'unresolved'     a Unity fileID was given and nothing matches it among several meshes:
+  //                    meshUuid is '' (callers report high; the model itself exists, so it must
+  //                    not be treated as a missing model)
   resolveModelMeshByStem(stem, meshNameHint = '', requiredExt = '', unityFileId = '') {
     const candidates = this.findModelRecordsByStem(stem).filter((record) => !requiredExt || record.ext === requiredExt);
     for (const record of candidates) {
-      // Unity references FBX meshes by a deterministic fileID (xxHash64 of "Type:Mesh-><name><i>");
-      // match it exactly before falling back to the GameObject-name heuristic.
-      const meshRecord = (unityFileId && firstImportedSubMetaRecordByUnityFileId(record.uuid, record.subMetas, 'gltf-mesh', 'Mesh', unityFileId))
-        || firstImportedSubMetaRecord(record.uuid, record.subMetas, 'gltf-mesh', meshNameHint);
-      const mesh = meshRecord?.uuid || '';
+      const meshRecords = subMetaRecords(record.uuid, record.subMetas, 'gltf-mesh')
+        .filter(({ subMeta }) => !isPendingGeneratedSubMeta(subMeta));
+      const isMesh = (uuid) => meshRecords.some((meshRecord) => meshRecord.uuid === uuid);
+      let mesh = '';
+      let meshMatch = '';
+      let meshNodeName = '';
+      if (unityFileId && meshRecords.length) {
+        // Unity references FBX meshes by a deterministic fileID (xxHash64 of "Type:Mesh-><name><i>");
+        // match it exactly before any name heuristic.
+        const byName = firstImportedSubMetaRecordByUnityFileId(record.uuid, record.subMetas, 'gltf-mesh', 'Mesh', unityFileId);
+        if (byName) {
+          mesh = byName.uuid;
+          meshMatch = 'mesh-file-id';
+        } else {
+          const byNode = meshUuidByUnitySceneNode(this.modelSceneMeshNodes(record), unityFileId);
+          if (byNode && isMesh(byNode.meshUuid)) {
+            mesh = byNode.meshUuid;
+            meshMatch = 'scene-file-id';
+            meshNodeName = byNode.nodeName;
+          }
+        }
+      }
+      if (!mesh) {
+        const byHint = importedSubMetaRecordMatch(record.uuid, record.subMetas, 'gltf-mesh', meshNameHint);
+        const byNodeName = meshRecords.length > 1 && byHint?.match !== 'exact'
+          ? meshUuidBySceneNodeName(this.modelSceneMeshNodes(record), meshNameHint)
+          : null;
+        if (byHint?.match === 'exact') {
+          mesh = byHint.record.uuid;
+          meshMatch = 'name';
+        } else if (byNodeName && isMesh(byNodeName.meshUuid)) {
+          mesh = byNodeName.meshUuid;
+          meshMatch = 'scene-name';
+          meshNodeName = byNodeName.nodeName;
+        } else if (byHint && meshRecords.length === 1) {
+          mesh = byHint.record.uuid;
+          meshMatch = 'single';
+        } else if (byHint && unityFileId) {
+          // A Unity fileID is authoritative: a name-contains or first-mesh guess among several
+          // meshes is how every prefab of a multi-mesh FBX ended up on mesh 0.
+          meshMatch = 'unresolved';
+        } else if (byHint) {
+          mesh = byHint.record.uuid;
+          meshMatch = byHint.match === 'hint' ? 'hint' : 'first-fallback';
+        }
+      }
       const materials = subMetaRecords(record.uuid, record.subMetas, 'gltf-material');
+      if (meshMatch === 'unresolved') {
+        return {
+          meshUuid: '',
+          meshMatch,
+          meshCount: meshRecords.length,
+          unityFileId: String(unityFileId),
+          materialUuid: '',
+          materialUuids: [],
+          materialNames: [],
+          source: record.relativePath,
+          fallbackExt: record.ext,
+        };
+      }
       if (mesh) {
         return {
           meshUuid: mesh,
+          meshMatch,
+          meshNodeName,
+          meshCount: meshRecords.length,
+          primitiveCount: libraryMeshPrimitiveCount(this.root, mesh),
+          unityFileId: String(unityFileId || ''),
           materialUuid: materials[0]?.uuid || '',
           materialUuids: materials.map((material) => material.uuid),
           materialNames: materials.map((material) => (
@@ -2553,13 +2638,19 @@ function firstImportedSubMetaRecordByUnityFileId(parentUuid, subMetas, importer,
 }
 
 function firstImportedSubMetaRecord(baseUuid, subMetas, importer, nameHint = '') {
+  return importedSubMetaRecordMatch(baseUuid, subMetas, importer, nameHint)?.record || null;
+}
+
+// { record, match } where match is 'exact' (normalized name equals the hint), 'hint' (name
+// contains a hint variant) or 'first' (no name evidence: the first imported record).
+function importedSubMetaRecordMatch(baseUuid, subMetas, importer, nameHint = '') {
   const hints = subMetaLookupHints(nameHint);
   if (hints.length) {
     // An exact mesh name ("Object001") must win over a longer one containing it.
     const exact = normalizeKey(nameHint);
     for (const record of subMetaRecords(baseUuid, subMetas, importer)) {
       const name = String(record.subMeta.name || record.subMeta.displayName || '').replace(/\.(mesh|material|prefab)$/i, '');
-      if (!isPendingGeneratedSubMeta(record.subMeta) && normalizeKey(name) === exact) return record;
+      if (!isPendingGeneratedSubMeta(record.subMeta) && normalizeKey(name) === exact) return { record, match: 'exact' };
     }
     for (const hint of hints) {
       for (const record of subMetaRecords(baseUuid, subMetas, importer)) {
@@ -2567,15 +2658,22 @@ function firstImportedSubMetaRecord(baseUuid, subMetas, importer, nameHint = '')
           !isPendingGeneratedSubMeta(record.subMeta) &&
           normalizeKey(record.subMeta.name || record.subMeta.displayName || '').includes(hint)
         ) {
-          return record;
+          return { record, match: 'hint' };
         }
       }
     }
   }
   for (const record of subMetaRecords(baseUuid, subMetas, importer)) {
-    if (!isPendingGeneratedSubMeta(record.subMeta)) return record;
+    if (!isPendingGeneratedSubMeta(record.subMeta)) return { record, match: 'first' };
   }
   return null;
+}
+
+// Submesh (primitive) count of an imported Cocos mesh sub-asset, or null when the library JSON is absent.
+function libraryMeshPrimitiveCount(cocosRoot, meshUuid) {
+  const data = readJsonIfExists(libraryJsonPathForUuid({ cocosRoot }, meshUuid));
+  const primitives = (Array.isArray(data) ? data.find((object) => object?._struct) : data)?._struct?.primitives;
+  return Array.isArray(primitives) ? primitives.length : null;
 }
 
 function subMetaRecords(baseUuid, subMetas, importer = '') {
@@ -5303,6 +5401,38 @@ function buildNestedChildTransformOverrides(sourceModel, sourceTransform, props,
   return overrides;
 }
 
+// Unity Renderer class IDs -> the Cocos component local id the porter gives the renderer it emits.
+const UNITY_RENDERER_COMPONENT_FILE_ID_PREFIX = new Map([
+  ['23', 'cmp-mesh-renderer-'],
+  ['137', 'cmp-skinned-mesh-renderer-'],
+  ['212', 'cmp-sprite-renderer-'],
+]);
+
+// A prefab instance can override a source renderer's m_Enabled (collider-only pieces disable their
+// MeshRenderer). Returns the Cocos property override { localId, propertyPath: '_enabled', value } or null.
+function nestedRendererEnabledOverride(sourceDoc, sourceFileId, props) {
+  const prefix = sourceDoc ? UNITY_RENDERER_COMPONENT_FILE_ID_PREFIX.get(String(sourceDoc.classId)) : '';
+  if (!prefix || !hasPrefabOverrideKey(props, 'm_Enabled')) return null;
+  return { localId: `${prefix}${sourceFileId}`, propertyPath: '_enabled', value: Number(props.m_Enabled) !== 0 };
+}
+
+/** Flattened nested prefabs: renderer m_Enabled overrides are written onto the built components in place. */
+function applyNestedRendererEnabledOverrides(nestedBuilder, nestedPrefab) {
+  const { model, overrideInfo, sourceGuid } = nestedPrefab || {};
+  if (!model?.componentDocs || !overrideInfo || !sourceGuid) return 0;
+  let applied = 0;
+  for (const [sourceFileId, sourceDoc] of model.componentDocs.entries()) {
+    const override = nestedRendererEnabledOverride(sourceDoc, sourceFileId, prefabOverridePropsByFileId(overrideInfo, sourceGuid, sourceFileId));
+    if (!override) continue;
+    const componentId = nestedBuilder.componentMap.get(sourceFileId);
+    const component = Number.isInteger(componentId) ? nestedBuilder.objects[componentId] : null;
+    if (!component) continue;
+    component._enabled = override.value;
+    applied += 1;
+  }
+  return applied;
+}
+
 function buildNestedPrefabPropertyOverrides(gameObject, transform, sourceModel, scriptContext = null) {
   const nestedPrefab = gameObject?.nestedPrefab;
   const overrideInfo = nestedPrefab?.overrideInfo;
@@ -5350,6 +5480,8 @@ function buildNestedPrefabPropertyOverrides(gameObject, transform, sourceModel, 
       });
     }
     const sourceDoc = sourceModel.componentDocs.get(sourceFileId);
+    const rendererEnabled = nestedRendererEnabledOverride(sourceDoc, sourceFileId, props);
+    if (rendererEnabled) overrides.push(rendererEnabled);
     if (!sourceDoc || Number(sourceDoc.classId) !== 114) continue;
     if (scriptContext) {
       for (const override of buildNestedScriptFieldOverrides(sourceDoc, sourceFileId, props, scriptContext)) {
@@ -5681,6 +5813,7 @@ function applyNestedParticlePrefabOverrides(builder, nestedPrefab, reporter, opt
         const resolved = meshAsset && cocosDb?.resolveModelMeshByStem
           ? cocosDb.resolveModelMeshByStem(meshAsset.stem, meshName || meshAsset.stem, meshAsset.ext === '.asset' ? '.fbx' : meshAsset.ext, unityRefFileId(meshOverride[1]))
           : null;
+        reportModelMeshResolution(reporter, resolved, nestedPrefab.sourceAsset?.relativePath || '', gameObject.name);
         const meshUuid = builtin || resolved?.meshUuid || '';
         renderer._mesh = meshUuid ? cocosUuid(meshUuid, 'cc.Mesh') : resolvedMesh;
         if (meshUuid) {
@@ -6165,6 +6298,7 @@ class CocosPrefabBuilder {
         ? [materialUuid]
         : [];
     return this.addComponent(nodeId, 'cc.MeshRenderer', {
+      _enabled: config.enabled !== false,
       _materials: materialUuids.map((uuid) => cocosUuid(uuid, 'cc.Material')),
       _visFlags: 0,
       bakeSettings: cocosRef(this.addModelBakeSettings()),
@@ -6183,6 +6317,7 @@ class CocosPrefabBuilder {
 
   addSkinnedMeshRenderer(nodeId, unityComponentId, meshUuid, materialUuids, skeletonUuid, skinningRootId, fileId, config = {}) {
     return this.addComponent(nodeId, 'cc.SkinnedMeshRenderer', {
+      _enabled: config.enabled !== false,
       // Empty slots stay null so later slots keep their sub-mesh index.
       _materials: materialUuids.map((uuid) => (uuid ? cocosUuid(uuid, 'cc.Material') : null)),
       _visFlags: 0,
@@ -7774,6 +7909,7 @@ function emitNodeRecursive(transform, parentNodeId, model, builder, layerResolve
       );
     }
     applyNestedScriptFieldOverrides(nestedBuilder, gameObject.nestedPrefab, { builder, reporter, unityDb, cocosDb });
+    applyNestedRendererEnabledOverrides(nestedBuilder, gameObject.nestedPrefab);
     const flattened = builder.clonePrefabTree(nestedBuilder.objects, parentNodeId);
     if (flattened?.rootId != null) {
       rekeyFlattenedPrefabClone(builder, flattened, `node-${sanitizeFileId(gameObject.name)}-${transform.fileId}`, String(transform.fileId));
@@ -9214,5 +9350,7 @@ module.exports = {
   inheritedPreflightStillValid,
   parseUnityYamlText,
   applyNestedParticlePrefabOverrides,
+  nestedRendererEnabledOverride,
+  applyNestedRendererEnabledOverrides,
   main,
 };
