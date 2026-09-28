@@ -9320,6 +9320,8 @@ if (require.main === module) {
 module.exports = {
   collectUnityModelExternalMaterialRemaps,
   parseUnityYaml,
+  parseUnityScalar,
+  getIndentedBlock,
   getField,
   getNestedList,
   unityRefGuid,

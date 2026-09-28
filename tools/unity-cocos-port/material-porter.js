@@ -127,16 +127,48 @@ module.exports = function createMaterialPorter(deps) {
     return Number.isFinite(minIndent) ? minIndent : -1;
   }
 
+  // Unity 5.x materials (m_SavedProperties serializedVersion 2, e.g. KriptoFX REP v1 DemoResources) list
+  // every property as "- first: {name: X}" + "second: <value | block>" instead of "- X: <value>".
+  // Returns { name, value, lines, consumed } for a legacy entry starting at block[i], else null.
+  function legacySerializedEntry(block, i, entryIndent) {
+    if (!/^-\s*first\s*:\s*$/.test(String(block[i] || '').trim())) return null;
+    const lines = [];
+    for (let j = i + 1; j < block.length; j += 1) {
+      const line = String(block[j] || '');
+      const indent = line.match(/^\s*/)?.[0]?.length || 0;
+      if (line.trim() && indent <= entryIndent) break;
+      lines.push(line);
+    }
+    const name = (lines.map((line) => /^\s*name\s*:\s*(.+?)\s*$/.exec(line)).find(Boolean) || [])[1];
+    const secondIndex = lines.findIndex((line) => /^\s*second\s*:/.test(line));
+    if (!name || secondIndex < 0) return null;
+    const secondIndent = lines[secondIndex].match(/^\s*/)[0].length;
+    const inline = /^\s*second\s*:\s*(.*)$/.exec(lines[secondIndex])[1].trim();
+    const nested = [];
+    for (const line of lines.slice(secondIndex + 1)) {
+      const indent = line.match(/^\s*/)?.[0]?.length || 0;
+      if (line.trim() && indent <= secondIndent) break;
+      nested.push(line);
+    }
+    return { name: name.trim(), value: inline, lines: nested, consumed: lines.length };
+  }
+
   function parseUnitySerializedScalarMap(doc, key) {
     const block = deps.getIndentedBlock(doc, key);
     const entryIndent = blockEntryIndent(block);
     const result = {};
     if (entryIndent < 0) return result;
 
-    for (const rawLine of block) {
-      const line = String(rawLine || '');
+    for (let i = 0; i < block.length; i += 1) {
+      const line = String(block[i] || '');
       const indent = line.match(/^\s*/)?.[0]?.length || 0;
       if (indent !== entryIndent) continue;
+      const legacy = legacySerializedEntry(block, i, entryIndent);
+      if (legacy) {
+        result[legacy.name] = parseUnityScalar(legacy.value);
+        i += legacy.consumed;
+        continue;
+      }
       const trimmed = line.trim();
       const match = /^-\s*([^:]+)\s*:\s*(.*)$/.exec(trimmed) || /^([^:]+)\s*:\s*(.*)$/.exec(trimmed);
       if (!match) continue;
@@ -157,6 +189,17 @@ module.exports = function createMaterialPorter(deps) {
       const indent = line.match(/^\s*/)?.[0]?.length || 0;
       if (indent !== entryIndent) continue;
 
+      const legacy = legacySerializedEntry(block, i, entryIndent);
+      if (legacy) {
+        const legacyDoc = { lines: legacy.lines };
+        result[legacy.name] = {
+          m_Texture: getField(legacyDoc, 'm_Texture', null),
+          m_Scale: getField(legacyDoc, 'm_Scale', { x: 1, y: 1 }),
+          m_Offset: getField(legacyDoc, 'm_Offset', { x: 0, y: 0 }),
+        };
+        i += legacy.consumed;
+        continue;
+      }
       const trimmed = line.trim();
       const match = /^-\s*([^:]+)\s*:\s*(.*)$/.exec(trimmed) || /^([^:]+)\s*:\s*(.*)$/.exec(trimmed);
       if (!match) continue;
