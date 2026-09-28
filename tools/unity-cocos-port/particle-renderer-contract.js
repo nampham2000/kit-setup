@@ -63,9 +63,6 @@ function particleRendererContract(particle = {}, renderer = {}) {
   const axialBillboard = mode === 2 || mode === 3;
   const meshWorldFrame = mesh && alignment === 1;
   const meshVelocityFrame = mesh && alignment === 4 && !straightBoxVelocity;
-  // Native BakeMesh (tools/jelly/unity/mesh-view-alignment.cs in JellyCubeRun2048): View-aligned
-  // meshes take world = camera rotation x particle rotation, roll included, emitter ignored.
-  const meshViewFrame = mesh && alignment === 0;
   const unsupported = [];
   // Sorting is bound for every transparent renderer by particle-sorting-binding.
   const sorting = { fudge: Number(renderer.m_SortingFudge || 0), order: Number(renderer.m_SortingOrder || 0), layer: Number(renderer.m_SortingLayerID || 0), sortMode: Number(renderer.m_SortMode || 0) };
@@ -105,9 +102,8 @@ function particleRendererContract(particle = {}, renderer = {}) {
     requiresMaterialAdapter: localBillboard || worldBillboard || stretched || mesh || mode === 2 || mode === 3 || (viewBillboard && pivotSet) || clampReachable,
     clampReachable,
     // w: 2 Local billboard; 3 Mesh rotation already in world space (World alignment,
-    // or the Velocity frame written by UnityParticleMeshFrameAdapter); 4 World billboard;
-    // 5 Mesh rotation relative to the camera (View alignment).
-    sourceRendererPivot: [...pivotValues, localBillboard ? 2 : worldBillboard ? 4 : meshWorldFrame || meshVelocityFrame ? 3 : meshViewFrame ? 5 : 0],
+    // or the Velocity frame written by UnityParticleMeshFrameAdapter).
+    sourceRendererPivot: [...pivotValues, localBillboard ? 2 : worldBillboard ? 4 : meshWorldFrame || meshVelocityFrame ? 3 : 0],
     // Runtime state a material cannot carry: mesh bounds for the pivot, per-particle Velocity frame.
     meshFrame: mesh && (pivotSet || meshVelocityFrame) ? { pivot: pivotSet, velocity: meshVelocityFrame } : null,
     // Unity linearizes particle vertex colors in a Linear project unless the

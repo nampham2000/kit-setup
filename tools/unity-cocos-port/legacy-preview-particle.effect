@@ -268,13 +268,7 @@ vec4 lpvs_main () {
     mat3 rotMat = quatToMat3(rot);
     // w=3: the particle rotation is already world space (Unity World alignment, or the
     // Velocity frame from UnityParticleMeshFrameAdapter); skip the emitter rotation.
-    // w=5: Unity View-aligned meshes (BakeMesh): world = camera rotation x particle rotation,
-    // roll included, emitter ignored. The camera node rotation is the Z-reflected Unity camera;
-    // the builtin nodeRotation (Quat.fromViewUp) adds a 180 deg turn about Y and drops roll.
     mat3 nodeMat = sourceRendererPivot.w == 3.0 ? mat3(1.0) : quatToMat3(nodeRotation);
-    if (sourceRendererPivot.w == 5.0) {
-      nodeMat = mat3(normalize(cc_matViewInv[0].xyz), normalize(cc_matViewInv[1].xyz), normalize(cc_matViewInv[2].xyz));
-    }
     rotMat = nodeMat * rotMat;
     rot = mat3ToQuat(rotMat);
 

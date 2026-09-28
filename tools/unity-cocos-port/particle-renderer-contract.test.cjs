@@ -61,15 +61,3 @@ test('scalar mesh axis binding is bounded to measured local Sphere births',()=>{
  for(const changed of [{...p,moveWithTransform:1},{...p,InitialModule:{rotation3D:true}},{...p,RotationModule:{enabled:true}},{...p,ShapeModule:{...p.ShapeModule,type:2}}])assert.equal(!!contract(changed,r).meshScalarAxis,false);
  assert.equal(!!contract(p,{...r,m_RenderAlignment:1}).meshScalarAxis,false);
 });
-
-// Unity BakeMesh (JellyCubeRun2048 tools/jelly/unity/mesh-view-alignment.cs): a View-aligned mesh
-// particle is drawn at camera rotation x particle rotation, roll included, emitter rotation ignored
-// (emitter 0 and 270 deg bake identically). Cocos' builtin View nodeRotation (Quat.fromViewUp)
-// adds a 180 deg turn about Y and drops roll, which turned the transform_die_bomb shield dome away.
-test('View-aligned mesh particles use the camera frame (w = 5)', () => {
-  assert.equal(contract({}, { m_RenderMode: 4, m_RenderAlignment: 0 }).sourceRendererPivot[3], 5);
-  assert.equal(contract({}, { m_RenderMode: 4, m_RenderAlignment: 0 }).requiresMaterialAdapter, true);
-  assert.equal(contract({}, { m_RenderMode: 4, m_RenderAlignment: 2 }).sourceRendererPivot[3], 0, 'Local keeps the emitter rotation');
-  assert.equal(contract({}, { m_RenderMode: 4, m_RenderAlignment: 1 }).sourceRendererPivot[3], 3, 'World stays world');
-  assert.equal(contract({}, { m_RenderMode: 0, m_RenderAlignment: 0 }).sourceRendererPivot[3], 0, 'View billboards are unchanged');
-});
