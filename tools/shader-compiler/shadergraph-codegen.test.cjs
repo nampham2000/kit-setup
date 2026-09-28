@@ -190,3 +190,18 @@ test('--latlong-cubes samples a Unity cube map through its equirect source image
   assert.match(latlong.effect, /sgTexLod\(_SampleCubemap_\w+, sgLatLongUV\(/);
   assert.ok(latlong.diagnostics.some((d) => d.code === 'SG_CUBEMAP_LATLONG'));
 });
+
+test('--color-space linear passes 3D output through; --vertex-color srgb decodes a_color in a linear project', () => {
+  const corpus = loadCorpus(path.join(FIXTURE, 'corpus.json.gz'));
+  const gamma3d = generateEffect(corpus.SmokeExplosion, { name: 'm' });
+  assert.match(gamma3d.effect, /return CCFragOutput\(color\);/);
+  assert.match(gamma3d.effect, /#include <legacy\/output>/);
+  const linear3d = generateEffect(corpus.SmokeExplosion, { name: 'm', colorSpace: 'linear' });
+  assert.doesNotMatch(linear3d.effect, /CCFragOutput|#include <legacy\/output>/);
+  assert.match(linear3d.effect, /return color;/);
+  const raw = generateEffect(corpus.SG_Tilemaps, { name: 't', colorSpace: 'linear' });
+  assert.doesNotMatch(raw.effect, /sgSRGBToLinear\(a_color\.rgb\)/);
+  const decoded = generateEffect(corpus.SG_Tilemaps, { name: 't', colorSpace: 'linear', vertexColor: 'srgb' });
+  assert.match(decoded.effect, /vec4\(sgSRGBToLinear\(a_color\.rgb\), a_color\.a\)/);
+  assert.match(decoded.effect, /return color;/);
+});
