@@ -5164,6 +5164,56 @@ function unityCanvasRenderMode(gameObject, model) {
   return null;
 }
 
+// CanvasScaler (a MonoBehaviour with m_UiScaleMode / m_ReferenceResolution) in Scale With Screen Size mode:
+// the canvas lays out at its reference resolution whatever the Game view size saved in the prefab.
+function unityCanvasScalerReferenceResolution(gameObject, model) {
+  for (const componentId of gameObject?.components || []) {
+    const doc = model?.componentDocs?.get(componentId);
+    if (Number(doc?.classId || 0) !== 114 || !hasField(doc, 'm_ReferenceResolution')) continue;
+    if (Number(getField(doc, 'm_UiScaleMode', 0)) !== 1) return null;
+    const reference = getField(doc, 'm_ReferenceResolution', null);
+    const x = finiteNumber(reference?.x, 0);
+    const y = finiteNumber(reference?.y, 0);
+    return x > 0 && y > 0 ? { x, y } : null;
+  }
+  return null;
+}
+
+/**
+ * Unity anchors a RectTransform edge to its parent per axis: stretched (anchorMin 0, anchorMax 1) keeps both
+ * edges, a point anchor at 0 or 1 keeps the left/bottom or right/top edge. A Cocos Widget reproduces that
+ * when the parent is resized (screen-fit canvases, stretched panels); centre anchors need nothing. Offsets
+ * are measured on the resolved reference layout. Returns { flags, left, right, top, bottom } or null.
+ */
+function unityRectEdgeWidget(transform, resolvedTransform, parentTransform) {
+  const parentLayout = parentTransform?.isRect ? parentTransform.resolvedLayout : null;
+  if (!parentLayout?.size) return null;
+  const near = (a, b) => Math.abs(a - b) < 1e-6;
+  const axis = (min, max) => (near(min, 0) && near(max, 1) ? 'stretch' : near(min, max) && near(min, 0) ? 'low' : near(min, max) && near(min, 1) ? 'high' : '');
+  const min = transform.anchorMin || {};
+  const max = transform.anchorMax || {};
+  const horizontal = axis(finiteNumber(min.x, 0.5), finiteNumber(max.x, finiteNumber(min.x, 0.5)));
+  const vertical = axis(finiteNumber(min.y, 0.5), finiteNumber(max.y, finiteNumber(min.y, 0.5)));
+  if (!horizontal && !vertical) return null;
+  const pw = finiteNumber(parentLayout.size.x, 0);
+  const ph = finiteNumber(parentLayout.size.y, 0);
+  const pax = finiteNumber(parentLayout.anchor?.x, 0.5);
+  const pay = finiteNumber(parentLayout.anchor?.y, 0.5);
+  const w = finiteNumber(resolvedTransform.sizeDelta?.x, 0);
+  const h = finiteNumber(resolvedTransform.sizeDelta?.y, 0);
+  const ax = finiteNumber(resolvedTransform.anchor?.x, 0.5);
+  const ay = finiteNumber(resolvedTransform.anchor?.y, 0.5);
+  const x = finiteNumber(resolvedTransform.localPosition?.x, 0);
+  const y = finiteNumber(resolvedTransform.localPosition?.y, 0);
+  const round = (v) => Math.round(v * 1e4) / 1e4;
+  const widget = { flags: 0, left: 0, right: 0, top: 0, bottom: 0 };
+  if (horizontal === 'stretch' || horizontal === 'low') { widget.flags |= 8; widget.left = round((x - ax * w) + pax * pw); }
+  if (horizontal === 'stretch' || horizontal === 'high') { widget.flags |= 32; widget.right = round((1 - pax) * pw - (x + (1 - ax) * w)); }
+  if (vertical === 'stretch' || vertical === 'high') { widget.flags |= 1; widget.top = round((1 - pay) * ph - (y + (1 - ay) * h)); }
+  if (vertical === 'stretch' || vertical === 'low') { widget.flags |= 4; widget.bottom = round((y - ay * h) + pay * ph); }
+  return widget;
+}
+
 function resolveTransformLayout(transform, parentTransform, options = {}) {
   const localPosition = {
     x: finiteNumber(transform?.localPosition?.x, 0),
@@ -6820,6 +6870,30 @@ class CocosPrefabBuilder {
     }, null, fileId);
   }
 
+  /** Widget for a RectTransform anchored to parent edges (see unityRectEdgeWidget). */
+  addEdgeWidget(nodeId, edge, fileId) {
+    return this.addComponent(nodeId, 'cc.Widget', {
+      _alignFlags: edge.flags,
+      _target: null,
+      _left: edge.left,
+      _right: edge.right,
+      _top: edge.top,
+      _bottom: edge.bottom,
+      _horizontalCenter: 0,
+      _verticalCenter: 0,
+      _isAbsLeft: true,
+      _isAbsRight: true,
+      _isAbsTop: true,
+      _isAbsBottom: true,
+      _isAbsHorizontalCenter: true,
+      _isAbsVerticalCenter: true,
+      _originalWidth: 0,
+      _originalHeight: 0,
+      _alignMode: 2,
+      _lockFlags: 0,
+    }, null, fileId);
+  }
+
   addCanvas(nodeId, unityComponentId, fileId) {
     return this.addComponent(nodeId, 'cc.Canvas', {
       _cameraComponent: null,
@@ -7924,6 +7998,14 @@ function emitNodeRecursive(transform, parentNodeId, model, builder, layerResolve
     };
     reporter.low('SCREEN_SPACE_CANVAS_ROOT_NORMALIZED', model.file, gameObject.name,
       'Screen-space Canvas root transform is runtime-driven in Unity; emitted as identity for the Cocos host Canvas');
+    // Its size is runtime-driven too: the prefab keeps whatever Game view it was last saved in (Blast Shooter's
+    // Canvas - Gameplay: 1081x605, so top-anchored HUD sat mid-screen). Lay out at the CanvasScaler reference.
+    const reference = unityCanvasScalerReferenceResolution(gameObject, model);
+    if (reference && transform.isRect) {
+      resolvedTransform = { ...resolvedTransform, sizeDelta: { ...reference } };
+      reporter.low('SCREEN_SPACE_CANVAS_ROOT_REFERENCE_SIZE', model.file, gameObject.name,
+        `Canvas root laid out at the CanvasScaler reference resolution ${reference.x}x${reference.y} instead of the saved ${transform.sizeDelta?.x}x${transform.sizeDelta?.y}`);
+    }
   }
   if (emissionContext?.rebaseNestedModelMountedChild) {
     resolvedTransform = rebaseNestedModelMountedChildTransform(resolvedTransform, emissionContext.modelBasisScale ?? 1);
@@ -8290,6 +8372,11 @@ function emitNodeRecursive(transform, parentNodeId, model, builder, layerResolve
       && Math.abs(finiteNumber(sizeDelta.x, 0)) < 1e-6
       && Math.abs(finiteNumber(sizeDelta.y, 0)) < 1e-6;
     if (isFullStretch) builder.addFullStretchWidget(nodeId, `cmp-widget-${transform.fileId}`);
+    else if (!parentTransform || !gameObjectHasParticleSystem(model.gameObjects.get(parentTransform.gameObjectId), model)) {
+      // A particle parent gets no cc.UITransform, so a Widget would have no rect to align against.
+      const edge = unityRectEdgeWidget(transform, resolvedTransform, parentTransform);
+      if (edge) builder.addEdgeWidget(nodeId, edge, `cmp-widget-${transform.fileId}`);
+    }
   }
 
   for (const childId of transform.children) {
@@ -9425,6 +9512,8 @@ module.exports = {
   emitMeshRenderer,
   emitCanvas,
   resolveTransformLayout,
+  unityRectEdgeWidget,
+  unityCanvasScalerReferenceResolution,
   resolveNestedPrefabEffectiveTransform,
   unityCanvasRenderMode,
   convertNodePosition,
