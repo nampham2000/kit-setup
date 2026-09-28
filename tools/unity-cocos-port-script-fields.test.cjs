@@ -82,6 +82,38 @@ test('a variant stored as a lone root PrefabInstance gets stripped root records 
   assert.equal(docs.length, count);
 });
 
+// Candy Pop Sort ArrowBoxObject: the variant adds a GameObject under an inner source Transform, so the
+// file carries a stripped Transform for that inner parent. It must not count as the variant root:
+// the root records are still synthesized, and they correspond to the SOURCE root Transform.
+test('a variant with a stripped inner parent still gets the source-root stripped records', (t) => {
+  const dir = tempDir(t);
+  const source = path.join(dir, 'BoxObject.prefab');
+  fs.writeFileSync(source, [
+    '%YAML 1.1',
+    '--- !u!1 &100', 'GameObject:', '  m_Name: BoxObject', '  m_Component:', '  - component: {fileID: 200}',
+    '--- !u!4 &200', 'Transform:', '  m_GameObject: {fileID: 100}', '  m_Father: {fileID: 0}', '  m_Children:', '  - {fileID: 400}',
+    '--- !u!1 &300', 'GameObject:', '  m_Name: TopBasket', '  m_Component:', '  - component: {fileID: 400}',
+    '--- !u!4 &400', 'Transform:', '  m_GameObject: {fileID: 300}', '  m_Father: {fileID: 200}', '  m_Children: []', '',
+  ].join('\n'));
+  const variant = path.join(dir, 'ArrowBoxObject.prefab');
+  fs.writeFileSync(variant, [
+    '%YAML 1.1',
+    '--- !u!1 &10', 'GameObject:', '  m_Name: Arrow', '  m_Component:', '  - component: {fileID: 11}',
+    '--- !u!4 &11', 'Transform:', '  m_GameObject: {fileID: 10}', '  m_Father: {fileID: 12}', '  m_Children: []',
+    '--- !u!1001 &777', 'PrefabInstance:', '  m_Modification:', '    m_TransformParent: {fileID: 0}', '    m_Modifications: []',
+    '  m_SourcePrefab: {fileID: 100100000, guid: aaaabbbbccccddddeeeeffff00001111, type: 3}',
+    '--- !u!4 &12 stripped', 'Transform:', '  m_CorrespondingSourceObject: {fileID: 400, guid: aaaabbbbccccddddeeeeffff00001111, type: 3}',
+    '  m_PrefabInstance: {fileID: 777}', '  m_PrefabAsset: {fileID: 0}', '',
+  ].join('\n'));
+  const unityDb = new Map([['aaaabbbbccccddddeeeeffff00001111', { path: source, ext: '.prefab', relativePath: 'BoxObject.prefab' }]]);
+  const docs = parseUnityYaml(variant);
+  synthesizeStrippedRootForPrefabVariant(docs, unityDb, null, variant);
+  const roots = docs.filter((d) => d.classId === 4 && d.stripped && /fileID: 200,/.test(d.lines.join('\n')));
+  assert.equal(roots.length, 1, 'a stripped Transform for the source root is synthesized');
+  assert.match(roots[0].lines.join('\n'), /m_PrefabInstance: \{fileID: 777\}/);
+  assert.ok(docs.some((d) => d.fileId === '12' && d.stripped), 'the inner stripped parent is kept');
+});
+
 test('prefab variant MonoBehaviour overrides become typed script field overrides', () => {
   const sourceDoc = { classId: 114, lines: ['MonoBehaviour:', '  m_Script: {fileID: 11500000, guid: 11112222333344445555666677778888, type: 3}', '  m_FullHealthColor: {r: 0, g: 1, b: 0, a: 1}'] };
   const unityDb = new Map([['11112222333344445555666677778888', { path: '/x/TankHealth.cs', ext: '.cs', relativePath: 'TankHealth.cs' }]]);
