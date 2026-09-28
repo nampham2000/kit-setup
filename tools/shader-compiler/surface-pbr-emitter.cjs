@@ -325,6 +325,10 @@ function buildSurfacePbrEffect({ docIR, passIR, yaml, ubo, samplers = [], proper
     }
   }
 
+  // UnpackNormal* lowers to UnpackNormalMap(): the helper must exist in this program too (EFX2406
+  // "no matching overloaded function" otherwise). Required lazily: cocos-effect-generator requires this module.
+  const usesNormalUnpack = /\bUnpackNormalMap\s*\(/.test(`${fsBody.join('\n')}\n${loweredFragmentHelpers.join('\n')}`);
+  const normalUnpack = usesNormalUnpack ? require('./cocos-effect-generator.cjs').GLSL_NORMAL_UNPACK_SNIPPET : null;
   const surfaceFragment = [
     'CCProgram surface-fragment %{',
     colorSamplerNames.length ? '  #include <common/color/gamma>' : null,
@@ -333,6 +337,7 @@ function buildSurfacePbrEffect({ docIR, passIR, yaml, ubo, samplers = [], proper
     ...customVaryings.map(cv => `  in ${cv.glslType} ${cv.varying};`),
     customVaryings.length ? '' : null,
     colorSamplerNames.length ? SRGB_SAMPLE_HELPER : null,
+    normalUnpack,
     ...loweredFragmentHelpers,
     loweredFragmentHelpers.length ? '' : null,
     '  #include <surfaces/data-structures/standard>',

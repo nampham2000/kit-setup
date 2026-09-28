@@ -548,3 +548,56 @@ test('receipt cache rejects an existing symlink or junction that redirects into 
   );
   assert.equal(fs.existsSync(path.join(fixture.root, 'must-not-be-created')), false);
 });
+
+test('stale-reference disposition accepts one GUID shared by more than eight owners, bounded at 32', async t => {
+  const fixture = createUnityFixture(t);
+  const cacheDir = cacheFixture(t);
+  const result = await scanUnityProject({ project: fixture.root, provider: 'static', cache: false });
+  // Visual Effect Graph assets carry the same missing editor m_Script GUID (Bunny Blitz sample).
+  // The core scene keeps the GUID in the playable-core route; the graphs are extra owners of the same GUID.
+  const vfx = Array.from({ length: 32 }, (_, index) => `Assets/Game/VFX/Effect${String(index).padStart(2, '0')}.vfx`);
+  fs.mkdirSync(path.join(fixture.root, 'Assets', 'Game', 'VFX'), { recursive: true });
+  for (const owner of vfx) fs.writeFileSync(path.join(fixture.root, ...owner.split('/')), `vfx ${owner}\n`);
+  const owners = ['Assets/Game/Scenes/Main.unity', ...vfx];
+  const hash = relative => crypto.createHash('sha256')
+    .update(fs.readFileSync(path.join(fixture.root, ...relative.split('/')))).digest('hex');
+  const guid = '081ffb0090424ba4cb05370a42ead6b9';
+  const push = sources => {
+    result.snapshot.dependencies.unresolved = result.snapshot.dependencies.unresolved.filter(item => item.guid !== guid);
+    result.snapshot.dependencies.unresolved.push({
+      guid, category: 'reachable-missing', confirmation: 'unity-editor-missing',
+      fields: ['MonoBehaviour.m_Script'], sources,
+      sourceEvidence: sources.map(source => ({ source, fields: ['MonoBehaviour.m_Script'] })),
+    });
+  };
+  result.snapshot.diagnostics.push({
+    code: 'UNITY_REACHABLE_GUID_UNRESOLVED', severity: 'high', count: 1,
+    message: 'missing', action: 'restore', evidence: [guid], source: 'unity-mcp',
+  });
+  const write = sources => {
+    const file = path.join(cacheDir, `source-dispositions-owners-${sources.length}.json`);
+    fs.writeFileSync(file, JSON.stringify({
+      schemaVersion: 1,
+      kind: 'unity-port-source-dispositions',
+      project: { name: result.snapshot.project.name, stateFingerprint: result.snapshot.stateFingerprint },
+      profile: 'playable-core',
+      entries: [{
+        code: 'UNITY_REACHABLE_GUID_UNRESOLVED', key: guid,
+        disposition: 'accept-stale-reference', basis: 'replaced-in-playable',
+        reason: 'Editor-side MonoBehaviour stored inside every VFX graph; the playable re-implements the graphs.',
+        owners: sources.map(source => ({ path: source, field: 'MonoBehaviour.m_Script', sha256: hash(source) })),
+        proof: [{ path: sources[0], sha256: hash(sources[0]), note: 'Reviewed: the missing m_Script is an editor object of the graph.' }],
+      }],
+    }));
+    return file;
+  };
+  // The Editor enumerates owners in its own order (not the sorted order of the disposition file).
+  push(owners.slice(0, 10).reverse());
+  const brief = createImplementationBrief(result, { project: fixture.root, sourceDispositions: write(owners.slice(0, 10)), now: 0 });
+  assert.equal(brief.sourceDispositions.acceptedCount, 1);
+  push(owners);
+  assert.throws(
+    () => createImplementationBrief(result, { project: fixture.root, sourceDispositions: write(owners), now: 0 }),
+    error => error.code === 'UNITY_SOURCE_DISPOSITION_INVALID',
+  );
+});

@@ -46,3 +46,30 @@ test('publication cannot escape the specified project', t => {
   const cocosRoot=workspace(t);
   assert.throws(()=>writeGeneratedAssetText(path.join(cocosRoot,'..','outside.mtl'),'{}',{cocosRoot}), /within its Cocos project/);
 });
+test('an effect that fails the real GLSL ES 1.00 compile (EFX2406) is never published', t => {
+  let prerequisites = true;
+  try { require('../shader-compiler/cocos-effect-compiler-host.cjs').resolveCreator(); require('../shader-compiler/webgl-glsl-compiler.cjs').findBrowser(); }
+  catch (_) { prerequisites = false; }
+  if (!prerequisites) { t.skip('Cocos Creator or Chrome/Edge missing: the gate fails closed there'); return; }
+  const cocosRoot = workspace(t), file = path.join(cocosRoot, 'assets', 'es3-only.effect');
+  fs.mkdirSync(path.dirname(file)); fs.writeFileSync(file, 'previous validated shader');
+  const text = `CCEffect %{
+  techniques:
+  - passes:
+    - vert: vs:vert
+      frag: fs:frag
+}%
+CCProgram vs %{
+  precision highp float;
+  in vec3 a_position;
+  vec4 vert () { return vec4(a_position, 1.0); }
+}%
+CCProgram fs %{
+  precision highp float;
+  vec4 frag () { float w[2] = float[2](0.25, 0.75); return vec4(w[1]); }
+}%
+`;
+  assert.throws(() => writeGeneratedAssetText(file, text, { cocosRoot }), (error) => error.code === 'EFFECT_COMPILE_GATE_FAILED'
+    && error.diagnostics.some((d) => d.code === 'EFX2406' && /array constructor/.test(d.message)));
+  assert.equal(fs.readFileSync(file, 'utf8'), 'previous validated shader');
+});
