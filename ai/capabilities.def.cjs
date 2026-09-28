@@ -798,7 +798,7 @@ const CAPABILITIES = [
     npm: null,
     cmd: `node ${TOOLS}/shader-compiler/unity-shader-compiler.cjs convert`,
     args: ['--src <unity.shader>', '--out <assets/effects/X.effect>'],
-    optional: ['-m', '--mode auto|unlit|surface-pbr', '--unity-project <UnityProjectRoot>', '--unity-uv', '--report', '--no-report', '--dry-run'],
+    optional: ['-m', '--mode auto|unlit|surface-pbr', '--unity-project <UnityProjectRoot>', '--unity-uv', '--color-space linear|gamma', '--report', '--no-report', '--dry-run'],
     when: 'Cần dịch một shader Unity cụ thể sang .effect. Thân HLSL ĐƯỢC dịch sang GLSL, không phải template.',
     outputs: ['<out>', '<out>.report.json', '<out>.report.md', '<out>.ucst-ai.json', '<out>.patch.json'],
     limits: [
@@ -810,12 +810,15 @@ const CAPABILITIES = [
       'Struct nội bộ của URP ngoài `SurfaceData`/`InputData`/`Light`/`VertexPositionInputs` (ví dụ `InputDataForwardPlusDummy` của Toony Colors Pro) không có shim — sẽ báo `GLSL_UNDECLARED_BASE`, phải tự viết.',
       'Không có bản dịch nào cho input engine mà Cocos không cấp: `_CameraDepthTexture` (soft particle) sẽ luôn báo lỗi.',
       'DXC/SPIRV-Cross không bắt buộc; thiếu thì dùng AST lowerer thuần Node (xem `doctor`).',
+      '`UNITY_COLORSPACE_GAMMA` theo Player Color Space của project nguồn: `--color-space` thắng; không có thì đọc `m_ActiveColorSpace` của `--unity-project` (0 = Gamma); không có nữa thì linear. Tool in `Color space: ...` ra stderr và ghi `colorSpace` vào report.json. Project nhiều pack (vd unity2cc_particles3d, Linear) KHÔNG phải color space của tác giả pack (KriptoFX = Gamma): port trên project reference riêng của pack hoặc truyền `--color-space` rõ ràng, nếu không mọi nhánh `#ifndef UNITY_COLORSPACE_GAMMA` sẽ compile sai.',
+      'Cocos import mỗi `.effect` thành cả GLSL ES 3.00 (WebGL 2) lẫn GLSL ES 1.00 `#version 100` (WebGL 1/GL ES 2.0); một bản lỗi là cả effect `imported:false`. Transpiler tự hạ các chuyển đổi ngầm của HLSL mà GLSL ES 1.00 cấm (`glsl-implicit-conversions`, `glsl-uniform-writes`, `glsl-int-literals`, `glsl-es1-compat`): ghi vào uniform, hậu tố `2.0f`/`0.5h`, cắt vec4->vec3 (cả `+=` và phép nhân), scalar->vecN, int trong phép tính float, `const int` khởi tạo runtime, vòng lặp có bound không hằng (loop cap + break, subscript dùng loop index), mảng uniform giữ `[N]`. Dạng mới ngoài danh sách này phải sửa ở transpiler + regression test lấy từ đúng dòng vendor, không sửa tay file .effect sinh ra.',
+      'Shader đọc `_CameraDepthTexture`/`_CameraOpaqueTexture`/`GrabPass` (vd KriptoFX RFX4_Uber*) không transpile được: map sang effect viết tay trong pipeline của pack (vd tools/hovl/materials.cjs VARIANTS) và rebind toàn bộ material dùng nó, rồi mới xoá (qua AssetDB, có xác nhận của user) bản transpile không còn ai tham chiếu.',
     ],
     status: 'ready',
     verify: 'npm run ai:verify',
     probe: 'help',
     probeCmd: `node ${TOOLS}/shader-compiler/unity-shader-compiler.cjs`,
-    expect: ['convert', '--src', '--out', '--mode', '--unity-project'],
+    expect: ['convert', '--src', '--out', '--mode', '--unity-project', '--color-space'],
   },
   {
     id: 'shader.batch',
@@ -824,7 +827,7 @@ const CAPABILITIES = [
     npm: null,
     cmd: `node ${TOOLS}/shader-compiler/unity-shader-compiler.cjs batch`,
     args: ['--dir <unity_shader_dir>', '--out-dir <assets/effects>'],
-    optional: ['-m', '--mode auto|unlit|surface-pbr', '--unity-project <UnityProjectRoot>'],
+    optional: ['-m', '--mode auto|unlit|surface-pbr', '--unity-project <UnityProjectRoot>', '--color-space linear|gamma'],
     when: 'Chuyển nhiều shader một lượt (đo được: 110 shader trong 0,75s).',
     outputs: ['<out-dir>/**/*.effect', '<out-dir>/**/*.report.json'],
     limits: [
@@ -868,6 +871,7 @@ const CAPABILITIES = [
     limits: [
       'Phân tích tĩnh, không chạy GLSL compiler thật: chứng minh được là SAI, không chứng minh được là ĐÚNG hình ảnh.',
       'PASS vẫn phải reimport effect/material qua Cocos MCP, xác nhận `cc.EffectAsset`/`cc.Material`, kiểm project log + runtime preview, rồi mới chạy reference visual metrics.',
+      'PASS không chứng minh Cocos compile được: validator không chạy GLSL compiler, còn Cocos compile thêm bản `#version 100`. Sau mỗi effect sinh ra phải reimport rồi đọc khối `error: [Assets] <Name>.effect - vs|fs` MỚI NHẤT trong project log; số dòng lỗi tham chiếu source đã expand mà Cocos in ngay sau đó trong log, không phải số dòng trong file .effect. `ai:verify:assets` phải PASS trước khi chuyển bước.',
       'Exit code 5 khi FAIL.',
     ],
     status: 'ready',
@@ -1915,6 +1919,7 @@ const CORE_RULES = [
   { id: 'particle-noise-curl-parity', rule: 'Unity Noise không tương đương random position jitter của Cocos. Giữ full curve/quality/damping/scroll/octave trong particle-noise-contract và dùng native-validated adapter theo quality; không sửa Shape/radius/strength theo screenshot để phá vòng tròn. Noise là animated velocity trước limit; sau limit phải trừ animated contribution khỏi base velocity. Giữ Z reflection ở cả vị trí lấy mẫu và vector trả về. Khóa native field holdouts, matched-birth trajectories, spatial spread có min/max qua nhiều vòng và visible pixels ở hai viewport. Medium kernel có shared adapter; High/Low/remap/random curves/rotation-size amount chưa đo phải report high. Clip hữu hạn không thay được emitter looping, và field accuracy không phải whole-scene 95% fidelity.' },
   { id: 'particle-port-fix-registry', rule: 'Trước mỗi Unity particle/VFX port, đọc playable-shared-kit/ai/particle-port-fixes.json và chạy particle-port-fix-audit --check. Registry phân biệt fix tự động với adapter cần source oracle và logic còn riêng project; file helper tồn tại không chứng minh prefab mới đã bind hay pixel parity. Cocos 3.8.8 dùng ma trận/rotation tạm toàn module trong ParticleSystem.emit: callback birth đồng bộ emit con có thể làm particle cha tiếp theo lệch vị trí. Với link birth đồng bộ, dùng UnityParticleNestedEmission trên source, kiểm tâm birth cha/con và phân bố trái/giữa/phải qua nhiều replay ở hai viewport. Kiểm first-frame rotation/size/color, source-derived impact capacity, orbital frame, Noise, trail/material slot, UV reflection, HDR/sRGB và console. Vendor shader, death terminal integration và burst catch-up phải có closure cùng acceptance riêng; không tự coi shared helper là semantic parity.' },
   { id: 'legacy-particle-blend-and-import', rule: 'Preserve native Legacy particle equations: Soft Additive uses One/OneMinusSrcColor and Premultiply uses One/OneMinusSrcAlpha; SrcAlpha double-multiplies alpha. Clamp alpha after tinted two-times product. Validate every generated particle/trail/static effect through live AssetDB; a property must exist in its selected vertex ABI. EFX3302 can cause subsequent import-UUID download failure for that effect; identify the asset UUID before attributing networking or shared-kit failure. Blend unit tests and import success do not establish runtime or visual parity.' },
+  { id: 'generated-effect-import-gate', rule: 'Mọi .effect sinh bởi transpiler hoặc porter phải import sạch trong live AssetDB (Cocos compile cả GLSL ES 3.00 lẫn 1.00 #version 100) trước khi làm bước tiếp theo; shader.validate PASS, Grade A hay file tồn tại không thay thế. Transpile shader Unity phải dùng đúng Player Color Space của project tác giả (--color-space hoặc --unity-project của reference riêng của pack) vì UNITY_COLORSPACE_GAMMA đổi nhánh code. Effect import lỗi phải được sửa tận gốc ở shared transpiler kèm regression test từ đúng dòng vendor (không sửa tay .effect), hoặc báo ngay cho user như blocker kèm lý do và kế hoạch; không được để effect đỏ trong project mà không báo. Shader không thể transpile (_CameraDepthTexture, _CameraOpaqueTexture, GrabPass) phải có effect viết tay thay thế, mọi material dùng nó phải được rebind (đếm tham chiếu UUID = 0) trước khi xoá bản transpile qua AssetDB với xác nhận của user. Bước texture/material của pipeline phải dùng cùng oracle và danh sách shader với bước bind, nếu không material bị kẹt ở effect lỗi.' },
   { id: 'effect-property-and-publication-gates', rule: 'Before publishing generated effects, run assertEffectPropertyBindings per technique/pass, including anchors, merge keys, propertyIndex, targets and selected-program includes. A uniform in an unused program cannot bind another pass. Resolve engine chunks with shader validate --chunk-root; unresolved vendor includes remain unverified. Do not erase intended properties to suppress EFX3302. Use generated-asset-writer for complete same-volume staging outside Assets and identical-write suppression; finish live AssetDB registration before graph/preview load. Assets-tree Can not change asset messages concern registration/UI synchronization, not shader compile. Correlate download UUIDs with failed imports before diagnosing networking. Static validation, generated metadata and library caches cannot prove live import or visual parity.' },
 ];
 

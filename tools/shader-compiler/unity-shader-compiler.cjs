@@ -80,6 +80,25 @@ function findShadersInDir(dir) {
 /**
  * Transpiles a single Unity shader file to Cocos Creator .effect
  */
+/**
+ * Player Settings > Color Space of the source project decides UNITY_COLORSPACE_GAMMA, which vendor
+ * shaders branch on (KriptoFX RFX4_Tornado: `#ifndef UNITY_COLORSPACE_GAMMA _TwistScale = pow(...)`).
+ * An explicit --color-space wins; otherwise ProjectSettings.asset m_ActiveColorSpace (0 = Gamma,
+ * 1 = Linear) of --unity-project; otherwise linear. A multi-pack project may not use a pack author's
+ * colour space: port against the pack's own (isolated) project or pass --color-space.
+ */
+function resolveColorSpace(options) {
+  if (options.colorSpace) return { colorSpace: options.colorSpace, source: '--color-space' };
+  if (options.unityProject) {
+    const settings = path.join(options.unityProject, 'ProjectSettings', 'ProjectSettings.asset');
+    if (fs.existsSync(settings)) {
+      const m = /^\s*m_ActiveColorSpace:\s*(\d)/m.exec(fs.readFileSync(settings, 'utf8'));
+      if (m) return { colorSpace: m[1] === '0' ? 'gamma' : 'linear', source: 'ProjectSettings m_ActiveColorSpace' };
+    }
+  }
+  return { colorSpace: 'linear', source: 'default: no --color-space and no readable --unity-project settings' };
+}
+
 function transpileShaderFile(srcPath, outPath, options = {}) {
   const source = fs.readFileSync(srcPath, 'utf8');
   const srcDir = path.dirname(srcPath);
@@ -160,7 +179,9 @@ function transpileShaderFile(srcPath, outPath, options = {}) {
     if (options.report) {
       const baseOut = outPath.replace(/\.effect$/i, '');
       const mdReport = generateMarkdownReport(docIR, effectCode, validationResult, scoreInfo, variantInfo);
-      const jsonReport = generateJsonReport(docIR, effectCode, validationResult, scoreInfo, variantInfo);
+      // colorSpace decides every UNITY_COLORSPACE_GAMMA branch; record it so a port can audit it.
+      const jsonReport = JSON.stringify({ ...JSON.parse(generateJsonReport(docIR, effectCode, validationResult, scoreInfo, variantInfo)),
+        colorSpace: options.colorSpace || 'linear' }, null, 2);
       fs.writeFileSync(`${baseOut}.report.md`, mdReport, 'utf8');
       fs.writeFileSync(`${baseOut}.report.json`, jsonReport, 'utf8');
       fs.writeFileSync(`${baseOut}.shader-variants.json`, JSON.stringify(variantInfo.manifest, null, 2), 'utf8');
@@ -568,6 +589,13 @@ function main() {
     requireProject: true,
   });
 
+  if (['convert', 'batch', 'chain'].includes(command)) {
+    const resolved = resolveColorSpace(options);
+    options.colorSpace = resolved.colorSpace;
+    // stderr: `chain --json` owns stdout.
+    console.error(`Color space: ${resolved.colorSpace} (${resolved.source})`);
+  }
+
   // Handle positionals
   if (command === 'scan') {
     cmdScan(args[1] || options.dir || '.');
@@ -625,6 +653,7 @@ if (require.main === module) {
 
 module.exports = {
   transpileShaderFile,
+  resolveColorSpace,
   findShadersInDir,
   convertMatFile,
   convertUnityMatToCocosMtl,
