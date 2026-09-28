@@ -21,6 +21,7 @@ module.exports = function createRendererPorter(deps) {
     resolveUnityMaterialUuid,
     resolveUnityBuiltinMeshUuid,
     handleMissingModel,
+    refreshExportedUnityMesh = () => false,
     recordPendingMeshRepair,
     getField,
     getNestedList,
@@ -261,6 +262,7 @@ module.exports = function createRendererPorter(deps) {
     const unityMeshName = meshAsset && !builtinMeshUuid ? unityModelMeshName(meshAsset, deps.unityRefFileId(meshRef)) : '';
     if (meshAsset && !meshUuid) {
       const requiredExt = meshAsset.ext === '.asset' ? '.fbx' : meshAsset.ext;
+      refreshExportedUnityMesh(meshAsset, reporter, options);
       const resolved = cocosDb.resolveModelMeshByStem(meshAsset.stem, unityMeshName || gameObject.name, requiredExt, deps.unityRefFileId(meshRef));
       meshReported = reportModelMeshResolution(reporter, resolved, model.file, gameObject.name) && !resolved.meshUuid;
       if (resolved) {

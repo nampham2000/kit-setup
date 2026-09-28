@@ -312,16 +312,20 @@ Connections:  {
   C: "OO",${modelId},0
 }
 `;
+  // Identical bytes are left alone so repeated ports never touch the file or trigger a reimport.
+  if (fs.existsSync(destFile) && fs.readFileSync(destFile, 'utf8') === content) return { changed: false };
   fs.writeFileSync(destFile, content, 'utf8');
+  return { changed: true };
 }
 
 function exportUnityMeshAssetToFbx(meshFile, destFile) {
   const mesh = parseUnityMeshAsset(meshFile);
   if (!mesh) return null;
   fs.mkdirSync(path.dirname(destFile), { recursive: true });
-  writeUnityMeshAssetAsFbx(mesh, destFile);
+  const { changed } = writeUnityMeshAssetAsFbx(mesh, destFile);
   return {
     destFile,
+    changed,
     meshName: mesh.meshName,
     vertexCount: mesh.positions.length,
     indexCount: mesh.indices.length,

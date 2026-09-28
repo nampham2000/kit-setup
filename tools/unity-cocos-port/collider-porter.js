@@ -15,6 +15,7 @@ module.exports = function createColliderPorter(deps) {
     resolveUnityBuiltinMeshUuid,
     resolveBuiltinPrimitiveMeshUuid,
     handleMissingModel,
+    refreshExportedUnityMesh = () => false,
     resolveLibraryAssetUuid,
     fbxMeshOwnerNode = ({ nodeId }) => nodeId,
   } = deps;
@@ -47,6 +48,7 @@ module.exports = function createColliderPorter(deps) {
     const meshAsset = unityDb.get(unityRefGuid(meshRef));
     if (!meshAsset) return '';
 
+    refreshExportedUnityMesh(meshAsset, reporter, options);
     const resolved = cocosDb?.resolveModelMeshByStem
       ? cocosDb.resolveModelMeshByStem(meshAsset.stem, gameObject.name, meshAsset.ext === '.asset' ? '.fbx' : meshAsset.ext, unityRefFileId(meshRef))
       : null;
