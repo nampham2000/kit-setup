@@ -108,6 +108,7 @@ const {
   copyUnityAssetToCocos: copyUnityAssetToCocosImpl,
   writePreparedUnityTexture: writePreparedUnityTextureImpl,
   handleMissingModel: handleMissingModelImpl,
+  refreshExportedUnityMesh: refreshExportedUnityMeshImpl,
 } = createAssetImportPorter({
   ensureDirectoryMetas,
   ensurePreparedAssetMeta,
@@ -191,6 +192,7 @@ const {
   importedUnityAssetPath: importedUnityAssetPathImpl,
   copyUnityAssetToCocos: copyUnityAssetToCocosImpl,
   handleMissingModel: handleMissingModelImpl,
+  refreshExportedUnityMesh: refreshExportedUnityMeshImpl,
   resolveLibraryAssetUuid,
   fbxMeshOwnerNode: (...args) => fbxMeshOwnerNode(...args),
   builtinPrimitiveOwnerNode: (...args) => builtinPrimitiveOwnerNode(...args),
@@ -209,6 +211,7 @@ const {
   importedUnityAssetPath: importedUnityAssetPathImpl,
   copyUnityAssetToCocos: copyUnityAssetToCocosImpl,
   handleMissingModel: handleMissingModelImpl,
+  refreshExportedUnityMesh: refreshExportedUnityMeshImpl,
   resolveLibraryAssetUuid,
   recordPendingMeshRepair,
   getField,
@@ -221,6 +224,7 @@ const {
 
 const { emitParticleSystem: emitParticleSystemImpl } = createParticlePorter({
   handleMissingModel: handleMissingModelImpl,
+  refreshExportedUnityMesh: refreshExportedUnityMeshImpl,
   recordPendingMeshRepair,
   resolveUnityBuiltinMeshUuid,
   resolveUnityParticleMaterial,

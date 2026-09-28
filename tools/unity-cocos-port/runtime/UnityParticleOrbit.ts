@@ -22,10 +22,21 @@ export function orbitalDelta(out: Float64Array, x: number, y: number, z: number,
     out[0]=(rx-x)/dt;out[1]=(ry-y)/dt;out[2]=(rz-z)/dt;
 }
 
+// Same activity rule as particle-orbit-contract.js (active).
+function linearActive(c: any): boolean {
+    if(!c)return false;
+    if(c.minMaxState===0)return c.scalar!==0;
+    if(c.minMaxState===3)return c.scalar!==0||c.minScalar!==0;
+    return (c.minMaxState===1?[c.maxCurve]:[c.maxCurve,c.minCurve]).some((v: any)=>v?.m_Curve?.some((k: any)=>k.value!==0||k.inSlope!==0||k.outSlope!==0));
+}
+
 export function installUnityParticleOrbit(system: ParticleSystem,spec: UnityOrbitSpec): void {
     const runtime=system as any;
     if(runtime.unityOrbit)return;
-    if((spec.simulationSpace!==0&&spec.simulationSpace!==1)||spec.inWorldSpace)throw new Error('Orbital custom-space/world-velocity integration requires a measured adapter');
+    if(spec.simulationSpace!==0&&spec.simulationSpace!==1)throw new Error('Orbital custom-space integration requires a measured adapter');
+    // Velocity space only moves linear X/Y/Z (fixtures/orbit-velocity-space-native.json); the
+    // porter binds world velocity space only when those axes are zero.
+    if(spec.inWorldSpace&&['x','y','z'].some(k=>linearActive(spec.velocity[k])))throw new Error('Orbital world-space linear velocity requires a measured adapter');
     if(spec.simulationSpace===1&&spec.scalingMode!==0)throw new Error('World orbital nonhierarchical scaling requires a measured adapter');
     const curves=spec.velocity;
     if(spec.limitEnabled){

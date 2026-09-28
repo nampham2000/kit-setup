@@ -832,6 +832,47 @@
         "tools/unity-cocos-port/particle-procedural-sort-center.test.cjs"
       ],
       "acceptance": "Procedural bounds with constant gravity and hemisphere speed: Unity renderer bounds center within 2e-3 (Tanks! PowerUpEffect/Trails) and multi-system draw order inside the Unity seed range."
+    },
+    {
+      "id": "limit-velocity-drag",
+      "origin": "9001d34",
+      "applicability": "automatic",
+      "sharedPaths": [
+        "tools/unity-cocos-port/particle-limit-velocity-binding.js",
+        "tools/unity-cocos-port/runtime/UnityParticleLimitVelocity.ts",
+        "tools/unity-cocos-port/runtime/UnityParticleLimitVelocityAdapter.ts"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/particle-limit-velocity.test.cjs"
+      ],
+      "acceptance": "20 native drag sequences (limit-drag-native.json): constant and curve drag, multiply by size (circle area of the start-of-step max axis, Size over Lifetime included) and by speed squared, zero clamp, dampened limit before drag, animated-velocity composition, 60/30 fps; velocity and position within 2e-5. Random drag modes and weighted keys stay high."
+    },
+    {
+      "id": "orbital-velocity-space",
+      "origin": "9001d34",
+      "applicability": "automatic",
+      "sharedPaths": [
+        "tools/unity-cocos-port/particle-orbit-binding.js",
+        "tools/unity-cocos-port/particle-orbit-contract.js",
+        "tools/unity-cocos-port/runtime/UnityParticleOrbit.ts"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/particle-orbit-velocity-space.test.cjs",
+        "tools/unity-cocos-port/particle-orbit-binding.test.cjs"
+      ],
+      "acceptance": "orbit-velocity-space-native.json: orbital/radial motion is identical for Local and World velocity space under a rotated, non-uniformly scaled parent (Local and World simulation, simulation speed 5 with 0.05 s substeps) within 2e-5; world-space linear velocity stays unsupported."
+    },
+    {
+      "id": "ui-particle-shader-materials",
+      "origin": "9001d34",
+      "applicability": "automatic",
+      "sharedPaths": [
+        "tools/unity-cocos-port/unity-particle-material.js"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/unity-particle-material.test.cjs"
+      ],
+      "acceptance": "Unity render oracle (unity-particle-oracle-ui-shaders.json, Linear): Coffee UI/Additive (package GUID ecfa8f57..., additive-one + premultiplied alpha) and built-in UI/Unlit/Transparent (10760, alpha) within 2/255 over three backgrounds and four vertex colours. UIParticle bridge scale/ordering is a separate gate."
     }
   ]
 }

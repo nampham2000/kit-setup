@@ -12,4 +12,4 @@ function particleOrbitContract(p){
   return {enabled:true,version:1,simulationSpace:p.moveWithTransform,...(p.moveWithTransform===1?{scalingMode:p.scalingMode}:{}),inWorldSpace:!!v.inWorldSpace,
     noiseEnabled:!!p.NoiseModule?.enabled,...(p.NoiseModule?.enabled?{noise:particleNoiseContract(p)}:{}),limitEnabled:!!p.ClampVelocityModule?.enabled,velocity:JSON.parse(JSON.stringify(v))};
 }
-module.exports={particleOrbitContract};
+module.exports={particleOrbitContract,orbitCurveActive:active};
