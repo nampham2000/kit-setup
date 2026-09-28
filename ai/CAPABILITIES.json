@@ -4,7 +4,7 @@
     "source": "playable-shared-kit/ai/capabilities.def.cjs",
     "generatedBy": "npm run ai:sync",
     "contractCheck": "npm run ai:contract:verify",
-    "count": 69
+    "count": 70
   },
   "coreRules": [
     {
@@ -1624,6 +1624,27 @@
         ],
         "verify": "npm run ai:verify",
         "status": "partial"
+      },
+      {
+        "id": "port.materials",
+        "title": "Port material Unity không prefab nào tham chiếu (palette trong ScriptableObject)",
+        "run": "node playable-shared-kit/tools/unity-cocos-port.cjs port-materials --src <Material.mat|ScriptableObject.asset|Folder>",
+        "command": "node playable-shared-kit/tools/unity-cocos-port.cjs port-materials --src <Material.mat|ScriptableObject.asset|Folder>",
+        "optional": [
+          "--cocos-root <dir>",
+          "--report <path>",
+          "--dry-run"
+        ],
+        "when": "Khi runtime gán material theo dữ liệu (bảng màu trong ScriptableObject, material theo level) mà prefab không tham chiếu, nên port.prefab không tạo .mtl.",
+        "outputs": [
+          "assets/unity_imported/**/*.mtl"
+        ],
+        "limits": [
+          "Chỉ gom tham chiếu material (type 2) trong file .asset/.mat/folder được chỉ định; không suy luận material chọn bằng code hay đường dẫn chuỗi.",
+          "Dùng cùng converter với renderer của prefab nên .mtl nằm đúng đường dẫn unity_imported và tái dùng giữa prefab lẫn runtime; dry-run chỉ liệt kê file đã tồn tại."
+        ],
+        "verify": "npm run ai:verify:assets",
+        "status": "broken"
       },
       {
         "id": "port.closure",
