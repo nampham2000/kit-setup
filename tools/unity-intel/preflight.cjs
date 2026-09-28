@@ -36,6 +36,9 @@ const SOURCE_DISPOSITION_MAX_ENTRIES = 128;
 // stale serialized level table). The key budget matches the live scanner's unresolved-GUID budget.
 const SOURCE_DISPOSITION_MAX_GROUP_KEYS = 256;
 const SOURCE_DISPOSITION_MAX_KEYS = 512;
+// One missing editor script GUID can sit in many assets (e.g. every Visual Effect Graph of a sample); the owner list
+// must still equal the full live evidence source list, so it is bounded by the file size limit, not by 8.
+const SOURCE_DISPOSITION_MAX_OWNERS = 32;
 const WORKFLOW_FILES = [
   'preflight.cjs',
   'project-state.cjs',
@@ -301,7 +304,7 @@ function loadSourceDispositions(projectRoot, snapshot, coreScope, input = {}, st
         entry.disposition !== 'accept-stale-reference' ||
         !['unreachable-from-target-runtime', 'replaced-in-playable'].includes(entry.basis) ||
         typeof entry.reason !== 'string' || entry.reason.trim().length < 20 || entry.reason.length > 600 ||
-        !Array.isArray(entry.owners) || !entry.owners.length || entry.owners.length > 8 ||
+        !Array.isArray(entry.owners) || !entry.owners.length || entry.owners.length > SOURCE_DISPOSITION_MAX_OWNERS ||
         !Array.isArray(entry.proof) || !entry.proof.length || entry.proof.length > 8 ||
         keys.some(key => acceptedKeys.has(key)) ||
         acceptedKeys.size + keys.length > SOURCE_DISPOSITION_MAX_KEYS) {
@@ -335,7 +338,8 @@ function loadSourceDispositions(projectRoot, snapshot, coreScope, input = {}, st
       if (entry.owners.some(owner => !(item.fields || []).includes(owner.field))) {
         throw preflightError('UNITY_SOURCE_DISPOSITION_OWNER_MISMATCH', `Owner field của ${key} không khớp live evidence.`);
       }
-      if (stableStringify(ownerSources) !== stableStringify(unresolvedSourcePaths(item))) {
+      // Live evidence order is the Editor's enumeration order; compare the owner set, not the order.
+      if (stableStringify(ownerSources) !== stableStringify([...unresolvedSourcePaths(item)].sort())) {
         throw preflightError('UNITY_SOURCE_DISPOSITION_OWNER_MISMATCH', `Owner paths của ${key} không khớp đầy đủ live evidence.`);
       }
     }
