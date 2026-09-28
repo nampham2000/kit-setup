@@ -320,6 +320,7 @@ Usage:
   node playable-shared-kit/tools/unity-cocos-port.cjs port --src <UnityPrefab> --out <CocosPrefab> [options]
   node playable-shared-kit/tools/unity-cocos-port.cjs scaffold-script --src <CSharpFileOrFolder> --out <TsFolder>
   node playable-shared-kit/tools/unity-cocos-port.cjs smart-port --src <UnityFolder> --out assets/ [options]
+  node playable-shared-kit/tools/unity-cocos-port.cjs port-materials --src <Material.mat|ScriptableObject.asset|Folder> [--report <csv>]
   node playable-shared-kit/tools/unity-cocos-port.cjs doctor [options]
 
 Options:
@@ -695,7 +696,7 @@ function parseArgs(argv) {
     fail(`Unknown option: ${arg}`);
   }
 
-  const validCommands = ['help', 'port', 'doctor', 'scaffold-script', 'port-script', 'smart-port', 'auto'];
+  const validCommands = ['help', 'port', 'port-materials', 'doctor', 'scaffold-script', 'port-script', 'smart-port', 'auto'];
   if (!validCommands.includes(options.command)) fail(`Unknown command: ${options.command}`);
   if (!['skip', 'wire-if-present', 'require'].includes(options.scriptMode)) {
     fail('--script-mode must be skip, wire-if-present, or require');
@@ -7237,6 +7238,49 @@ function emitCreatorReopenNotice(options, reporter) {
   console.warn(`[unity-cocos-port] WARN: Added Cocos custom layer(s) to ${projectFile}: ${detail}. Reopen Cocos Creator to refresh Inspector layer names.`);
 }
 
+// Materials no ported prefab references, e.g. a colour palette held by a ScriptableObject and
+// assigned at runtime (Candy Pop Sort's BoxColorSO: 16 TCP2 candy colours, only 3 reached through
+// prefabs). --src is a .mat, a ScriptableObject/.asset whose serialized material references are
+// collected, or a folder of .mat files; each goes through the same converter as a prefab renderer
+// and lands at its unity_imported path, so prefab and runtime references share one .mtl.
+function collectMaterialPortSources(src, unityDb) {
+  const materials = new Map();
+  const add = (record) => { if (record && record.ext === '.mat') materials.set(record.guid, record); };
+  const guidOf = (file) => {
+    let meta = '';
+    try { meta = fs.readFileSync(`${file}.meta`, 'utf8'); } catch (_) { meta = ''; }
+    return /^guid:\s*([a-fA-F0-9]+)/m.exec(meta)?.[1] || '';
+  };
+  if (fs.statSync(src).isDirectory()) {
+    for (const file of findFiles(src, (f) => f.toLowerCase().endsWith('.mat'))) add(unityDb.get(guidOf(file)));
+  } else if (src.toLowerCase().endsWith('.mat')) {
+    add(unityDb.get(guidOf(src)));
+  } else {
+    const text = fs.readFileSync(src, 'utf8');
+    for (const match of text.matchAll(/guid:\s*([a-fA-F0-9]{32}),\s*type:\s*2\b/g)) add(unityDb.get(match[1]));
+  }
+  return [...materials.values()].sort((a, b) => a.relativePath.localeCompare(b.relativePath));
+}
+
+function runMaterialPort(options) {
+  if (!options.src || !fs.existsSync(options.src)) fail(`Missing or unknown --src: ${options.src || ''}`);
+  const reporter = new Reporter();
+  const unityDb = scannedUnityAssetDatabase(options.unityRoot);
+  const sources = collectMaterialPortSources(path.resolve(options.src), unityDb);
+  if (!sources.length) fail(`No Unity material found in ${options.src}`);
+  const written = [];
+  for (const material of sources) {
+    const out = convertUnityMaterialToCocos(material, options, unityDb, reporter);
+    if (out) written.push(toPosix(path.relative(options.cocosRoot, out)));
+    else reporter.medium('MATERIAL_CONVERSION_FAILED', material.relativePath, '', 'Standalone material produced no Cocos material');
+  }
+  const actualReport = options.report && !options.dryRun ? reporter.writeCsv(options.report, 'materials') : '';
+  const counts = reporter.summary();
+  log(`${options.dryRun ? 'Dry-run converted' : 'Converted'} ${written.length}/${sources.length} material(s)${actualReport ? `; report ${toPosix(path.relative(options.cocosRoot, actualReport))}` : ''} (high=${counts.high}, medium=${counts.medium}, low=${counts.low})`);
+  for (const file of written) log(`  ${file}`);
+  return { written, sources: sources.map(m => m.relativePath), counts };
+}
+
 function portPrefab(options, reporter) {
   if (!options.src) fail('Missing --src');
   if (!options.out) fail('Missing --out');
@@ -9030,6 +9074,11 @@ async function main() {
     await runSmartPort(options);
     return;
   }
+  if (options.command === 'port-materials') {
+    runMaterialPort(options);
+    await finalizeImportedAssets(options);
+    return;
+  }
   await portPrefabBatch(options);
   await finalizeImportedAssets(options);
   await finalizeEngineFeatures(options);
@@ -9066,6 +9115,8 @@ module.exports = {
   finalizeEngineFeatures,
   finalizeImportedAssets,
   repairFinalizedPrefabRefs,
+  collectMaterialPortSources,
+  runMaterialPort,
   findPendingImporterStates,
   convertUnityPhysicsMaterialToCocos,
   resolveUnityPhysicsMaterialUuid,
