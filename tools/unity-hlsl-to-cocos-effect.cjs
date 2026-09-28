@@ -20,6 +20,7 @@ const { HlslAstTranspiler } = require('./unity-cocos-port/hlsl-ast-transpiler');
 const { packStd140Uniforms } = require('./unity-cocos-port/ubo-alignment-formatter');
 const { assertUnityPortPreflight } = require('./unity-intel/preflight.cjs');
 const { createPathBoundary, inspectContainedPath } = require('./lib/path-boundary.cjs');
+const { assertEffectCompilesSync } = require('./shader-compiler/effect-compile-gate.cjs');
 
 function findProjectRoot(startDir) {
   let current = path.resolve(startDir);
@@ -468,6 +469,14 @@ function convertUnityHlslToCocosEffect(options, externalReporter) {
   }
 
   if (!options.dryRun) {
+    // Never publish an effect the Cocos importer rejects (EFX2406): editor effect compiler + GLSL ES 1.00/3.00.
+    try {
+      assertEffectCompilesSync(effectText, outFile);
+    } catch (e) {
+      reporter.high('EFFECT_COMPILE_GATE_FAILED', srcFile, outFile,
+        'Generated effect fails the Cocos effect compile gate; it was not written.', e.message);
+      throw e;
+    }
     ensureDir(path.dirname(outFile));
     fs.writeFileSync(outFile, effectText, 'utf8');
     const effectUuid = ensureEffectMeta(outFile, options.cocosRoot);

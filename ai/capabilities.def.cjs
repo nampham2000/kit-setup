@@ -876,6 +876,27 @@ const CAPABILITIES = [
     expect: ['validate', 'doctor'],
   },
   {
+    id: 'verify.effects',
+    group: 'verify',
+    title: 'Compile gate offline cho mọi .effect: Cocos effect compiler thật + GLSL ES 1.00/3.00 thật (WebGL)',
+    npm: 'npm run ai:verify:effects',
+    cmd: `node ${TOOLS}/shader-compiler/effect-compile-gate.cjs`,
+    args: [],
+    optional: ['--project <CocosProjectRoot>', '<files-or-dirs...>', '--mode editor|basic|full', '--json', '--max-diagnostics <n>', '--no-cache'],
+    when: 'BẮT BUỘC trước khi ghi/commit bất kỳ .effect nào (kit generator hay generator project-local) và sau mọi sửa .effect/.chunk. Không cần mở editor. `ai:verify:assets` cũng gọi gate này cho mọi effect trong phạm vi quét.',
+    outputs: ['stdout: file:line + dòng GLSL gây lỗi cho từng EFX2406/GLSL300/EFX2xxx (JSON khi --json)'],
+    limits: [
+      'Expansion dùng chính shdc-lib.js trong app.asar của Cocos Creator đã cài (cache user-local theo integrity hash) + engine chunks thật; compile dùng ANGLE trong Chrome/Edge headless (SwiftShader): glsl1 trong WebGL1 với đúng macro value của editor (EFX2406/EFX2407) và glsl3 trong WebGL2 (GLSL300). Thiếu editor, browser hoặc WebGL context là FAIL (exit 2), không bao giờ PASS rỗng.',
+      '`basic` (mặc định) = permutation của editor + mọi boolean macro tắt; `full` thêm từng macro do effect sở hữu bật riêng (tối đa 24 permutation/program). Permutation khác của runtime vẫn có thể lỗi; compile sạch không chứng minh visual parity.',
+      'Include project resolve theo thư mục effect rồi assets/, engine chunk theo editor/assets/chunks. Kết quả cache theo nội dung effect + chunk project; --no-cache để ép compile lại.',
+      'Khi editor đang mở, bằng chứng live vẫn là `verify.effects.live` (reimport qua Cocos MCP + quét EFX trong temp/logs/project.log).',
+    ],
+    status: 'ok',
+    probe: 'help',
+    probeCmd: `node ${TOOLS}/shader-compiler/effect-compile-gate.cjs`,
+    expect: ['--project', '--mode', '--json', 'Exit 0'],
+  },
+  {
     id: 'fbx.strip',
     group: 'port',
     title: 'Gỡ liên kết texture nhúng trong FBX đã import vào Cocos',
@@ -1916,6 +1937,7 @@ const CORE_RULES = [
   { id: 'particle-port-fix-registry', rule: 'Trước mỗi Unity particle/VFX port, đọc playable-shared-kit/ai/particle-port-fixes.json và chạy particle-port-fix-audit --check. Registry phân biệt fix tự động với adapter cần source oracle và logic còn riêng project; file helper tồn tại không chứng minh prefab mới đã bind hay pixel parity. Cocos 3.8.8 dùng ma trận/rotation tạm toàn module trong ParticleSystem.emit: callback birth đồng bộ emit con có thể làm particle cha tiếp theo lệch vị trí. Với link birth đồng bộ, dùng UnityParticleNestedEmission trên source, kiểm tâm birth cha/con và phân bố trái/giữa/phải qua nhiều replay ở hai viewport. Kiểm first-frame rotation/size/color, source-derived impact capacity, orbital frame, Noise, trail/material slot, UV reflection, HDR/sRGB và console. Vendor shader, death terminal integration và burst catch-up phải có closure cùng acceptance riêng; không tự coi shared helper là semantic parity.' },
   { id: 'legacy-particle-blend-and-import', rule: 'Preserve native Legacy particle equations: Soft Additive uses One/OneMinusSrcColor and Premultiply uses One/OneMinusSrcAlpha; SrcAlpha double-multiplies alpha. Clamp alpha after tinted two-times product. Validate every generated particle/trail/static effect through live AssetDB; a property must exist in its selected vertex ABI. EFX3302 can cause subsequent import-UUID download failure for that effect; identify the asset UUID before attributing networking or shared-kit failure. Blend unit tests and import success do not establish runtime or visual parity.' },
   { id: 'effect-property-and-publication-gates', rule: 'Before publishing generated effects, run assertEffectPropertyBindings per technique/pass, including anchors, merge keys, propertyIndex, targets and selected-program includes. A uniform in an unused program cannot bind another pass. Resolve engine chunks with shader validate --chunk-root; unresolved vendor includes remain unverified. Do not erase intended properties to suppress EFX3302. Use generated-asset-writer for complete same-volume staging outside Assets and identical-write suppression; finish live AssetDB registration before graph/preview load. Assets-tree Can not change asset messages concern registration/UI synchronization, not shader compile. Correlate download UUIDs with failed imports before diagnosing networking. Static validation, generated metadata and library caches cannot prove live import or visual parity.' },
+  { id: 'effect-compile-gate', rule: 'No generator (kit tool or project-local script) may write or commit a .effect that fails `verify.effects`: expansion by the installed editor effect compiler (EFX1xxx/2xxx) and a real GLSL ES 1.00 (WebGL1, editor macro values, EFX2406/EFX2407) + GLSL ES 3.00 (WebGL2) compile of every program. Generators call checkEffects/checkEffectSource before writing and report `high` instead of writing on failure; `ai:verify:assets` fails on any failing effect in scope. Gate unavailable (no Creator/browser/WebGL) is a failure, not a pass. Lower HLSL to ES 1.00-compatible GLSL at the source: no array constructors/first-class arrays, no methods, derivatives only under #pragma extension([GL_OES_standard_derivatives, __VERSION__ < 300]), texture LOD through a per-stage helper, UnityTexture2D/UnitySamplerState structs resolved at compile time (samplers cannot live in local structs in ES 1.00), only helpers reachable from each stage entry, no function-like #define wrappers around nested calls. Compile success is not visual parity.' },
 ];
 
 module.exports = { CAPABILITIES, CORE_RULES, TOOLS };

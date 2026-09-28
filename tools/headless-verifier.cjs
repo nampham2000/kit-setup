@@ -213,6 +213,41 @@ function checkAssetImport() {
   };
 }
 
+/**
+ * Offline effect compile gate (installed editor effect compiler + real GLSL ES 1.00/3.00 in WebGL) over every
+ * project .effect. Catches EFX2406-class failures from any generator before an editor ever imports them.
+ */
+function checkEffectCompile(root = ROOT_DIR) {
+  const result = { name: 'Effect Compile Gate', status: 'PASS', errors: [], warnings: [], details: '' };
+  const gate = path.join(__dirname, 'shader-compiler', 'effect-compile-gate.cjs');
+  const run = require('child_process').spawnSync(process.execPath, [gate, '--project', root, '--json', '--max-diagnostics', '6'], {
+    encoding: 'utf8', windowsHide: true, maxBuffer: 64 * 1024 * 1024, timeout: 900000,
+  });
+  let report = null;
+  try { report = JSON.parse(run.stdout); } catch (_) { /* handled below */ }
+  if (!report) {
+    result.status = 'FAIL';
+    result.errors.push(`effect compile gate did not run: ${run.error ? run.error.message : String(run.stderr || '').slice(0, 300)}`);
+    return result;
+  }
+  if (report.unavailable) {
+    result.status = 'FAIL';
+    result.errors.push(`effect compile gate unavailable (fails closed): ${report.unavailable}`);
+  }
+  for (const effect of report.effects || []) {
+    if (effect.ok) continue;
+    const rel = path.relative(root, effect.file || effect.name).split(path.sep).join('/');
+    const first = (effect.diagnostics || []).find((d) => d.severity === 'error');
+    result.errors.push(`${rel}: ${effect.errorCount} error(s)${first ? ` — ${first.code} ${first.message}${first.source ? ` @ ${first.source}` : ''}` : ''}`);
+  }
+  if (result.errors.length) result.status = 'FAIL';
+  const total = (report.effects || []).length;
+  result.details = result.status === 'PASS'
+    ? `${total} effect(s) expand with the editor compiler and compile as GLSL ES 1.00 + 3.00.`
+    : `${result.errors.length} failure(s) across ${total} effect(s); run npm run ai:verify:effects for file:line diagnostics.`;
+  return result;
+}
+
 function checkEngineFeatureCropping(auditFeatures = auditCocosEngineFeatures, root = ROOT_DIR) {
   const result = { name: 'Engine Feature Cropping', status: 'PASS', errors: [], warnings: [], details: '' };
   try {
@@ -338,6 +373,7 @@ function runVerificationSuite(options = {}, dependencies = {}) {
     (dependencies.checkEngineFeatureCropping || checkEngineFeatureCropping)(),
     (dependencies.checkMetaIntegrity || checkMetaIntegrity)(),
     (dependencies.checkAssetImport || checkAssetImport)(),
+    (dependencies.checkEffectCompile || checkEffectCompile)(),
   ];
   if (!options.skipBuildSize) checks.push((dependencies.checkBuildSize || checkBuildSize)());
 
@@ -366,7 +402,7 @@ Options:
   --help             Show this help and exit without running any check.
 
 Checks: TypeScript compilation, Zero-GC rules, config schema, config asset
-bindings, .meta integrity, playable bundle size.
+bindings, .meta integrity, asset import, effect compile gate (GLSL ES 1.00/3.00), playable bundle size.
 Exit code 1 when any check fails.`;
 
 function parseArgs(args) {

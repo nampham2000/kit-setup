@@ -39,6 +39,7 @@ const { convertMatFile, convertUnityMatToCocosMtl } = require('./unity-material-
 const { generateVariantManifest } = require('./shader-variant-manager.cjs');
 const { assertUnityPortPreflight } = require('../unity-intel/preflight.cjs');
 const { createPathBoundary, inspectContainedPath } = require('../lib/path-boundary.cjs');
+const { assertEffectCompilesSync } = require('./effect-compile-gate.cjs');
 
 function ensureDir(dir) {
   fs.mkdirSync(dir, { recursive: true });
@@ -145,6 +146,9 @@ function transpileShaderFile(srcPath, outPath, options = {}) {
   if (!options.dryRun && outPath) {
     if (validationResult.propertyBindings.errors.length) throw Object.assign(
       new Error(validationResult.propertyBindings.errors.join('\n')), { code: 'EFX3302_PROPERTY_UNIFORM_MISSING' });
+    // Editor effect compiler + real GLSL ES 1.00/3.00 compile. Throws EFFECT_COMPILE_GATE_FAILED (high) instead of
+    // publishing an effect the Cocos importer would reject with EFX2406.
+    assertEffectCompilesSync(effectCode, outPath);
     ensureDir(path.dirname(outPath));
     fs.writeFileSync(outPath, effectCode, 'utf8');
 
@@ -281,7 +285,8 @@ function cmdConvert(options) {
   }
   console.log(`   Static confidence: ${result.scoreInfo.score}/100 (Grade ${result.scoreInfo.grade})`);
   console.log(`   Static validation: ${result.validationResult.valid ? 'PASS' : 'FAIL'}`);
-  console.log('   Cocos import/runtime/Unity visual parity: UNVERIFIED');
+  console.log(`   Effect compile gate (editor compiler + GLSL ES 1.00/3.00): ${options.dryRun ? 'NOT RUN (--dry-run)' : 'PASS'}`);
+  console.log('   Live Cocos import/runtime/Unity visual parity: UNVERIFIED');
 
   if (result.validationResult.errors.length > 0) {
     console.log('   Errors:');
@@ -493,7 +498,9 @@ function cmdChain(options) {
     for (const b of blocking) console.log(`  ❌ ${b}`);
     process.exitCode = 5;
   } else if (outDir) {
-    console.log('\n✅ every generated effect passes the static analyzer. Cocos import/runtime/visual gates remain required.');
+    console.log(options.dryRun
+      ? '\n✅ every generated effect passes the static analyzer (--dry-run: effect compile gate not run).'
+      : '\n✅ every generated effect passes the static analyzer and the effect compile gate (editor compiler + GLSL ES 1.00/3.00). Live import/runtime/visual gates remain required.');
   }
 
   if (outDir && chain.materials.some(m => m.mtl)) {

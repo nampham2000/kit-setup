@@ -284,6 +284,57 @@ async function checkEffectSource(content, options = {}) {
   return { ok: result.ok && effect.ok, unavailable: result.unavailable || null, diagnostics: effect.diagnostics, result };
 }
 
+/**
+ * Synchronous gate for writers that cannot await (spawns this CLI in --stdin-json mode).
+ * Returns the same shape as checkEffectSource.
+ */
+function checkEffectSourceSync(content, options = {}) {
+  const { spawnSync } = require('node:child_process');
+  const payload = JSON.stringify({
+    content: String(content), name: options.name || 'generated', effectDir: options.effectDir || null,
+    assetsRoot: options.assetsRoot || null, projectRoot: options.projectRoot || null, mode: options.mode || 'basic',
+  });
+  const run = spawnSync(process.execPath, [__filename, '--stdin-json'], {
+    input: payload, encoding: 'utf8', windowsHide: true, maxBuffer: 64 * 1024 * 1024, timeout: options.timeoutMs || 300000,
+  });
+  if (run.error || !run.stdout) {
+    return { ok: false, unavailable: `effect compile gate did not run: ${run.error ? run.error.message : (run.stderr || '').slice(0, 400)}`, diagnostics: [] };
+  }
+  try {
+    return JSON.parse(run.stdout);
+  } catch (_) {
+    return { ok: false, unavailable: `effect compile gate returned no JSON: ${(run.stderr || run.stdout).slice(0, 400)}`, diagnostics: [] };
+  }
+}
+
+/** Find the nearest ancestor named `assets` (Cocos project asset root) for include resolution. */
+function assetsRootFor(file) {
+  let dir = path.dirname(path.resolve(file));
+  for (;;) {
+    if (path.basename(dir) === 'assets') return dir;
+    const parent = path.dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+}
+
+/** Throw unless `content` (to be written at `outPath`) passes the gate. Error.code = EFFECT_COMPILE_GATE_FAILED. */
+function assertEffectCompilesSync(content, outPath, options = {}) {
+  const res = checkEffectSourceSync(content, {
+    ...options,
+    name: options.name || stripExtension(outPath || 'generated.effect'),
+    effectDir: options.effectDir || (outPath ? path.dirname(path.resolve(outPath)) : null),
+    assetsRoot: options.assetsRoot || (outPath ? assetsRootFor(outPath) : null),
+  });
+  if (res.ok) return res;
+  const rel = outPath ? path.basename(outPath) : 'effect';
+  const lines = res.unavailable ? [res.unavailable]
+    : res.diagnostics.filter((d) => d.severity === 'error').slice(0, 6).map((d) => formatDiagnostic(rel, d));
+  throw Object.assign(new Error(`effect compile gate failed for ${rel}:\n  ${lines.join('\n  ')}`), {
+    code: 'EFFECT_COMPILE_GATE_FAILED', diagnostics: res.diagnostics || [], unavailable: res.unavailable || null,
+  });
+}
+
 function findEffects(target) {
   const out = [];
   const stat = fs.statSync(target);
@@ -334,7 +385,19 @@ Usage:
 
 With no files, scans <project>/assets for *.effect. Exit 0 = every effect compiles; 1 = failures; 2 = gate unavailable.`;
 
+async function stdinJsonMain() {
+  let text = '';
+  for await (const chunk of process.stdin) text += chunk;
+  const req = JSON.parse(text);
+  const res = await checkEffectSource(req.content, {
+    name: req.name, effectDir: req.effectDir, assetsRoot: req.assetsRoot, projectRoot: req.projectRoot || undefined, mode: req.mode,
+  });
+  process.stdout.write(JSON.stringify({ ok: res.ok, unavailable: res.unavailable, diagnostics: res.diagnostics }));
+  return 0;
+}
+
 async function main(argv = process.argv.slice(2)) {
+  if (argv[0] === '--stdin-json') return stdinJsonMain();
   let options;
   try { options = parseArgs(argv); } catch (error) { console.error(error.message); console.error(USAGE); return 2; }
   if (options.help) { console.log(USAGE); return 0; }
@@ -372,4 +435,7 @@ if (require.main === module) {
   main().then((code) => { process.exitCode = code; }, (error) => { console.error(error && error.stack || error); process.exitCode = 2; });
 }
 
-module.exports = { checkEffects, checkEffectSource, findEffects, formatDiagnostic, permutationsFor, main, GATE_VERSION };
+module.exports = {
+  checkEffects, checkEffectSource, checkEffectSourceSync, assertEffectCompilesSync, assetsRootFor,
+  findEffects, formatDiagnostic, permutationsFor, main, GATE_VERSION,
+};
