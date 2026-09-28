@@ -100,7 +100,7 @@ test('default policy preserves a two-triangle backdrop and repairs destructive l
   assert.equal(hasPlayableFbxImportSettings(next), true);
 });
 
-test('models with morph targets keep Mesh Compress off (3.8.8 compress breaks morph displacement views)', async () => {
+test('models with morph targets keep their source buffers (3.8.8 optimize/compress break morph views)', async () => {
   const fs = require('node:fs');
   const os = require('node:os');
   const path = require('node:path');
@@ -127,7 +127,8 @@ test('models with morph targets keep Mesh Compress off (3.8.8 compress breaks mo
     const policy = new ModelImportPolicy();
     assert.equal((await policy.enforceAsset('chal')).status, 'updated');
     assert.deepEqual(metas.get('chal').userData.meshCompress, { ...MORPH_FBX_IMPORT_SETTINGS.meshCompress });
-    assert.deepEqual(metas.get('chal').userData.meshOptimize, { ...PLAYABLE_FBX_IMPORT_SETTINGS.meshOptimize });
+    assert.deepEqual(metas.get('chal').userData.meshOptimize, { ...MORPH_FBX_IMPORT_SETTINGS.meshOptimize });
+    assert.equal(metas.get('chal').userData.meshSimplify.enable, false);
     assert.equal((await policy.enforceAsset('chal')).status, 'unchanged');
     assert.equal(hasPlayableFbxImportSettings(metas.get('chal')), false);
   } finally {

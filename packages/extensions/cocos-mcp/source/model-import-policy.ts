@@ -12,12 +12,16 @@ export const PLAYABLE_FBX_IMPORT_SETTINGS = Object.freeze({
     meshCompress: Object.freeze({ enable: true, encode: false, compress: true, quantize: false }),
 });
 
-// Cocos 3.8.8 Mesh Compress repacks the vertex/index data but keeps the morph target displacement
-// views at their uncompressed offsets: StdMorphRendering then builds Float32Arrays past the end of the
-// buffer ("Invalid typed array length", KriptoFX Chal_Rig2 beard blend shape) and the mesh fails to
-// load. A model with morph targets keeps every setting except Mesh Compress, which stays off.
+// Cocos 3.8.8 mesh processing rewrites the vertex/index buffers but keeps the morph target
+// displacement views at their original offsets: Mesh Optimize widened the KriptoFX Chal_Rig2 beard
+// indices from u16 to u32 (index view 22416 bytes over the morph view at 200024 + 11208) and Mesh
+// Compress shrank the buffer below the morph end (211232 + 27276 > 137438), so StdMorphRendering
+// read past the buffer ("Invalid typed array length") and the mesh never loaded. A model with morph
+// targets keeps the source buffers: Optimize, Simplify and Compress stay off.
 export const MORPH_FBX_IMPORT_SETTINGS = Object.freeze({
-    ...PLAYABLE_FBX_IMPORT_SETTINGS,
+    meshOptimize: Object.freeze({ enable: false, vertexCache: false, vertexFetch: false, overdraw: false }),
+    meshSimplify: Object.freeze({ enable: false, targetRatio: 1, autoErrorRate: false, errorRate: 1, lockBoundary: false }),
+    meshCluster: PLAYABLE_FBX_IMPORT_SETTINGS.meshCluster,
     meshCompress: Object.freeze({ enable: false, encode: false, compress: false, quantize: false }),
 });
 
