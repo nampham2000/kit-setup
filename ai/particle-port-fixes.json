@@ -791,7 +791,7 @@
       "testPaths": [
         "tools/unity-cocos-port/porting-regressions.test.cjs"
       ],
-      "acceptance": "Moving emitter at constant speed: particle count, ages (1/(rate*speed) steps) and path positions equal a Unity per-frame Simulate dump."
+      "acceptance": "Moving emitter at constant speed: particle count, ages (1/(rate*speed) steps) and path positions equal a Unity per-frame Simulate dump. Random Between Two Constants draws a uniform rate per update (mean density preserved; Unity per-frame vs per-emitter draw is unmeasured); curve rates stay native."
     },
     {
       "id": "sub-emitter-birth-timeline",

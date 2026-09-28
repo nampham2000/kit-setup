@@ -719,10 +719,13 @@ function createRuntimeComponentPorter(deps) {
 
       const data = parseUnityParticleDoc(doc);
       const rateRange = data?.EmissionModule?.rateOverDistance;
-      if (Number(rateRange?.minMaxState || 0) !== 0) continue;
+      const rateMode = Number(rateRange?.minMaxState || 0);
+      // Constant, or Random Between Two Constants (minScalar..scalar); curve modes stay native.
+      if (rateMode !== 0 && rateMode !== 3) continue;
 
       const rateOverDistance = Number(rateRange?.scalar || 0);
       if (!(rateOverDistance > 0)) continue;
+      const rateOverDistanceMin = rateMode === 3 ? Math.max(0, Math.min(rateOverDistance, Number(rateRange?.minScalar || 0))) : rateOverDistance;
 
       const particleId = builder.componentMap.get(componentId);
       const particle = builder.objects[particleId];
@@ -734,10 +737,17 @@ function createRuntimeComponentPorter(deps) {
       // nested PrefabInstance, the effective rate is whatever the flattening pass
       // already wrote onto the Cocos curve, so prefer that.
       const emittedCurve = objectByRef(builder.objects, particle.rateOverDistance);
-      const effectiveRate = Number(emittedCurve?.constant);
-      const rate = Number.isFinite(effectiveRate) && effectiveRate > 0
-        ? effectiveRate
-        : rateOverDistance;
+      let rate = rateOverDistance;
+      let rateMax = 0;
+      if (rateMode === 3) {
+        const low = Number(emittedCurve?.constantMin), high = Number(emittedCurve?.constantMax);
+        const multiplier = Number.isFinite(Number(emittedCurve?.multiplier)) ? Number(emittedCurve.multiplier) : 1;
+        rate = Number.isFinite(low) && Number.isFinite(high) && high > 0 ? low * multiplier : rateOverDistanceMin;
+        rateMax = Number.isFinite(low) && Number.isFinite(high) && high > 0 ? high * multiplier : rateOverDistance;
+      } else {
+        const effectiveRate = Number(emittedCurve?.constant);
+        if (Number.isFinite(effectiveRate) && effectiveRate > 0) rate = effectiveRate;
+      }
 
       if (!helperClassId) {
         reporter.medium(
@@ -754,6 +764,7 @@ function createRuntimeComponentPorter(deps) {
         builder.addComponent(nodeId, helperClassId, {
           particleSystem: cocosRef(particleId),
           rateOverDistance: rate,
+          ...(rateMax > rate ? { rateOverDistanceMax: rateMax } : {}),
         }, null, `cmp-unity-particle-rate-over-distance-${componentId}`);
       }
 
@@ -761,7 +772,7 @@ function createRuntimeComponentPorter(deps) {
         'PARTICLE_RATE_OVER_DISTANCE_EMITTER',
         model.file,
         node._name || '',
-        `Attached ${script.className} to distribute ${rate} particle(s) per world unit along high-speed movement`
+        `Attached ${script.className} to distribute ${rateMax > rate ? `${rate}-${rateMax} (uniform per update; Unity's draw frequency unmeasured)` : rate} particle(s) per world unit along high-speed movement`
       );
     }
   }
