@@ -20,7 +20,7 @@ const USAGE = `Unity ShaderGraph generated code -> Cocos effects (gated by the e
 
 Usage:
   node shadergraph-codegen.cjs --src <file.shader.txt|dir> --out <assets/effects/dir>
-       [--prefix sg-] [--unity-project <UnityProjectRoot>] [--color-space gamma|linear]
+       [--prefix sg-] [--unity-project <UnityProjectRoot>] [--color-space gamma|linear] [--vertex-color srgb|linear]
        [--linear-textures a,b] [--srgb-textures a,b] [--latlong-cubes a,b|all] [--overrides <functions.glsl>]
        [--skip "<GraphName>=<reason>"]... [--no-normals] [--report <file.json>] [--json] [--dry-run] [--check]
 
@@ -28,7 +28,9 @@ Usage:
   --out            Cocos effect output directory (inside the project assets/).
   --unity-project  Resolves Custom Function file includes ("Assets/...hlsl").
   --color-space    gamma (default): decode sRGB colour textures + vertex colour, compute linear, re-encode output.
-                   linear: pass-through for projects with their own linear pipeline.
+                   linear: pass-through for projects with their own linear pipeline (2D and 3D targets alike).
+  --vertex-color   srgb: decode a_color (Unity linear-space SpriteRenderer/Tilemap/SpriteShape colours arrive gamma).
+                   linear: use a_color as-is. Default: srgb with --color-space gamma, linear with --color-space linear.
   --latlong-cubes  Cube maps Unity imported from an equirect image: sample the 2D image by direction instead.
   --overrides      GLSL file whose functions replace graph/custom functions of the same name (project hooks).
   --skip           Explicit disposition for a graph the playable does not render (repeatable).
@@ -48,6 +50,7 @@ function parseArgs(argv) {
     else if (a === '--prefix') o.prefix = next();
     else if (a === '--unity-project') o.unityProject = next();
     else if (a === '--color-space') o.colorSpace = next();
+    else if (a === '--vertex-color') o.vertexColor = next();
     else if (a === '--linear-textures') o.linearTextures = next().split(',').map((x) => x.trim()).filter(Boolean);
     else if (a === '--srgb-textures') o.srgbTextures = next().split(',').map((x) => x.trim()).filter(Boolean);
     else if (a === '--latlong-cubes') { const v = next(); o.latlongCubes = v === 'all' ? 'all' : v.split(',').map((x) => x.trim()).filter(Boolean); }
@@ -63,6 +66,7 @@ function parseArgs(argv) {
   if (o.help) return o;
   if (!o.src || !o.out) throw new Error('--src and --out are required');
   if (!['gamma', 'linear'].includes(o.colorSpace)) throw new Error('--color-space must be gamma|linear');
+  if (o.vertexColor !== undefined && !['srgb', 'linear'].includes(o.vertexColor)) throw new Error('--vertex-color must be srgb|linear');
   if (o.check && o.dryRun) throw new Error('--check and --dry-run are exclusive');
   return o;
 }
@@ -106,7 +110,7 @@ async function run(input) {
     let r;
     try {
       r = generateEffect(entry.text != null ? entry.text : fs.readFileSync(entry.file, 'utf8'), {
-        name: base, colorSpace: options.colorSpace, linearTextures: options.linearTextures, srgbTextures: options.srgbTextures, latlongCubes: options.latlongCubes,
+        name: base, colorSpace: options.colorSpace, vertexColor: options.vertexColor, linearTextures: options.linearTextures, srgbTextures: options.srgbTextures, latlongCubes: options.latlongCubes,
         resolveInclude, overrides, normalsTechnique: options.normals,
       });
     } catch (error) {
@@ -176,7 +180,7 @@ async function main(argv = process.argv.slice(2)) {
     stale,
   };
   const report = {
-    tool: 'shadergraph-codegen', options: { colorSpace: options.colorSpace, prefix: options.prefix, check: options.check, dryRun: options.dryRun },
+    tool: 'shadergraph-codegen', options: { colorSpace: options.colorSpace, vertexColor: options.vertexColor || null, prefix: options.prefix, check: options.check, dryRun: options.dryRun },
     gate, summary,
     graphs: results.map((r) => ({
       name: r.name, source: path.basename(r.source || ''), disposition: r.disposition, reason: r.reason || undefined,
