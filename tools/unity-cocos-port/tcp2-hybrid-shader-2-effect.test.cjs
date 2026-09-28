@@ -36,3 +36,13 @@ test('TCP2 material port keeps Unity color-space and feature-toggle semantics', 
   assert.match(source, /rimStrength: Number\(firstDefinedMaterialValue\(floats, \['_UseRim'\]/);
   assert.match(source, /specularStrength: Number\(firstDefinedMaterialValue\(floats, \['_UseSpecular'\]/);
 });
+
+test('TCP2 material port imports the textures of active features only (keyword-gated)', () => {
+  const source = fs.readFileSync(path.join(__dirname, 'material-porter.js'), 'utf8');
+  // Blast Shooter Ball Material Ice: TCP2_MATCAP samples _MatCapTex (IceMatcap.png); a project-level TCP2
+  // effect could not bind it because the porter never imported it.
+  assert.match(source, /\['TCP2_MATCAP', \['_MatCapTex'\]\]/);
+  assert.match(source, /\['TCP2_RAMPTEXT', \['_Ramp'\]\]/);
+  assert.match(source, /if \(!materialKeywords\.has\(keyword\)\) continue;/,
+    'a saved texture slot of a disabled TCP2 feature is dormant state and must not be imported');
+});

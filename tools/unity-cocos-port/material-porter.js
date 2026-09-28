@@ -57,6 +57,13 @@ const BUILTIN_PARTICLE_TRAIL_EFFECT_UUID = '17debcc3-0a6b-4b8a-b00b-dc58b885581e
 const INVISIBLE_SHADOW_RECEIVER_EFFECT_TEMPLATE = path.join(__dirname, 'invisible-shadow-receiver.effect');
 const INVISIBLE_SHADOW_RECEIVER_EFFECT_PATH = path.join('assets', 'effects', 'InvisibleShadowReceiver.effect');
 const TCP2_HYBRID_SHADER_2_EFFECT_TEMPLATE = path.join(__dirname, 'tcp2-hybrid-shader-2.effect');
+// TCP2 Hybrid 2 feature keyword -> texture properties it samples (TCP2 Hybrid 2 Include.cginc).
+const TCP2_FEATURE_TEXTURE_KEYS = [
+  ['TCP2_MATCAP', ['_MatCapTex']],
+  ['TCP2_MATCAP_MASK', ['_MatCapMask']],
+  ['TCP2_RAMPTEXT', ['_Ramp']],
+  ['TCP2_SHADOW_TEXTURE', ['_ShadowBaseMap']],
+];
 const TCP2_HYBRID_SHADER_2_EFFECT_PATH = path.join('assets', 'effects', 'TCP2HybridShader2.effect');
 const TCP2_HYBRID_PARTICLE_EFFECT_TEMPLATE = path.join(__dirname, 'tcp2-hybrid-particle.effect');
 const TCP2_HYBRID_PARTICLE_EFFECT_PATH = path.join('assets', 'effects', 'TCP2HybridParticle.effect');
@@ -872,6 +879,19 @@ module.exports = function createMaterialPorter(deps) {
     const normalTextureUuid = resolveUnityMaterialTextureUuid(texEnvs, UNITY_MATERIAL_NORMAL_TEXTURE_KEYS, unityDb, options, reporter);
     const occlusionTextureUuid = resolveUnityMaterialTextureUuid(texEnvs, UNITY_MATERIAL_OCCLUSION_TEXTURE_KEYS, unityDb, options, reporter);
     const emissiveTextureUuid = resolveUnityMaterialTextureUuid(texEnvs, UNITY_MATERIAL_EMISSIVE_TEXTURE_KEYS, unityDb, options, reporter);
+    if (tcp2HybridShader2) {
+      // Textures of active TCP2 features the kit effect does not bind (matcap, ramp texture, shadow
+      // texture) are still imported, so a project-level TCP2 effect can bind them; keyword-gated, so a
+      // dormant saved slot is never copied.
+      for (const [keyword, keys] of TCP2_FEATURE_TEXTURE_KEYS) {
+        if (!materialKeywords.has(keyword)) continue;
+        const uuid = resolveUnityMaterialTextureUuid(texEnvs, keys, unityDb, options, reporter);
+        if (uuid) {
+          reporter.low('TCP2_FEATURE_TEXTURE_IMPORTED', materialAsset.relativePath, keys[0],
+            `${keyword} texture imported for project-level effects (the kit TCP2 effect does not sample it)`);
+        }
+      }
+    }
 
     const defines = {};
     if (alphaClip) defines.USE_ALPHA_TEST = true;
