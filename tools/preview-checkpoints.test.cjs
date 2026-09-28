@@ -399,3 +399,37 @@ test('verify.visual guards the preview project once per session (match, mismatch
   assert.equal(allowed.overridden, true);
   assert.equal(allowed.allowForeignPreview, true);
 });
+
+test('--url origin-only swaps only the origin and keeps the matrix path and query (like the gate)', () => {
+  const { resolvePreviewUrl } = require('./preview-checkpoints.cjs');
+  const matrixUrl = 'http://localhost:7457/?tutorials=off&level=3';
+  for (const override of ['http://localhost:7458', 'http://localhost:7458/', 'http://127.0.0.1:7458/']) {
+    const resolved = resolvePreviewUrl(matrixUrl, override);
+    assert.equal(resolved.mode, 'origin-swap');
+    assert.equal(new URL(resolved.url).search, '?tutorials=off&level=3');
+    assert.equal(new URL(resolved.url).port, '7458');
+    assert.deepEqual(resolved.warnings, []);
+  }
+  const value = validateConfig({ url: matrixUrl, cases: [{ name: 'a' }] }, { url: 'http://localhost:7458' });
+  assert.equal(value.url, 'http://localhost:7458/?tutorials=off&level=3');
+  assert.equal(value.urlResolution.mode, 'origin-swap');
+  assert.equal(resolvePreviewUrl(matrixUrl, undefined).url, matrixUrl);
+});
+
+test('--url with a path or query replaces the whole URL and warns when it drops matrix query', () => {
+  const { resolvePreviewUrl } = require('./preview-checkpoints.cjs');
+  const matrixUrl = 'http://localhost:7457/?tutorials=off';
+  const dropped = resolvePreviewUrl(matrixUrl, 'http://localhost:7458/?level=2');
+  assert.equal(dropped.mode, 'replace');
+  assert.equal(dropped.url, 'http://localhost:7458/?level=2');
+  assert.match(dropped.warnings[0], /PREVIEW_URL_QUERY_DROPPED/);
+  assert.match(dropped.warnings[0], /tutorials/);
+  const kept = resolvePreviewUrl(matrixUrl, 'http://localhost:7458/?tutorials=off&level=2');
+  assert.equal(kept.mode, 'replace');
+  assert.deepEqual(kept.warnings, []);
+  const pathOnly = resolvePreviewUrl(matrixUrl, 'http://localhost:7458/index.html');
+  assert.equal(pathOnly.mode, 'replace');
+  assert.equal(pathOnly.warnings.length, 1);
+  const noQuery = resolvePreviewUrl('http://localhost:7457/', 'http://localhost:7458/?level=2');
+  assert.deepEqual(noQuery.warnings, []);
+});
