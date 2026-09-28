@@ -30,6 +30,8 @@ export interface UnityParticleSortSpec {
     velocityScale?: number;
     /** Native analytic Local-space bounds center, for the measured procedural subset. */
     proceduralCenter?: number[];
+    /** World -Y drop 0.5 * 9.81 * gravityModifier * life^2 of that envelope (constant gravity). */
+    proceduralGravityDrop?: number;
 }
 
 interface Point { x: number; y: number; z: number; }
@@ -86,7 +88,18 @@ export function unityParticleSortPoint(system: any, spec: UnityParticleSortSpec,
     const processor = system.processor;
     if(spec.proceduralCenter&&system.simulationSpace!==WORLD){
         if(!processor?._particles?.length)return false;
-        const p=spec.proceduralCenter,m=system.node.worldMatrix,x=p[0],y=p[1],z=-p[2];
+        const p=spec.proceduralCenter,m=system.node.worldMatrix;
+        let x=p[0],y=p[1],z=-p[2];
+        const drop=spec.proceduralGravityDrop||0;
+        if(drop){
+            // Unity unites the envelope with its copy dropped along world -Y, which moves
+            // the center by half the drop; bring it into the local frame through the
+            // inverse world rotation (unit matrix columns).
+            const h=-drop/2;
+            x+=h*m.m01/(Math.hypot(m.m00,m.m01,m.m02)||1);
+            y+=h*m.m05/(Math.hypot(m.m04,m.m05,m.m06)||1);
+            z+=h*m.m09/(Math.hypot(m.m08,m.m09,m.m10)||1);
+        }
         out.x=m.m00*x+m.m04*y+m.m08*z+m.m12;
         out.y=m.m01*x+m.m05*y+m.m09*z+m.m13;
         out.z=m.m02*x+m.m06*y+m.m10*z+m.m14;

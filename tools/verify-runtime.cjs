@@ -195,13 +195,13 @@ class CdpSession {
     });
   }
 
-  send(method, params = {}, sessionId = undefined) {
+  send(method, params = {}, sessionId = undefined, timeoutMs = undefined) {
     const id = this.nextId++;
     const payload = { id, method, params };
     if (sessionId) payload.sessionId = sessionId;
     return new Promise((resolve, reject) => {
       if(this.ws?.readyState!==1){reject(new Error('CDP WebSocket is not open'));return;}
-      const timer=setTimeout(()=>{this.pending.delete(id);reject(new Error(`CDP command timed out: ${method}`));},this.commandTimeoutMs);
+      const timer=setTimeout(()=>{this.pending.delete(id);reject(new Error(`CDP command timed out: ${method}`));},timeoutMs||this.commandTimeoutMs);
       this.pending.set(id, { resolve, reject, timer });
       try{this.ws.send(JSON.stringify(payload));}
       catch(error){clearTimeout(timer);this.pending.delete(id);reject(error);}
@@ -353,12 +353,16 @@ function resolveGestureFromEvalBefore(spec, evalBeforeResult) {
   return { x1, y1, x2, y2, durationMs, steps, normalized };
 }
 
-async function evaluatePage(session, sessionId, expression) {
+// User eval/evalBefore scripts may await gameplay readiness or long async flows (a slow preview under memory pressure
+// can need minutes to preload); they get their own CDP deadline instead of the 90 s protocol-command default.
+const USER_EVAL_TIMEOUT_MS = Math.max(90000, Number(process.env.PLAYABLE_EVAL_TIMEOUT_MS) || 300000);
+
+async function evaluatePage(session, sessionId, expression, timeoutMs = undefined) {
   const evaluated = await session.send('Runtime.evaluate', {
     expression,
     returnByValue: true,
     awaitPromise: true,
-  }, sessionId);
+  }, sessionId, timeoutMs);
   if (evaluated && evaluated.exceptionDetails) {
     const detail = evaluated.exceptionDetails;
     throw new Error(detail.exception
@@ -377,7 +381,7 @@ async function evaluatePageWithNavigationRetry(session, sessionId, expression, t
   const evaluator = timing.evaluate || evaluatePage;
   const waitFor = timing.wait || wait;
   try {
-    return { value: await evaluator(session, sessionId, expression), retriedAfterNavigation: false };
+    return { value: await evaluator(session, sessionId, expression, timing.timeoutMs), retriedAfterNavigation: false };
   } catch (error) {
     if (!isNavigationEvaluationError(error)) throw error;
     // AssetDB refresh can trigger one preview navigation after the CDP target
@@ -385,7 +389,7 @@ async function evaluatePageWithNavigationRetry(session, sessionId, expression, t
     // evalBefore once in the new document instead of dispatching gestures
     // against a missing baseline.
     await waitFor(Math.max(0, Number(timing.retryDelayMs ?? 1000)));
-    return { value: await evaluator(session, sessionId, expression), retriedAfterNavigation: true };
+    return { value: await evaluator(session, sessionId, expression, timing.timeoutMs), retriedAfterNavigation: true };
   }
 }
 
@@ -553,6 +557,61 @@ async function dispatchTouchGestureSequence(session, sessionId, gestures, timing
  * lets the editor's live preview be smoke-tested without producing a build -
  * same checks, same monochrome-frame heuristic.
  */
+const HOSTNAME_RE = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/;
+const MAX_ENVIRONMENT_HOSTS = 8;
+
+/**
+ * Exact hostnames of scripts the machine injects into every page (antivirus / proxy web injection), declared by the
+ * matrix. Wildcards, IPs, localhost and the preview's own host are refused: the game's own traffic can never be
+ * classified as environment noise.
+ */
+function normalizeEnvironmentHosts(value, previewUrl) {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value) || value.length > MAX_ENVIRONMENT_HOSTS) {
+    throw new Error(`environmentHosts must be an array of at most ${MAX_ENVIRONMENT_HOSTS} exact hostnames`);
+  }
+  let previewHost = '';
+  try { previewHost = new URL(String(previewUrl)).hostname.toLowerCase(); } catch (_) { /* file target */ }
+  const hosts = [...new Set(value.map((item) => String(item || '').trim().toLowerCase()))];
+  for (const host of hosts) {
+    if (!HOSTNAME_RE.test(host) || /^[0-9.]+$/.test(host) || host === 'localhost' || host.endsWith('.localhost')
+      || host === previewHost) {
+      throw new Error(`environmentHosts: "${host}" is not an allowed exact external hostname`);
+    }
+  }
+  return hosts;
+}
+
+/** Hostnames of every absolute http(s) URL named by a console entry (message text, request URL, initiator stack). */
+function referencedHosts(texts) {
+  const hosts = new Set();
+  for (const text of texts) {
+    if (!text) continue;
+    for (const match of String(text).matchAll(/https?:\/\/[^\s'"<>)]+/gi)) {
+      try { hosts.add(new URL(match[0]).hostname.toLowerCase()); } catch (_) { /* not a URL */ }
+    }
+  }
+  return hosts;
+}
+
+/**
+ * An error is environment noise only when it names a declared injected host and no other external host: a request the
+ * page makes to that host (the injected script's own XHR) is reported by the page origin, so the preview host is allowed
+ * alongside. Anything else stays a console error.
+ */
+function isEnvironmentError(texts, environmentHosts, previewUrl) {
+  if (!environmentHosts.length) return false;
+  let previewHost = '';
+  try { previewHost = new URL(String(previewUrl)).hostname.toLowerCase(); } catch (_) { /* file target */ }
+  const hosts = referencedHosts(texts);
+  let injected = false;
+  for (const host of hosts) {
+    if (environmentHosts.includes(host)) injected = true;
+    else if (host !== previewHost) return false;
+  }
+  return injected;
+}
+
 async function runOne(target, options) {
   if(options.checkpoints)validateCheckpoints(options.checkpoints);
   const isUrl = isUrlTarget(target);
@@ -562,9 +621,12 @@ async function runOne(target, options) {
   const runtimeProfile = createRuntimeProfile(PROJECT_ROOT);
   const userDataDir = runtimeProfile.directory;
 
+  // PLAYABLE_RUNTIME_GPU=1 keeps the GPU (ANGLE) in headless Chrome: software GL on a loaded machine drops heavy
+  // scenes to a few fps, which frame-paced gameplay (Unity per-frame input) cannot pass. Default stays --disable-gpu.
+  const gpuArgs = process.env.PLAYABLE_RUNTIME_GPU === '1' ? [] : ['--disable-gpu'];
   const child = spawn(browser, [
     '--headless=new',
-    '--disable-gpu',
+    ...gpuArgs,
     '--no-first-run',
     '--no-default-browser-check',
     '--disable-extensions',
@@ -584,7 +646,8 @@ async function runOne(target, options) {
     consoleErrors: [],
     consoleErrorDetails: [],
     consoleWarnings: [],
-    eventCounts: { exceptions: 0, consoleErrors: 0, consoleWarnings: 0 },
+    environmentErrors: [],
+    eventCounts: { exceptions: 0, consoleErrors: 0, consoleWarnings: 0, environmentErrors: 0 },
     frames: 0,
     fps: 0,
     hasCanvas: false,
@@ -641,10 +704,19 @@ async function runOne(target, options) {
         (item) => `${item.message}|${item.url}|${item.line}|${item.column}`,
       );
     });
+    const environmentHosts = normalizeEnvironmentHosts(options.environmentHosts, target);
+    const environmentNoise = (texts, line) => {
+      if (!isEnvironmentError(texts, environmentHosts, target)) return false;
+      result.eventCounts.environmentErrors += 1;
+      pushUniqueBounded(result.environmentErrors, line.slice(0, 300), 20);
+      return true;
+    };
     session.on('Runtime.consoleAPICalled', (params) => {
       const text = (params.args || [])
         .map((a) => (a.value !== undefined ? a.value : a.description || a.type))
         .join(' ');
+      const stackUrls = (params.stackTrace?.callFrames || []).map((frame) => frame.url);
+      if (params.type === 'error' && environmentNoise([text, ...stackUrls], text)) return;
       if (params.type === 'error') {
         result.eventCounts.consoleErrors += 1;
         pushUniqueBounded(result.consoleErrors, text.slice(0, 300), 50);
@@ -656,9 +728,13 @@ async function runOne(target, options) {
     });
     session.on('Log.entryAdded', (params) => {
       const e = params.entry || {};
+      const stackUrls = (e.stackTrace?.callFrames || []).map((frame) => frame.url);
+      if (e.level === 'error' && environmentNoise([e.text, e.url, ...stackUrls], `[${e.source}] ${String(e.text)}`)) return;
       if (e.level === 'error') {
         result.eventCounts.consoleErrors += 1;
-        pushUniqueBounded(result.consoleErrors, `[${e.source}] ${String(e.text).slice(0, 300)}`, 50);
+        // network entries name the failing request so environment noise can be told apart from the game
+        const where = e.url ? ` <${String(e.url).slice(0, 160)}>` : '';
+        pushUniqueBounded(result.consoleErrors, `[${e.source}] ${String(e.text).slice(0, 300)}${where}`, 50);
         pushUniqueBounded(result.consoleErrorDetails, {message:String(e.text).slice(0,1000),source:e.source||'',url:e.url||'',line:Number(e.lineNumber??-1)+1,stack:e.stackTrace?.callFrames||[]},20,item=>JSON.stringify(item));
       }
     });
@@ -697,6 +773,7 @@ async function runOne(target, options) {
           session,
           sessionId,
           options.evalBeforeExpression,
+          { timeoutMs: USER_EVAL_TIMEOUT_MS },
         );
         result.evalBeforeResult = evaluatedBefore.value;
         result.evalBeforeRetriedAfterNavigation = evaluatedBefore.retriedAfterNavigation;
@@ -803,7 +880,7 @@ async function runOne(target, options) {
     // trình duyệt hiển thị.
     if (options.evalExpression) {
       try {
-        result.evalResult = await evaluatePage(session, sessionId, options.evalExpression);
+        result.evalResult = await evaluatePage(session, sessionId, options.evalExpression, USER_EVAL_TIMEOUT_MS);
       } catch (err) {
         result.evalError = String(err && err.message ? err.message : err);
       }
@@ -820,9 +897,15 @@ async function runOne(target, options) {
       if (shot && shot.data) {
         const dir = path.resolve(PROJECT_ROOT, options.screenshotDir);
         fs.mkdirSync(dir, { recursive: true });
-        const stem = isUrl
+        let stem = isUrl
           ? (String(target).replace(/^https?:\/\//i, '').replace(/[^\w.-]+/g, '_').replace(/_+$/, '') || 'preview')
           : path.basename(htmlFile, path.extname(htmlFile));
+        // Long preview URLs (QA query parameters) pushed the path past Windows MAX_PATH, where Chrome still
+        // wrote the PNG but sharp/libvips could not reopen it for screenshot/reference metrics.
+        if (stem.length > 64) {
+          const digest = require('node:crypto').createHash('sha1').update(stem).digest('hex').slice(0, 10);
+          stem = `${stem.slice(0, 48).replace(/_+$/, '')}_${digest}`;
+        }
         const out = path.join(dir, `${stem}.png`);
         const buffer = Buffer.from(shot.data, 'base64');
         fs.writeFileSync(out, buffer);
@@ -1047,6 +1130,8 @@ if (require.main === module) {
 }
 
 module.exports = {
+  normalizeEnvironmentHosts,
+  isEnvironmentError,
   runOne, runtimeVerdict, findBuiltHtml, findBrowser, ensureWebSocketRuntime,
   parseArgs, parseGesture, resolveGestureFromEvalBefore,
   isNavigationEvaluationError, evaluatePageWithNavigationRetry,

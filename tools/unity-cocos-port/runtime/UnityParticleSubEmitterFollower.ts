@@ -1,4 +1,4 @@
-import { _decorator, Component, CurveRange, Enum, Mat4, Node, ParticleSystem, Vec3 } from 'cc';
+import { _decorator, Component, CurveRange, Enum, Mat4, Node, ParticleSystem, Quat, Vec3 } from 'cc';
 import { EDITOR_NOT_IN_PREVIEW } from 'cc/env';
 import { UnityParticleDistanceSubEmitter } from './UnityParticleDistanceSubEmitter';
 
@@ -19,7 +19,13 @@ type ParticleLike = {
     position: Vec3;
     remainingLifetime?: number;
     randomSeed?: number;
+    velocity?: Vec3;
+    ultimateVelocity?: Vec3;
+    animatedVelocity?: Vec3;
+    startLifetime?: number;
 };
+
+type AnimatedModuleLike = { animate(particle: ParticleLike, dt: number): void; };
 
 type BurstLike = { time: number; repeatCount: number; repeatInterval: number; count: CurveRange };
 
@@ -35,6 +41,8 @@ type EmissionInstance = {
     track: TrackedParticle | null;
     seed: number;
     position: Vec3;
+    /** Where the instance was at the start of the current step (birth: along the parent's path). */
+    from: Vec3;
     time: number;
     fresh: boolean;
     rateAccumulator: number;
@@ -56,6 +64,15 @@ type ParticlePoolLike = {
 
 const PARTICLE_SPACE_WORLD = 0;
 const CURVE_MODE_CONSTANT = 0;
+const EMISSION_EPSILON = 1e-6;
+const GRAVITY = 9.8;
+const VELOCITY_EPSILON = 1e-8;
+// Cocos emitters face -Z (Unity +Z after the porter's Z mirror).
+const EMITTER_FORWARD = new Vec3(0, 0, -1);
+
+// Where and how old the particles of one step are: an event at unwrapped instance time u sits at
+// lerp(from, to, (u - start) / step) and has aged end - u by the end of the step.
+type EmissionWindow = { from: Vec3; to: Vec3; start: number; step: number; end: number };
 
 function isBirthEntry (this: UnityParticleSubEmitterEntry): boolean {
     return this.type === UnityParticleSubEmitterType.Birth;
@@ -141,6 +158,13 @@ export class UnityParticleSubEmitterFollower extends Component {
     private readonly _legacyEntries: UnityParticleSubEmitterEntry[] = [];
     private readonly _worldPosition = new Vec3();
     private readonly _sourceWorldMatrix = new Mat4();
+    private readonly _velocity = new Vec3();
+    private readonly _sample = new Vec3();
+    private readonly _sourceForward = new Vec3();
+    private readonly _alignment = new Quat();
+    private readonly _emitterRotation = new Quat();
+    private readonly _alignedRotation = new Quat();
+    private readonly _window: EmissionWindow = { from: new Vec3(), to: new Vec3(), start: 0, step: 0, end: 0 };
     private _sourceHadParticles = false;
     private readonly _distanceBindings: UnityParticleDistanceSubEmitter[] = [];
 
@@ -469,7 +493,7 @@ export class UnityParticleSubEmitterFollower extends Component {
             const schedule = this.captureSchedule(entry);
             this.ensureTargetRunning(entry);
             const instance = this._freeInstances.pop() || {
-                entry, schedule, particle: null, track: null, seed: 0, position: new Vec3(), time: 0, fresh: true, rateAccumulator: 0, cycles: [],
+                entry, schedule, particle: null, track: null, seed: 0, position: new Vec3(), from: new Vec3(), time: 0, fresh: true, rateAccumulator: 0, cycles: [],
             };
             instance.entry = entry;
             instance.schedule = schedule;
@@ -477,6 +501,7 @@ export class UnityParticleSubEmitterFollower extends Component {
             instance.track = track;
             instance.seed = particle?.randomSeed ?? 0;
             instance.position.set(position);
+            instance.from.set(position);
             instance.time = 0;
             instance.fresh = true;
             instance.rateAccumulator = 0;
@@ -486,9 +511,23 @@ export class UnityParticleSubEmitterFollower extends Component {
         }
     }
 
-    /** Returns false once the instance can no longer emit. */
+    /**
+     * Returns false once the instance can no longer emit.
+     *
+     * Unity runs each instance's emission inside the step: particles sit at their sub-frame point (a Birth
+     * instance along its parent's path) and are aged by the rest of the step, so a moving parent leaves a
+     * continuous trail instead of one clump per frame. A Birth instance that starts this step began at the
+     * parent's birth point, parent-age seconds ago. Unity also turns a Birth instance by the parent's direction
+     * of travel: FromTo(parent system forward, parent velocity incl. velocity over lifetime), measured on
+     * sub-emitters aligned with their parent system (Tanks! shell sparks); the porter reports sub-emitters
+     * rotated more than 20 deg from their parent, where this is unvalidated.
+     */
     private advanceInstance (instance: EmissionInstance, source: ParticleSystem, dt: number): boolean {
         const { schedule, particle } = instance;
+        let step = instance.fresh ? 0 : dt;
+        instance.from.set(instance.position);
+        const emitterNode = instance.entry.subEmitterNode || instance.entry.subEmitter!.node;
+        let aligned = false;
         if (particle) {
             // Unity stops a birth sub-emitter when its parent particle dies. Particles removed
             // without a lifetime change (ParticleSystem.stop/clear resets the pool length,
@@ -497,30 +536,63 @@ export class UnityParticleSubEmitterFollower extends Component {
             if (track && (track.stamp !== this._stamp || track.seed !== instance.seed)) return false;
             if ((particle.randomSeed ?? 0) !== instance.seed || particle.remainingLifetime !== undefined && particle.remainingLifetime <= 0) return false;
             this.getParticleWorldPosition(source, particle, instance.position);
-        }
-        if (instance.fresh) instance.fresh = false;
-        else instance.time += dt;
-        if (instance.time >= schedule.duration) {
-            if (!schedule.loop) {
-                this.emitDueBursts(instance, schedule.duration, dt);
-                return false;
+            this.getParticleWorldVelocity(source, particle, this._velocity);
+            if (instance.fresh) {
+                const age = particle.startLifetime !== undefined && particle.remainingLifetime !== undefined
+                    ? Math.max(0, particle.startLifetime - particle.remainingLifetime) : 0;
+                step = age;
+                Vec3.scaleAndAdd(instance.from, instance.position, this._velocity, -age);
             }
-            this.emitDueBursts(instance, schedule.duration, dt);
-            instance.time -= schedule.duration;
-            instance.cycles.fill(0);
+            if (Vec3.lengthSqr(this._velocity) > VELOCITY_EPSILON) {
+                Vec3.transformQuat(this._sourceForward, EMITTER_FORWARD, source.node.worldRotation);
+                Vec3.normalize(this._velocity, this._velocity);
+                Quat.rotationTo(this._alignment, this._sourceForward, this._velocity);
+                this._emitterRotation.set(emitterNode.worldRotation);
+                Quat.multiply(this._alignedRotation, this._alignment, this._emitterRotation);
+                emitterNode.setWorldRotation(this._alignedRotation);
+                aligned = true;
+            }
         }
-        this.emitDueBursts(instance, instance.time, dt);
-        const rate = schedule.rate.evaluate(instance.time / schedule.duration, Math.random());
-        if (rate > 0 && dt > 0) {
-            instance.rateAccumulator += rate * dt;
-            const emitCount = Math.floor(instance.rateAccumulator);
-            instance.rateAccumulator -= emitCount;
-            if (emitCount > 0) this.emitAtWorldPosition(instance.entry, instance.position, emitCount);
+        instance.fresh = false;
+        const window = this._window;
+        window.from.set(instance.from);
+        window.to.set(instance.position);
+        window.start = instance.time;
+        window.step = step;
+        window.end = instance.time + step;
+        let alive = true;
+        if (window.end >= schedule.duration) {
+            this.emitSpan(instance, instance.time, schedule.duration, 0, dt);
+            if (!schedule.loop) {
+                alive = false;
+            } else {
+                instance.time = window.end - schedule.duration;
+                instance.cycles.fill(0);
+                this.emitSpan(instance, 0, instance.time, schedule.duration, dt);
+            }
+        } else {
+            this.emitSpan(instance, instance.time, window.end, 0, dt);
+            instance.time = window.end;
         }
-        return true;
+        if (aligned) emitterNode.setWorldRotation(this._emitterRotation);
+        return alive;
     }
 
-    private emitDueBursts (instance: EmissionInstance, time: number, dt: number): void {
+    /** Bursts due by `to` and rate emission over (from, to] of the instance clock; base unwraps a looped clock. */
+    private emitSpan (instance: EmissionInstance, from: number, to: number, base: number, dt: number): void {
+        this.emitDueBursts(instance, to, dt, base);
+        const { schedule } = instance;
+        const rate = schedule.rate.evaluate(Math.min(1, from / schedule.duration), Math.random());
+        if (!(rate > 0) || !(to > from)) return;
+        const owed = instance.rateAccumulator + rate * (to - from);
+        const count = Math.floor(owed + EMISSION_EPSILON);
+        for (let k = 1; k <= count; k += 1) {
+            this.emitPlaced(instance.entry, from + (k - instance.rateAccumulator) / rate + base, 1);
+        }
+        instance.rateAccumulator = Math.max(0, owed - count);
+    }
+
+    private emitDueBursts (instance: EmissionInstance, time: number, dt: number, base: number): void {
         const { bursts, duration } = instance.schedule;
         // Unity emits at most one cycle per 1/60 s of the step and drops the other due
         // cycles (fixtures/burst-cycles.json, same rule as UnityParticleBurstEmission).
@@ -536,11 +608,52 @@ export class UnityParticleSubEmitterFollower extends Component {
             const due = Math.min(Math.max(1, burst.repeatCount), inside, Math.floor((time - burst.time) / interval + 1e-6) + 1);
             const last = Math.min(due, instance.cycles[b] + cap);
             for (let cycle = instance.cycles[b]; cycle < last; cycle += 1) {
-                const count = Math.round(burst.count.evaluate(Math.min(1, (burst.time + cycle * interval) / duration), Math.random()));
-                if (count > 0) this.emitAtWorldPosition(instance.entry, instance.position, count);
+                const at = burst.time + cycle * interval;
+                const count = Math.round(burst.count.evaluate(Math.min(1, at / duration), Math.random()));
+                if (count > 0) this.emitPlaced(instance.entry, at + base, count);
             }
             instance.cycles[b] = Math.max(instance.cycles[b], due);
         }
+    }
+
+    /** Emits count particles for an event at unwrapped instance time u, placed and aged within the current step. */
+    private emitPlaced (entry: UnityParticleSubEmitterEntry, u: number, count: number): void {
+        const w = this._window;
+        const fraction = w.step > 0 ? Math.min(1, Math.max(0, (u - w.start) / w.step)) : 1;
+        Vec3.lerp(this._sample, w.from, w.to, fraction);
+        const target = entry.subEmitter!;
+        const pool = this.getSourceParticlePool(target);
+        const before = pool ? pool.length : 0;
+        this.emitAtWorldPosition(entry, this._sample, count);
+        if (!pool) return;
+        const age = Math.max(0, w.end - u);
+        if (age > 0) for (let i = before; i < pool.length; i += 1) this.advanceNewParticle(target, pool.data[i], age);
+    }
+
+    // One CPU-renderer update step of age seconds for a particle born this step, in updateParticles' order
+    // (the follower runs in lateUpdate, after the systems simulated the step).
+    private advanceNewParticle (target: ParticleSystem, particle: ParticleLike, age: number): void {
+        if (particle.remainingLifetime === undefined || particle.startLifetime === undefined || !particle.velocity || !particle.ultimateVelocity) return;
+        particle.remainingLifetime -= age;
+        if (particle.animatedVelocity) Vec3.set(particle.animatedVelocity, 0, 0, 0);
+        const normalizedTime = 1 - particle.remainingLifetime / particle.startLifetime;
+        const gravity = target.gravityModifier.evaluate(normalizedTime, 0) || 0;
+        if (gravity !== 0 && target.simulationSpace === PARTICLE_SPACE_WORLD) particle.velocity.y -= gravity * GRAVITY * age;
+        Vec3.copy(particle.ultimateVelocity, particle.velocity);
+        const animated = (target.processor as any)?._runAnimateList as AnimatedModuleLike[] | undefined;
+        if (animated) for (const module of animated) module.animate(particle, age);
+        Vec3.scaleAndAdd(particle.position, particle.position, particle.ultimateVelocity, age);
+    }
+
+    private getParticleWorldVelocity (source: ParticleSystem, particle: ParticleLike, out: Vec3): Vec3 {
+        const velocity = particle.ultimateVelocity || particle.velocity;
+        if (!velocity) return out.set(0, 0, 0);
+        out.set(velocity);
+        if (source.simulationSpace !== PARTICLE_SPACE_WORLD) {
+            source.node.getWorldMatrix(this._sourceWorldMatrix);
+            Vec3.transformMat4Normal(out, out, this._sourceWorldMatrix);
+        }
+        return out;
     }
 
     private captureSchedule (entry: UnityParticleSubEmitterEntry): EmissionSchedule {

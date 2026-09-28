@@ -86,6 +86,7 @@
       "testPaths": [
         "tools/unity-cocos-port/particle-orbit-native.test.cjs",
         "tools/unity-cocos-port/particle-orbit-binding.test.cjs",
+        "tools/unity-cocos-port/particle-orbit-speed-modifier.test.cjs",
         "tools/unity-cocos-port/particle-limit-composition.test.cjs"
       ],
       "acceptance": "Source frame, native paths and repeated loop/viewport occupancy. With a source Limit Velocity: native composition cases and matched-birth trajectories of the ported emitter."
@@ -764,6 +765,71 @@
         "tools/port-regression-gate.test.cjs"
       ],
       "acceptance": "Inventory representatives before bulk conversion; report renderer plus module gaps. New particle registries request catalog scope by default. Every declared prefab/phase requires native reference, semantic checks and explicit color/silhouette bounds. Reference selection, Editor lifecycle and trustworthy source producers remain separate required evidence."
+    },
+    {
+      "id": "unity-particle-material-semantics",
+      "origin": "b8e3eb0",
+      "applicability": "automatic",
+      "sharedPaths": [
+        "tools/unity-cocos-port/unity-particle-material.js",
+        "tools/unity-cocos-port/unity-particle.effect"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/unity-particle-material.test.cjs"
+      ],
+      "acceptance": "Unity oracle fragment samples within 2/255 and per-effect foreground colour inside the Unity seed range (vertex-colour colour space, premultiply, lit particles)."
+    },
+    {
+      "id": "rate-over-distance-subframe",
+      "origin": "dc04664",
+      "applicability": "automatic",
+      "sharedPaths": [
+        "tools/unity-cocos-port/runtime/UnityParticleRateOverDistanceEmitter.ts"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/porting-regressions.test.cjs"
+      ],
+      "acceptance": "Moving emitter at constant speed: particle count, ages (1/(rate*speed) steps) and path positions equal a Unity per-frame Simulate dump."
+    },
+    {
+      "id": "sub-emitter-birth-timeline",
+      "origin": "dc04664",
+      "applicability": "conditional",
+      "sharedPaths": [
+        "tools/unity-cocos-port/runtime/UnityParticleSubEmitterFollower.ts",
+        "tools/unity-cocos-port/runtime-component-porter.js"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/runtime-component-porter.test.cjs"
+      ],
+      "acceptance": "Per-system counts and sub-emitter particle centroid/spread match a Unity seeded capture; the FromTo(parent forward, velocity) alignment is only validated within 20 deg (porter flags larger offsets)."
+    },
+    {
+      "id": "edge-shape-flattened-box",
+      "origin": "dc04664",
+      "applicability": "conditional",
+      "sharedPaths": [
+        "tools/unity-cocos-port/particle-system-converter.js",
+        "tools/unity-cocos-port/particle-shape-rotation.js"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/particle-edge-shape-fallback.test.cjs",
+        "tools/unity-cocos-port/particle-shape-rotation.test.cjs"
+      ],
+      "acceptance": "Only when the native Edge adapter rejects the system (rate over distance, non-Loop radius): per-particle Unity dump of the moving single-sided Edge emitter shows spread along shape X within +/-radius and start velocity along shape +Y."
+    },
+    {
+      "id": "procedural-sort-gravity",
+      "origin": "dc04664",
+      "applicability": "automatic",
+      "sharedPaths": [
+        "tools/unity-cocos-port/particle-procedural-sort-center.cjs",
+        "tools/unity-cocos-port/runtime/UnityParticleSorting.ts"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/particle-procedural-sort-center.test.cjs"
+      ],
+      "acceptance": "Procedural bounds with constant gravity and hemisphere speed: Unity renderer bounds center within 2e-3 (Tanks! PowerUpEffect/Trails) and multi-system draw order inside the Unity seed range."
     }
   ]
 }

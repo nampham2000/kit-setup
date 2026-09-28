@@ -10,7 +10,7 @@ const { particleCollisionContract } = require('./particle-collision-binding');
 const { particleCustomDataContract } = require('./particle-custom-data-binding');
 const { particleAlignToDirectionContract } = require('./particle-align-to-direction-binding');
 
-const { particleShapeRotation } = require('./particle-shape-rotation');
+const { particleShapeRotation, particleShapeEdgeRotation } = require('./particle-shape-rotation');
 
 const DEG_TO_RAD = Math.PI / 180;
 const UNITY_CURVE_MODE_TO_COCOS = {
@@ -917,7 +917,7 @@ function getShapeMapping(unityType) {
     case 9: return { shapeType: 2, emitFrom: 2 }; // Cone volume shell
     case 10: return { shapeType: 1, emitFrom: 0 }; // Circle
     case 11: return { shapeType: 1, emitFrom: 1 }; // Circle edge
-    case 12: return { shapeType: 0, emitFrom: 1 }; // Single-sided edge approximation
+    case 12: return { shapeType: 0, emitFrom: 3 }; // Single-sided edge: flattened Box volume, see applyShapeModule
     case 6: // Mesh
     case 13: // Mesh renderer
     case 14: // Skinned mesh renderer
@@ -957,7 +957,7 @@ function shouldUsePointShapeFallback(data) {
   return !shapeHasUnitySource(data);
 }
 
-function applyShapeModule(builder, particle, data) {
+function applyShapeModule(builder, particle, data, source = null) {
   const module = refObject(builder.objects, particle?._shapeModule);
   if (!module || !data || typeof data !== 'object') return false;
   const enabled = bool(data.enabled, false);
@@ -984,6 +984,14 @@ function applyShapeModule(builder, particle, data) {
   const rotation = vec3(data.m_Rotation || data.rotation, { x: 0, y: 0, z: 0 });
   module._rotation = vec3(particleShapeRotation(rotation), { x: 0, y: 0, z: 0 });
   module._scale = vec3(data.m_Scale || data.scale, module._scale || { x: 1, y: 1, z: 1 });
+  if (Number(data.type) === 12 && (!source || edgeShapeContract(source)?.reasons?.length)) {
+    // Unity's single-sided Edge is a 2 * radius line on shape X emitting toward shape +Y; a unit Box shell spread
+    // the Tanks! dust trails over a 1 m cube rising upward. Flatten the Box onto X and turn its -Z onto +Y.
+    // Only when the native Edge adapter (UnityParticleEdgeShape, which builds that basis itself from the
+    // unrotated shape frame) cannot take the system, e.g. rate over distance or a non-Loop radius mode.
+    module._rotation = vec3(particleShapeEdgeRotation(rotation), { x: 0, y: 0, z: 0 });
+    module._scale = vec3({ x: 2 * module.radius * num(module._scale.x, 1), y: 0, z: 0 });
+  }
   if (!enabled || shouldUsePointShapeFallback(data)) {
     setKnown(module, ['_shapeType'], 0);
     setKnown(module, ['shapeType'], 0);
@@ -1388,7 +1396,7 @@ function applyUnityParticleDataToCocos(builder, particleId, data = {}, rendererD
   applied+=applyParticleStartRotation(builder,particle,data,rendererData);
   count(applyCurveByRef(builder, particle, 'gravityModifier', gravityData));
 
-  count(applyShapeModule(builder, particle, data.ShapeModule));
+  count(applyShapeModule(builder, particle, data.ShapeModule, data));
   count(applyEmission(builder, particle, data.EmissionModule));
   count(applySizeModule(builder, particle, data.SizeModule));
   count(applyRotationModule(builder, particle, data.RotationModule, particleRendererContract(data, rendererData)));
@@ -1435,7 +1443,7 @@ function applyUnityParticleSystemToCocos(builder, particleId, unityDoc, renderer
 function restoreOrbitalSourceModules(builder, particleId, data) {
   const particle=builder.objects[particleId];
   applyCurveByRef(builder,particle,'startSpeed',data.InitialModule.startSpeed);
-  applyShapeModule(builder,particle,data.ShapeModule);
+  applyShapeModule(builder,particle,data.ShapeModule,data);
   applyVelocityModule(builder,particle,data.VelocityModule);
 }
 

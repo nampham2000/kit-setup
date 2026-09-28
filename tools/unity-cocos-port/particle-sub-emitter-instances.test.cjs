@@ -3,12 +3,28 @@
 // event. Hovl "Magic shield 3": 8/s parents over 1.1 s; Glow = 1 burst, Bubbles = 30 x 0.1 s.
 const fs = require('node:fs'), path = require('node:path'), test = require('node:test'), assert = require('node:assert/strict'), ts = require('typescript');
 
-class Vec3 { constructor(x = 0, y = 0, z = 0) { this.x = x; this.y = y; this.z = z; } set(v) { this.x = v.x; this.y = v.y; this.z = v.z; return this; } clone() { return new Vec3(this.x, this.y, this.z); } static transformMat4() {} }
+class Vec3 {
+  constructor(x = 0, y = 0, z = 0) { this.x = x; this.y = y; this.z = z; }
+  set(v, y, z) { if (typeof v === 'number') { this.x = v; this.y = y; this.z = z; } else { this.x = v.x; this.y = v.y; this.z = v.z; } return this; }
+  clone() { return new Vec3(this.x, this.y, this.z); }
+  static transformMat4() {}
+  static lerp(o, a, b, t) { return o.set(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, a.z + (b.z - a.z) * t); }
+  static scaleAndAdd(o, a, b, s) { return o.set(a.x + b.x * s, a.y + b.y * s, a.z + b.z * s); }
+  static lengthSqr(a) { return a.x * a.x + a.y * a.y + a.z * a.z; }
+  static normalize(o, a) { const l = Math.sqrt(Vec3.lengthSqr(a)) || 1; return o.set(a.x / l, a.y / l, a.z / l); }
+  static transformQuat(o, a) { return o.set(a); }
+}
+class Quat {
+  constructor() { this.x = 0; this.y = 0; this.z = 0; this.w = 1; }
+  set(q) { Object.assign(this, { x: q.x, y: q.y, z: q.z, w: q.w }); return this; }
+  static rotationTo(o) { return o; }
+  static multiply(o) { return o; }
+}
 class CurveRange { constructor(constant = 0) { this.mode = 0; this.constant = constant; this.multiplier = 1; } evaluate() { return this.constant; } }
 const decorator = () => (target) => target;
 const cc = {
   _decorator: { ccclass: decorator, executeInEditMode: (t) => t, executionOrder: decorator, playOnFocus: (t) => t, property: () => () => undefined },
-  Component: class { constructor() { this.enabled = true; } }, Enum: (e) => e, Mat4: class {}, Node: class {}, ParticleSystem: class {}, Vec3, CurveRange,
+  Component: class { constructor() { this.enabled = true; } }, Enum: (e) => e, Mat4: class {}, Node: class {}, ParticleSystem: class {}, Vec3, Quat, CurveRange,
 };
 
 function load(editor = false) {
@@ -20,7 +36,7 @@ function load(editor = false) {
 }
 
 function target(name, { duration = 6, loop = false, rate = 0, bursts = [] } = {}) {
-  const node = { name, active: true, position: new Vec3(), setWorldPosition(v) { this.position.set(v); } };
+  const node = { name, active: true, position: new Vec3(), worldRotation: new Quat(), setWorldPosition(v) { this.position.set(v); }, setWorldRotation(q) { this.worldRotation.set(q); } };
   return {
     node, duration, loop, rateOverTime: new CurveRange(rate), rateOverDistance: new CurveRange(0), _isPlaying: false,
     bursts: bursts.map(([time, count, repeatCount = 1, repeatInterval = 0.01]) => ({ time, repeatCount, repeatInterval, count: new CurveRange(count) })),
@@ -31,7 +47,7 @@ function target(name, { duration = 6, loop = false, rate = 0, bursts = [] } = {}
 
 function rig(mod, targets, types) {
   const pool = { data: [], length: 0 };
-  const source = { simulationSpace: 0, processor: { _particles: pool } };
+  const source = { simulationSpace: 0, node: { worldRotation: new Quat() }, processor: { _particles: pool } };
   const follower = new mod.UnityParticleSubEmitterFollower();
   follower.source = source;
   follower.entries = targets.map((t, i) => Object.assign(new mod.UnityParticleSubEmitterEntry(), {
@@ -140,4 +156,23 @@ test('instance-mode targets are silenced when the follower loads, before any par
   assert.equal(trail.rateOverTime.constant, 0);
   assert.equal(trail.bursts.length, 0);
   assert.equal(trail.total(), 0);
+});
+
+// Tanks! shell sparks: a moving parent's Birth instance leaves a continuous trail. Particles sit at their
+// sub-frame point along the parent's path, not one clump at the parent's end-of-frame position.
+test('birth rate emission is placed along the parent path within the step', () => {
+  const mod = load();
+  const trail = target('Trail', { rate: 600, duration: 1, loop: true });
+  const { follower, spawn } = rig(mod, [trail]);
+  const p = spawn(0);
+  p.velocity = new Vec3(60, 0, 0); p.startLifetime = 5; // 1 unit per 1/60 s frame
+  const dt = 1 / 60;
+  follower.lateUpdate(dt); // instance starts; the parent's age is 0 here
+  trail.emitted.length = 0;
+  p.remainingLifetime -= dt; p.position.x += 1;
+  follower.lateUpdate(dt);
+  const xs = trail.emitted.map((e) => e.x);
+  assert.equal(xs.length, 10, '600/s over one frame');
+  assert.ok(Math.min(...xs) > 0 && Math.min(...xs) <= 0.11 && Math.max(...xs) === 1, JSON.stringify(xs));
+  for (let i = 1; i < xs.length; i++) assert.ok(Math.abs(xs[i] - xs[i - 1] - 0.1) < 1e-9, 'evenly spaced along the path');
 });

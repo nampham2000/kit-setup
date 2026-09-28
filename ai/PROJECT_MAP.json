@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "generatedAt": "2026-09-27T05:10:08.911Z",
+    "generatedAt": "2026-09-25T13:25:12.494Z",
     "description": "Compact project manifest for AI Agents. Use this instead of scanning file trees.",
     "project": {
       "projectName": "cc_playable_framework",
@@ -20,1140 +20,1103 @@
   },
   "scenes": [
     {
-      "name": "Gameplay",
-      "path": "assets/Gameplay.scene",
-      "sizeKb": 14.1
+      "name": "AoeDemo",
+      "path": "assets/AoeDemo.scene",
+      "sizeKb": 15.9
     },
     {
-      "name": "ScrewOutFactory",
-      "path": "assets/screw/ScrewOutFactory.scene",
-      "sizeKb": 5.6
+      "name": "ARPGDemo01",
+      "path": "assets/arpg/ARPGDemo01.scene",
+      "sizeKb": 5.7
+    },
+    {
+      "name": "ARPGDemo04",
+      "path": "assets/arpg/ARPGDemo04.scene",
+      "sizeKb": 5.7
+    },
+    {
+      "name": "ARPGDemo08",
+      "path": "assets/arpg/ARPGDemo08.scene",
+      "sizeKb": 5.7
+    },
+    {
+      "name": "Gameplay",
+      "path": "assets/Gameplay.scene",
+      "sizeKb": 14.9
     }
   ],
   "prefabs": [
     {
-      "name": "Cube_Crystal",
-      "path": "assets/resources/screw/levels/Cube_Crystal.prefab",
-      "sizeKb": 2.7
+      "name": "Energy explosion",
+      "path": "assets/prefabs/aoe/Energy explosion.prefab",
+      "sizeKb": 392
     },
     {
-      "name": "Cube_Diamond",
-      "path": "assets/resources/screw/levels/Cube_Diamond.prefab",
-      "sizeKb": 2.7
+      "name": "Flower slash",
+      "path": "assets/prefabs/aoe/Flower slash.prefab",
+      "sizeKb": 510.5
     },
     {
-      "name": "Cube_Soil",
-      "path": "assets/resources/screw/levels/Cube_Soil.prefab",
-      "sizeKb": 2.7
+      "name": "Front spikes attack",
+      "path": "assets/prefabs/aoe/Front spikes attack.prefab",
+      "sizeKb": 477.2
     },
     {
-      "name": "Cube_Wooden_Crate",
-      "path": "assets/resources/screw/levels/Cube_Wooden_Crate.prefab",
-      "sizeKb": 2.7
+      "name": "Ise attack",
+      "path": "assets/prefabs/aoe/Ise attack.prefab",
+      "sizeKb": 334.7
     },
     {
-      "name": "Level_10",
-      "path": "assets/resources/screw/levels/Level_10.prefab",
-      "sizeKb": 591.7
+      "name": "Knife hit",
+      "path": "assets/prefabs/aoe/Knife hit.prefab",
+      "sizeKb": 123.4
     },
     {
-      "name": "Level_100",
-      "path": "assets/resources/screw/levels/Level_100.prefab",
-      "sizeKb": 927.7
+      "name": "Knives",
+      "path": "assets/prefabs/aoe/Knives.prefab",
+      "sizeKb": 53.5
     },
     {
-      "name": "Level_101",
-      "path": "assets/resources/screw/levels/Level_101.prefab",
-      "sizeKb": 1539.3
+      "name": "Leaves buff",
+      "path": "assets/prefabs/aoe/Leaves buff.prefab",
+      "sizeKb": 777.5
     },
     {
-      "name": "Level_102",
-      "path": "assets/resources/screw/levels/Level_102.prefab",
-      "sizeKb": 822.4
+      "name": "Lightning hit",
+      "path": "assets/prefabs/aoe/Lightning hit.prefab",
+      "sizeKb": 26.2
     },
     {
-      "name": "Level_103",
-      "path": "assets/resources/screw/levels/Level_103.prefab",
-      "sizeKb": 934.9
+      "name": "Lightning strike",
+      "path": "assets/prefabs/aoe/Lightning strike.prefab",
+      "sizeKb": 394.1
     },
     {
-      "name": "Level_104",
-      "path": "assets/resources/screw/levels/Level_104.prefab",
-      "sizeKb": 1028.3
+      "name": "Magic attack",
+      "path": "assets/prefabs/aoe/Magic attack.prefab",
+      "sizeKb": 102.2
     },
     {
-      "name": "Level_105",
-      "path": "assets/resources/screw/levels/Level_105.prefab",
-      "sizeKb": 998
+      "name": "Magic hit",
+      "path": "assets/prefabs/aoe/Magic hit.prefab",
+      "sizeKb": 180.5
     },
     {
-      "name": "Level_106",
-      "path": "assets/resources/screw/levels/Level_106.prefab",
-      "sizeKb": 457.4
+      "name": "Meteor 2",
+      "path": "assets/prefabs/aoe/Meteor 2.prefab",
+      "sizeKb": 416
     },
     {
-      "name": "Level_107",
-      "path": "assets/resources/screw/levels/Level_107.prefab",
-      "sizeKb": 585.2
+      "name": "Meteor hit 2",
+      "path": "assets/prefabs/aoe/Meteor hit 2.prefab",
+      "sizeKb": 172.1
     },
     {
-      "name": "Level_108",
-      "path": "assets/resources/screw/levels/Level_108.prefab",
-      "sizeKb": 1303.3
+      "name": "Meteor hit",
+      "path": "assets/prefabs/aoe/Meteor hit.prefab",
+      "sizeKb": 245.1
     },
     {
-      "name": "Level_109",
-      "path": "assets/resources/screw/levels/Level_109.prefab",
-      "sizeKb": 1704.8
+      "name": "Meteor shower 2",
+      "path": "assets/prefabs/aoe/Meteor shower 2.prefab",
+      "sizeKb": 105.2
     },
     {
-      "name": "Level_11",
-      "path": "assets/resources/screw/levels/Level_11.prefab",
-      "sizeKb": 478.2
+      "name": "Meteor shower",
+      "path": "assets/prefabs/aoe/Meteor shower.prefab",
+      "sizeKb": 103
     },
     {
-      "name": "Level_110",
-      "path": "assets/resources/screw/levels/Level_110.prefab",
-      "sizeKb": 629.1
+      "name": "Meteor",
+      "path": "assets/prefabs/aoe/Meteor.prefab",
+      "sizeKb": 497.4
     },
     {
-      "name": "Level_111_2",
-      "path": "assets/resources/screw/levels/Level_111_2.prefab",
-      "sizeKb": 1206.1
+      "name": "Buff 1",
+      "path": "assets/prefabs/aoe-rpg/Buff 1.prefab",
+      "sizeKb": 590.9
     },
     {
-      "name": "Level_112",
-      "path": "assets/resources/screw/levels/Level_112.prefab",
-      "sizeKb": 570.5
+      "name": "Buff 2",
+      "path": "assets/prefabs/aoe-rpg/Buff 2.prefab",
+      "sizeKb": 280.4
     },
     {
-      "name": "Level_113",
-      "path": "assets/resources/screw/levels/Level_113.prefab",
-      "sizeKb": 1479.8
+      "name": "Buff 3",
+      "path": "assets/prefabs/aoe-rpg/Buff 3.prefab",
+      "sizeKb": 299
     },
     {
-      "name": "Level_114",
-      "path": "assets/resources/screw/levels/Level_114.prefab",
-      "sizeKb": 957.9
+      "name": "Buff 4",
+      "path": "assets/prefabs/aoe-rpg/Buff 4.prefab",
+      "sizeKb": 122.4
     },
     {
-      "name": "Level_115",
-      "path": "assets/resources/screw/levels/Level_115.prefab",
-      "sizeKb": 987
+      "name": "Buff 5",
+      "path": "assets/prefabs/aoe-rpg/Buff 5.prefab",
+      "sizeKb": 91.7
     },
     {
-      "name": "Level_116",
-      "path": "assets/resources/screw/levels/Level_116.prefab",
-      "sizeKb": 1665.8
+      "name": "Buff 6",
+      "path": "assets/prefabs/aoe-rpg/Buff 6.prefab",
+      "sizeKb": 175.1
     },
     {
-      "name": "Level_117",
-      "path": "assets/resources/screw/levels/Level_117.prefab",
-      "sizeKb": 378.2
+      "name": "Buff 7",
+      "path": "assets/prefabs/aoe-rpg/Buff 7.prefab",
+      "sizeKb": 63.2
     },
     {
-      "name": "Level_118",
-      "path": "assets/resources/screw/levels/Level_118.prefab",
-      "sizeKb": 1082.1
+      "name": "Cute buff Yorai",
+      "path": "assets/prefabs/aoe-rpg/Cute buff Yorai.prefab",
+      "sizeKb": 111.4
     },
     {
-      "name": "Level_119",
-      "path": "assets/resources/screw/levels/Level_119.prefab",
-      "sizeKb": 658.4
+      "name": "Debuff 1",
+      "path": "assets/prefabs/aoe-rpg/Debuff 1.prefab",
+      "sizeKb": 284.8
     },
     {
-      "name": "Level_12",
-      "path": "assets/resources/screw/levels/Level_12.prefab",
-      "sizeKb": 608
+      "name": "Debuff 2",
+      "path": "assets/prefabs/aoe-rpg/Debuff 2.prefab",
+      "sizeKb": 477.5
     },
     {
-      "name": "Level_121",
-      "path": "assets/resources/screw/levels/Level_121.prefab",
-      "sizeKb": 1169.5
+      "name": "Dragon punch",
+      "path": "assets/prefabs/aoe-rpg/Dragon punch.prefab",
+      "sizeKb": 301.1
     },
     {
-      "name": "Level_123",
-      "path": "assets/resources/screw/levels/Level_123.prefab",
-      "sizeKb": 846.9
+      "name": "Gold dot",
+      "path": "assets/prefabs/aoe-rpg/Gold dot.prefab",
+      "sizeKb": 112.7
     },
     {
-      "name": "Level_124",
-      "path": "assets/resources/screw/levels/Level_124.prefab",
-      "sizeKb": 935.9
+      "name": "Heal",
+      "path": "assets/prefabs/aoe-rpg/Heal.prefab",
+      "sizeKb": 284.7
     },
     {
-      "name": "Level_126",
-      "path": "assets/resources/screw/levels/Level_126.prefab",
-      "sizeKb": 472.4
+      "name": "Lvl up",
+      "path": "assets/prefabs/aoe-rpg/Lvl up.prefab",
+      "sizeKb": 369.8
     },
     {
-      "name": "Level_127",
-      "path": "assets/resources/screw/levels/Level_127.prefab",
-      "sizeKb": 676.8
+      "name": "Magic Sparks",
+      "path": "assets/prefabs/aoe-rpg/Magic Sparks.prefab",
+      "sizeKb": 28.5
     },
     {
-      "name": "Level_128",
-      "path": "assets/resources/screw/levels/Level_128.prefab",
-      "sizeKb": 440.7
+      "name": "Punch Hit",
+      "path": "assets/prefabs/aoe-rpg/Punch Hit.prefab",
+      "sizeKb": 42.4
     },
     {
-      "name": "Level_129",
-      "path": "assets/resources/screw/levels/Level_129.prefab",
-      "sizeKb": 858.2
+      "name": "Soft blue buff",
+      "path": "assets/prefabs/aoe-rpg/Soft blue buff.prefab",
+      "sizeKb": 394.5
     },
     {
-      "name": "Level_13",
-      "path": "assets/resources/screw/levels/Level_13.prefab",
-      "sizeKb": 395.8
+      "name": "Yellow Flash",
+      "path": "assets/prefabs/aoe-rpg/Yellow Flash.prefab",
+      "sizeKb": 109.8
     },
     {
-      "name": "Level_130_3",
-      "path": "assets/resources/screw/levels/Level_130_3.prefab",
-      "sizeKb": 869.3
+      "name": "CharacterCircleBlue",
+      "path": "assets/prefabs/arpg/Combat/CharacterCircle/CharacterCircleBlue.prefab",
+      "sizeKb": 25.3
     },
     {
-      "name": "Level_131",
-      "path": "assets/resources/screw/levels/Level_131.prefab",
-      "sizeKb": 664.9
+      "name": "CharacterCircleGreen",
+      "path": "assets/prefabs/arpg/Combat/CharacterCircle/CharacterCircleGreen.prefab",
+      "sizeKb": 25.3
     },
     {
-      "name": "Level_132",
-      "path": "assets/resources/screw/levels/Level_132.prefab",
-      "sizeKb": 337.1
+      "name": "CharacterCirclePurple",
+      "path": "assets/prefabs/arpg/Combat/CharacterCircle/CharacterCirclePurple.prefab",
+      "sizeKb": 25.3
     },
     {
-      "name": "Level_133",
-      "path": "assets/resources/screw/levels/Level_133.prefab",
-      "sizeKb": 534.5
+      "name": "CharacterCircleRed",
+      "path": "assets/prefabs/arpg/Combat/CharacterCircle/CharacterCircleRed.prefab",
+      "sizeKb": 25.3
     },
     {
-      "name": "Level_134",
-      "path": "assets/resources/screw/levels/Level_134.prefab",
-      "sizeKb": 1209.1
+      "name": "CharacterCircleWhite",
+      "path": "assets/prefabs/arpg/Combat/CharacterCircle/CharacterCircleWhite.prefab",
+      "sizeKb": 25.3
     },
     {
-      "name": "Level_135",
-      "path": "assets/resources/screw/levels/Level_135.prefab",
-      "sizeKb": 988.6
+      "name": "CharacterCircleYellow",
+      "path": "assets/prefabs/arpg/Combat/CharacterCircle/CharacterCircleYellow.prefab",
+      "sizeKb": 25.3
     },
     {
-      "name": "Level_136",
-      "path": "assets/resources/screw/levels/Level_136.prefab",
-      "sizeKb": 777.4
+      "name": "Shield",
+      "path": "assets/prefabs/arpg/Combat/Shield/Shield.prefab",
+      "sizeKb": 25.2
     },
     {
-      "name": "Level_137",
-      "path": "assets/resources/screw/levels/Level_137.prefab",
-      "sizeKb": 520.3
+      "name": "ShieldHit",
+      "path": "assets/prefabs/arpg/Combat/Shield/ShieldHit.prefab",
+      "sizeKb": 23.2
     },
     {
-      "name": "Level_138",
-      "path": "assets/resources/screw/levels/Level_138.prefab",
-      "sizeKb": 831.5
+      "name": "Canvas",
+      "path": "assets/prefabs/arpg/Demo/Canvas.prefab",
+      "sizeKb": 94.7
     },
     {
-      "name": "Level_139",
-      "path": "assets/resources/screw/levels/Level_139.prefab",
-      "sizeKb": 364.7
+      "name": "BluePortal",
+      "path": "assets/prefabs/arpg/Demo/Portals/BluePortal.prefab",
+      "sizeKb": 1.9
     },
     {
-      "name": "Level_14",
-      "path": "assets/resources/screw/levels/Level_14.prefab",
-      "sizeKb": 397.2
+      "name": "GreenPortal",
+      "path": "assets/prefabs/arpg/Demo/Portals/GreenPortal.prefab",
+      "sizeKb": 1.9
     },
     {
-      "name": "Level_140_2",
-      "path": "assets/resources/screw/levels/Level_140_2.prefab",
-      "sizeKb": 463.5
+      "name": "PortalBlueClose",
+      "path": "assets/prefabs/arpg/Demo/Portals/PortalBlueClose.prefab",
+      "sizeKb": 75.2
     },
     {
-      "name": "Level_141",
-      "path": "assets/resources/screw/levels/Level_141.prefab",
-      "sizeKb": 497.7
+      "name": "PortalBlueIdle",
+      "path": "assets/prefabs/arpg/Demo/Portals/PortalBlueIdle.prefab",
+      "sizeKb": 53.1
     },
     {
-      "name": "Level_142",
-      "path": "assets/resources/screw/levels/Level_142.prefab",
-      "sizeKb": 901.2
+      "name": "PortalBlueOpen",
+      "path": "assets/prefabs/arpg/Demo/Portals/PortalBlueOpen.prefab",
+      "sizeKb": 71.2
     },
     {
-      "name": "Level_143",
-      "path": "assets/resources/screw/levels/Level_143.prefab",
-      "sizeKb": 529
+      "name": "PortalGreenClose",
+      "path": "assets/prefabs/arpg/Demo/Portals/PortalGreenClose.prefab",
+      "sizeKb": 74.3
     },
     {
-      "name": "Level_144",
-      "path": "assets/resources/screw/levels/Level_144.prefab",
-      "sizeKb": 1394.4
+      "name": "PortalGreenIdle",
+      "path": "assets/prefabs/arpg/Demo/Portals/PortalGreenIdle.prefab",
+      "sizeKb": 53.4
     },
     {
-      "name": "Level_145",
-      "path": "assets/resources/screw/levels/Level_145.prefab",
-      "sizeKb": 1398.4
+      "name": "PortalGreenOpen",
+      "path": "assets/prefabs/arpg/Demo/Portals/PortalGreenOpen.prefab",
+      "sizeKb": 71.7
     },
     {
-      "name": "Level_146",
-      "path": "assets/resources/screw/levels/Level_146.prefab",
-      "sizeKb": 981.7
+      "name": "PortalPurpleClose",
+      "path": "assets/prefabs/arpg/Demo/Portals/PortalPurpleClose.prefab",
+      "sizeKb": 74.3
     },
     {
-      "name": "Level_147",
-      "path": "assets/resources/screw/levels/Level_147.prefab",
-      "sizeKb": 1101.2
+      "name": "PortalPurpleIdle",
+      "path": "assets/prefabs/arpg/Demo/Portals/PortalPurpleIdle.prefab",
+      "sizeKb": 52.7
     },
     {
-      "name": "Level_148",
-      "path": "assets/resources/screw/levels/Level_148.prefab",
-      "sizeKb": 904.2
+      "name": "PortalPurpleOpen",
+      "path": "assets/prefabs/arpg/Demo/Portals/PortalPurpleOpen.prefab",
+      "sizeKb": 71.2
     },
     {
-      "name": "Level_149",
-      "path": "assets/resources/screw/levels/Level_149.prefab",
-      "sizeKb": 757.7
+      "name": "PortalRedClose",
+      "path": "assets/prefabs/arpg/Demo/Portals/PortalRedClose.prefab",
+      "sizeKb": 74.3
     },
     {
-      "name": "Level_15",
-      "path": "assets/resources/screw/levels/Level_15.prefab",
-      "sizeKb": 1239.1
+      "name": "PortalRedIdle",
+      "path": "assets/prefabs/arpg/Demo/Portals/PortalRedIdle.prefab",
+      "sizeKb": 52.7
     },
     {
-      "name": "Level_150",
-      "path": "assets/resources/screw/levels/Level_150.prefab",
-      "sizeKb": 2265.8
+      "name": "PortalRedOpen",
+      "path": "assets/prefabs/arpg/Demo/Portals/PortalRedOpen.prefab",
+      "sizeKb": 71.2
     },
     {
-      "name": "Level_151",
-      "path": "assets/resources/screw/levels/Level_151.prefab",
-      "sizeKb": 906.3
+      "name": "PortalYellowClose",
+      "path": "assets/prefabs/arpg/Demo/Portals/PortalYellowClose.prefab",
+      "sizeKb": 74.3
     },
     {
-      "name": "Level_152",
-      "path": "assets/resources/screw/levels/Level_152.prefab",
-      "sizeKb": 868
+      "name": "PortalYellowIdle",
+      "path": "assets/prefabs/arpg/Demo/Portals/PortalYellowIdle.prefab",
+      "sizeKb": 52.7
     },
     {
-      "name": "Level_153",
-      "path": "assets/resources/screw/levels/Level_153.prefab",
-      "sizeKb": 870.9
+      "name": "PortalYellowOpen",
+      "path": "assets/prefabs/arpg/Demo/Portals/PortalYellowOpen.prefab",
+      "sizeKb": 71.2
     },
     {
-      "name": "Level_154",
-      "path": "assets/resources/screw/levels/Level_154.prefab",
-      "sizeKb": 1062
+      "name": "PurplePortal",
+      "path": "assets/prefabs/arpg/Demo/Portals/PurplePortal.prefab",
+      "sizeKb": 1.9
     },
     {
-      "name": "Level_155",
-      "path": "assets/resources/screw/levels/Level_155.prefab",
-      "sizeKb": 1120.1
+      "name": "RedPortal",
+      "path": "assets/prefabs/arpg/Demo/Portals/RedPortal.prefab",
+      "sizeKb": 1.9
     },
     {
-      "name": "Level_156",
-      "path": "assets/resources/screw/levels/Level_156.prefab",
-      "sizeKb": 1155
+      "name": "YellowPortal",
+      "path": "assets/prefabs/arpg/Demo/Portals/YellowPortal.prefab",
+      "sizeKb": 1.9
     },
     {
-      "name": "Level_157",
-      "path": "assets/resources/screw/levels/Level_157.prefab",
-      "sizeKb": 307.5
+      "name": "DoorwayGlowEntrance",
+      "path": "assets/prefabs/arpg/Environment/Doorways/DoorwayGlowEntrance.prefab",
+      "sizeKb": 49
     },
     {
-      "name": "Level_158",
-      "path": "assets/resources/screw/levels/Level_158.prefab",
-      "sizeKb": 548.3
+      "name": "DoorwayGlowExit",
+      "path": "assets/prefabs/arpg/Environment/Doorways/DoorwayGlowExit.prefab",
+      "sizeKb": 48.3
     },
     {
-      "name": "Level_159",
-      "path": "assets/resources/screw/levels/Level_159.prefab",
-      "sizeKb": 460.3
+      "name": "FireNatural",
+      "path": "assets/prefabs/arpg/Environment/Fire/Fire/FireNatural.prefab",
+      "sizeKb": 86.3
     },
     {
-      "name": "Level_16",
-      "path": "assets/resources/screw/levels/Level_16.prefab",
-      "sizeKb": 566.6
+      "name": "MagicFireBlue",
+      "path": "assets/prefabs/arpg/Environment/Fire/Fire/MagicFireBlue.prefab",
+      "sizeKb": 86.5
     },
     {
-      "name": "Level_160",
-      "path": "assets/resources/screw/levels/Level_160.prefab",
-      "sizeKb": 560.5
+      "name": "MagicFireGreen",
+      "path": "assets/prefabs/arpg/Environment/Fire/Fire/MagicFireGreen.prefab",
+      "sizeKb": 86.5
     },
     {
-      "name": "Level_161_2",
-      "path": "assets/resources/screw/levels/Level_161_2.prefab",
-      "sizeKb": 567.6
+      "name": "MagicFirePurple",
+      "path": "assets/prefabs/arpg/Environment/Fire/Fire/MagicFirePurple.prefab",
+      "sizeKb": 86.5
     },
     {
-      "name": "Level_162",
-      "path": "assets/resources/screw/levels/Level_162.prefab",
-      "sizeKb": 582.1
+      "name": "MagicFireRed",
+      "path": "assets/prefabs/arpg/Environment/Fire/Fire/MagicFireRed.prefab",
+      "sizeKb": 86.5
     },
     {
-      "name": "Level_163",
-      "path": "assets/resources/screw/levels/Level_163.prefab",
-      "sizeKb": 1056.6
+      "name": "MagicTorchBlue",
+      "path": "assets/prefabs/arpg/Environment/Fire/Torch/MagicTorchBlue.prefab",
+      "sizeKb": 83.4
     },
     {
-      "name": "Level_164",
-      "path": "assets/resources/screw/levels/Level_164.prefab",
-      "sizeKb": 538.3
+      "name": "MagicTorchGreen",
+      "path": "assets/prefabs/arpg/Environment/Fire/Torch/MagicTorchGreen.prefab",
+      "sizeKb": 83.4
     },
     {
-      "name": "Level_165",
-      "path": "assets/resources/screw/levels/Level_165.prefab",
-      "sizeKb": 606.1
+      "name": "MagicTorchPurple",
+      "path": "assets/prefabs/arpg/Environment/Fire/Torch/MagicTorchPurple.prefab",
+      "sizeKb": 83.4
     },
     {
-      "name": "Level_166",
-      "path": "assets/resources/screw/levels/Level_166.prefab",
-      "sizeKb": 1281.5
+      "name": "MagicTorchRed",
+      "path": "assets/prefabs/arpg/Environment/Fire/Torch/MagicTorchRed.prefab",
+      "sizeKb": 83.4
     },
     {
-      "name": "Level_167",
-      "path": "assets/resources/screw/levels/Level_167.prefab",
-      "sizeKb": 1115.1
+      "name": "TorchFireNatural",
+      "path": "assets/prefabs/arpg/Environment/Fire/Torch/TorchFireNatural.prefab",
+      "sizeKb": 83.4
     },
     {
-      "name": "Level_168",
-      "path": "assets/resources/screw/levels/Level_168.prefab",
-      "sizeKb": 982.9
+      "name": "BlowingLeaves",
+      "path": "assets/prefabs/arpg/Environment/Weather/BlowingLeaves.prefab",
+      "sizeKb": 26.7
     },
     {
-      "name": "Level_169",
-      "path": "assets/resources/screw/levels/Level_169.prefab",
-      "sizeKb": 1471
+      "name": "DrippingWater",
+      "path": "assets/prefabs/arpg/Environment/Weather/DrippingWater.prefab",
+      "sizeKb": 72
     },
     {
-      "name": "Level_17",
-      "path": "assets/resources/screw/levels/Level_17.prefab",
-      "sizeKb": 538
+      "name": "GroundFog",
+      "path": "assets/prefabs/arpg/Environment/Weather/GroundFog.prefab",
+      "sizeKb": 21.9
     },
     {
-      "name": "Level_170",
-      "path": "assets/resources/screw/levels/Level_170.prefab",
-      "sizeKb": 1599.4
+      "name": "Rain",
+      "path": "assets/prefabs/arpg/Environment/Weather/Rain.prefab",
+      "sizeKb": 69.9
     },
     {
-      "name": "Level_171",
-      "path": "assets/resources/screw/levels/Level_171.prefab",
-      "sizeKb": 962.1
+      "name": "ClickMoveArrows",
+      "path": "assets/prefabs/arpg/Interactive/Actions/ClickMoveArrows.prefab",
+      "sizeKb": 49.1
     },
     {
-      "name": "Level_172",
-      "path": "assets/resources/screw/levels/Level_172.prefab",
-      "sizeKb": 1304.9
+      "name": "ClickMoveCircle",
+      "path": "assets/prefabs/arpg/Interactive/Actions/ClickMoveCircle.prefab",
+      "sizeKb": 23.3
     },
     {
-      "name": "Level_173",
-      "path": "assets/resources/screw/levels/Level_173.prefab",
-      "sizeKb": 999.9
+      "name": "IdentifyChannel",
+      "path": "assets/prefabs/arpg/Interactive/Actions/IdentifyChannel.prefab",
+      "sizeKb": 74
     },
     {
-      "name": "Level_174",
-      "path": "assets/resources/screw/levels/Level_174.prefab",
-      "sizeKb": 1604.3
+      "name": "IdentifyFinish",
+      "path": "assets/prefabs/arpg/Interactive/Actions/IdentifyFinish.prefab",
+      "sizeKb": 72.3
     },
     {
-      "name": "Level_175",
-      "path": "assets/resources/screw/levels/Level_175.prefab",
-      "sizeKb": 1536.4
+      "name": "ItemPickup",
+      "path": "assets/prefabs/arpg/Interactive/Actions/ItemPickup.prefab",
+      "sizeKb": 50.7
     },
     {
-      "name": "Level_176",
-      "path": "assets/resources/screw/levels/Level_176.prefab",
-      "sizeKb": 957
+      "name": "ItemPickup2",
+      "path": "assets/prefabs/arpg/Interactive/Actions/ItemPickup2.prefab",
+      "sizeKb": 47.3
     },
     {
-      "name": "Level_177",
-      "path": "assets/resources/screw/levels/Level_177.prefab",
-      "sizeKb": 841.7
+      "name": "LevelUp",
+      "path": "assets/prefabs/arpg/Interactive/Actions/LevelUp.prefab",
+      "sizeKb": 101.1
     },
     {
-      "name": "Level_178",
-      "path": "assets/resources/screw/levels/Level_178.prefab",
-      "sizeKb": 828.9
+      "name": "TeleportChannel",
+      "path": "assets/prefabs/arpg/Interactive/Actions/TeleportChannel.prefab",
+      "sizeKb": 74
     },
     {
-      "name": "Level_180",
-      "path": "assets/resources/screw/levels/Level_180.prefab",
-      "sizeKb": 540.2
+      "name": "TeleportFinish",
+      "path": "assets/prefabs/arpg/Interactive/Actions/TeleportFinish.prefab",
+      "sizeKb": 72.1
     },
     {
-      "name": "Level_181",
-      "path": "assets/resources/screw/levels/Level_181.prefab",
-      "sizeKb": 452.6
+      "name": "IconExclamation",
+      "path": "assets/prefabs/arpg/Interactive/Icons/2D Beveled/IconExclamation.prefab",
+      "sizeKb": 72.6
     },
     {
-      "name": "Level_182",
-      "path": "assets/resources/screw/levels/Level_182.prefab",
-      "sizeKb": 474.8
+      "name": "IconQuestion",
+      "path": "assets/prefabs/arpg/Interactive/Icons/2D Beveled/IconQuestion.prefab",
+      "sizeKb": 72.6
     },
     {
-      "name": "Level_184",
-      "path": "assets/resources/screw/levels/Level_184.prefab",
-      "sizeKb": 524.6
+      "name": "IconReward",
+      "path": "assets/prefabs/arpg/Interactive/Icons/2D Beveled/IconReward.prefab",
+      "sizeKb": 72.6
     },
     {
-      "name": "Level_186",
-      "path": "assets/resources/screw/levels/Level_186.prefab",
-      "sizeKb": 1076.3
+      "name": "IconWhiteExclamation",
+      "path": "assets/prefabs/arpg/Interactive/Icons/2D White/IconWhiteExclamation.prefab",
+      "sizeKb": 72.7
     },
     {
-      "name": "Level_187",
-      "path": "assets/resources/screw/levels/Level_187.prefab",
-      "sizeKb": 1112.5
+      "name": "IconWhiteQuestion",
+      "path": "assets/prefabs/arpg/Interactive/Icons/2D White/IconWhiteQuestion.prefab",
+      "sizeKb": 72.6
     },
     {
-      "name": "Level_188",
-      "path": "assets/resources/screw/levels/Level_188.prefab",
-      "sizeKb": 1001.8
+      "name": "IconWhiteReward",
+      "path": "assets/prefabs/arpg/Interactive/Icons/2D White/IconWhiteReward.prefab",
+      "sizeKb": 72.6
     },
     {
-      "name": "Level_189",
-      "path": "assets/resources/screw/levels/Level_189.prefab",
-      "sizeKb": 1031
+      "name": "IconWhiteSpeech",
+      "path": "assets/prefabs/arpg/Interactive/Icons/2D White/IconWhiteSpeech.prefab",
+      "sizeKb": 72.6
     },
     {
-      "name": "Level_19",
-      "path": "assets/resources/screw/levels/Level_19.prefab",
-      "sizeKb": 473.9
+      "name": "IconExclamation3D",
+      "path": "assets/prefabs/arpg/Interactive/Icons/3D Round/IconExclamation3D.prefab",
+      "sizeKb": 70.1
     },
     {
-      "name": "Level_190",
-      "path": "assets/resources/screw/levels/Level_190.prefab",
-      "sizeKb": 1657
+      "name": "IconQuestion3D",
+      "path": "assets/prefabs/arpg/Interactive/Icons/3D Round/IconQuestion3D.prefab",
+      "sizeKb": 70.1
     },
     {
-      "name": "Level_191_2",
-      "path": "assets/resources/screw/levels/Level_191_2.prefab",
-      "sizeKb": 798.1
+      "name": "IconStar3D",
+      "path": "assets/prefabs/arpg/Interactive/Icons/3D Round/IconStar3D.prefab",
+      "sizeKb": 71.3
     },
     {
-      "name": "Level_192",
-      "path": "assets/resources/screw/levels/Level_192.prefab",
-      "sizeKb": 613.1
+      "name": "VerticalIconExclamationMark3D",
+      "path": "assets/prefabs/arpg/Interactive/Icons/3D Vertical/VerticalIconExclamationMark3D.prefab",
+      "sizeKb": 75.9
     },
     {
-      "name": "Level_1_1",
-      "path": "assets/resources/screw/levels/Level_1_1.prefab",
-      "sizeKb": 73.5
+      "name": "VerticalIconQuestionMark3D",
+      "path": "assets/prefabs/arpg/Interactive/Icons/3D Vertical/VerticalIconQuestionMark3D.prefab",
+      "sizeKb": 76
     },
     {
-      "name": "Level_20",
-      "path": "assets/resources/screw/levels/Level_20.prefab",
-      "sizeKb": 1526
+      "name": "VerticalIconStar3D",
+      "path": "assets/prefabs/arpg/Interactive/Icons/3D Vertical/VerticalIconStar3D.prefab",
+      "sizeKb": 77.1
     },
     {
-      "name": "Level_201",
-      "path": "assets/resources/screw/levels/Level_201.prefab",
-      "sizeKb": 61.7
+      "name": "PortalBlueClose",
+      "path": "assets/prefabs/arpg/Interactive/Portals/Blue/PortalBlueClose.prefab",
+      "sizeKb": 76.9
     },
     {
-      "name": "Level_202",
-      "path": "assets/resources/screw/levels/Level_202.prefab",
-      "sizeKb": 226
+      "name": "PortalBlueIdle",
+      "path": "assets/prefabs/arpg/Interactive/Portals/Blue/PortalBlueIdle.prefab",
+      "sizeKb": 54.8
     },
     {
-      "name": "Level_203",
-      "path": "assets/resources/screw/levels/Level_203.prefab",
-      "sizeKb": 650.7
+      "name": "PortalBlueOpen",
+      "path": "assets/prefabs/arpg/Interactive/Portals/Blue/PortalBlueOpen.prefab",
+      "sizeKb": 72.9
     },
     {
-      "name": "Level_204",
-      "path": "assets/resources/screw/levels/Level_204.prefab",
-      "sizeKb": 1042.8
+      "name": "PortalGreenClose",
+      "path": "assets/prefabs/arpg/Interactive/Portals/Green/PortalGreenClose.prefab",
+      "sizeKb": 76
     },
     {
-      "name": "Level_205",
-      "path": "assets/resources/screw/levels/Level_205.prefab",
-      "sizeKb": 473
+      "name": "PortalGreenIdle",
+      "path": "assets/prefabs/arpg/Interactive/Portals/Green/PortalGreenIdle.prefab",
+      "sizeKb": 55
     },
     {
-      "name": "Level_206",
-      "path": "assets/resources/screw/levels/Level_206.prefab",
-      "sizeKb": 422
+      "name": "PortalGreenOpen",
+      "path": "assets/prefabs/arpg/Interactive/Portals/Green/PortalGreenOpen.prefab",
+      "sizeKb": 73.4
     },
     {
-      "name": "Level_207",
-      "path": "assets/resources/screw/levels/Level_207.prefab",
-      "sizeKb": 1085.1
+      "name": "PortalPurpleClose",
+      "path": "assets/prefabs/arpg/Interactive/Portals/Purple/PortalPurpleClose.prefab",
+      "sizeKb": 76
     },
     {
-      "name": "Level_208",
-      "path": "assets/resources/screw/levels/Level_208.prefab",
-      "sizeKb": 531
+      "name": "PortalPurpleIdle",
+      "path": "assets/prefabs/arpg/Interactive/Portals/Purple/PortalPurpleIdle.prefab",
+      "sizeKb": 54.4
     },
     {
-      "name": "Level_209",
-      "path": "assets/resources/screw/levels/Level_209.prefab",
-      "sizeKb": 861.4
+      "name": "PortalPurpleOpen",
+      "path": "assets/prefabs/arpg/Interactive/Portals/Purple/PortalPurpleOpen.prefab",
+      "sizeKb": 72.9
     },
     {
-      "name": "Level_21",
-      "path": "assets/resources/screw/levels/Level_21.prefab",
-      "sizeKb": 267.7
+      "name": "PortalRedClose",
+      "path": "assets/prefabs/arpg/Interactive/Portals/Red/PortalRedClose.prefab",
+      "sizeKb": 76
     },
     {
-      "name": "Level_210",
-      "path": "assets/resources/screw/levels/Level_210.prefab",
-      "sizeKb": 630.4
+      "name": "PortalRedIdle",
+      "path": "assets/prefabs/arpg/Interactive/Portals/Red/PortalRedIdle.prefab",
+      "sizeKb": 54.4
     },
     {
-      "name": "Level_211",
-      "path": "assets/resources/screw/levels/Level_211.prefab",
-      "sizeKb": 687.1
+      "name": "PortalRedOpen",
+      "path": "assets/prefabs/arpg/Interactive/Portals/Red/PortalRedOpen.prefab",
+      "sizeKb": 72.9
     },
     {
-      "name": "Level_212",
-      "path": "assets/resources/screw/levels/Level_212.prefab",
-      "sizeKb": 316.4
+      "name": "PortalYellowClose",
+      "path": "assets/prefabs/arpg/Interactive/Portals/Yellow/PortalYellowClose.prefab",
+      "sizeKb": 76
     },
     {
-      "name": "Level_22",
-      "path": "assets/resources/screw/levels/Level_22.prefab",
-      "sizeKb": 462.7
+      "name": "PortalYellowIdle",
+      "path": "assets/prefabs/arpg/Interactive/Portals/Yellow/PortalYellowIdle.prefab",
+      "sizeKb": 54.4
     },
     {
-      "name": "Level_23",
-      "path": "assets/resources/screw/levels/Level_23.prefab",
-      "sizeKb": 534.2
+      "name": "PortalYellowOpen",
+      "path": "assets/prefabs/arpg/Interactive/Portals/Yellow/PortalYellowOpen.prefab",
+      "sizeKb": 72.9
     },
     {
-      "name": "Level_24",
-      "path": "assets/resources/screw/levels/Level_24.prefab",
-      "sizeKb": 582.3
+      "name": "GoldShrine",
+      "path": "assets/prefabs/arpg/Interactive/Shrines/GoldShrine.prefab",
+      "sizeKb": 58.5
     },
     {
-      "name": "Level_25",
-      "path": "assets/resources/screw/levels/Level_25.prefab",
-      "sizeKb": 1222.2
+      "name": "HealthShrine",
+      "path": "assets/prefabs/arpg/Interactive/Shrines/HealthShrine.prefab",
+      "sizeKb": 58.5
     },
     {
-      "name": "Level_26",
-      "path": "assets/resources/screw/levels/Level_26.prefab",
-      "sizeKb": 329
+      "name": "ManaShrine",
+      "path": "assets/prefabs/arpg/Interactive/Shrines/ManaShrine.prefab",
+      "sizeKb": 58.5
     },
     {
-      "name": "Level_27",
-      "path": "assets/resources/screw/levels/Level_27.prefab",
-      "sizeKb": 357.8
+      "name": "WaterShrine",
+      "path": "assets/prefabs/arpg/Interactive/Shrines/WaterShrine.prefab",
+      "sizeKb": 58.5
     },
     {
-      "name": "Level_28",
-      "path": "assets/resources/screw/levels/Level_28.prefab",
-      "sizeKb": 850.3
+      "name": "QuestZoneBlue",
+      "path": "assets/prefabs/arpg/Interactive/Zones/Zone 1/QuestZoneBlue.prefab",
+      "sizeKb": 92.7
     },
     {
-      "name": "Level_29",
-      "path": "assets/resources/screw/levels/Level_29.prefab",
-      "sizeKb": 1250.2
+      "name": "QuestZoneGreen",
+      "path": "assets/prefabs/arpg/Interactive/Zones/Zone 1/QuestZoneGreen.prefab",
+      "sizeKb": 92.7
     },
     {
-      "name": "Level_2_1",
-      "path": "assets/resources/screw/levels/Level_2_1.prefab",
-      "sizeKb": 277.3
+      "name": "QuestZonePurple",
+      "path": "assets/prefabs/arpg/Interactive/Zones/Zone 1/QuestZonePurple.prefab",
+      "sizeKb": 92.8
     },
     {
-      "name": "Level_3",
-      "path": "assets/resources/screw/levels/Level_3.prefab",
-      "sizeKb": 346.7
+      "name": "QuestZoneRed",
+      "path": "assets/prefabs/arpg/Interactive/Zones/Zone 1/QuestZoneRed.prefab",
+      "sizeKb": 92.7
     },
     {
-      "name": "Level_30",
-      "path": "assets/resources/screw/levels/Level_30.prefab",
-      "sizeKb": 642.1
+      "name": "QuestZoneWhite",
+      "path": "assets/prefabs/arpg/Interactive/Zones/Zone 1/QuestZoneWhite.prefab",
+      "sizeKb": 92.8
     },
     {
-      "name": "Level_31",
-      "path": "assets/resources/screw/levels/Level_31.prefab",
-      "sizeKb": 1585.8
+      "name": "QuestZoneYellow",
+      "path": "assets/prefabs/arpg/Interactive/Zones/Zone 1/QuestZoneYellow.prefab",
+      "sizeKb": 92.8
     },
     {
-      "name": "Level_32",
-      "path": "assets/resources/screw/levels/Level_32.prefab",
-      "sizeKb": 997.9
+      "name": "QuestZone2Blue",
+      "path": "assets/prefabs/arpg/Interactive/Zones/Zone 2/QuestZone2Blue.prefab",
+      "sizeKb": 73.8
     },
     {
-      "name": "Level_33",
-      "path": "assets/resources/screw/levels/Level_33.prefab",
-      "sizeKb": 641.5
+      "name": "QuestZone2Green",
+      "path": "assets/prefabs/arpg/Interactive/Zones/Zone 2/QuestZone2Green.prefab",
+      "sizeKb": 73.8
     },
     {
-      "name": "Level_34",
-      "path": "assets/resources/screw/levels/Level_34.prefab",
-      "sizeKb": 490
+      "name": "QuestZone2Purple",
+      "path": "assets/prefabs/arpg/Interactive/Zones/Zone 2/QuestZone2Purple.prefab",
+      "sizeKb": 73.8
     },
     {
-      "name": "Level_35",
-      "path": "assets/resources/screw/levels/Level_35.prefab",
-      "sizeKb": 634
+      "name": "QuestZone2Red",
+      "path": "assets/prefabs/arpg/Interactive/Zones/Zone 2/QuestZone2Red.prefab",
+      "sizeKb": 73.8
     },
     {
-      "name": "Level_36",
-      "path": "assets/resources/screw/levels/Level_36.prefab",
-      "sizeKb": 1242.7
+      "name": "QuestZone2White",
+      "path": "assets/prefabs/arpg/Interactive/Zones/Zone 2/QuestZone2White.prefab",
+      "sizeKb": 73.8
     },
     {
-      "name": "Level_37",
-      "path": "assets/resources/screw/levels/Level_37.prefab",
-      "sizeKb": 664.2
+      "name": "QuestZone2Yellow",
+      "path": "assets/prefabs/arpg/Interactive/Zones/Zone 2/QuestZone2Yellow.prefab",
+      "sizeKb": 73.8
     },
     {
-      "name": "Level_38_2",
-      "path": "assets/resources/screw/levels/Level_38_2.prefab",
-      "sizeKb": 852.6
+      "name": "ChestLv1Glow",
+      "path": "assets/prefabs/arpg/Loot/Chests/ChestLv1Glow.prefab",
+      "sizeKb": 74.1
     },
     {
-      "name": "Level_39",
-      "path": "assets/resources/screw/levels/Level_39.prefab",
-      "sizeKb": 1178.7
+      "name": "ChestLv1Open",
+      "path": "assets/prefabs/arpg/Loot/Chests/ChestLv1Open.prefab",
+      "sizeKb": 114.6
     },
     {
-      "name": "Level_4",
-      "path": "assets/resources/screw/levels/Level_4.prefab",
-      "sizeKb": 468.6
+      "name": "ChestLv2Glow",
+      "path": "assets/prefabs/arpg/Loot/Chests/ChestLv2Glow.prefab",
+      "sizeKb": 50.3
     },
     {
-      "name": "Level_40",
-      "path": "assets/resources/screw/levels/Level_40.prefab",
-      "sizeKb": 712
+      "name": "ChestLv2Open",
+      "path": "assets/prefabs/arpg/Loot/Chests/ChestLv2Open.prefab",
+      "sizeKb": 114.6
     },
     {
-      "name": "Level_41",
-      "path": "assets/resources/screw/levels/Level_41.prefab",
-      "sizeKb": 832.7
+      "name": "ChestLv3Glow",
+      "path": "assets/prefabs/arpg/Loot/Chests/ChestLv3Glow.prefab",
+      "sizeKb": 49.6
     },
     {
-      "name": "Level_42",
-      "path": "assets/resources/screw/levels/Level_42.prefab",
-      "sizeKb": 828.5
+      "name": "ChestLv3Open",
+      "path": "assets/prefabs/arpg/Loot/Chests/ChestLv3Open.prefab",
+      "sizeKb": 123.5
     },
     {
-      "name": "Level_43",
-      "path": "assets/resources/screw/levels/Level_43.prefab",
-      "sizeKb": 1153.3
+      "name": "ChestLv4Glow",
+      "path": "assets/prefabs/arpg/Loot/Chests/ChestLv4Glow.prefab",
+      "sizeKb": 49.6
     },
     {
-      "name": "Level_44",
-      "path": "assets/resources/screw/levels/Level_44.prefab",
-      "sizeKb": 555.8
+      "name": "ChestLv4Open",
+      "path": "assets/prefabs/arpg/Loot/Chests/ChestLv4Open.prefab",
+      "sizeKb": 123.5
     },
     {
-      "name": "Level_45",
-      "path": "assets/resources/screw/levels/Level_45.prefab",
-      "sizeKb": 1762.8
+      "name": "ItemGemBlue",
+      "path": "assets/prefabs/arpg/Loot/Gems/ItemGemBlue.prefab",
+      "sizeKb": 49.6
     },
     {
-      "name": "Level_46",
-      "path": "assets/resources/screw/levels/Level_46.prefab",
-      "sizeKb": 947.7
+      "name": "ItemGemGreen",
+      "path": "assets/prefabs/arpg/Loot/Gems/ItemGemGreen.prefab",
+      "sizeKb": 49.6
     },
     {
-      "name": "Level_47",
-      "path": "assets/resources/screw/levels/Level_47.prefab",
-      "sizeKb": 443.4
+      "name": "ItemGemOrange",
+      "path": "assets/prefabs/arpg/Loot/Gems/ItemGemOrange.prefab",
+      "sizeKb": 49.6
     },
     {
-      "name": "Level_48",
-      "path": "assets/resources/screw/levels/Level_48.prefab",
-      "sizeKb": 854.1
+      "name": "ItemGemPurple",
+      "path": "assets/prefabs/arpg/Loot/Gems/ItemGemPurple.prefab",
+      "sizeKb": 49.6
     },
     {
-      "name": "Level_49",
-      "path": "assets/resources/screw/levels/Level_49.prefab",
-      "sizeKb": 473.5
+      "name": "ItemGemRed",
+      "path": "assets/prefabs/arpg/Loot/Gems/ItemGemRed.prefab",
+      "sizeKb": 49.6
     },
     {
-      "name": "Level_5",
-      "path": "assets/resources/screw/levels/Level_5.prefab",
-      "sizeKb": 394.8
+      "name": "ItemGemWhite",
+      "path": "assets/prefabs/arpg/Loot/Gems/ItemGemWhite.prefab",
+      "sizeKb": 49.6
     },
     {
-      "name": "Level_50",
-      "path": "assets/resources/screw/levels/Level_50.prefab",
-      "sizeKb": 1163.7
+      "name": "GoldBig",
+      "path": "assets/prefabs/arpg/Loot/Gold/GoldBig.prefab",
+      "sizeKb": 48.6
     },
     {
-      "name": "Level_51",
-      "path": "assets/resources/screw/levels/Level_51.prefab",
-      "sizeKb": 1171.3
+      "name": "GoldSmall",
+      "path": "assets/prefabs/arpg/Loot/Gold/GoldSmall.prefab",
+      "sizeKb": 48.6
     },
     {
-      "name": "Level_52_2",
-      "path": "assets/resources/screw/levels/Level_52_2.prefab",
-      "sizeKb": 1028.6
+      "name": "CircleItemBlue",
+      "path": "assets/prefabs/arpg/Loot/Items/Circle Item/CircleItemBlue.prefab",
+      "sizeKb": 73.3
     },
     {
-      "name": "Level_53",
-      "path": "assets/resources/screw/levels/Level_53.prefab",
-      "sizeKb": 329.2
+      "name": "CircleItemGold",
+      "path": "assets/prefabs/arpg/Loot/Items/Circle Item/CircleItemGold.prefab",
+      "sizeKb": 73.3
     },
     {
-      "name": "Level_54_4",
-      "path": "assets/resources/screw/levels/Level_54_4.prefab",
-      "sizeKb": 1504.6
+      "name": "CircleItemGreen",
+      "path": "assets/prefabs/arpg/Loot/Items/Circle Item/CircleItemGreen.prefab",
+      "sizeKb": 73.3
     },
     {
-      "name": "Level_55",
-      "path": "assets/resources/screw/levels/Level_55.prefab",
-      "sizeKb": 662
+      "name": "CircleItemPurple",
+      "path": "assets/prefabs/arpg/Loot/Items/Circle Item/CircleItemPurple.prefab",
+      "sizeKb": 73.3
     },
     {
-      "name": "Level_56",
-      "path": "assets/resources/screw/levels/Level_56.prefab",
-      "sizeKb": 1387.5
+      "name": "CircleItemRed",
+      "path": "assets/prefabs/arpg/Loot/Items/Circle Item/CircleItemRed.prefab",
+      "sizeKb": 73.3
     },
     {
-      "name": "Level_57",
-      "path": "assets/resources/screw/levels/Level_57.prefab",
-      "sizeKb": 549
+      "name": "CircleItemWhite",
+      "path": "assets/prefabs/arpg/Loot/Items/Circle Item/CircleItemWhite.prefab",
+      "sizeKb": 73.3
     },
     {
-      "name": "Level_58",
-      "path": "assets/resources/screw/levels/Level_58.prefab",
-      "sizeKb": 784
+      "name": "CircleItemYellow",
+      "path": "assets/prefabs/arpg/Loot/Items/Circle Item/CircleItemYellow.prefab",
+      "sizeKb": 73.3
     },
     {
-      "name": "Level_59",
-      "path": "assets/resources/screw/levels/Level_59.prefab",
-      "sizeKb": 1117.1
+      "name": "ItemEpicGreen",
+      "path": "assets/prefabs/arpg/Loot/Items/Epic Item/ItemEpicGreen.prefab",
+      "sizeKb": 124.6
     },
     {
-      "name": "Level_6",
-      "path": "assets/resources/screw/levels/Level_6.prefab",
-      "sizeKb": 499.5
+      "name": "ItemEpicModular",
+      "path": "assets/prefabs/arpg/Loot/Items/Epic Item/ItemEpicModular.prefab",
+      "sizeKb": 124.6
     },
     {
-      "name": "Level_60",
-      "path": "assets/resources/screw/levels/Level_60.prefab",
-      "sizeKb": 1661.4
+      "name": "ItemEpicOrange",
+      "path": "assets/prefabs/arpg/Loot/Items/Epic Item/ItemEpicOrange.prefab",
+      "sizeKb": 124.6
     },
     {
-      "name": "Level_61",
-      "path": "assets/resources/screw/levels/Level_61.prefab",
-      "sizeKb": 422.3
+      "name": "ItemEpicPurple",
+      "path": "assets/prefabs/arpg/Loot/Items/Epic Item/ItemEpicPurple.prefab",
+      "sizeKb": 124.6
     },
     {
-      "name": "Level_62",
-      "path": "assets/resources/screw/levels/Level_62.prefab",
-      "sizeKb": 1013
+      "name": "ItemEpicRed",
+      "path": "assets/prefabs/arpg/Loot/Items/Epic Item/ItemEpicRed.prefab",
+      "sizeKb": 124.6
     },
     {
-      "name": "Level_64",
-      "path": "assets/resources/screw/levels/Level_64.prefab",
-      "sizeKb": 811.2
+      "name": "ItemBlueEssence",
+      "path": "assets/prefabs/arpg/Loot/Items/Essence Item/ItemBlueEssence.prefab",
+      "sizeKb": 72.1
     },
     {
-      "name": "Level_65",
-      "path": "assets/resources/screw/levels/Level_65.prefab",
-      "sizeKb": 2210
+      "name": "ItemDarkEssence",
+      "path": "assets/prefabs/arpg/Loot/Items/Essence Item/ItemDarkEssence.prefab",
+      "sizeKb": 72.1
     },
     {
-      "name": "Level_66",
-      "path": "assets/resources/screw/levels/Level_66.prefab",
-      "sizeKb": 502.8
+      "name": "ItemGreenEssence",
+      "path": "assets/prefabs/arpg/Loot/Items/Essence Item/ItemGreenEssence.prefab",
+      "sizeKb": 72.1
     },
     {
-      "name": "Level_67",
-      "path": "assets/resources/screw/levels/Level_67.prefab",
-      "sizeKb": 1250.3
+      "name": "ItemOrangeEssence",
+      "path": "assets/prefabs/arpg/Loot/Items/Essence Item/ItemOrangeEssence.prefab",
+      "sizeKb": 72.1
     },
     {
-      "name": "Level_68",
-      "path": "assets/resources/screw/levels/Level_68.prefab",
-      "sizeKb": 533.2
+      "name": "ItemPurpleEssence",
+      "path": "assets/prefabs/arpg/Loot/Items/Essence Item/ItemPurpleEssence.prefab",
+      "sizeKb": 72.1
     },
     {
-      "name": "Level_69",
-      "path": "assets/resources/screw/levels/Level_69.prefab",
-      "sizeKb": 1552.4
+      "name": "ItemRedEssence",
+      "path": "assets/prefabs/arpg/Loot/Items/Essence Item/ItemRedEssence.prefab",
+      "sizeKb": 72.1
     },
     {
-      "name": "Level_7",
-      "path": "assets/resources/screw/levels/Level_7.prefab",
-      "sizeKb": 487.3
+      "name": "ItemWhiteEssence",
+      "path": "assets/prefabs/arpg/Loot/Items/Essence Item/ItemWhiteEssence.prefab",
+      "sizeKb": 72.1
     },
     {
-      "name": "Level_70",
-      "path": "assets/resources/screw/levels/Level_70.prefab",
-      "sizeKb": 922.4
+      "name": "ItemYellowEssence",
+      "path": "assets/prefabs/arpg/Loot/Items/Essence Item/ItemYellowEssence.prefab",
+      "sizeKb": 72.1
     },
     {
-      "name": "Level_71",
-      "path": "assets/resources/screw/levels/Level_71.prefab",
-      "sizeKb": 680
+      "name": "ItemGlowBlue",
+      "path": "assets/prefabs/arpg/Loot/Items/Glow Item/ItemGlowBlue.prefab",
+      "sizeKb": 50.6
     },
     {
-      "name": "Level_72",
-      "path": "assets/resources/screw/levels/Level_72.prefab",
-      "sizeKb": 859
+      "name": "ItemGlowNormal",
+      "path": "assets/prefabs/arpg/Loot/Items/Glow Item/ItemGlowNormal.prefab",
+      "sizeKb": 50.6
     },
     {
-      "name": "Level_73",
-      "path": "assets/resources/screw/levels/Level_73.prefab",
-      "sizeKb": 616.4
+      "name": "ItemGlowOrange",
+      "path": "assets/prefabs/arpg/Loot/Items/Glow Item/ItemGlowOrange.prefab",
+      "sizeKb": 50.6
     },
     {
-      "name": "Level_74",
-      "path": "assets/resources/screw/levels/Level_74.prefab",
-      "sizeKb": 1431.9
+      "name": "ItemGlowYellow",
+      "path": "assets/prefabs/arpg/Loot/Items/Glow Item/ItemGlowYellow.prefab",
+      "sizeKb": 50.6
     },
     {
-      "name": "Level_75",
-      "path": "assets/resources/screw/levels/Level_75.prefab",
-      "sizeKb": 916.5
+      "name": "ItemRune01",
+      "path": "assets/prefabs/arpg/Loot/Items/Runes/ItemRune01.prefab",
+      "sizeKb": 52.4
     },
     {
-      "name": "Level_76",
-      "path": "assets/resources/screw/levels/Level_76.prefab",
-      "sizeKb": 1119.3
+      "name": "ItemRune02",
+      "path": "assets/prefabs/arpg/Loot/Items/Runes/ItemRune02.prefab",
+      "sizeKb": 72.6
     },
     {
-      "name": "Level_77",
-      "path": "assets/resources/screw/levels/Level_77.prefab",
-      "sizeKb": 575.5
+      "name": "ItemRune03",
+      "path": "assets/prefabs/arpg/Loot/Items/Runes/ItemRune03.prefab",
+      "sizeKb": 72.8
     },
     {
-      "name": "Level_78",
-      "path": "assets/resources/screw/levels/Level_78.prefab",
-      "sizeKb": 639.3
+      "name": "ItemRune04",
+      "path": "assets/prefabs/arpg/Loot/Items/Runes/ItemRune04.prefab",
+      "sizeKb": 72.8
     },
     {
-      "name": "Level_79",
-      "path": "assets/resources/screw/levels/Level_79.prefab",
-      "sizeKb": 577.8
+      "name": "BlueOrbConsume",
+      "path": "assets/prefabs/arpg/Loot/Orb Consume/BlueOrbConsume.prefab",
+      "sizeKb": 50.2
     },
     {
-      "name": "Level_8",
-      "path": "assets/resources/screw/levels/Level_8.prefab",
-      "sizeKb": 705.2
+      "name": "DarkOrbConsume",
+      "path": "assets/prefabs/arpg/Loot/Orb Consume/DarkOrbConsume.prefab",
+      "sizeKb": 50.2
     },
     {
-      "name": "Level_80",
-      "path": "assets/resources/screw/levels/Level_80.prefab",
-      "sizeKb": 1889
+      "name": "GoldOrbConsume",
+      "path": "assets/prefabs/arpg/Loot/Orb Consume/GoldOrbConsume.prefab",
+      "sizeKb": 50.2
     },
     {
-      "name": "Level_81",
-      "path": "assets/resources/screw/levels/Level_81.prefab",
-      "sizeKb": 827.6
+      "name": "GreenOrbConsume",
+      "path": "assets/prefabs/arpg/Loot/Orb Consume/GreenOrbConsume.prefab",
+      "sizeKb": 50.2
     },
     {
-      "name": "Level_82",
-      "path": "assets/resources/screw/levels/Level_82.prefab",
-      "sizeKb": 956.7
+      "name": "HealthOrbConsume",
+      "path": "assets/prefabs/arpg/Loot/Orb Consume/HealthOrbConsume.prefab",
+      "sizeKb": 50.2
     },
     {
-      "name": "Level_83",
-      "path": "assets/resources/screw/levels/Level_83.prefab",
-      "sizeKb": 817.8
+      "name": "PurpleOrbConsume",
+      "path": "assets/prefabs/arpg/Loot/Orb Consume/PurpleOrbConsume.prefab",
+      "sizeKb": 50.2
     },
     {
-      "name": "Level_84",
-      "path": "assets/resources/screw/levels/Level_84.prefab",
-      "sizeKb": 748.1
+      "name": "WaterOrbConsume",
+      "path": "assets/prefabs/arpg/Loot/Orb Consume/WaterOrbConsume.prefab",
+      "sizeKb": 47.6
     },
     {
-      "name": "Level_85_2",
-      "path": "assets/resources/screw/levels/Level_85_2.prefab",
-      "sizeKb": 1840.8
+      "name": "WhiteOrbConsume",
+      "path": "assets/prefabs/arpg/Loot/Orb Consume/WhiteOrbConsume.prefab",
+      "sizeKb": 50.2
     },
     {
-      "name": "Level_86",
-      "path": "assets/resources/screw/levels/Level_86.prefab",
-      "sizeKb": 570.3
+      "name": "BlueOrb",
+      "path": "assets/prefabs/arpg/Loot/Orbs/BlueOrb.prefab",
+      "sizeKb": 97.3
     },
     {
-      "name": "Level_87",
-      "path": "assets/resources/screw/levels/Level_87.prefab",
-      "sizeKb": 787.5
+      "name": "DarkOrb",
+      "path": "assets/prefabs/arpg/Loot/Orbs/DarkOrb.prefab",
+      "sizeKb": 97.3
     },
     {
-      "name": "Level_88",
-      "path": "assets/resources/screw/levels/Level_88.prefab",
-      "sizeKb": 1244.1
+      "name": "GoldOrb",
+      "path": "assets/prefabs/arpg/Loot/Orbs/GoldOrb.prefab",
+      "sizeKb": 123.3
     },
     {
-      "name": "Level_89",
-      "path": "assets/resources/screw/levels/Level_89.prefab",
-      "sizeKb": 1230.6
+      "name": "GreenOrb",
+      "path": "assets/prefabs/arpg/Loot/Orbs/GreenOrb.prefab",
+      "sizeKb": 97.3
     },
     {
-      "name": "Level_9",
-      "path": "assets/resources/screw/levels/Level_9.prefab",
-      "sizeKb": 392.9
+      "name": "HealthOrb",
+      "path": "assets/prefabs/arpg/Loot/Orbs/HealthOrb.prefab",
+      "sizeKb": 95.5
     },
     {
-      "name": "Level_91",
-      "path": "assets/resources/screw/levels/Level_91.prefab",
-      "sizeKb": 531
+      "name": "PurpleOrb",
+      "path": "assets/prefabs/arpg/Loot/Orbs/PurpleOrb.prefab",
+      "sizeKb": 97.3
     },
     {
-      "name": "Level_92",
-      "path": "assets/resources/screw/levels/Level_92.prefab",
-      "sizeKb": 537.3
+      "name": "WaterOrb",
+      "path": "assets/prefabs/arpg/Loot/Orbs/WaterOrb.prefab",
+      "sizeKb": 124.7
     },
     {
-      "name": "Level_93",
-      "path": "assets/resources/screw/levels/Level_93.prefab",
-      "sizeKb": 683.9
+      "name": "WhiteOrb",
+      "path": "assets/prefabs/arpg/Loot/Orbs/WhiteOrb.prefab",
+      "sizeKb": 97.3
     },
     {
-      "name": "Level_94",
-      "path": "assets/resources/screw/levels/Level_94.prefab",
-      "sizeKb": 1121.4
+      "name": "ARPGDemo01",
+      "path": "assets/prefabs/arpg/scenes/ARPGDemo01.prefab",
+      "sizeKb": 433
     },
     {
-      "name": "Level_95",
-      "path": "assets/resources/screw/levels/Level_95.prefab",
-      "sizeKb": 635.9
+      "name": "ARPGDemo02",
+      "path": "assets/prefabs/arpg/scenes/ARPGDemo02.prefab",
+      "sizeKb": 22.4
     },
     {
-      "name": "Level_96",
-      "path": "assets/resources/screw/levels/Level_96.prefab",
-      "sizeKb": 1408.3
+      "name": "ARPGDemo03",
+      "path": "assets/prefabs/arpg/scenes/ARPGDemo03.prefab",
+      "sizeKb": 84.5
     },
     {
-      "name": "Level_97_3",
-      "path": "assets/resources/screw/levels/Level_97_3.prefab",
-      "sizeKb": 732.5
+      "name": "ARPGDemo04",
+      "path": "assets/prefabs/arpg/scenes/ARPGDemo04.prefab",
+      "sizeKb": 15.6
     },
     {
-      "name": "Level_98",
-      "path": "assets/resources/screw/levels/Level_98.prefab",
-      "sizeKb": 663.3
+      "name": "ARPGDemo08",
+      "path": "assets/prefabs/arpg/scenes/ARPGDemo08.prefab",
+      "sizeKb": 29.6
     },
     {
-      "name": "Level_99",
-      "path": "assets/resources/screw/levels/Level_99.prefab",
-      "sizeKb": 812.8
+      "name": "ARPGDemo09",
+      "path": "assets/prefabs/arpg/scenes/ARPGDemo09.prefab",
+      "sizeKb": 63.2
     },
     {
-      "name": "static-assets",
-      "path": "assets/resources/screw/static-assets.prefab",
-      "sizeKb": 27.6
-    },
-    {
-      "name": "BaseBox",
-      "path": "assets/screw/prefabs/BaseBox.prefab",
-      "sizeKb": 463.2
-    },
-    {
-      "name": "BaseTray",
-      "path": "assets/screw/prefabs/BaseTray.prefab",
-      "sizeKb": 71
-    },
-    {
-      "name": "Booster3D",
-      "path": "assets/screw/prefabs/Booster3D.prefab",
-      "sizeKb": 14.3
-    },
-    {
-      "name": "Box",
-      "path": "assets/screw/prefabs/Box.prefab",
-      "sizeKb": 12.9
-    },
-    {
-      "name": "SOF_Box",
-      "path": "assets/screw/prefabs/SOF_Box.prefab",
-      "sizeKb": 96.2
-    },
-    {
-      "name": "Unlock",
-      "path": "assets/screw/prefabs/Unlock.prefab",
-      "sizeKb": 83.5
-    },
-    {
-      "name": "keyUnlockBox",
-      "path": "assets/screw/prefabs/keyUnlockBox.prefab",
-      "sizeKb": 7
-    },
-    {
-      "name": "par_hammer",
-      "path": "assets/screw/prefabs/par_hammer.prefab",
-      "sizeKb": 80.5
-    },
-    {
-      "name": "par_rope_brake",
-      "path": "assets/screw/prefabs/par_rope_brake.prefab",
-      "sizeKb": 88.5
-    },
-    {
-      "name": "screw",
-      "path": "assets/screw/prefabs/screw.prefab",
-      "sizeKb": 3.8
-    },
-    {
-      "name": "smoke",
-      "path": "assets/screw/prefabs/smoke.prefab",
-      "sizeKb": 29.9
-    },
-    {
-      "name": "SOF_Screw_open",
-      "path": "assets/screw/prefabs/SOF_Screw_open.prefab",
-      "sizeKb": 67
-    },
-    {
-      "name": "SOF_Explosion",
-      "path": "assets/screw/prefabs/SOF_Explosion.prefab",
-      "sizeKb": 289.1
-    },
-    {
-      "name": "SOF_Point",
-      "path": "assets/screw/prefabs/SOF_Point.prefab",
-      "sizeKb": 27.2
-    },
-    {
-      "name": "SOF_Paper_Drop",
-      "path": "assets/screw/prefabs/SOF_Paper_Drop.prefab",
-      "sizeKb": 22.5
-    },
-    {
-      "name": "SOF_Paper_Fireworks",
-      "path": "assets/screw/prefabs/SOF_Paper_Fireworks.prefab",
-      "sizeKb": 76.7
+      "name": "ARPGDemo10",
+      "path": "assets/prefabs/arpg/scenes/ARPGDemo10.prefab",
+      "sizeKb": 657.3
     }
   ],
   "scripts": {
-    "count": 86,
+    "count": 78,
     "byDir": [
       {
-        "dir": "assets/script/shared/sdk/analytics",
+        "dir": "assets/script",
         "names": [
-          "GameTrackingService"
+          "AoeAudio",
+          "AoeBakedLighting",
+          "AoeBirthBurst",
+          "AoeBurstEmission",
+          "AoeCustomStream",
+          "AoeDeathBurst",
+          "AoeDemoController",
+          "AoeDistanceSubEmitter",
+          "AoeEnvironment",
+          "AoeImpactPool",
+          "AoeLinearFrame",
+          "AoeParticleCollision",
+          "AoeParticleLights",
+          "AoeSimulationStep",
+          "UnityLinearTarget",
+          "UnityNoiseKernel",
+          "UnityParticleBirthState",
+          "UnityParticleBirthStateAdapter",
+          "UnityParticleBurstEmission",
+          "UnityParticleBurstSpreadAdapter",
+          "UnityParticleEulerRotation",
+          "UnityParticleEulerRotationAdapter",
+          "UnityParticleHierarchyTransformSync",
+          "UnityParticleLimitVelocity",
+          "UnityParticleLimitVelocityAdapter",
+          "UnityParticleNestedEmission",
+          "UnityParticleNoise",
+          "UnityParticleNoiseAdapter",
+          "UnityParticleOrbit",
+          "UnityParticleOrbitAdapter",
+          "UnityParticlePrewarm",
+          "UnityParticlePrewarmAdapter",
+          "UnityParticleRateOverDistanceEmitter",
+          "UnityParticleRendererVisibility",
+          "UnityParticleSorting",
+          "UnityParticleSortingAdapter",
+          "UnityParticleSubEmitterFollower",
+          "UnitySpriteRendererColorAdapter",
+          "UnitySrgbTexture"
         ]
       },
       {
-        "dir": "assets/script/shared/sdk/platform",
+        "dir": "assets/script/arpg",
         "names": [
-          "PlayableAdDownloadEvent",
-          "SuperHtmlPlayable"
+          "ARPGFXCycler",
+          "ARPGFXLightFade",
+          "ARPGFXLightFlicker",
+          "ARPGFXLoopScript",
+          "ARPGFXPortalScript",
+          "ARPGFXRotation",
+          "ARPGSceneSelect",
+          "ArpgClock",
+          "ArpgLightAccess",
+          "ArpgLinearFrame",
+          "ArpgSceneRuntime",
+          "ArpgUnityCanvas",
+          "ArpgUnityMesh"
         ]
       },
       {
-        "dir": "assets/script/shared/sdk",
+        "dir": "assets/script/shared/core/audio",
         "names": [
-          "index"
-        ]
-      },
-      {
-        "dir": "assets/script/shared/core/utils",
-        "names": [
-          "GameUtils"
-        ]
-      },
-      {
-        "dir": "assets/script/shared/core/utils/pool",
-        "names": [
-          "NodePoolAdapter",
-          "ObjectPool",
-          "Poolable"
-        ]
-      },
-      {
-        "dir": "assets/script/shared/core",
-        "names": [
-          "GameManager",
-          "SoundManager",
-          "index"
+          "AudioSystem",
+          "CocosAudioBackend"
         ]
       },
       {
@@ -1179,10 +1142,25 @@
         ]
       },
       {
-        "dir": "assets/script/shared/core/audio",
+        "dir": "assets/script/shared/core",
         "names": [
-          "AudioSystem",
-          "CocosAudioBackend"
+          "GameManager",
+          "SoundManager",
+          "index"
+        ]
+      },
+      {
+        "dir": "assets/script/shared/core/utils",
+        "names": [
+          "GameUtils"
+        ]
+      },
+      {
+        "dir": "assets/script/shared/core/utils/pool",
+        "names": [
+          "NodePoolAdapter",
+          "ObjectPool",
+          "Poolable"
         ]
       },
       {
@@ -1192,203 +1170,135 @@
         ]
       },
       {
-        "dir": "assets/script",
+        "dir": "assets/script/shared/sdk/analytics",
         "names": [
-          "UnityParticleBirthState",
-          "UnityParticleBirthStateAdapter",
-          "UnityParticleHierarchyTransformSync",
-          "UnityParticleRateOverDistanceEmitter",
-          "UnityParticleRendererVisibility",
-          "UnityParticleSubEmitterFollower",
-          "UnitySpriteRendererColorAdapter"
+          "GameTrackingService"
         ]
       },
       {
-        "dir": "assets/script/screw",
+        "dir": "assets/script/shared/sdk",
         "names": [
-          "ScrewAssetStore",
-          "ScrewAudioBus",
-          "ScrewConfig",
-          "ScrewGameApp",
-          "ScrewLevelLoader",
-          "ScrewProgressStore"
+          "index"
         ]
       },
       {
-        "dir": "assets/script/screw/core",
+        "dir": "assets/script/shared/sdk/platform",
         "names": [
-          "OrderedCounter",
-          "ScrewColorPlanner",
-          "ScrewConvexHull",
-          "ScrewCurve",
-          "ScrewEase",
-          "ScrewModel",
-          "ScrewRandom",
-          "ScrewRopeGeometry",
-          "ScrewTypes",
-          "ScrewUnitySpace"
-        ]
-      },
-      {
-        "dir": "assets/script/screw/input",
-        "names": [
-          "ScrewPicker",
-          "ScrewRotationController"
-        ]
-      },
-      {
-        "dir": "assets/script/screw/view",
-        "names": [
-          "ScrewBoosterBar",
-          "ScrewBoosterFlights",
-          "ScrewBoosterFx",
-          "ScrewBoosterUnlockPopup",
-          "ScrewBoxView",
-          "ScrewClipPlayer",
-          "ScrewFlightAnimator",
-          "ScrewGameplayVfx",
-          "ScrewHoleWarning",
-          "ScrewHud",
-          "ScrewHudFxCamera",
-          "ScrewLevelView",
-          "ScrewLightRig",
-          "ScrewLoseSequence",
-          "ScrewPresentationContext",
-          "ScrewRedAlertBorder",
-          "ScrewRenderers",
-          "ScrewRevivePopup",
-          "ScrewRopeRelease",
-          "ScrewRopeView",
-          "ScrewScreenRatio",
-          "ScrewSecretBoxView",
-          "ScrewStartBanner",
-          "ScrewTimeline",
-          "ScrewTransition",
-          "ScrewTutorialClip",
-          "ScrewTutorialFlow",
-          "ScrewTutorialView",
-          "ScrewUiKit",
-          "ScrewVfxPool",
-          "ScrewWarningFx",
-          "ScrewWinConfetti",
-          "ScrewWinSequence",
-          "ScrewWorld",
-          "ScrewZoomUi"
+          "PlayableAdDownloadEvent",
+          "SuperHtmlPlayable"
         ]
       }
     ]
   },
   "assetsSummary": {
-    "audioCount": 18,
+    "audioCount": 12,
     "audio": {
-      "count": 18,
-      "totalKb": 3164.5,
+      "count": 12,
+      "totalKb": 5226.4,
       "sample": [
-        "assets/resources/screw/audio/Background.mp3",
-        "assets/resources/screw/audio/Button.mp3",
-        "assets/resources/screw/audio/Cartoon_Crazy_Fireworks.mp3",
-        "assets/resources/screw/audio/Clearbox.mp3",
-        "assets/resources/screw/audio/Closebox.mp3",
-        "assets/resources/screw/audio/Fly.mp3"
+        "assets/resources/aoe-audio/Hit Skill9.wav",
+        "assets/resources/aoe-audio/Skill 1.wav",
+        "assets/resources/aoe-audio/Skill 10.wav",
+        "assets/resources/aoe-audio/Skill 11.wav",
+        "assets/resources/aoe-audio/Skill 2.wav",
+        "assets/resources/aoe-audio/Skill 3.wav"
       ],
-      "truncated": 12
+      "truncated": 6
     },
-    "modelCount": 203,
+    "modelCount": 26,
     "models": {
-      "count": 203,
-      "totalKb": 110150.1,
+      "count": 26,
+      "totalKb": 723.7,
       "sample": [
-        "assets/unity_imported/Mesh/Refrigerator_1.fbx",
-        "assets/unity_imported/Mesh/Refrigerator_10.fbx",
-        "assets/unity_imported/Mesh/Refrigerator_100.fbx",
-        "assets/unity_imported/Mesh/Refrigerator_105.fbx",
-        "assets/unity_imported/Mesh/Refrigerator_107.fbx",
-        "assets/unity_imported/Mesh/Refrigerator_108.fbx"
+        "assets/unity_imported/Assets/ARPG Effects/Demo/Models/RPGFXChest.FBX",
+        "assets/unity_imported/Assets/ARPG Effects/Models/RPGFXClickCurve.FBX",
+        "assets/unity_imported/Assets/ARPG Effects/Models/RPGFXCurvedCylinder2.FBX",
+        "assets/unity_imported/Assets/ARPG Effects/Models/RPGFXIconExclamation.FBX",
+        "assets/unity_imported/Assets/ARPG Effects/Models/RPGFXIconQuestion.FBX",
+        "assets/unity_imported/Assets/ARPG Effects/Models/RPGFXIconStar.FBX"
       ],
-      "truncated": 197
+      "truncated": 20
     },
     "shaderCount": 8,
     "shaders": {
       "count": 8,
-      "totalKb": 64.8,
+      "totalKb": 65.4,
       "sample": [
-        "assets/effects/UnitySpriteRendererColor.effect",
-        "assets/effects/MatCap_TextureMult_Bumped.effect",
-        "assets/effects/ScrewCelLit.effect",
-        "assets/effects/ScrewGlowOverlay.effect",
-        "assets/effects/ScrewOutline.effect",
-        "assets/effects/URPLit.effect"
+        "assets/effects/aoe-floor.effect",
+        "assets/effects/aoe-particle-trail.effect",
+        "assets/effects/aoe-particle.effect",
+        "assets/effects/aoe-present.effect",
+        "assets/effects/arpg-skybox.effect",
+        "assets/effects/unity-legacy-preview-particle.effect"
       ],
       "truncated": 2
     },
     "materials": {
-      "count": 131,
-      "totalKb": 117.3,
+      "count": 311,
+      "totalKb": 877.2,
       "sample": [
-        "assets/materials/UnitySpriteRendererColor.mtl",
-        "assets/materials/UnitySpriteRendererColorOpaque.mtl",
-        "assets/materials/UnitySpriteRendererGlow.mtl",
-        "assets/screw/materials/box/Box_Begie.mtl",
-        "assets/screw/materials/box/Box_Blue.mtl",
-        "assets/screw/materials/box/Box_Brown.mtl"
+        "assets/materials/aoe-default-particle.mtl",
+        "assets/materials/aoe-floor.mtl",
+        "assets/materials/aoe-local-10-4388768745790252.mtl",
+        "assets/materials/aoe-local-10-4567003171582396.mtl",
+        "assets/materials/aoe-local-10-4755324015660310.mtl",
+        "assets/materials/aoe-local-13-4601147430084982.mtl"
       ],
-      "truncated": 125
+      "truncated": 305
     },
     "textures": {
-      "count": 192,
-      "totalKb": 68525.8,
+      "count": 199,
+      "totalKb": 115597.8,
       "sample": [
-        "assets/screw/textures/colors/Box_Begie.png",
-        "assets/screw/textures/colors/Box_Blue.png",
-        "assets/screw/textures/colors/Box_Brown.png",
-        "assets/screw/textures/colors/Box_Green.png",
-        "assets/screw/textures/colors/Box_Orange.png",
-        "assets/screw/textures/colors/Box_Pink.png"
+        "assets/aoe/Default-Particle.png",
+        "assets/arpg/sky/ARPGDemo01.png",
+        "assets/arpg/sky/ARPGDemo04.png",
+        "assets/arpg/sky/ARPGDemo08.png",
+        "assets/unity_imported/Assets/ARPG Effects/Demo/Textures/brickwall.png",
+        "assets/unity_imported/Assets/ARPG Effects/Demo/Textures/brick_ambient.png"
       ],
-      "truncated": 186
+      "truncated": 193
     },
     "animations": {
-      "count": 4,
-      "totalKb": 29.8,
+      "count": 2,
+      "totalKb": 0.4,
       "sample": [
-        "assets/animations/animationkeycontroller/key_keyAction.anim",
-        "assets/animations/animsecretbox/Close.anim",
-        "assets/animations/animsecretbox/Idle.anim",
-        "assets/animations/animsecretbox/Open.anim"
+        "assets/animations/lightfadein/LightFadeIn.anim",
+        "assets/animations/lightfadeout/LightFadeOut.anim"
       ],
       "truncated": 0
     },
     "prefabsInAssets": {
-      "count": 216,
-      "totalKb": 167885.4,
+      "count": 200,
+      "totalKb": 21065.5,
       "sample": [
-        "assets/resources/screw/levels/Cube_Crystal.prefab",
-        "assets/resources/screw/levels/Cube_Diamond.prefab",
-        "assets/resources/screw/levels/Cube_Soil.prefab",
-        "assets/resources/screw/levels/Cube_Wooden_Crate.prefab",
-        "assets/resources/screw/levels/Level_10.prefab",
-        "assets/resources/screw/levels/Level_100.prefab"
+        "assets/prefabs/aoe/Energy explosion.prefab",
+        "assets/prefabs/aoe/Flower slash.prefab",
+        "assets/prefabs/aoe/Front spikes attack.prefab",
+        "assets/prefabs/aoe/Ise attack.prefab",
+        "assets/prefabs/aoe/Knife hit.prefab",
+        "assets/prefabs/aoe/Knives.prefab"
       ],
-      "truncated": 210
+      "truncated": 194
     },
     "unityImported": {
       "exists": true,
       "root": "assets/unity_imported",
-      "count": 498,
-      "totalKb": 196367.4,
+      "count": 479,
+      "totalKb": 115821.2,
       "sample": [
-        "assets/unity_imported/Mesh/Refrigerator_1.fbx",
-        "assets/unity_imported/Mesh/Refrigerator_10.fbx",
-        "assets/unity_imported/Mesh/Refrigerator_100.fbx",
-        "assets/unity_imported/Mesh/Refrigerator_105.fbx",
-        "assets/unity_imported/Mesh/Refrigerator_107.fbx",
-        "assets/unity_imported/Mesh/Refrigerator_108.fbx"
+        "assets/unity_imported/Assets/ARPG Effects/Demo/Materials/ChestFrame02.mesh.mtl",
+        "assets/unity_imported/Assets/ARPG Effects/Demo/Materials/ChestInner02.mesh.mtl",
+        "assets/unity_imported/Assets/ARPG Effects/Demo/Materials/Floor.mesh.mtl",
+        "assets/unity_imported/Assets/ARPG Effects/Demo/Materials/GoldCoins.mesh.mtl",
+        "assets/unity_imported/Assets/ARPG Effects/Demo/Materials/Metal.mesh.mtl",
+        "assets/unity_imported/Assets/ARPG Effects/Demo/Materials/Stairs.mesh.mtl"
       ],
-      "truncated": 492
+      "truncated": 473
     }
   },
   "configSummary": {
-    "fragmentCount": 3,
+    "fragmentCount": 0,
     "ctaKeys": [
       "googlePlayUrl",
       "appStoreUrl",
@@ -1420,7 +1330,7 @@
       "presets"
     ],
     "customKeys": [
-      "screwOut"
+      "aoeDemo"
     ],
     "rawPreview": {
       "cta": {
@@ -1432,204 +1342,141 @@
         "pulseDuration": 0.6
       },
       "audio": {
-        "autoPlayBgm": true,
-        "bgmVolume": 0.202,
+        "autoPlayBgm": false,
+        "bgmVolume": 0.6,
         "sfxVolume": 1,
-        "bgmSoundPath": "screw/audio/Background",
+        "bgmSoundPath": "",
         "clickSoundPath": "",
         "successSoundPath": "",
         "winSoundPath": "",
         "system": {
-          "maxSfxVoices": 16,
+          "maxSfxVoices": 32,
           "sounds": {
-            "ui-click": {
-              "path": "",
-              "cooldownMs": 0,
-              "maxConcurrent": 2,
-              "priority": 100,
-              "volume": 1,
-              "loop": false,
-              "stealable": true
-            },
-            "success": {
-              "path": "",
-              "cooldownMs": 0,
-              "maxConcurrent": 3,
-              "priority": 80,
-              "volume": 1,
-              "loop": false,
-              "stealable": true
-            },
-            "win": {
-              "path": "",
+            "aoe-effect-0": {
+              "path": "aoe-audio/Skill 1",
               "cooldownMs": 0,
               "maxConcurrent": 1,
-              "priority": 100,
+              "priority": 128,
+              "volume": 0.5,
+              "loop": false,
+              "stealable": false
+            },
+            "aoe-effect-1": {
+              "path": "aoe-audio/Skill 2",
+              "cooldownMs": 0,
+              "maxConcurrent": 2,
+              "priority": 128,
+              "volume": 0.8,
+              "loop": false,
+              "stealable": false
+            },
+            "aoe-effect-2": {
+              "path": "aoe-audio/Skill 3",
+              "cooldownMs": 0,
+              "maxConcurrent": 1,
+              "priority": 128,
+              "volume": 0.6,
+              "loop": false,
+              "stealable": false
+            },
+            "aoe-effect-3": {
+              "path": "aoe-audio/Skill 4",
+              "cooldownMs": 0,
+              "maxConcurrent": 1,
+              "priority": 128,
+              "volume": 0.8,
+              "loop": false,
+              "stealable": false
+            },
+            "aoe-effect-4": {
+              "path": "aoe-audio/Skill 5",
+              "cooldownMs": 0,
+              "maxConcurrent": 1,
+              "priority": 128,
+              "volume": 0.3,
+              "loop": false,
+              "stealable": false
+            },
+            "aoe-effect-5": {
+              "path": "aoe-audio/Skill 6",
+              "cooldownMs": 0,
+              "maxConcurrent": 1,
+              "priority": 128,
+              "volume": 0.8,
+              "loop": false,
+              "stealable": false
+            },
+            "aoe-effect-6": {
+              "path": "aoe-audio/Skill 7",
+              "cooldownMs": 0,
+              "maxConcurrent": 2,
+              "priority": 128,
               "volume": 1,
               "loop": false,
               "stealable": false
             },
-            "ScrewClick": {
-              "path": "screw/audio/Screw_open",
+            "aoe-effect-7": {
+              "path": "aoe-audio/Skill 8",
               "cooldownMs": 0,
               "maxConcurrent": 1,
-              "priority": 100,
+              "priority": 128,
               "volume": 1,
               "loop": false,
-              "stealable": true
+              "stealable": false
             },
-            "ScrewUp": {
-              "path": "screw/audio/Screw_open_fail",
+            "aoe-effect-8": {
+              "path": "aoe-audio/Skill 9",
+              "cooldownMs": 0,
+              "maxConcurrent": 2,
+              "priority": 128,
+              "volume": 0.6,
+              "loop": false,
+              "stealable": false
+            },
+            "aoe-effect-9": {
+              "path": "aoe-audio/Skill 10",
               "cooldownMs": 0,
               "maxConcurrent": 1,
-              "priority": 100,
+              "priority": 128,
               "volume": 1,
               "loop": false,
-              "stealable": true
+              "stealable": false
             },
-            "ScrewDown": {
-              "path": "screw/audio/Screw_close",
+            "aoe-effect-10": {
+              "path": "aoe-audio/Skill 11",
               "cooldownMs": 0,
-              "maxConcurrent": 1,
-              "priority": 100,
-              "volume": 0.4,
+              "maxConcurrent": 2,
+              "priority": 128,
+              "volume": 0.8,
               "loop": false,
-              "stealable": true
+              "stealable": false
             },
-            "Merge": {
-              "path": "screw/audio/Closebox",
+            "aoe-effect-14": {
+              "path": "aoe-audio/Skill 10",
               "cooldownMs": 0,
               "maxConcurrent": 1,
-              "priority": 100,
+              "priority": 128,
               "volume": 1,
               "loop": false,
-              "stealable": true
+              "stealable": false
             },
-            "ClearBox": {
-              "path": "screw/audio/Clearbox",
+            "aoe-impact-3": {
+              "path": "aoe-audio/Hit Skill9",
               "cooldownMs": 0,
-              "maxConcurrent": 1,
-              "priority": 100,
+              "maxConcurrent": 32,
+              "priority": 128,
               "volume": 1,
               "loop": false,
-              "stealable": true
+              "stealable": false
             },
-            "StartLevel": {
-              "path": "screw/audio/Start_level",
+            "aoe-impact-4": {
+              "path": "aoe-audio/Hit Skill9",
               "cooldownMs": 0,
-              "maxConcurrent": 1,
-              "priority": 100,
+              "maxConcurrent": 32,
+              "priority": 128,
               "volume": 1,
               "loop": false,
-              "stealable": true
-            },
-            "Fly": {
-              "path": "screw/audio/Fly",
-              "cooldownMs": 0,
-              "maxConcurrent": 1,
-              "priority": 100,
-              "volume": 1,
-              "loop": false,
-              "stealable": true
-            },
-            "LevelStart_ScrewDown": {
-              "path": "screw/audio/Screw_no_box",
-              "cooldownMs": 0,
-              "maxConcurrent": 1,
-              "priority": 100,
-              "volume": 1,
-              "loop": false,
-              "stealable": true
-            },
-            "Win": {
-              "path": "screw/audio/Win_game",
-              "cooldownMs": 0,
-              "maxConcurrent": 1,
-              "priority": 100,
-              "volume": 1,
-              "loop": false,
-              "stealable": true
-            },
-            "WIN_WITH_TRUMPET": {
-              "path": "screw/audio/Win_new",
-              "cooldownMs": 0,
-              "maxConcurrent": 1,
-              "priority": 100,
-              "volume": 1,
-              "loop": false,
-              "stealable": true
-            },
-            "WIN_WITH_FIREWORK": {
-              "path": "screw/audio/Cartoon_Crazy_Fireworks",
-              "cooldownMs": 0,
-              "maxConcurrent": 1,
-              "priority": 100,
-              "volume": 0.2,
-              "loop": false,
-              "stealable": true
-            },
-            "Lose": {
-              "path": "screw/audio/Lose_game",
-              "cooldownMs": 0,
-              "maxConcurrent": 1,
-              "priority": 100,
-              "volume": 1,
-              "loop": false,
-              "stealable": true
-            },
-            "Click": {
-              "path": "screw/audio/Button",
-              "cooldownMs": 0,
-              "maxConcurrent": 1,
-              "priority": 100,
-              "volume": 1,
-              "loop": false,
-              "stealable": true
-            },
-            "Lose_New": {
-              "path": "screw/audio/Lose_game",
-              "cooldownMs": 0,
-              "maxConcurrent": 1,
-              "priority": 100,
-              "volume": 1,
-              "loop": false,
-              "stealable": true
-            },
-            "Booster_AddHole": {
-              "path": "screw/audio/Booster_Drill",
-              "cooldownMs": 0,
-              "maxConcurrent": 1,
-              "priority": 100,
-              "volume": 1,
-              "loop": false,
-              "stealable": true
-            },
-            "Booster_Hammer": {
-              "path": "screw/audio/Booster_Hammer",
-              "cooldownMs": 0,
-              "maxConcurrent": 1,
-              "priority": 100,
-              "volume": 1,
-              "loop": false,
-              "stealable": true
-            },
-            "Booster_Clear": {
-              "path": "screw/audio/Booster_Sweep",
-              "cooldownMs": 0,
-              "maxConcurrent": 1,
-              "priority": 100,
-              "volume": 1,
-              "loop": false,
-              "stealable": true
-            },
-            "Effectt_Appear": {
-              "path": "screw/audio/Booster_Active",
-              "cooldownMs": 0,
-              "maxConcurrent": 1,
-              "priority": 100,
-              "volume": 1,
-              "loop": false,
-              "stealable": true
+              "stealable": false
             }
           }
         }
@@ -1729,7 +1576,6 @@
     "port.core.init": "npm run ai:port:core:init -- --unity-project <UnityProjectRoot> --cocos-project <CocosProjectRoot>",
     "port.core.scaffold": "npm run ai:port:core:scaffold -- --unity-project <UnityProjectRoot> --cocos-project <CocosProjectRoot>",
     "port.core.resume": "npm run ai:port:core:resume -- --unity-project <UnityProjectRoot> --cocos-project <CocosProjectRoot>",
-    "unity.intel.reference.capture": "node playable-shared-kit/tools/unity-intel/unity-reference-capture.cjs --project <UnityProjectRoot> --scene <Assets/...unity> --out <dir> --frames <n,n,...>",
     "unity.intel.scan": "npm run ai:unity:scan -- --project <UnityProjectRoot>",
     "unity.intel.query": "npm run ai:unity:query -- --project <UnityProjectRoot> --section <name>",
     "port.plan": "npm run ai:port:plan -- --project <UnityProjectRoot>",

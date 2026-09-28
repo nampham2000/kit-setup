@@ -119,3 +119,4 @@ test('refuses to delete a legacy adapter when canonical and legacy UUIDs conflic
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+

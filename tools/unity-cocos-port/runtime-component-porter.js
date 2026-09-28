@@ -283,6 +283,39 @@ function hasSubEmitterEntry(component, type, subEmitterParticleId) {
   ));
 }
 
+function quatMultiply(a, b) {
+  return {
+    x: a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
+    y: a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
+    z: a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w,
+    w: a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z,
+  };
+}
+
+function nodeWorldQuat(builder, nodeId) {
+  let rotation = { x: 0, y: 0, z: 0, w: 1 };
+  for (let id = nodeId, guard = 0; Number.isInteger(id) && guard < 256; guard++) {
+    const node = builder.objects[id];
+    if (!node || node.__type__ !== 'cc.Node') break;
+    const local = node._lrot || { x: 0, y: 0, z: 0, w: 1 };
+    rotation = quatMultiply({ x: Number(local.x || 0), y: Number(local.y || 0), z: Number(local.z || 0), w: Number(local.w ?? 1) }, rotation);
+    id = Number(node._parent?.__id__);
+  }
+  return rotation;
+}
+
+// Angle between two nodes' emitter forwards (-Z), in degrees.
+function emitterForwardAngle(builder, nodeA, nodeB) {
+  const forward = (q) => ({ x: -2 * (q.x * q.z + q.w * q.y), y: -2 * (q.y * q.z - q.w * q.x), z: -(1 - 2 * (q.x * q.x + q.y * q.y)) });
+  const a = forward(nodeWorldQuat(builder, nodeA));
+  const b = forward(nodeWorldQuat(builder, nodeB));
+  return Math.acos(Math.max(-1, Math.min(1, a.x * b.x + a.y * b.y + a.z * b.z))) * 180 / Math.PI;
+}
+
+// Unity turns a Birth instance by FromTo(parent system forward, parent velocity); the runtime reproduces that rule,
+// which was measured on sub-emitters whose forward stays close to their parent system's forward.
+const SUB_EMITTER_ALIGNMENT_VALIDATED_DEGREES = 20;
+
 function makeSubEmitterEntry(script, type, entry, subEmitterParticleId, subEmitterNodeId) {
   const emitProbability = Math.max(0, Math.min(1, Number(entry?.emitProbability ?? 1)));
   return {
@@ -597,6 +630,11 @@ function createRuntimeComponentPorter(deps) {
           subEmitterParticle._simulationSpace = 0;
         }
         if (type === SUB_EMITTER_TYPE.death) subEmitterNode._active = false;
+        const forwardAngle = emitterForwardAngle(builder, sourceNodeId, subEmitterNodeId);
+        if (type === SUB_EMITTER_TYPE.birth && forwardAngle > SUB_EMITTER_ALIGNMENT_VALIDATED_DEGREES) {
+          reporter.medium('PARTICLE_SUB_EMITTER_ALIGNMENT_UNVALIDATED', model.file, subEmitterNode._name || '',
+            `Sub-emitter forward is ${forwardAngle.toFixed(0)} deg from its parent system's; Unity's parent-velocity alignment is only validated within ${SUB_EMITTER_ALIGNMENT_VALIDATED_DEGREES} deg`);
+        }
 
         followerComponent.entries.push({...makeSubEmitterEntry(script, type, entry, subEmitterParticleId, subEmitterNodeId),
           ...(distanceContract?{sourceDistanceRate:distanceContract.rate,sourceSimulationSpace:distanceContract.simulationSpace,emitRatePerParticle:0}:{}),

@@ -1084,6 +1084,22 @@ sprite FTUE animation, nested HUD prefabs, mirrored hidden objects, or particles
 It explains which serialized values are easy to misinterpret and how to check
 the actual runtime path. Keep project-specific sizing in JSON.
 
+### URP 2D HDR buffers are B10G11R11 with round-toward-zero
+
+URP's 2D Renderer stores the HDR camera colour (`Renderer2D` requestColorFormat),
+every bloom pyramid level (`PostProcessPassRenderGraph`) and the 2D light textures
+(`RendererLighting.GetRenderTextureFormat`) as `B10G11R11_UFloatPack32`: 6/6/5-bit
+mantissas, written with round-toward-zero on D3D11 (Editor captures). A Cocos port
+that keeps RGBA16F/float targets renders a few percent brighter with no parameter
+being wrong (Lost Crypt: +2.8/+2.3/+2.9 % R/G/B over seven Unity frames, bloom
+alone adds ~25 %). Emulate the truncation where the source stores: on every bloom
+level write (after the gamma-space `sqrt` encode), on the scene colour read by the
+prefilter/uber passes and on the light texture reads. It has no free parameter, so
+verify it the other way round: per-channel mean ratio and a per-cell colour audit
+against Unity reference frames must move to ~1.00 (Lost Crypt: mean dLum
++2.4 -> ~0.0). Check the pipeline asset first: `m_HDRColorBufferPrecision: 1`
+(64-bit) or a non-2D renderer changes the formats.
+
 AnimationClip sample rate and stop time do not include `AnimatorState.m_Speed`.
 Preserve that field on the generated Cocos Motion state. If project runtime
 disables AnimationController and calls `cc.Animation.play()` directly, read the

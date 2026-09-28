@@ -68,6 +68,7 @@ function unityParticleSortSpec(particle, objects, options) {
   if (layer.value) spec.layer = layer.value;
   if (sorting.sortMode) spec.sortMode = Number(sorting.sortMode);
   if (sorting.proceduralCenter) spec.proceduralCenter = sorting.proceduralCenter.slice();
+  if (sorting.proceduralGravityDrop) spec.proceduralGravityDrop = sorting.proceduralGravityDrop;
   if (contract?.mode === 1) {
     spec.lengthScale = Number(renderer._lengthScale) || 0;
     spec.velocityScale = Number(renderer._velocityScale) || 0;

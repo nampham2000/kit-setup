@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { toPosix, sanitizeFileId } = require('./core-utils');
-const { unityModelMeshName } = require('./model-import-basis');
+const { unityModelImportBasis, unityModelMeshName } = require('./model-import-basis');
 const { cocosSlotsForUnitySlots } = require('./fbx-submesh-order');
 const { requestModelMeshBasis } = require('./model-mesh-basis-binding');
 
@@ -17,7 +17,27 @@ module.exports = function createRendererPorter(deps) {
     getField,
     getNestedList,
     unityRefGuid,
+    fbxMeshOwnerNode = ({ nodeId }) => nodeId,
   } = deps;
+
+  // A Cocos FBX mesh drawn under a converted Unity transform needs the basis diag(-k, k, -k). MeshRenderers get it
+  // from the UnityModelMeshBasis runtime (ModelImporter.globalScale k). The one case it does not cover is a pivot
+  // the Cocos importer baked into the vertices (Tanks! LevelMoon: 4 of 108 meshes): with Unity mesh-bounds evidence
+  // and k = 1, fbxMeshOwnerNode mounts the renderer on a Ry(180) * T(-pivot) carrier instead, which also owns a
+  // MeshCollider of that mesh. Importer settings without a measured basis are reported high by requestModelMeshBasis.
+  function fbxBasisRoute(modelAsset) {
+    const basis = unityModelImportBasis(modelAsset);
+    if (!basis) return { pivotCarrier: false, request: false };
+    return { pivotCarrier: !basis.supported || basis.scale === 1, request: true };
+  }
+
+  function meshRendererOwner(args) {
+    const route = fbxBasisRoute(args.modelAsset);
+    const ownerNodeId = route.pivotCarrier ? fbxMeshOwnerNode({ ...args, requirePivot: true }) : args.nodeId;
+    const carrier = ownerNodeId !== args.nodeId;
+    const basis = unityModelImportBasis(args.modelAsset);
+    return { ownerNodeId, requestBasis: route.request && (!carrier || !basis?.supported) };
+  }
 
   function normalizeMaterialName(value) {
     return String(value || '')
@@ -54,6 +74,17 @@ module.exports = function createRendererPorter(deps) {
     }).filter(Boolean);
   }
 
+  // Unity-MCP evidence (--unity-object-map): the materials Unity actually resolved for the model's single
+  // renderer (ModelImporter name search, remaps or embedded fallback).
+  function evidenceMaterialAssets(gameObject, options, unityDb) {
+    const model = options?.unityObjectMap?.[gameObject.syntheticModelAsset?.guid || ''];
+    if (!model) return [];
+    const renderers = Object.values(model.objects || {})
+      .filter((object) => /Renderer$/.test(String(object?.type || '')) && Array.isArray(object.materials));
+    if (renderers.length !== 1) return [];
+    return renderers[0].materials.map((material) => (material?.guid ? unityDb?.get(material.guid) || null : null));
+  }
+
   // Unity material slot i draws Unity sub-mesh i; the Cocos primitive order of the
   // same FBX mesh differs (fbx-submesh-order.js). Returns the slots in Cocos order.
   function cocosMaterialSlots(modelAsset, modelName, unitySlots, reporter, label) {
@@ -67,8 +98,11 @@ module.exports = function createRendererPorter(deps) {
 
   function resolveSyntheticMaterialOverrides(gameObject, resolvedModel, options, unityDb, cocosDb, reporter) {
     const explicitAssets = gameObject.syntheticModelMaterialOverrideGroups?.[0]?.materialAssets || [];
-    const externalAssets = explicitAssets.length ? [] : orderedExternalMaterialAssets(gameObject, resolvedModel);
-    const assets = explicitAssets.length ? explicitAssets : externalAssets;
+    const evidenceAssets = explicitAssets.length ? [] : evidenceMaterialAssets(gameObject, options, unityDb);
+    const externalAssets = explicitAssets.length || evidenceAssets.some(Boolean)
+      ? []
+      : orderedExternalMaterialAssets(gameObject, resolvedModel);
+    const assets = explicitAssets.length ? explicitAssets : evidenceAssets.some(Boolean) ? evidenceAssets.filter(Boolean) : externalAssets;
     if (!assets.length) return [];
     let uuids = resolveUnityMaterialUuids(assets, options, unityDb, cocosDb, reporter, gameObject.name);
     if (explicitAssets.length) {
@@ -97,15 +131,16 @@ module.exports = function createRendererPorter(deps) {
       const overrideMaterialUuids = resolveSyntheticMaterialOverrides(
         gameObject, resolved, options, unityDb, cocosDb, reporter,
       );
+      const syntheticOwner = meshRendererOwner({ builder, nodeId, gameObject, modelAsset, meshUuid: resolved.meshUuid, meshNameHint, seed: componentId, reporter, options });
       const rendererId = builder.addMeshRenderer(
-        nodeId,
+        syntheticOwner.ownerNodeId,
         componentId,
         resolved.meshUuid,
         overrideMaterialUuids.length ? overrideMaterialUuids : (resolved.materialUuids || (resolved.materialUuid ? [resolved.materialUuid] : [])),
         componentFileId,
         { castShadows: true, receiveShadows: true },
       );
-      requestModelMeshBasis(builder, reporter, options, nodeId, rendererId, modelAsset, gameObject.name);
+      if (syntheticOwner.requestBasis) requestModelMeshBasis(builder, reporter, options, nodeId, rendererId, modelAsset, gameObject.name);
       reporter.low('NESTED_MODEL_RENDERER_CREATED', modelAsset.relativePath, gameObject.name, 'Nested model asset resolved to Cocos MeshRenderer', resolved.source);
       return;
     }
@@ -115,15 +150,16 @@ module.exports = function createRendererPorter(deps) {
       const overrideMaterialUuids = resolveSyntheticMaterialOverrides(
         gameObject, missing.resolved, options, unityDb, cocosDb, reporter,
       );
+      const syntheticOwner = meshRendererOwner({ builder, nodeId, gameObject, modelAsset, meshUuid: missing.resolved.meshUuid, meshNameHint, seed: componentId, reporter, options });
       const rendererId = builder.addMeshRenderer(
-        nodeId,
+        syntheticOwner.ownerNodeId,
         componentId,
         missing.resolved.meshUuid,
         overrideMaterialUuids.length ? overrideMaterialUuids : (missing.resolved.materialUuids || (missing.resolved.materialUuid ? [missing.resolved.materialUuid] : [])),
         componentFileId,
         { castShadows: true, receiveShadows: true },
       );
-      requestModelMeshBasis(builder, reporter, options, nodeId, rendererId, modelAsset, gameObject.name);
+      if (syntheticOwner.requestBasis) requestModelMeshBasis(builder, reporter, options, nodeId, rendererId, modelAsset, gameObject.name);
       reporter.low(
         missing.pendingImport ? 'NESTED_MODEL_PENDING_MESH_WIRED' : 'NESTED_MODEL_RENDERER_CREATED',
         modelAsset.relativePath,
@@ -263,11 +299,30 @@ module.exports = function createRendererPorter(deps) {
       recordPendingMeshRepair(options, options.out, componentFileId, meshAsset.stem, gameObject.name, meshAsset.relativePath);
     }
     if (!meshUuid && !meshPendingImport) reporter.high('MESH_UNRESOLVED', model.file, gameObject.name, 'MeshRenderer has no resolved Cocos mesh');
-    const rendererId = builder.addMeshRenderer(nodeId, componentId, meshUuid, materialUuids, componentFileId, {
+    const fbxOwner = meshUuid && !builtinMeshUuid && meshAsset
+      ? meshRendererOwner({
+        builder,
+        nodeId,
+        gameObject,
+        modelAsset: meshAsset,
+        meshUuid,
+        unityMeshFileId: deps.unityRefFileId(meshRef),
+        meshNameHint: gameObject.name,
+        seed: componentId,
+        reporter,
+        options,
+      })
+      : null;
+    const ownerNodeId = fbxOwner
+      ? fbxOwner.ownerNodeId
+      : builtinMeshUuid && deps.builtinPrimitiveOwnerNode
+        ? deps.builtinPrimitiveOwnerNode({ builder, nodeId, meshRef, meshUuid, gameObject, seed: componentId, reporter })
+        : nodeId;
+    const rendererId = builder.addMeshRenderer(ownerNodeId, componentId, meshUuid, materialUuids, componentFileId, {
       castShadows: Number(getField(doc, 'm_CastShadows', 1) || 0) !== 0,
       receiveShadows: Number(getField(doc, 'm_ReceiveShadows', 1) || 0) !== 0,
     });
-    if (meshAsset && !builtinMeshUuid && (meshUuid || meshPendingImport)) {
+    if (meshAsset && !builtinMeshUuid && (meshUuid || meshPendingImport) && (fbxOwner ? fbxOwner.requestBasis : fbxBasisRoute(meshAsset).request)) {
       requestModelMeshBasis(builder, reporter, options, nodeId, rendererId, meshAsset, gameObject.name);
     }
   }

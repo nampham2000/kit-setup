@@ -1,5 +1,5 @@
 'use strict';
-const {unityProceduralSortCenter}=require('./particle-procedural-sort-center.cjs');
+const {unityProceduralSortCenter,unityProceduralSortGravityDrop}=require("./particle-procedural-sort-center.cjs");
 
 // World width (m) of the narrowest view in which a Min/Max Particle Size clamp is expected to bind.
 const CLAMP_REFERENCE_VIEW_WIDTH = 2;
@@ -67,7 +67,7 @@ function particleRendererContract(particle = {}, renderer = {}) {
   // Sorting is bound for every transparent renderer by particle-sorting-binding.
   const sorting = { fudge: Number(renderer.m_SortingFudge || 0), order: Number(renderer.m_SortingOrder || 0), layer: Number(renderer.m_SortingLayerID || 0), sortMode: Number(renderer.m_SortMode || 0) };
   const proceduralCenter=unityProceduralSortCenter(particle);
-  if(proceduralCenter)sorting.proceduralCenter=proceduralCenter;
+  if(proceduralCenter){sorting.proceduralCenter=proceduralCenter;const drop=unityProceduralSortGravityDrop(particle);if(drop)sorting.proceduralGravityDrop=drop;}
   // Local/axial billboard pivots, stretched X/Z pivots, Facing and billboard Velocity are unmeasured.
   if (pivotSet && !(mesh || viewBillboard || (mode === 1 && pivotValues[0] === 0 && pivotValues[2] === 0))) unsupported.push('pivot-axes');
   if (alignment !== 0 && alignment !== 2 && !worldBillboard && !straightBoxVelocity && mode !== 1 && !axialBillboard && !meshWorldFrame && !meshVelocityFrame) unsupported.push('alignment');

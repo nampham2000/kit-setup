@@ -21,8 +21,15 @@ test('backs off ~30 s over 16 attempts while Chrome helpers still hold first_par
   assert.equal(waits.reduce((a,b)=>a+b,0),30000);
 });
 test('reports persistent cleanup failure instead of swallowing it',async()=>{
-  const r=await closeRuntimeProfile({exitCode:0,signalCode:null},null,profile,{async lstat(){return{isSymbolicLink:()=>false}},async rm(){throw Object.assign(new Error('locked'),{code:'EPERM'})}},async()=>{});
-  assert.equal(r.ok,false);assert.equal(r.directory,profile.directory);
+  let reaps=0;
+  const r=await closeRuntimeProfile({exitCode:0,signalCode:null},null,profile,{async lstat(){return{isSymbolicLink:()=>false}},async rm(){throw Object.assign(new Error('locked'),{code:'EPERM'})}},async()=>{},()=>{reaps++;});
+  assert.equal(r.ok,false);assert.equal(r.directory,profile.directory);assert.equal(reaps,1);
+});
+test('stops only the processes of its own profile once the lock outlives the browser',async()=>{
+  let reapedDirectory=null,attempts=0;
+  const r=await closeRuntimeProfile({exitCode:0,signalCode:null},null,profile,{async lstat(){return{isSymbolicLink:()=>false}},
+    async rm(){attempts++;if(!reapedDirectory)throw Object.assign(new Error('locked'),{code:'EBUSY'})}},async()=>{},(directory)=>{reapedDirectory=directory;});
+  assert.equal(r.ok,true);assert.equal(r.reapedProcesses,true);assert.equal(reapedDirectory,profile.directory);assert.equal(attempts,4);
 });
 test('rejects paths outside owned root and redirected directories before deleting',async()=>{
   const io={async lstat(){return{isSymbolicLink:()=>true}},async rm(){throw new Error('must not run')}};

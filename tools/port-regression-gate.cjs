@@ -145,6 +145,15 @@ function regressionError(code, message, details = null) {
   return error;
 }
 
+function timeoutFromMinutes(value, id) {
+  const minutes = Number(value);
+  const max = MAX_SUITE_TIMEOUT_MS / 60000;
+  if (typeof value !== 'number' || !Number.isInteger(minutes) || minutes < 1 || minutes > max) {
+    throw regressionError('REGRESSION_TIMEOUT_INVALID', `${id}.timeoutMinutes phải là số nguyên 1-${max}.`);
+  }
+  return minutes * 60000;
+}
+
 function validateSuiteTimeoutMs(value, label) {
   const text = typeof value === 'string' ? value.trim() : value;
   const number = typeof text === 'string' && /^\d+$/.test(text) ? Number(text) : text;
@@ -752,7 +761,12 @@ function validateRegistry(projectRoot, value, options = {}) {
     if (entry.timeoutMs !== undefined && typeof entry.timeoutMs !== 'number') {
       throw regressionError('REGRESSION_SUITE_TIMEOUT_INVALID', `${id}.timeoutMs phải là JSON number (integer ms); nhận: ${JSON.stringify(entry.timeoutMs)}.`);
     }
-    const timeoutMs = entry.timeoutMs === undefined ? undefined : validateSuiteTimeoutMs(entry.timeoutMs, `${id}.timeoutMs`);
+    if (entry.timeoutMs !== undefined && entry.timeoutMinutes !== undefined) {
+      throw regressionError('REGRESSION_TIMEOUT_INVALID', `${id}: khai báo timeoutMs hoặc timeoutMinutes, không cả hai.`);
+    }
+    // timeoutMinutes: earlier registries (unity-samples) declared whole minutes; same bounds as timeoutMs.
+    const timeoutMs = entry.timeoutMs !== undefined ? validateSuiteTimeoutMs(entry.timeoutMs, `${id}.timeoutMs`)
+      : entry.timeoutMinutes !== undefined ? timeoutFromMinutes(entry.timeoutMinutes, id) : undefined;
     const normalized = { id, risks, mandatory, runs, matrix: matrixRelative, watchFiles, watch, ...(timeoutMs !== undefined ? { timeoutMs } : {}) };
     normalized.matrixEvidence = validateMatrixPolicy(projectRoot, normalized, matrix, matrixFile);
     return normalized;
