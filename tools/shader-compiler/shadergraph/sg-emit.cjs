@@ -6,7 +6,7 @@
  *   2D  SpriteUnlitPass / SpriteLitPass (+ SpriteNormalPass)   -> sprite effect (world-space batched vertices,
  *       USE_LOCAL toggles the node transform like builtin-sprite)
  *   2D  MeshUnlitPass / Mesh2DLitPass (+ MeshNormalPass)       -> mesh effect (node transform)
- *   3D  UnlitPass (Universal Unlit)                            -> mesh effect, CCFragOutput
+ *   3D  UnlitPass (Universal Unlit)                            -> mesh effect, CCFragOutput (colour space gamma)
  * Everything else gets an explicit disposition (not-renderer-material / unsupported-target / unsupported-pipeline)
  * instead of a broken effect.
  */
@@ -225,7 +225,8 @@ function textureDefault(prop) {
 
 /**
  * Build the effect for one generated ShaderGraph text.
- * options: { name, colorSpace: 'gamma'|'linear', linearTextures:[], srgbTextures:[], resolveInclude(path)->text|null,
+ * options: { name, colorSpace: 'gamma'|'linear', vertexColor: 'srgb'|'linear' (default: srgb in gamma, linear in linear),
+ *            linearTextures:[], srgbTextures:[], resolveInclude(path)->text|null,
  *            overrides: { functions: glslText, names: [..] }, normalsTechnique: bool }
  * returns { disposition, effect|null, diagnostics[], properties[], textures[], target, name }
  */
@@ -261,6 +262,9 @@ function generateEffect(sourceText, options = {}) {
   const normalPass = options.normalsTechnique === false ? null
     : parsed.passes.find((p) => p.lightMode === 'NormalsRendering' && /NormalPass$/.test(p.passInclude || ''));
   const colorSpace = options.colorSpace || 'gamma';
+  // Vertex colours: Unity (linear colour space) writes SpriteRenderer / Tilemap / SpriteShape colours linearized, so a
+  // project running its own linear pipeline may still feed gamma vertex colours and want them decoded ('srgb').
+  const vertexColor = options.vertexColor || (colorSpace === 'gamma' ? 'srgb' : 'linear');
 
   // ---- lowering ---------------------------------------------------------------------------------------------
   const overrideNames = (options.overrides && options.overrides.names) || [];
@@ -454,7 +458,7 @@ vec3 sgTangentViewDir () { return vec3(0.0); }`;
   // roots: the description functions plus every helper the generated vert()/frag() bodies call
   const fragInputExprs = (fields) => fields.map((f) => (FRAGMENT_INPUTS[f.name] || [''])[0]).join('\n');
   const vsRoots = ['VertexDescriptionFunction', colorPass.vertexInputs.map((f) => VERTEX_INPUTS[f.name] || '').join('\n'),
-    colorSpace === 'gamma' ? 'sgSRGBToLinear' : ''];
+    vertexColor === 'srgb' ? 'sgSRGBToLinear' : ''];
   const fsRoots = ['SurfaceDescriptionFunction', fragInputExprs(colorPass.surfaceInputs), target.lit ? 'sgCombinedShapeLight' : '',
     colorSpace === 'gamma' && target.kind === '2d' ? 'sgLinearToSRGB' : ''];
   const vsFuncs = pruneItems(pool, vsRoots);
@@ -513,8 +517,10 @@ vec3 sgTangentViewDir () { return vec3(0.0); }`;
   const colorExpr = legacySprite ? 's.SpriteColor'
     : `vec4(${outputs.has('BaseColor') ? 's.BaseColor' : 'vec3(1.0)'}, ${outputs.has('Alpha') ? 's.Alpha' : '1.0'})`;
   const tint = target.kind === '2d' && !has('_DISABLE_COLOR_TINT');
-  const outputLine = target.kind === '3d' ? 'return CCFragOutput(color);'
-    : (colorSpace === 'gamma' ? 'return vec4(sgLinearToSRGB(color.rgb), color.a);' : 'return color;');
+  // linear: the project owns the linear frame (HDR target + its own final encode), so 3D targets pass through too
+  // instead of CCFragOutput's builtin-pipeline encode
+  const outputLine = colorSpace === 'linear' ? 'return color;'
+    : (target.kind === '3d' ? 'return CCFragOutput(color);' : 'return vec4(sgLinearToSRGB(color.rgb), color.a);');
   const objectSpace = target.sprite
     ? `#if USE_LOCAL
   #include <builtin/uniforms/cc-local>
@@ -621,7 +627,7 @@ vec3 sgTangentViewDir () { return vec3(0.0); }`;
     lines.push(`    ${outputLine}`);
     return lines.join('\n');
   };
-  const vColor = colorSpace === 'gamma' ? 'vec4(sgSRGBToLinear(a_color.rgb), a_color.a)' : 'a_color';
+  const vColor = vertexColor === 'srgb' ? 'vec4(sgSRGBToLinear(a_color.rgb), a_color.a)' : 'a_color';
   const vertLines = [
     '    VertexDescriptionInputs IN;',
     vBind.replace(/IN\.VertexColor = a_color;/, `IN.VertexColor = ${vColor};`),
@@ -693,7 +699,7 @@ ${vertLines}
 CCProgram sg-fs %{
   precision highp float;
 ${derivExt(fsFuncs)}  #include <sg-common>
-${target.kind === '3d' ? '  #include <legacy/output>\n' : ''}${pickPrelude(fragPrelude, fsFuncs)}
+${target.kind === '3d' && colorSpace !== 'linear' ? '  #include <legacy/output>\n' : ''}${pickPrelude(fragPrelude, fsFuncs)}
 ${varyingDecl('in')}
 
 ${indent(fsFuncs)}
