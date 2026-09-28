@@ -435,6 +435,47 @@ test and acceptance gate to that registry. The AOE source project runs
   source burst times, actual preview shader uniforms and bounded visible
   pixels at source and portrait viewports before claiming the fix.
 
+### Effect compile gate (mandatory for every `.effect` writer)
+
+The Cocos importer expands an effect with the editor's effect compiler (shdc) and then compiles the WebGL1
+program in a WebGL context; a failure there is `EFX2406` and the effect never imports. `verify.effects`
+(`npm run ai:verify:effects`, `tools/shader-compiler/effect-compile-gate.cjs`) reproduces that offline:
+it loads the installed Creator's own `shdc-lib.js` from `app.asar` (engine chunks, macro tagging, GLSL 300
+-> 100 lowering, EFX1xxx/2xxx/3302 checks) and compiles every program as GLSL ES 1.00 in WebGL1 (the exact
+editor sources and macro values) and GLSL ES 3.00 in WebGL2 with ANGLE in headless Chrome/Edge.
+
+- No generator may write or commit an effect that fails it. Kit writers (`generated-asset-writer`,
+  `shader.convert/batch/chain`, the legacy HLSL/ShaderGraph wrapper, `cli-batch-engine`,
+  `shader.shadergraph`) gate before writing and report `high` instead. A project-local generator must call
+  `checkEffects` / `checkEffectSource` (or `assertEffectCompilesSync`) before its write, or run
+  `ai:verify:effects` on its output before committing.
+- `ai:verify:assets` and `ai:verify` fail on any failing effect in scope. Missing Creator, browser or WebGL
+  context is a FAIL, never a pass.
+- Diagnostics carry `file:line`, API/stage/program/permutation and the offending GLSL line; read those, do not
+  guess from the headline. With the editor open, `verify.effects.live` reimports through Cocos MCP and pulls
+  the same `ERROR: 0:<line>` + source line out of `temp/logs/project.log` (the MCP tool alone returns headlines).
+- Write ES 1.00-compatible GLSL at the source: no array constructors or first-class arrays, no methods,
+  derivatives only under `#pragma extension([GL_OES_standard_derivatives, __VERSION__ < 300])` and never in
+  the vertex stage, explicit-LOD sampling through a per-stage helper (`texture2DLod` is vertex-only in ES
+  1.00), no `f` literal suffixes, no uint/bit operations in the ES 1.00 branch, exact types everywhere (HLSL's
+  implicit int->float, splat, truncation, scalar swizzles and float predicates do not exist in GLSL ES), only
+  the helpers each stage reaches, no function-like `#define` wrappers around nested calls.
+- Compile success is not visual parity: live import, material binding and Unity reference checkpoints remain.
+
+### Unity ShaderGraph: port Unity's generated code, not the graph JSON
+
+Dump the code Unity compiles for each graph (read-only):
+`npm run unity:script -- --project <Unity> --script playable-shared-kit/tools/unity-intel/dump-shadergraph-code.cs --set OUTPUT_DIR=<dir> --set SEARCH_FOLDERS=Assets/<game>`,
+then `node playable-shared-kit/tools/shader-compiler/shadergraph-codegen.cjs --src <dir> --out assets/effects/sg --unity-project <Unity> --report <file>`
+(`port.prefab --shadergraph-dump <dir>` routes material ports through the same path). The generator lowers
+HLSL with a typed pass, resolves `UnityTexture2D`/`UnitySamplerState` at compile time, hoists gradient
+literals, prunes helpers per stage, composes the URP 2D sprite/mesh (lit + normals) and Universal Unlit
+targets, and gates every effect before writing. Give each graph the playable does not render an explicit
+`--skip "<Graph>=<reason>"`; UI Toolkit / Fullscreen / HDRP / Universal Lit get their own dispositions. Custom
+Function files that read engine data Cocos lacks (e.g. `unity_RendererUserValue`) take a project
+`--overrides <glsl>` (same-name function + its own `uniform Block {}`). Bind the 2D light textures, `_TexelSize`
+values and texture sampler states from the project; they are reported medium, not silently defaulted.
+
 ### Preview combat and filesystem pitfalls
 
 - Keep gameplay delivery first. For explicit preview-only acceptance use core verify with --preview-only --preview-url; keep all runtime, regression and evidence gates, exclude only packaged build. Never invent a build receipt.

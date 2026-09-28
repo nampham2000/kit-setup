@@ -63,6 +63,7 @@
     "verify:runtime": "node playable-shared-kit/tools/verify-runtime.cjs",
     "ai:verify:prefab": "node playable-shared-kit/tools/verify-prefab.cjs --json",
     "ai:verify:assets": "node playable-shared-kit/tools/verify-assets.cjs --json",
+    "ai:verify:effects": "node playable-shared-kit/tools/shader-compiler/effect-compile-gate.cjs",
     "ai:verify:runtime": "node playable-shared-kit/tools/verify-runtime.cjs --json",
     "ai:verify:visual": "node playable-shared-kit/tools/preview-checkpoints.cjs --json",
     "verify:regressions": "node playable-shared-kit/tools/port-regression-gate.cjs run",

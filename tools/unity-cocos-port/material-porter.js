@@ -529,6 +529,9 @@ module.exports = function createMaterialPorter(deps) {
         cocosRoot: options.cocosRoot,
         shaderName: effectStem,
         overwrite: true,
+        // .shadergraph: Unity's generated code (dump-shadergraph-code.cs) is used when present
+        shaderGraphDumpDir: options.shaderGraphDumpDir,
+        unityProject: options.unityRoot ? path.resolve(options.unityRoot, '..') : undefined,
       }, reporter);
 
       const meta = readJsonIfExists(`${effectFile}.meta`);

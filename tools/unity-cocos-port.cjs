@@ -341,6 +341,8 @@ Options:
   --force-physics-backend   Chấp nhận override dù tool phát hiện mất hành vi (được ghi rõ trong report).
   --skip-physics            Không emit Rigidbody/Collider/Joint/CharacterController (report low PHYSICS_COMPONENT_SKIPPED)
                             khi playable tự thay physics bằng logic riêng; collider mesh không bị export/import.
+  --shadergraph-dump <dir> Code ShaderGraph do Unity sinh (tools/unity-intel/dump-shadergraph-code.cs); material
+                            dùng .shadergraph được sinh bằng shadergraph-codegen thay vì đọc JSON graph.
   --jobs <n>                Chạy song song n tiến trình con cho batch prefab.
   --only-prefabs <names>    Batch từ folder: chỉ port các prefab trong danh sách (tên không đuôi hoặc
                             path tương đối với --src; phân tách bằng dấu phẩy hoặc @file JSON/dòng).
@@ -580,6 +582,10 @@ function parseArgs(argv) {
     }
     if (arg === '--skip-physics') {
       options.skipPhysics = true;
+      continue;
+    }
+    if (arg === '--shadergraph-dump') {
+      options.shaderGraphDumpDir = readValue(arg);
       continue;
     }
     if (arg === '--physics-backend') {

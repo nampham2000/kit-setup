@@ -3,12 +3,17 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { assertEffectPropertyBindings } = require('../shader-compiler/effect-property-bindings.cjs');
+const { assertEffectCompilesSync } = require('../shader-compiler/effect-compile-gate.cjs');
 
 /** Publish complete content once; temporary bytes never enter the Assets tree. */
 function writeGeneratedAssetText(file, content, options) {
   const destination = path.resolve(file), project = path.resolve(options.cocosRoot);
   if (!destination.startsWith(project + path.sep)) throw new Error('Generated asset must remain within its Cocos project');
-  if (/\.effect$/i.test(destination)) assertEffectPropertyBindings(content);
+  if (/\.effect$/i.test(destination)) {
+    assertEffectPropertyBindings(content);
+    // Real editor expansion + GLSL ES 1.00/3.00 compile: an effect Cocos would reject (EFX2406) is never published.
+    assertEffectCompilesSync(content, destination);
+  }
   if (fs.existsSync(destination) && fs.readFileSync(destination, 'utf8') === content) return false;
   // Same project volume prevents EXDEV when the system TEMP is on C: and the
   // Cocos checkout is on D:. Rename prevents the Editor reading half-written JSON.
