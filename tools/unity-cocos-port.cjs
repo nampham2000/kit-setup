@@ -5747,9 +5747,13 @@ function nestedPrefabHasExternallyReferencedObjects(nestedPrefab, outerModel) {
  */
 function syncNestedRateOverDistanceHelper(builder, particleId, particleData, reporter, nestedPrefab) {
   const rateRange = particleData?.EmissionModule?.rateOverDistance;
-  if (!rateRange || Number(rateRange.minMaxState || 0) !== 0) return;
-  const effectiveRate = Number(rateRange.scalar || 0);
-  if (!(effectiveRate > 0)) return;
+  const rateMode = Number(rateRange?.minMaxState || 0);
+  if (!rateRange || (rateMode !== 0 && rateMode !== 3)) return;
+  const effectiveMax = Number(rateRange.scalar || 0);
+  if (!(effectiveMax > 0)) return;
+  // Random Between Two Constants: rateOverDistance holds the lower bound, rateOverDistanceMax the upper.
+  const effectiveRate = rateMode === 3 ? Math.max(0, Math.min(effectiveMax, Number(rateRange.minScalar || 0))) : effectiveMax;
+  const effectiveRateMax = rateMode === 3 && effectiveMax > effectiveRate ? effectiveMax : 0;
 
   const particle = builder.objects[particleId];
   const nodeId = Number(particle?.node?.__id__);
@@ -5760,14 +5764,17 @@ function syncNestedRateOverDistanceHelper(builder, particleId, particleData, rep
     const component = builder.objects[Number(componentRef?.__id__)];
     if (!component || Number(component.particleSystem?.__id__) !== particleId) continue;
     if (typeof component.rateOverDistance !== 'number') continue;
-    if (component.rateOverDistance === effectiveRate) return;
+    const currentMax = Number(component.rateOverDistanceMax || 0);
+    if (component.rateOverDistance === effectiveRate && currentMax === effectiveRateMax) return;
     reporter.low(
       'PARTICLE_RATE_OVER_DISTANCE_OVERRIDE_SYNCED',
       nestedPrefab?.sourceAsset?.relativePath || '',
       node._name || '',
-      `Rate over Distance ${component.rateOverDistance} -> ${effectiveRate} from the prefab instance override`,
+      `Rate over Distance ${component.rateOverDistance}${currentMax ? `-${currentMax}` : ''} -> ${effectiveRate}${effectiveRateMax ? `-${effectiveRateMax}` : ''} from the prefab instance override`,
     );
     component.rateOverDistance = effectiveRate;
+    if (effectiveRateMax) component.rateOverDistanceMax = effectiveRateMax;
+    else delete component.rateOverDistanceMax;
     return;
   }
 }

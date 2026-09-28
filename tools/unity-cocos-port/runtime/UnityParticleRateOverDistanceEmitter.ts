@@ -31,6 +31,14 @@ export class UnityParticleRateOverDistanceEmitter extends Component {
     @property({ min: 0, displayName: 'Rate Over Distance' })
     public rateOverDistance = 0;
 
+    /**
+     * Unity "Random Between Two Constants" upper bound (rateOverDistance is then the lower one); 0 = Constant.
+     * The rate is drawn uniformly per update, which keeps Unity's mean density; whether Unity draws once per
+     * frame or once per emitter is not measured.
+     */
+    @property({ min: 0, displayName: 'Rate Over Distance Max' })
+    public rateOverDistanceMax = 0;
+
     private readonly _lastWorldPosition = new Vec3();
     private readonly _currentWorldPosition = new Vec3();
     private readonly _sampleWorldPosition = new Vec3();
@@ -76,7 +84,8 @@ export class UnityParticleRateOverDistanceEmitter extends Component {
             return;
         }
 
-        const rate = Math.max(0, this.rateOverDistance);
+        const min = Math.max(0, this.rateOverDistance);
+        const rate = this.rateOverDistanceMax > min ? min + Math.random() * (this.rateOverDistanceMax - min) : min;
         const distance = Vec3.distance(this._lastWorldPosition, this._currentWorldPosition);
         if (rate <= 0 || distance <= DISTANCE_EPSILON) {
             this._lastWorldPosition.set(this._currentWorldPosition);
