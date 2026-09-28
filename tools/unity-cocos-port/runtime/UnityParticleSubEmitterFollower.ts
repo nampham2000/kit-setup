@@ -1,4 +1,4 @@
-import { _decorator, Component, CurveRange, Enum, Mat4, Node, ParticleSystem, Quat, Vec3 } from 'cc';
+import { Color, Component, CurveRange, Enum, Mat4, Node, ParticleSystem, Quat, Vec3, _decorator } from 'cc';
 import { EDITOR_NOT_IN_PREVIEW } from 'cc/env';
 import { UnityParticleDistanceSubEmitter } from './UnityParticleDistanceSubEmitter';
 
@@ -10,8 +10,15 @@ export enum UnityParticleSubEmitterType {
 }
 Enum(UnityParticleSubEmitterType);
 
+// Unity ParticleSystemSubEmitterProperties flags. Instances apply Color (the parent's current color times the
+// sub particle's start color); the porter reports the other flags.
 export enum UnityParticleSubEmitterInherit {
     Nothing = 0,
+    Color = 1,
+    Size = 2,
+    Rotation = 4,
+    Lifetime = 8,
+    Duration = 16,
 }
 Enum(UnityParticleSubEmitterInherit);
 
@@ -23,6 +30,8 @@ type ParticleLike = {
     ultimateVelocity?: Vec3;
     animatedVelocity?: Vec3;
     startLifetime?: number;
+    color?: Color;
+    startColor?: Color;
 };
 
 type AnimatedModuleLike = { animate(particle: ParticleLike, dt: number): void; };
@@ -592,7 +601,7 @@ export class UnityParticleSubEmitterFollower extends Component {
         const owed = instance.rateAccumulator + rate * (to - from);
         const count = Math.floor(owed + EMISSION_EPSILON);
         for (let k = 1; k <= count; k += 1) {
-            this.emitPlaced(instance.entry, from + (k - instance.rateAccumulator) / rate + base, 1);
+            this.emitPlaced(instance, from + (k - instance.rateAccumulator) / rate + base, 1);
         }
         instance.rateAccumulator = Math.max(0, owed - count);
     }
@@ -610,7 +619,7 @@ export class UnityParticleSubEmitterFollower extends Component {
         const count = Math.floor(owed + EMISSION_EPSILON);
         for (let k = 1; k <= count; k += 1) {
             const fraction = Math.min(1, (k - instance.distanceAccumulator) / travelled);
-            this.emitPlaced(instance.entry, w.start + fraction * w.step, 1);
+            this.emitPlaced(instance, w.start + fraction * w.step, 1);
         }
         instance.distanceAccumulator = Math.max(0, owed - count);
     }
@@ -633,14 +642,15 @@ export class UnityParticleSubEmitterFollower extends Component {
             for (let cycle = instance.cycles[b]; cycle < last; cycle += 1) {
                 const at = burst.time + cycle * interval;
                 const count = Math.round(burst.count.evaluate(Math.min(1, at / duration), Math.random()));
-                if (count > 0) this.emitPlaced(instance.entry, at + base, count);
+                if (count > 0) this.emitPlaced(instance, at + base, count);
             }
             instance.cycles[b] = Math.max(instance.cycles[b], due);
         }
     }
 
     /** Emits count particles for an event at unwrapped instance time u, placed and aged within the current step. */
-    private emitPlaced (entry: UnityParticleSubEmitterEntry, u: number, count: number): void {
+    private emitPlaced (instance: EmissionInstance, u: number, count: number): void {
+        const entry = instance.entry;
         const w = this._window;
         const fraction = w.step > 0 ? Math.min(1, Math.max(0, (u - w.start) / w.step)) : 1;
         Vec3.lerp(this._sample, w.from, w.to, fraction);
@@ -649,6 +659,14 @@ export class UnityParticleSubEmitterFollower extends Component {
         const before = pool ? pool.length : 0;
         this.emitAtWorldPosition(entry, this._sample, count);
         if (!pool) return;
+        const parentColor = (entry.inherit & UnityParticleSubEmitterInherit.Color) !== 0 ? instance.particle?.color : undefined;
+        if (parentColor) {
+            for (let i = before; i < pool.length; i += 1) {
+                const particle = pool.data[i];
+                if (particle.startColor) Color.multiply(particle.startColor, particle.startColor, parentColor);
+                if (particle.color) Color.multiply(particle.color, particle.color, parentColor);
+            }
+        }
         const age = Math.max(0, w.end - u);
         if (age > 0) for (let i = before; i < pool.length; i += 1) this.advanceNewParticle(target, pool.data[i], age);
     }

@@ -20,11 +20,15 @@ class Quat {
   static rotationTo(o) { return o; }
   static multiply(o) { return o; }
 }
+class Color {
+  constructor(r = 255, g = 255, b = 255, a = 255) { this.r = r; this.g = g; this.b = b; this.a = a; }
+  static multiply(o, x, y) { o.r = x.r * y.r / 255; o.g = x.g * y.g / 255; o.b = x.b * y.b / 255; o.a = x.a * y.a / 255; return o; }
+}
 class CurveRange { constructor(constant = 0) { this.mode = 0; this.constant = constant; this.multiplier = 1; } evaluate() { return this.constant; } }
 const decorator = () => (target) => target;
 const cc = {
   _decorator: { ccclass: decorator, executeInEditMode: (t) => t, executionOrder: decorator, playOnFocus: (t) => t, property: () => () => undefined },
-  Component: class { constructor() { this.enabled = true; } }, Enum: (e) => e, Mat4: class {}, Node: class {}, ParticleSystem: class {}, Vec3, Quat, CurveRange,
+  Component: class { constructor() { this.enabled = true; } }, Enum: (e) => e, Mat4: class {}, Node: class {}, ParticleSystem: class {}, Vec3, Quat, CurveRange, Color,
 };
 
 function load(editor = false) {
@@ -202,4 +206,22 @@ test('instances emit the sub system Rate over Distance along their parent path (
   still.spawn(1);
   for (let frame = 0; frame < 30; frame++) still.follower.lateUpdate(dt);
   assert.equal(idle.total(), 0);
+});
+
+test('Inherit Color multiplies each instance particle by its parent current color', () => {
+  const mod = load();
+  const sub = target('SubGlow', { loop: true, rate: 60 });
+  const pool = { data: [], length: 0 };
+  sub.processor = { _particles: pool };
+  sub.emit = function (n) { for (let i = 0; i < n; i++) pool.data[pool.length++] = { position: new Vec3(), startColor: new Color(255, 255, 255, 200), color: new Color(255, 255, 255, 200) }; this.emitted.push({ n, x: this.node.position.x }); };
+  const { follower, spawn } = rig(mod, [sub]);
+  follower.entries[0].inherit = 1;
+  const parent = spawn(0);
+  parent.color = new Color(200, 255, 50, 255);
+  for (let frame = 0; frame < 10; frame++) follower.lateUpdate(1 / 60);
+  assert.ok(pool.length > 0, 'instance emitted');
+  for (let i = 0; i < pool.length; i++) {
+    const c = pool.data[i].startColor;
+    assert.deepEqual([Math.round(c.r), Math.round(c.g), Math.round(c.b), Math.round(c.a)], [200, 255, 50, 200]);
+  }
 });
