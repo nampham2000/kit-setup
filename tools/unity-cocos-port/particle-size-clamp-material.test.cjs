@@ -34,7 +34,7 @@ test('renderers sharing one LegacyPreview material keep their own Min/Max Partic
     const glowBlast=write({m_RenderMode:1,m_MaxParticleSize:5});
     assert.equal(unityDefault.name,'glow.mtl','the Unity default clamp keeps the shared file name');
     assert.equal(levelUpRing.name,'glow.size-0_25.mtl');
-    assert.equal(glowBlast.name,'glow.size-0_5.mtl');
+    assert.equal(glowBlast.name,'glow.renderer-1-0_0_0_0.size-0_5.mtl','stretched renderers always use the source effect');
     assert.deepEqual(unityDefault.props.sourceRendererSize,{__type__:'cc.Vec4',x:0,y:0.5,z:0,w:1});
     assert.deepEqual(levelUpRing.props.sourceRendererSize,{__type__:'cc.Vec4',x:0,y:25,z:0,w:1});
     assert.equal(JSON.parse(fs.readFileSync(path.join(temp,'assets','glow.mtl'),'utf8'))._props[0].sourceRendererSize.y,0.5,'a later renderer never overwrites the default variant');

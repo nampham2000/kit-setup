@@ -108,6 +108,10 @@ test('CLI is explicit about refresh and rejects unknown options', () => {
   assert.deepEqual(parseArgs(['init', '--risk', 'input-response', '--risk=level-lifecycle']).risks,
     ['input-response', 'level-lifecycle']);
   assert.throws(() => parseArgs(['run', '--maybe']), error => error.code === 'REGRESSION_OPTION_INVALID');
+  // --preview-url must reach the camelCase option that executeMatrix reads (was stored as options['preview-url']).
+  assert.equal(parseArgs(['run', '--preview-url', 'http://localhost:7457']).previewUrl, 'http://localhost:7457');
+  assert.equal(parseArgs(['run', '--preview-url=http://127.0.0.1:7460/']).previewUrl, 'http://127.0.0.1:7460/');
+  assert.equal(parseArgs(['run', '--preview-url', 'http://localhost:7457'])['preview-url'], undefined);
 });
 
 test('a win-less demo can verify lifecycle through two measured gesture restarts', t => {
@@ -821,4 +825,210 @@ test('ui-layout tag requires a bounded centre offset at two viewports and hashes
   writeMatrix(root, matrix, [{ ...cases[0], evalHelpers: ['tools/qa/missing.js'] }, cases[1]]);
   assert.throws(() => validateRegistry(root, source, { configFile: file }),
     error => error.code === 'REGRESSION_PATH_MISSING');
+});
+
+// ---- per-suite timeout -------------------------------------------------------
+
+function timeoutFixture(t, suiteExtra = {}, cases = null) {
+  const root = fixture(t);
+  const matrix = 'tools/qa/lifecycle.json';
+  fs.writeFileSync(path.join(root, 'tools', 'qa', 'assert-lifecycle.js'), '({ok:true})\n');
+  writeMatrix(root, matrix, cases || [{
+    name: 'complete level',
+    evalFile: 'tools/qa/assert-lifecycle.js',
+    requireEvalOk: true,
+    regressionTags: ['win'],
+  }]);
+  const source = registry([{
+    id: 'lifecycle', risks: ['level-lifecycle'], runs: 2, matrix,
+    watchFiles: ['assets/script/Game.ts'], ...suiteExtra,
+  }], ['level-lifecycle']);
+  const file = writeRegistry(root, source);
+  return { root, matrix, source, file };
+}
+
+test('suite timeoutMs accepts bounded integers and rejects non-integer or out-of-range values', t => {
+  const gate = require('./port-regression-gate.cjs');
+  const { root, source, file } = timeoutFixture(t, { timeoutMs: 1_800_000 });
+  assert.equal(validateRegistry(root, source, { configFile: file }).suites[0].timeoutMs, 1_800_000);
+  for (const value of [gate.MIN_SUITE_TIMEOUT_MS, gate.MAX_SUITE_TIMEOUT_MS]) {
+    source.suites[0].timeoutMs = value;
+    assert.equal(validateRegistry(root, source, { configFile: file }).suites[0].timeoutMs, value);
+  }
+  delete source.suites[0].timeoutMs;
+  assert.equal(validateRegistry(root, source, { configFile: file }).suites[0].timeoutMs, undefined);
+  for (const bad of [59_999, 2_700_001, 600000.5, '600000', null, -1, 0, true]) {
+    source.suites[0].timeoutMs = bad;
+    assert.throws(() => validateRegistry(root, source, { configFile: file }),
+      error => error.code === 'REGRESSION_SUITE_TIMEOUT_INVALID' && /lifecycle\.timeoutMs/.test(error.message),
+      `timeoutMs=${JSON.stringify(bad)} must fail`);
+  }
+});
+
+test('--suite-timeout-ms parses before any I/O, is run-only, bounded, and overrides the registry', async t => {
+  assert.equal(parseArgs(['run', '--suite-timeout-ms', '1200000']).suiteTimeoutMs, 1_200_000);
+  assert.equal(parseArgs(['run', '--suite-timeout-ms=60000']).suiteTimeoutMs, 60_000);
+  for (const bad of ['59999', '2700001', '1e6', '600000.5', 'abc', '-60000', ' ']) {
+    assert.throws(() => parseArgs(['run', `--suite-timeout-ms=${bad}`]),
+      error => error.code === 'REGRESSION_SUITE_TIMEOUT_INVALID' || error.code === 'REGRESSION_OPTION_VALUE_REQUIRED',
+      `--suite-timeout-ms=${bad} must fail`);
+  }
+  assert.throws(() => parseArgs(['run', '--suite-timeout-ms']), error => error.code === 'REGRESSION_OPTION_VALUE_REQUIRED');
+  assert.throws(() => parseArgs(['check', '--suite-timeout-ms', '600000']), error => error.code === 'REGRESSION_OPTION_INVALID');
+  assert.throws(() => parseArgs(['init', '--suite-timeout-ms', '600000']), error => error.code === 'REGRESSION_OPTION_INVALID');
+  assert.throws(() => parseArgs(['run', '--suite-timeout-ms', '600000', '--suite-timeout-ms', '700000']),
+    error => error.code === 'REGRESSION_OPTION_INVALID');
+
+  const { root } = timeoutFixture(t, { timeoutMs: 900_000 });
+  const seen = [];
+  const deps = {
+    assertPortable() { return { ok: true }; },
+    async refreshPreview() { return { ok: true }; },
+    runMatrix(_root, _suite, runNumber, options) { seen.push(options.timeoutMs); return { run: runNumber, ok: true, cases: [] }; },
+  };
+  const fromRegistry = await runRegressionGate({ project: root }, deps);
+  assert.deepEqual(seen, [900_000, 900_000]);
+  assert.equal(fromRegistry.suites[0].timeoutSource, 'registry');
+  seen.length = 0;
+  const fromCli = await runRegressionGate({ project: root, suiteTimeoutMs: 1_500_000 }, deps);
+  assert.deepEqual(seen, [1_500_000, 1_500_000]);
+  assert.equal(fromCli.suites[0].timeoutSource, 'cli');
+  // The CLI override is machine-local: it does not change the receipt digest.
+  assert.equal(fromCli.snapshotDigest, fromRegistry.snapshotDigest);
+  assert.equal(checkRegressionReceipt({ project: root, portabilityCheck: false }).ok, true);
+  await assert.rejects(runRegressionGate({ project: root, suiteTimeoutMs: 10 }, deps),
+    error => error.code === 'REGRESSION_SUITE_TIMEOUT_INVALID');
+
+  const defaults = timeoutFixture(t);
+  seen.length = 0;
+  const fromDefault = await runRegressionGate({ project: defaults.root }, deps);
+  assert.deepEqual(seen, [600_000, 600_000]);
+  assert.equal(fromDefault.suites[0].timeoutSource, 'default');
+});
+
+test('a spawnSync ETIMEDOUT run reports REGRESSION_SUITE_TIMEOUT with suite, timeout, case count and hint', async t => {
+  const { root } = timeoutFixture(t, { timeoutMs: 120_000 });
+  const spawned = [];
+  const result = await runRegressionGate({ project: root }, {
+    assertPortable() { return { ok: true }; },
+    async refreshPreview() { return { ok: true }; },
+    matrixOptions: {
+      spawnSync(_exe, _args, spawnOptions) {
+        spawned.push(spawnOptions.timeout);
+        const error = new Error('spawnSync node ETIMEDOUT');
+        error.code = 'ETIMEDOUT';
+        return { status: null, signal: 'SIGTERM', stdout: '', stderr: '', error };
+      },
+    },
+  });
+  assert.equal(result.ok, false);
+  assert.deepEqual(spawned, [120_000, 120_000]);
+  const suite = result.suites[0];
+  assert.equal(suite.code, 'REGRESSION_SUITE_TIMEOUT');
+  assert.match(suite.message, /lifecycle/);
+  assert.match(suite.message, /120000 ms/);
+  assert.match(suite.message, /1 cases/);
+  assert.match(suite.message, /Split the matrix/);
+  assert.match(suite.message, /timeoutMs/);
+  for (const run of suite.runs) {
+    assert.equal(run.ok, false);
+    assert.equal(run.timedOut, true);
+    assert.equal(run.code, 'REGRESSION_SUITE_TIMEOUT');
+    assert.equal(run.spawnErrorCode, 'ETIMEDOUT');
+    assert.equal(run.timeoutMs, 120_000);
+  }
+  assert.match(result.nextActions[0], /REGRESSION_SUITE_TIMEOUT/);
+
+  // A kill signal without an error object is still a timeout when the stub marks it.
+  const gate = require('./port-regression-gate.cjs');
+  const loaded = loadRegistry(root);
+  const signalled = gate.executeMatrix(root, loaded.suites[0], 1, {
+    timeoutMs: 60_000,
+    spawnSync: () => ({ status: null, signal: 'SIGTERM', timedOut: true, stdout: '', stderr: '' }),
+  });
+  assert.equal(signalled.code, 'REGRESSION_SUITE_TIMEOUT');
+  assert.equal(signalled.ok, false);
+  const failedFast = gate.executeMatrix(root, loaded.suites[0], 1, {
+    timeoutMs: 60_000,
+    spawnSync: () => ({ status: 1, stdout: '{"ok":false}', stderr: '' }),
+  });
+  assert.equal(failedFast.code, undefined);
+  assert.equal(failedFast.timedOut, undefined);
+});
+
+test('duration estimate warns REGRESSION_SUITE_TIMEOUT_RISK without failing the gate', async t => {
+  const gate = require('./port-regression-gate.cjs');
+  const overhead = gate.CASE_RELOAD_OVERHEAD_MS;
+  assert.equal(gate.estimateMatrixDurationMs({ seconds: 5, postActionSeconds: 10, cases: [
+    { name: 'a' },
+    { name: 'b', seconds: 2, postActionSeconds: 0 },
+    { name: 'c', gestures: ['x', 'y', 'z'], gestureGapMs: 500, gestureDelaysMs: [1000, 2000, 3000] },
+  ] }), (5 + 10) * 1000 + overhead + 2000 + overhead + (5 + 10) * 1000 + 6000 + 1000 + overhead);
+  assert.equal(gate.estimateMatrixDurationMs({ cases: [{ name: 'd' }] }), 4000 + overhead);
+
+  const cases = Array.from({ length: 22 }, (_, index) => ({
+    name: `case ${index}`,
+    evalFile: 'tools/qa/assert-lifecycle.js',
+    requireEvalOk: true,
+    regressionTags: ['win'],
+    seconds: 6,
+    postActionSeconds: 30,
+  }));
+  const { root } = timeoutFixture(t, {}, cases);
+  const printed = [];
+  const deps = {
+    assertPortable() { return { ok: true }; },
+    async refreshPreview() { return { ok: true }; },
+    runMatrix(_root, _suite, runNumber) { return { run: runNumber, ok: true, cases: [] }; },
+    onWarning(warning) { printed.push(warning.code); },
+  };
+  const risky = await runRegressionGate({ project: root }, deps);
+  assert.equal(risky.ok, true);
+  assert.equal(risky.warnings.length, 1);
+  const [warning] = risky.warnings;
+  assert.equal(warning.code, 'REGRESSION_SUITE_TIMEOUT_RISK');
+  assert.equal(warning.suite, 'lifecycle');
+  assert.equal(warning.caseCount, 22);
+  assert.equal(warning.estimatedMs, 22 * (36_000 + overhead));
+  assert.equal(warning.timeoutMs, 600_000);
+  assert.deepEqual(printed, ['REGRESSION_SUITE_TIMEOUT_RISK']);
+  const receipt = JSON.parse(fs.readFileSync(path.join(root, ...DEFAULT_RECEIPT.split('/')), 'utf8'));
+  assert.equal(receipt.warnings[0].code, 'REGRESSION_SUITE_TIMEOUT_RISK');
+
+  const raised = await runRegressionGate({ project: root, suiteTimeoutMs: 1_800_000 }, deps);
+  assert.deepEqual(raised.warnings, []);
+});
+
+test('changing suite timeoutMs makes the receipt stale; registries without it keep their digest', async t => {
+  const api = require('./port-regression-gate.cjs');
+  const { root, source } = timeoutFixture(t);
+  const deps = {
+    assertPortable() { return { ok: true }; },
+    async refreshPreview() { return { ok: true }; },
+    runMatrix(_root, _suite, runNumber) { return { run: runNumber, ok: true, cases: [] }; },
+  };
+  const plain = await runRegressionGate({ project: root }, deps);
+  const plainSnapshot = api.registrySnapshot(root, loadRegistry(root));
+  assert.equal(plainSnapshot.suites[0].timeoutMs, undefined, 'undeclared timeout keeps the pre-existing snapshot shape');
+  assert.equal(plain.snapshotDigest, plainSnapshot.digest);
+
+  source.suites[0].timeoutMs = 900_000;
+  writeRegistry(root, source);
+  assert.throws(() => checkRegressionReceipt({ project: root, portabilityCheck: false }),
+    error => error.code === 'REGRESSION_RECEIPT_STALE');
+  const declared = await runRegressionGate({ project: root }, deps);
+  assert.equal(api.registrySnapshot(root, loadRegistry(root)).suites[0].timeoutMs, 900_000);
+  assert.equal(checkRegressionReceipt({ project: root, portabilityCheck: false }).ok, true);
+
+  // Same registry bytes except the timeout must still yield a different digest.
+  const loaded = loadRegistry(root);
+  const baseline = api.registrySnapshot(root, loaded).digest;
+  loaded.suites[0].timeoutMs = 1_200_000;
+  assert.notEqual(api.registrySnapshot(root, loaded).digest, baseline);
+
+  source.suites[0].timeoutMs = 1_200_000;
+  writeRegistry(root, source);
+  assert.throws(() => checkRegressionReceipt({ project: root, portabilityCheck: false }),
+    error => error.code === 'REGRESSION_RECEIPT_STALE');
+  assert.notEqual(declared.snapshotDigest, plain.snapshotDigest);
 });

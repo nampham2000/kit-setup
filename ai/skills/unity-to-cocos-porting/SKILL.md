@@ -906,6 +906,10 @@ obligation/feature nguồn và bug history, không chỉ từ phần đang sửa
 đừng giữ checkpoint quan trọng chỉ trong `.unity/` vì máy khác sẽ không nhận được. Trước khi kết luận hoặc handoff,
 chạy `npm run ai:verify:regressions`: tool refresh AssetDB/reload preview, chạy đủ rounds, và ghi receipt gắn hash
 code/config/effect/font/matrix hiện tại. Nếu `check` báo stale thì phải chạy lại, không được dùng ảnh PASS cũ.
+Matrix dài (20+ case, postActionSeconds lớn) có thể vượt timeout mặc định 10 phút/run: khai báo `"timeoutMs"`
+(integer 60000-2700000) trên suite trong `tools/port-regressions.json` hoặc chạy với `--suite-timeout-ms <ms>`
+(CLI thắng registry). Warning `REGRESSION_SUITE_TIMEOUT_RISK` nghĩa là ước lượng đã vượt timeout; lỗi
+`REGRESSION_SUITE_TIMEOUT` nghĩa là run bị kill. Ưu tiên tách matrix thành suite nhỏ hơn thay vì tăng timeout mù.
 
 Đừng xem mesh import là kết quả cuối nếu Unity source gọi `meshFilter.mesh`, gán `vertices`, `uv/uv2`,
 `colors`, `tangents`, hoặc ghi vertex buffer ở runtime. Truy theo chuỗi producer-consumer: code bake attribute nào,

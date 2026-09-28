@@ -38,10 +38,38 @@ test('Min/Max Particle Size keep Unity defaults and only the measured stretched 
   assert.ok(contract({}, {m_RenderMode:1,m_MinParticleSize:0.2}).unsupported.includes('stretched-min-particle-size'));
   assert.deepEqual(contract({}, {m_RenderMode:0,m_MinParticleSize:0.2}).unsupported,[]);
 });
+// JellyCubeRun2048 ParHitEffect: Blast (Facing, start size 25, Size over Lifetime curve peaking at 1,
+// max particle size 0.3) is clamped by Unity to 0.3 viewport widths; the builtin effect cannot clamp.
+test('particles large enough to reach the Min/Max Particle Size clamp use the source effect', () => {
+  const blast = { InitialModule: { startSize: { minMaxState: 0, scalar: 25 } }, SizeModule: { enabled: 1, curve: { minMaxState: 1, scalar: 1, maxCurve: { m_Curve: [{ value: 0 }, { value: 1 }] } } } };
+  const spark = { InitialModule: { startSize: { minMaxState: 3, scalar: 0.5, minScalar: 0.2 } }, SizeModule: { enabled: 1, curve: { minMaxState: 1, scalar: 0.5, maxCurve: { m_Curve: [{ value: 1 }, { value: 0 }] } } } };
+  for (const alignment of [0, 3]) {
+    const c = contract(blast, { m_RenderMode: 0, m_RenderAlignment: alignment, m_MaxParticleSize: 0.3 });
+    assert.equal(c.clampReachable, true);
+    assert.equal(c.requiresMaterialAdapter, true);
+    assert.deepEqual(c.sourceRendererSize, [0, 0.3, 0, 1]);
+  }
+  assert.equal(contract(blast, { m_RenderMode: 1, m_MaxParticleSize: 0.3 }).requiresMaterialAdapter, true, 'stretched widths are clamped too');
+  assert.equal(contract(spark, { m_RenderMode: 0, m_RenderAlignment: 0, m_MaxParticleSize: 0.3 }).requiresMaterialAdapter, false, '0.25 m View billboards keep the builtin effect');
+  assert.equal(contract(blast, { m_RenderMode: 4, m_MaxParticleSize: 0.3 }).clampReachable, false, 'mesh particles are never clamped');
+  assert.equal(contract({ InitialModule: { startSize: { minMaxState: 0, scalar: 0.8 } } }, { m_RenderMode: 0 }).requiresMaterialAdapter, false, 'default 0.5 clamp needs over 1 m');
+});
 
 test('scalar mesh axis binding is bounded to measured local Sphere births',()=>{
  const p={moveWithTransform:0,InitialModule:{rotation3D:false},ShapeModule:{enabled:true,type:0,radius:{value:.01},arc:{mode:0},m_Rotation:{x:0,y:0,z:0}}},r={m_RenderMode:4,m_RenderAlignment:2};
  assert.equal(!!contract(p,r).meshScalarAxis,true);
  for(const changed of [{...p,moveWithTransform:1},{...p,InitialModule:{rotation3D:true}},{...p,RotationModule:{enabled:true}},{...p,ShapeModule:{...p.ShapeModule,type:2}}])assert.equal(!!contract(changed,r).meshScalarAxis,false);
  assert.equal(!!contract(p,{...r,m_RenderAlignment:1}).meshScalarAxis,false);
+});
+
+// Unity BakeMesh (JellyCubeRun2048 tools/jelly/unity/mesh-view-alignment.cs): a View-aligned mesh
+// particle is drawn at camera rotation x particle rotation, roll included, emitter rotation ignored
+// (emitter 0 and 270 deg bake identically). Cocos' builtin View nodeRotation (Quat.fromViewUp)
+// adds a 180 deg turn about Y and drops roll, which turned the transform_die_bomb shield dome away.
+test('View-aligned mesh particles use the camera frame (w = 5)', () => {
+  assert.equal(contract({}, { m_RenderMode: 4, m_RenderAlignment: 0 }).sourceRendererPivot[3], 5);
+  assert.equal(contract({}, { m_RenderMode: 4, m_RenderAlignment: 0 }).requiresMaterialAdapter, true);
+  assert.equal(contract({}, { m_RenderMode: 4, m_RenderAlignment: 2 }).sourceRendererPivot[3], 0, 'Local keeps the emitter rotation');
+  assert.equal(contract({}, { m_RenderMode: 4, m_RenderAlignment: 1 }).sourceRendererPivot[3], 3, 'World stays world');
+  assert.equal(contract({}, { m_RenderMode: 0, m_RenderAlignment: 0 }).sourceRendererPivot[3], 0, 'View billboards are unchanged');
 });

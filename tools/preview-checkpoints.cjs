@@ -16,6 +16,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { runOne, parseGesture } = require('./verify-runtime.cjs');
+const { contentProbeClips } = require('./lib/runtime-content-probes.cjs');
 
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
 const REEXEC_ENV = 'PLAYABLE_PREVIEW_CHECKPOINTS_WEBSOCKET_REEXEC';
@@ -717,6 +718,8 @@ function validateConfig(config, overrides = {}) {
       || brightLuminanceThreshold < 0 || brightLuminanceThreshold > 255) {
       throw new Error(`cases[${index}].screenshotMetricOptions.brightLuminanceThreshold phải nằm trong 0-255`);
     }
+    // Extra normalized [x,y] blank-frame probes for narrow VFX on a flat backdrop (runtime-content-probes).
+    if (entry.contentProbePoints !== undefined) contentProbeClips(16, 16, entry.contentProbePoints);
     if (entry.gestureKeepPressed !== undefined && typeof entry.gestureKeepPressed !== 'boolean') {
       throw new Error(`cases[${index}].gestureKeepPressed phải là boolean`);
     }
@@ -947,6 +950,7 @@ async function main() {
       gestureDelaysMs: caseEntry.gestureDelaysMs,
       gestureHoldBeforeMoveMs: caseEntry.gestureHoldBeforeMoveMs,
       gestureKeepPressed: caseEntry.gestureKeepPressed === true,
+      contentProbePoints: caseEntry.contentProbePoints,
     });
     const referenceImage = copyReference(caseEntry, caseDir);
     const evalBeforeAssertion = evaluateEvalAssertion(caseEntry.requireEvalBeforeOk === true,

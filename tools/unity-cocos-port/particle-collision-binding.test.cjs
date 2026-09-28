@@ -79,3 +79,17 @@ test('unmeasured collision modes are reported, never silently dropped', () => {
   assert.deepEqual(report2.entries.map(e => [e.level, e.code]), [['low', 'PARTICLE_COLLISION_MESSAGES_EVENT'], ['medium', 'PARTICLE_COLLISION_CURVE_APPROXIMATED'], ['low', 'PARTICLE_COLLISION_ADAPTER_BOUND']]);
   assert.equal(JSON.parse(messageBuilder.added[0].body.sourceContract).messages, true);
 });
+
+// With --skip-physics every Collider is stripped, so a World collision adapter has nothing to hit,
+// while its collider imports would still force a physics backend (JellyCubeRun2048 SmashHammer_Effect).
+test('--skip-physics reports the collision for project replacement and stages no adapter', () => {
+  const cocosRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'collision-skip-'));
+  const builder = builderWith(particleCollisionContract(rain));
+  const reporter = reports();
+  attachCollisionRuntime(builder, reporter, { cocosRoot, skipPhysics: true });
+  assert.equal(builder.added.length, 0);
+  assert.deepEqual(reporter.entries.map(e => [e.level, e.code]), [['high', 'PARTICLE_COLLISION_PHYSICS_SKIPPED']]);
+  assert.equal(fs.existsSync(path.join(cocosRoot, 'assets/script/UnityParticleCollision.ts')), false);
+  assert.equal(builder.objects[2].playOnAwake, true, 'sub-emitters are left as authored');
+  fs.rmSync(cocosRoot, { recursive: true, force: true });
+});
