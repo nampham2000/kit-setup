@@ -5526,6 +5526,16 @@ function buildNestedPrefabPropertyOverrides(gameObject, transform, sourceModel, 
         value: Number(props.m_IsActive) !== 0,
       });
     }
+    // Outer prefabs re-layer nested children (Blast Shooter's conveyors put their Block tray on layer 8,
+    // lit by its own light); the root's layer is written by addNestedPrefabInstance.
+    const rootGameObjectId = rootTransform?.gameObjectId;
+    if (sourceGameObject && sourceFileId !== rootGameObjectId && hasPrefabOverrideKey(props, 'm_Layer') && scriptContext?.layerResolver) {
+      overrides.push({
+        localId: `node-${sanitizeFileId(sourceGameObject.name)}-${sourceGameObject.transformId}`,
+        propertyPath: '_layer',
+        value: scriptContext.layerResolver(Number(props.m_Layer), sourceGameObject.name),
+      });
+    }
     const sourceDoc = sourceModel.componentDocs.get(sourceFileId);
     const rendererEnabled = nestedRendererEnabledOverride(sourceDoc, sourceFileId, props);
     if (rendererEnabled) overrides.push(rendererEnabled);
@@ -8058,7 +8068,7 @@ function emitNodeRecursive(transform, parentNodeId, model, builder, layerResolve
   }
 
   if (gameObject.nestedPrefab?.prefabUuid && gameObject.nestedPrefab?.rootLocalId) {
-    const nestedOverrides = buildNestedPrefabPropertyOverrides(gameObject, resolvedTransform, gameObject.nestedPrefab.model, { builder, reporter, unityDb, cocosDb });
+    const nestedOverrides = buildNestedPrefabPropertyOverrides(gameObject, resolvedTransform, gameObject.nestedPrefab.model, { builder, reporter, unityDb, cocosDb, layerResolver });
     const nodeId = builder.addNestedPrefabInstance(
       gameObject.name,
       parentNodeId,
