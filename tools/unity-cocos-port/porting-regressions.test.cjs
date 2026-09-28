@@ -780,3 +780,21 @@ Prefab:
   assert.ok(node,'the instance node is emitted');
   assert.equal(overrides.find(o=>o.propertyPath[0]==='_lpos').value.x,-2.98,'legacy m_Modification overrides are merged');
 });
+
+test('Nested child Transform override on a local-scaled ParticleSystem object merges (no stale helper)', () => {
+  const { buildNestedChildTransformOverrides } = require('../unity-cocos-port.cjs');
+  // BlastShooter Conveyor_+: the outer prefab rescales a nested object carrying a ParticleSystem
+  // (scalingMode 1); the porter threw "gameObjectHasWorldScaledParticleSystem is not defined".
+  const transform = { fileId: '40', gameObjectId: '10', parentId: '20', localPosition: { x: 0, y: 0, z: 0 }, localRotation: { x: 0, y: 0, z: 0, w: 1 }, localScale: { x: 1, y: 1, z: 1 } };
+  const sourceModel = {
+    gameObjects: new Map([['10', { name: 'Smoke', components: ['50'] }], ['30', { name: 'Root' }]]),
+    transforms: new Map([['40', transform], ['20', { fileId: '20', gameObjectId: '30' }]]),
+    componentDocs: new Map([['50', { classId: 198 }]]),
+  };
+  const reporter = reports();
+  const overrides = buildNestedChildTransformOverrides(sourceModel, transform, { 'm_LocalScale.x': '2' }, reporter, 'Conveyor_+.prefab');
+  assert.equal(reporter.entries.filter(e => e.level !== 'low').length, 0);
+  const scale = overrides.find(o => o.propertyPath === '_lscale');
+  assert.ok(scale, 'scale override emitted');
+  assert.equal(scale.value.x, 2);
+});
