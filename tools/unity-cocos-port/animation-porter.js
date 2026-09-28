@@ -624,9 +624,12 @@ module.exports = function createAnimationPorter(deps) {
     const stopTime = Number(unityClipSettingsValue(doc, 'm_StopTime', 0) || 0);
     const loopTime = Number(unityClipSettingsValue(doc, 'm_LoopTime', 0) || 0);
     // A legacy clip (Animation component) carries its own WrapMode:
-    // Once 1, Loop 2, PingPong 4, ClampForever 8 -> Cocos Normal 1, Loop 2, PingPong 22.
-    const legacyWrap = Number(getField(doc, 'm_Legacy', 0) || 0) ? Number(getField(doc, 'm_WrapMode', 0) || 0) : 0;
-    const wrapMode = legacyWrap === 4 ? 22 : (loopTime || legacyWrap === 2 ? 2 : 1);
+    // Default 0 / Once 1, Loop 2, PingPong 4, ClampForever 8 -> Cocos Normal 1, Loop 2, PingPong 22.
+    // m_LoopTime is the Mecanim clip setting; the legacy Animation ignores it (Hovl Shake.anim
+    // has m_LoopTime 1 with m_WrapMode 0 and shakes once per click in Unity).
+    const legacy = Number(getField(doc, 'm_Legacy', 0) || 0) !== 0;
+    const legacyWrap = legacy ? Number(getField(doc, 'm_WrapMode', 0) || 0) : 0;
+    const wrapMode = legacyWrap === 4 ? 22 : ((legacy ? legacyWrap === 2 : loopTime) ? 2 : 1);
     const tracks = [];
 
     for (const entry of parseUnityVectorCurveEntries(doc, 'm_PositionCurves')) tracks.push(cocosVectorTrack(entry.path, 'position', entry.keyframes));

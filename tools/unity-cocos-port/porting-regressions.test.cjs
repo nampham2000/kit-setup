@@ -259,6 +259,18 @@ for(const frames of [4,7]) test(`${frames}-frame sprite FTUE preserves timing, c
   assert.equal(track._channel._curve._values[1].__uuid__,'frame1-uuid');
   assert.equal(reporter.entries.length,0);
 });
+test('legacy clips wrap by their own WrapMode, not the Mecanim m_LoopTime',()=>{
+  const clip=(legacy,wrap,loop)=>{
+    const file=path.join(temp,`wrap-${legacy}-${wrap}-${loop}.anim`);
+    fs.writeFileSync(file,`AnimationClip:\n  m_Name: Shake\n  m_Legacy: ${legacy}\n  m_SampleRate: 60\n  m_WrapMode: ${wrap}\n  m_AnimationClipSettings:\n    m_StopTime: 0.083333336\n    m_LoopTime: ${loop}\n`);
+    return animation.parseUnityAnimationClip(file,reports()).wrapMode;
+  };
+  assert.equal(clip(1,0,1),1); // Hovl Shake.anim: plays once per click
+  assert.equal(clip(1,2,0),2);
+  assert.equal(clip(1,4,1),22);
+  assert.equal(clip(0,0,1),2); // Mecanim clip: Loop Time
+  assert.equal(clip(0,0,0),1);
+});
 test('unresolved animation frames report high and never emit a partial track',()=>{
   const {clip,reporter}=spriteClip(4,true);
   assert.equal(clip._tracks.length,0);
