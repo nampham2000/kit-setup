@@ -181,6 +181,33 @@ test('birth rate emission is placed along the parent path within the step', () =
   for (let i = 1; i < xs.length; i++) assert.ok(Math.abs(xs[i] - xs[i - 1] - 0.1) < 1e-9, 'evenly spaced along the path');
 });
 
+test('death instances of a Local-simulation sub system stay at their own parent positions', () => {
+  // PopupWin logo (Candy Pop Sort): trailR rockets die at different points and each par_firework (Local
+  // simulation) burst stays where its rocket died; moving the shared node dragged every burst to the last one.
+  const mod = load();
+  const burst = target('Firework', { bursts: [[0, 3]] });
+  burst.simulationSpace = 1;
+  const pool = { data: [], length: 0 };
+  burst.processor = { _particles: pool };
+  burst.emit = function (n) { this.emitted.push({ n, x: this.node.position.x }); for (let i = 0; i < n; i++) pool.data[pool.length++] = { position: new Vec3(0.5 * i, 0, 0) }; };
+  burst.node.getWorldMatrix = (out) => out;
+  const saved = { transformMat4: Vec3.transformMat4, invert: cc.Mat4.invert };
+  Vec3.transformMat4 = (o, a) => o.set(a); // identity emitter frame
+  cc.Mat4.invert = (o) => o;
+  try {
+    const { follower, spawn, kill } = rig(mod, [burst], [2]);
+    const a = spawn(4), b = spawn(-7);
+    follower.lateUpdate(1 / 60);
+    kill(a);
+    follower.lateUpdate(1 / 60);
+    kill(b);
+    follower.lateUpdate(1 / 60);
+    assert.equal(burst.total(), 6);
+    assert.equal(burst.node.position.x, 0, 'the Local sub system node is not moved');
+    assert.deepEqual(pool.data.slice(0, pool.length).map((p) => p.position.x), [4, 4.5, 5, -7, -6.5, -6]);
+  } finally { Vec3.transformMat4 = saved.transformMat4; cc.Mat4.invert = saved.invert; }
+});
+
 test('instances emit the sub system Rate over Distance along their parent path (Hovl Magic circle 1 SubGlow)', () => {
   const mod = load();
   Vec3.distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);

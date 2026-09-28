@@ -75,6 +75,7 @@ type ParticlePoolLike = {
 };
 
 const PARTICLE_SPACE_WORLD = 0;
+const PARTICLE_SPACE_LOCAL = 1;
 const CURVE_MODE_CONSTANT = 0;
 const EMISSION_EPSILON = 1e-6;
 const GRAVITY = 9.8;
@@ -170,6 +171,8 @@ export class UnityParticleSubEmitterFollower extends Component {
     private readonly _legacyEntries: UnityParticleSubEmitterEntry[] = [];
     private readonly _worldPosition = new Vec3();
     private readonly _sourceWorldMatrix = new Mat4();
+    private readonly _targetInverseMatrix = new Mat4();
+    private readonly _localOffset = new Vec3();
     private readonly _velocity = new Vec3();
     private readonly _sample = new Vec3();
     private readonly _sourceForward = new Vec3();
@@ -405,11 +408,26 @@ export class UnityParticleSubEmitterFollower extends Component {
         if (!emitterNode.active) {
             emitterNode.active = true;
         }
-        emitterNode.setWorldPosition(worldPosition);
+        // Instances of a Local-simulation sub system share its transform: Unity emits each instance at
+        // the parent's world point expressed in that frame, and the particles stay there. Moving the
+        // node would drag every live instance to the last event (one clump instead of N bursts).
+        const local = entry.unityInstances && entry.subEmitter.simulationSpace === PARTICLE_SPACE_LOCAL;
+        if (!local) emitterNode.setWorldPosition(worldPosition);
         if (!(entry.subEmitter as any)._isPlaying) {
             entry.subEmitter.play();
         }
+        const pool = local ? this.getSourceParticlePool(entry.subEmitter) : null;
+        const before = pool ? pool.length : 0;
         (entry.subEmitter as any).emit(count, 0);
+        if (pool && pool.length > before) {
+            emitterNode.getWorldMatrix(this._targetInverseMatrix);
+            Mat4.invert(this._targetInverseMatrix, this._targetInverseMatrix);
+            Vec3.transformMat4(this._localOffset, worldPosition, this._targetInverseMatrix);
+            for (let i = before; i < pool.length; i += 1) {
+                const position = pool.data[i].position;
+                position.set(position.x + this._localOffset.x, position.y + this._localOffset.y, position.z + this._localOffset.z);
+            }
+        }
         if (entry.type === UnityParticleSubEmitterType.Death) {
             this._deathEmitterHoldTimes.set(entry, 0.15);
         }
