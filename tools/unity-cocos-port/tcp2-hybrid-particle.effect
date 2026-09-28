@@ -183,8 +183,7 @@ CCProgram tcp2-particle-vs %{
 CCProgram tcp2-particle-fs %{
   precision highp float;
 
-  #include <legacy/output>
-  #include <common/color/gamma>
+  #include <legacy/output-standard>
   #include <builtin/internal/embedded-alpha>
   #include <builtin/uniforms/cc-global>
   #include <tcp2-particle-shared>
@@ -203,9 +202,24 @@ CCProgram tcp2-particle-fs %{
     return alpha2 / max(3.14159265 * denominator * denominator, 0.0001);
   }
 
+  // TCP2 Hybrid Shader 2 in a linear Unity project samples the sRGB _BaseMap decoded, lights it in
+  // linear space and writes `half4(color, alpha)` into the sRGB target, which encodes it. The
+  // `legacy/output` passthrough never encoded, so this effect rendered linear values (about
+  // texture^2: dark and oversaturated). Cocos' SRGBToLinear / LinearToSRGB are x^2 / sqrt
+  // approximations; use Unity's exact piecewise curves and round-trip the encoded value through
+  // output-standard (SRGBToLinear, then its LinearToSRGB) so the 8-bit output is exact.
+  vec3 unityDecodeSRGB (vec3 c) {
+    return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), c));
+  }
+
+  vec3 unityEncodeSRGB (vec3 c) {
+    c = clamp(c, 0.0, 1.0);
+    return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), c));
+  }
+
   vec4 frag () {
     vec4 texColor = CCSampleWithAlphaSeparated(mainTexture, uv);
-    texColor.rgb = SRGBToLinear(texColor.rgb);
+    texColor.rgb = unityDecodeSRGB(texColor.rgb);
     vec4 baseColor = texColor * color * mainColor;
 
     vec3 normal = normalize(v_worldNormal);
@@ -229,6 +243,7 @@ CCProgram tcp2-particle-fs %{
     float rim = smoothstep(rimParams.x, max(rimParams.y, rimParams.x + 0.0001), 1.0 - noV);
     vec3 rimContribution = rimColor.rgb * rim * mix(vec3(1.0), mainLight * ramp, rimParams.z) * rimParams.w;
     vec3 specular = ggxDistribution(noH, specularParams.x) * specularColor.rgb * mainLight * noL * specularParams.y;
-    return CCFragOutput(vec4(direct + indirect + rimContribution + specular + emissive.rgb, baseColor.a));
+    vec3 lit = direct + indirect + rimContribution + specular + emissive.rgb;
+    return CCFragOutput(vec4(SRGBToLinear(unityEncodeSRGB(lit)), baseColor.a));
   }
 }%
