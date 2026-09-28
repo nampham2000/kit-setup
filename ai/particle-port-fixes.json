@@ -428,12 +428,14 @@
       "sharedPaths": [
         "tools/unity-cocos-port/particle-simulation-step-binding.js",
         "tools/unity-cocos-port/runtime/UnityParticleSimulationStep.ts",
-        "tools/unity-cocos-port/runtime/UnityParticleSimulationStepAdapter.ts"
+        "tools/unity-cocos-port/runtime/UnityParticleSimulationStepAdapter.ts",
+        "tools/unity-cocos-port/runtime/UnityParticleBurstEmission.ts"
       ],
       "testPaths": [
-        "tools/unity-cocos-port/particle-simulation-step.test.cjs"
+        "tools/unity-cocos-port/particle-simulation-step.test.cjs",
+        "tools/unity-cocos-port/particle-simulation-step-burst-once.test.cjs"
       ],
-      "acceptance": "Source TimeManager maximum particle timestep, AssetDB bound adapter, long-frame emission and full elapsed simulation, replay; looping boundaries/bursts and visual fidelity require additional native acceptance."
+      "acceptance": "Source TimeManager maximum particle timestep, AssetDB bound adapter, long-frame emission and full elapsed simulation, replay. Non-looping bursts on the float32 step clock fire once per cycle (stock Burst.update re-arm replayed the 0.1 s SOF_Point burst: 80 vs 55) and the clock restarts on engine reset() for pooled stop()/play() and prewarm; looping boundaries/bursts and visual fidelity require additional native acceptance."
     },
     {
       "id": "capture-camera-all-layer-bits",
