@@ -897,6 +897,22 @@
         "tools/unity-cocos-port/particle-sub-emitter-instances.test.cjs"
       ],
       "acceptance": "Death/birth instances of a Local-simulation sub system stay at their own parent points (unit test) and the preview shows one burst per parent event; per-burst spread against Unity frames."
+    },
+    {
+      "id": "inherit-velocity-initial",
+      "origin": "e6c5c2e",
+      "applicability": "automatic",
+      "sharedPaths": [
+        "tools/unity-cocos-port/particle-inherit-velocity-binding.js",
+        "tools/unity-cocos-port/runtime/UnityParticleInheritVelocity.ts",
+        "tools/unity-cocos-port/runtime/UnityParticleInheritVelocityAdapter.ts"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/particle-inherit-velocity.test.cjs",
+        "tools/unity-cocos-port/fixtures/inherit-velocity-native.json",
+        "tools/unity-cocos-port/fixtures/capture-inherit-velocity.cs"
+      ],
+      "acceptance": "World-simulation InheritVelocity Initial with a constant multiplier adds multiplier * emitter velocity (transform displacement / frame dt) to the base velocity at birth, matching native Unity 6000.3.1f1 within 1e-4 (fixtures/inherit-velocity-native.json). Local simulation is a measured no-op; Current mode and curve multipliers stay reported high until bound."
     }
   ]
 }
