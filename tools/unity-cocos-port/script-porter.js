@@ -367,7 +367,7 @@ module.exports = function createScriptPorter(deps) {
           .map((entry) => unityDb.get(unityRefGuid(entry)))
           .find((entry) => entry && ['.fbx', '.gltf', '.glb'].includes(entry.ext));
         const importedClips = modelAsset
-          ? cocosDb.resolveModelAnimationsByStem(modelAsset.stem)
+          ? cocosDb.resolveModelAnimationsByStem(modelAsset.stem, modelAsset.relativePath)
           : [];
         if (importedClips.length >= value.length) {
           translated[key] = value.map((_, index) => cocosUuid(importedClips[index].uuid, 'cc.AnimationClip'));

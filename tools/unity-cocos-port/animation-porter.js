@@ -1396,7 +1396,7 @@ module.exports = function createAnimationPorter(deps) {
       }
       let clipInfo = null;
       if (['.fbx', '.gltf', '.glb'].includes(clipAsset.ext)) {
-        clipInfo = cocosDb?.resolveModelAnimationByStem(clipAsset.stem, state.name) || null;
+        clipInfo = cocosDb?.resolveModelAnimationByStem(clipAsset.stem, state.name, clipAsset.relativePath) || null;
         if (clipInfo?.uuid) {
           clipInfo = { ...clipInfo, name: state.name };
           reporter.low(

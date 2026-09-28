@@ -135,7 +135,7 @@ module.exports = function createRendererPorter(deps) {
     const componentId = `synthetic-model-${modelAsset.guid || modelAsset.uuid || gameObject.fileId}`;
     const componentFileId = `cmp-model-${sanitizeFileId(gameObject.name)}`;
     const requiredExt = modelAsset.ext === '.asset' ? '.fbx' : modelAsset.ext;
-    const resolved = cocosDb.resolveModelMeshByStem(modelAsset.stem, gameObject.syntheticModelName || gameObject.name, requiredExt);
+    const resolved = cocosDb.resolveModelMeshByStem(modelAsset.stem, gameObject.syntheticModelName || gameObject.name, requiredExt, '', modelAsset.relativePath);
     reportModelMeshResolution(reporter, resolved, modelAsset.relativePath, gameObject.name);
     if (resolved?.meshUuid) {
       const overrideMaterialUuids = resolveSyntheticMaterialOverrides(
@@ -263,13 +263,13 @@ module.exports = function createRendererPorter(deps) {
     if (meshAsset && !meshUuid) {
       const requiredExt = meshAsset.ext === '.asset' ? '.fbx' : meshAsset.ext;
       refreshExportedUnityMesh(meshAsset, reporter, options);
-      const resolved = cocosDb.resolveModelMeshByStem(meshAsset.stem, unityMeshName || gameObject.name, requiredExt, deps.unityRefFileId(meshRef));
+      const resolved = cocosDb.resolveModelMeshByStem(meshAsset.stem, unityMeshName || gameObject.name, requiredExt, deps.unityRefFileId(meshRef), meshAsset.relativePath);
       meshReported = reportModelMeshResolution(reporter, resolved, model.file, gameObject.name) && !resolved.meshUuid;
       if (resolved) {
         resolvedPrimitiveCount = resolved.primitiveCount ?? null;
         meshUuid = resolved.meshUuid;
         if (hasExplicitMaterialSlots) {
-          const resolvedMaterials = cocosDb.resolveModelMaterialUuidsByStem(meshAsset.stem, materialHints, requiredExt);
+          const resolvedMaterials = cocosDb.resolveModelMaterialUuidsByStem(meshAsset.stem, materialHints, requiredExt, meshAsset.relativePath);
           materialUuids = resolvedMaterials?.materialUuids || resolved.materialUuids || (resolved.materialUuid ? [resolved.materialUuid] : []);
         }
         if (resolved.fallbackExt !== meshAsset.ext && ['.fbx', '.gltf', '.glb'].includes(resolved.fallbackExt)) {
@@ -383,7 +383,7 @@ module.exports = function createRendererPorter(deps) {
       return;
     }
     const meshName = unityModelMeshName(meshAsset, deps.unityRefFileId(meshRef)) || gameObject.name;
-    let resolved = cocosDb.resolveModelMeshByStem(meshAsset.stem, meshName, meshAsset.ext, deps.unityRefFileId(meshRef));
+    let resolved = cocosDb.resolveModelMeshByStem(meshAsset.stem, meshName, meshAsset.ext, deps.unityRefFileId(meshRef), meshAsset.relativePath);
     if (reportModelMeshResolution(reporter, resolved, model.file, gameObject.name) && !resolved.meshUuid) return;
     if (!resolved) {
       const missing = handleMissingModel(meshAsset, reporter, options, { autoCopy: true, meshNameHint: meshName });
@@ -394,7 +394,7 @@ module.exports = function createRendererPorter(deps) {
         return;
       }
     }
-    const skin = cocosDb.resolveModelSkinByMesh(meshAsset.stem, resolved.meshUuid, resolved.fallbackExt || meshAsset.ext);
+    const skin = cocosDb.resolveModelSkinByMesh(meshAsset.stem, resolved.meshUuid, resolved.fallbackExt || meshAsset.ext, meshAsset.relativePath);
     if (!skin?.skeletonUuid || !skin.joints.length) {
       reporter.high('SKINNED_MESH_SKELETON_UNRESOLVED', meshAsset.relativePath, gameObject.name,
         'The imported Cocos model has no skeleton for this mesh; refresh AssetDB and rerun the porter.');
