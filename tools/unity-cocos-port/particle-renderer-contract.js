@@ -39,6 +39,9 @@ function particleRendererContract(particle = {}, renderer = {}) {
   const localBillboard = mode === 0 && alignment === 2;
   const worldBillboard = mode === 0 && alignment === 1;
   const mesh = mode === 4;
+  // fixtures/mesh-view-align-to-direction-native.json: with ShapeModule.alignToDirection, a View-aligned
+  // mesh ignores the camera and renders in the emitter frame exactly like Local alignment.
+  const meshAlignedView = mesh && alignment === 0 && Number(particle.ShapeModule?.enabled) === 1 && Number(particle.ShapeModule?.alignToDirection) === 1;
   const pivot = renderer.m_Pivot || {};
   const shape = particle.ShapeModule || {}, initial = particle.InitialModule || {};
   const constant = (curve, value) => !!curve && Number(curve.minMaxState ?? 0) === 0 && Number(curve.scalar) === value;
@@ -95,7 +98,7 @@ function particleRendererContract(particle = {}, renderer = {}) {
       && particle.moveWithTransform===0 && shape.enabled && shape.type===0 && shape.radius?.value>0
       && !shape.alignToDirection && !shape.randomDirectionAmount && !shape.sphericalDirectionAmount && !shape.randomPositionAmount
       && shape.arc?.mode===0 && (shape.arc.spread??0)===0 && ['x','y','z'].every(k=>shape.m_Rotation?.[k]===0),
-    cocosAlignment: localBillboard || straightBoxVelocity || alignment === 2 ? 0 : alignment === 0 ? 2 : 1,
+    cocosAlignment: localBillboard || straightBoxVelocity || alignment === 2 || meshAlignedView ? 0 : alignment === 0 ? 2 : 1,
     eulerSigns: mesh ? [-1, -1, 1] : localBillboard || worldBillboard ? [1, 1, -1] : viewBillboard ? [-1, -1, -1] : [-1, 1, -1],
     // Horizontal/Vertical billboards need the source vertex program for Unity's
     // size/sqrt(2) corner geometry; builtin particle effects draw them at size.
