@@ -111,19 +111,44 @@ function cleanComments(source) {
  */
 /** SubShader text with every `Pass { ... }` / `GrabPass { ... }` body removed. */
 function stripPassBlocks(ssContent) {
+  return stripBlocks(ssContent, /\b(?:Pass|GrabPass)\s*\{/gi);
+}
+
+/**
+ * `Category { <state/Tags> SubShader { ... } }` ranges: ShaderLab applies a Category's render
+ * commands and Tags to every SubShader it wraps (KriptoFX RFX4_PortalSky keeps Blend, Cull Off,
+ * ZWrite Off and its Queue there).
+ */
+function parseCategories(shaderBody) {
+  const categories = [];
+  const regex = /\bCategory\s*\{/gi;
+  let m;
+  while ((m = regex.exec(shaderBody)) !== null) {
+    const open = m.index + m[0].length - 1;
+    const close = findClosingBrace(shaderBody, open);
+    if (close <= open) continue;
+    const outside = stripBlocks(shaderBody.slice(open + 1, close), /\bSubShader\s*\{/gi);
+    const tagsMatch = /\bTags\s*\{([\s\S]*?)\}/i.exec(outside);
+    categories.push({ open, close, outside, tags: tagsMatch ? parseTagsBlock(tagsMatch[1]) : {} });
+  }
+  return categories;
+}
+
+/** `content` with every block opened by `openRegex` (global, ending in `{`) removed. */
+function stripBlocks(content, openRegex) {
   let out = '';
   let cursor = 0;
-  const passRegex = /\b(?:Pass|GrabPass)\s*\{/gi;
+  const regex = new RegExp(openRegex.source, openRegex.flags);
   let m;
-  while ((m = passRegex.exec(ssContent)) !== null) {
+  while ((m = regex.exec(content)) !== null) {
     const open = m.index + m[0].length - 1;
-    const close = findClosingBrace(ssContent, open);
+    const close = findClosingBrace(content, open);
     if (close <= open) break;
-    out += ssContent.slice(cursor, m.index);
+    out += content.slice(cursor, m.index);
     cursor = close + 1;
-    passRegex.lastIndex = close + 1;
+    regex.lastIndex = close + 1;
   }
-  return out + ssContent.slice(cursor);
+  return out + content.slice(cursor);
 }
 
 function findClosingBrace(str, openIndex) {
@@ -644,6 +669,7 @@ function parseShaderLab(source, filename = '') {
   let subShaderIdx = 0;
 
   // Search for SubShader blocks
+  const categories = parseCategories(shaderBody);
   const subShaderRegex = /\bSubShader\s*\{/gi;
   let ssMatch;
   while ((ssMatch = subShaderRegex.exec(shaderBody)) !== null) {
@@ -652,12 +678,13 @@ function parseShaderLab(source, filename = '') {
     if (ssClose <= ssOpen) continue;
 
     const ssContent = shaderBody.slice(ssOpen + 1, ssClose);
+    const category = categories.find(c => c.open < ssMatch.index && ssClose < c.close);
 
-    // SubShader Tags
-    let ssTags = {};
+    // SubShader Tags (over the enclosing Category's)
+    let ssTags = { ...(category ? category.tags : {}) };
     const ssTagsMatch = /\bTags\s*\{([\s\S]*?)\}/i.exec(ssContent);
     if (ssTagsMatch) {
-      ssTags = parseTagsBlock(ssTagsMatch[1]);
+      Object.assign(ssTags, parseTagsBlock(ssTagsMatch[1]));
     }
 
     // SubShader LOD
@@ -667,7 +694,7 @@ function parseShaderLab(source, filename = '') {
     // SubShader default render state. Only commands outside Pass blocks are
     // SubShader defaults; a later pass's `Blend`/`ZWrite Off`/`Cull Off` must
     // not leak into an earlier opaque pass that declares none of them.
-    const ssRenderState = parseRenderState(stripPassBlocks(ssContent));
+    const ssRenderState = parseRenderState(stripPassBlocks(ssContent), category ? parseRenderState(category.outside) : {});
 
     // Parse Passes inside this SubShader
     const passes = [];

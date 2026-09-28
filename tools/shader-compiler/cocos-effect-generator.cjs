@@ -459,6 +459,16 @@ function formatYamlPropertyValue(prop) {
 /**
  * Builds CCEffect YAML frontmatter
  */
+/** Unity `ColorMask RGB|A|0|...` -> gfx ColorMask bits; dynamic `[_Prop]` keeps all channels. */
+function unityColorMaskBits(mask) {
+  const value = String(mask ?? 'RGBA').trim();
+  if (value === '0') return 0;
+  if (!/^[RGBA]+$/i.test(value)) return 15;
+  let bits = 0;
+  for (const ch of value.toUpperCase()) bits |= { R: 1, G: 2, B: 4, A: 8 }[ch];
+  return bits;
+}
+
 function buildCceffectYaml(docIR, passIR, uboInfo, options = {}) {
   const isTransparent = passIR.renderState.blend && passIR.renderState.blend.enabled;
   const techniqueName = isTransparent ? 'transparent' : 'opaque';
@@ -530,6 +540,16 @@ function buildCceffectYaml(docIR, passIR, uboInfo, options = {}) {
     if (passIR.renderState.blend.opAlpha && passIR.renderState.blend.opAlpha !== 'add') {
       lines.push(`          blendAlphaEq: ${passIR.renderState.blend.opAlpha}`);
     }
+  }
+  // ColorMask: gfx ColorMask bits (R=1, G=2, B=4, A=8). `ColorMask 0` passes (KriptoFX portal
+  // stencil masks) only write stencil/depth and must not draw.
+  const colorMask = unityColorMaskBits(passIR.renderState.colorMask);
+  if (colorMask !== 15) {
+    if (!isTransparent) {
+      lines.push('      blendState:');
+      lines.push('        targets:');
+      lines.push(`        - blendColorMask: ${colorMask}`);
+    } else lines.push(`          blendColorMask: ${colorMask}`);
   }
 
   // Properties Block
@@ -1306,16 +1326,37 @@ function withoutUnusedHiddenProperties(docIR) {
   }) };
 }
 
+const isProgramPass = (pass) => !!pass && !pass.usePass && !pass.isGrabPass && !!String(pass.program?.rawHlsl || '').trim();
+
+/**
+ * The SubShader Unity renders: the first one it can build. A SubShader made only of `UsePass` into a
+ * shader the source project does not contain (docIR.unresolvedUsePasses, e.g. KriptoFX
+ * `SubShader { UsePass "LegacyPreview/URP/OPAQUE" }` in a Built-in project) is skipped by Unity;
+ * taking it emitted an opaque stub and dropped the real SubShader's program, Stencil, ColorMask and ZWrite.
+ */
+function primarySubShader(docIR) {
+  const subShaders = docIR.subShaders || [];
+  const unresolved = new Set(docIR.unresolvedUsePasses || []);
+  const unbuildable = (s) => (s.passes || []).length > 0 && s.passes.every(p => p.usePass && unresolved.has(p.usePass));
+  return subShaders.find(s => !unbuildable(s)) || subShaders[0];
+}
+
+function primaryPass(subShader) {
+  const passes = subShader?.passes || [];
+  return passes.find(isProgramPass) || passes[0];
+}
+
 function emitCocosEffect(docIR, options = {}) {
   docIR = withoutUnusedHiddenProperties(docIR);
+  const primary = primarySubShader(docIR);
   if (options.mode === 'surface-pbr') {
     return renameReservedInEffect(
-      emitSurfaceShaderEffect(docIR, docIR.subShaders[0]?.passes[0] || { renderState: {} }, options),
+      emitSurfaceShaderEffect(docIR, primaryPass(primary) || { renderState: {} }, options),
     ).text;
   }
 
-  const subShader = docIR.subShaders[0] || { passes: [{ renderState: {}, program: {} }] };
-  const pass = subShader.passes[0] || { renderState: {}, program: {} };
+  const subShader = primary || { passes: [{ renderState: {}, program: {} }] };
+  const pass = primaryPass(subShader) || { renderState: {}, program: {} };
 
   const { vsCode, fsCode, ubo } = generateCocosPrograms(docIR, pass, options);
   const yaml = buildCceffectYaml(docIR, pass, ubo, options);
