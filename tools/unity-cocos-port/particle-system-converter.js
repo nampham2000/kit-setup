@@ -9,6 +9,7 @@ const { particleLimitVelocityContract } = require('./particle-limit-velocity-bin
 const { particleCollisionContract } = require('./particle-collision-binding');
 const { particleCustomDataContract } = require('./particle-custom-data-binding');
 const { particleAlignToDirectionContract } = require('./particle-align-to-direction-binding');
+const { particleInheritVelocityContract } = require('./particle-inherit-velocity-binding');
 
 const { particleShapeRotation, particleShapeEdgeRotation } = require('./particle-shape-rotation');
 
@@ -1427,6 +1428,7 @@ function applyUnityParticleDataToCocos(builder, particleId, data = {}, rendererD
   Object.defineProperty(particle, 'unityCollisionContract', { value: particleCollisionContract(data), configurable: true });
   Object.defineProperty(particle, 'unityCustomDataContract', { value: particleCustomDataContract(data, rendererData || {}), configurable: true });
   Object.defineProperty(particle, 'unityAlignToDirectionContract', { value: particleAlignToDirectionContract(data, rendererData || {}), configurable: true });
+  Object.defineProperty(particle, 'unityInheritVelocityContract', { value: particleInheritVelocityContract(data), configurable: true });
 
   return { applied };
 }
