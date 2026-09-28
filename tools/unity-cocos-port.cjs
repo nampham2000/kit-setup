@@ -1025,9 +1025,6 @@ function synthesizeStrippedRootForPrefabVariant(docs, unityDb, reporter, file) {
     if (doc.classId !== 1001) continue;
     if (unityRefFileId(getField(doc, 'm_TransformParent'))) continue;
     const instanceId = doc.fileId;
-    const anchored = docs.some((other) => other.stripped && (other.classId === 4 || other.classId === 224)
-      && unityRefFileId(getField(other, 'm_PrefabInstance')) === instanceId);
-    if (anchored) continue;
     const source = getField(doc, 'm_SourcePrefab');
     const sourceGuid = unityRefGuid(source);
     const sourceAsset = sourceGuid && unityDb ? unityDb.get(sourceGuid) : null;
@@ -1036,6 +1033,14 @@ function synthesizeStrippedRootForPrefabVariant(docs, unityDb, reporter, file) {
     try { sourceDocs = parseUnityYaml(sourceAsset.path); } catch { continue; }
     const rootTransform = sourceDocs.find((d) => (d.classId === 4 || d.classId === 224) && !unityRefFileId(getField(d, 'm_Father')));
     if (!rootTransform) continue;
+    // A variant that adds GameObjects under source children keeps stripped Transforms for those
+    // parents (Candy Pop Sort ArrowBoxObject: TopBasket, ConnectedBoxObject: Visuals). Only a
+    // stripped record that stands for the source ROOT anchors the variant; otherwise the port rooted
+    // the variant at the first stripped child and lost the root transform and the added children.
+    const anchored = docs.some((other) => other.stripped && (other.classId === 4 || other.classId === 224)
+      && unityRefFileId(getField(other, 'm_PrefabInstance')) === instanceId
+      && unityRefFileId(getField(other, 'm_CorrespondingSourceObject')) === rootTransform.fileId);
+    if (anchored) continue;
     const rootGameObjectId = unityRefFileId(getField(rootTransform, 'm_GameObject'));
     const transformId = `${instanceId}9001`;
     const gameObjectId = `${instanceId}9002`;
@@ -4201,8 +4206,29 @@ function collapseStrippedTransformsToInstanceRoot(context) {
     prefabInstanceInfos,
     referencedTransformIds,
     childReferencedTransformIds,
+    unityDb,
     reporter,
   } = context;
+
+  // Source-prefab root Transform id per PrefabInstance: the stripped record that corresponds to it is
+  // the instance root. Inner stripped Transforms (parents of variant-added GameObjects) must not be
+  // chosen as the root, and their added children keep their inner source parent for mounting.
+  const sourceRootIds = new Map();
+  const sourceRootIdFor = (instanceId) => {
+    if (sourceRootIds.has(instanceId)) return sourceRootIds.get(instanceId);
+    let rootId = '';
+    const guid = unityRefGuid(prefabInstanceInfos.get(instanceId)?.sourcePrefab);
+    const asset = guid && unityDb ? unityDb.get(guid) : null;
+    if (asset && String(asset.ext || '').toLowerCase() === '.prefab') {
+      try {
+        const root = parseUnityYaml(asset.path).find((d) => (d.classId === 4 || d.classId === 224) && !unityRefFileId(getField(d, 'm_Father')));
+        rootId = root ? String(root.fileId) : '';
+      } catch (_) { rootId = ''; }
+    }
+    sourceRootIds.set(instanceId, rootId);
+    return rootId;
+  };
+  const correspondingSourceId = (transform) => String(unityRefFileId(getField(byId.get(transform.fileId), 'm_CorrespondingSourceObject')) || '');
 
   const strippedByInstance = new Map();
   for (const transform of transforms.values()) {
@@ -4218,7 +4244,9 @@ function collapseStrippedTransformsToInstanceRoot(context) {
   for (const [instanceId, group] of strippedByInstance.entries()) {
     if (group.length < 2) continue;
     const instanceInfo = prefabInstanceInfos.get(instanceId);
-    const rootTransform = group.find((entry) => childReferencedTransformIds.has(entry.fileId))
+    const sourceRootId = sourceRootIdFor(instanceId);
+    const rootTransform = (sourceRootId && group.find((entry) => correspondingSourceId(entry) === sourceRootId))
+      || group.find((entry) => childReferencedTransformIds.has(entry.fileId))
       || group.find((entry) => entry.parentId && entry.parentId === instanceInfo?.parentTransformId)
       || group[0];
 
@@ -4226,8 +4254,12 @@ function collapseStrippedTransformsToInstanceRoot(context) {
       if (transform === rootTransform) continue;
       if (!referencedTransformIds.has(transform.fileId)) continue;
 
+      const innerSourceId = correspondingSourceId(transform);
       for (const other of transforms.values()) {
-        if (other.parentId === transform.fileId) other.parentId = rootTransform.fileId;
+        if (other.parentId !== transform.fileId) continue;
+        other.parentId = rootTransform.fileId;
+        // Remember the inner source parent (e.g. TopBasket) so a flattened clone mounts it there.
+        if (innerSourceId && innerSourceId !== sourceRootId) other.nestedMountSourceTransformId = innerSourceId;
       }
       for (const childId of transform.children || []) {
         if (!rootTransform.children.includes(childId)) rootTransform.children.push(childId);
@@ -4360,6 +4392,7 @@ function materializeStrippedTransforms(context) {
     prefabInstanceInfos,
     referencedTransformIds,
     childReferencedTransformIds,
+    unityDb,
     reporter,
   });
   synthesizeRootPrefabInstanceTransforms({
@@ -7782,7 +7815,15 @@ function emitNodeRecursive(transform, parentNodeId, model, builder, layerResolve
           reporter.medium('MISSING_CHILD_TRANSFORM', model.file, gameObject.name, `Child transform ${childId} is missing`);
           continue;
         }
-        emitNodeRecursive(child, flattened.rootId, model, builder, layerResolver, reporter, options, unityDb, cocosDb);
+        // A variant-added GameObject under an inner source Transform mounts on that node's clone.
+        let mountId = flattened.rootId;
+        if (child.nestedMountSourceTransformId) {
+          const nestedNodeId = nestedBuilder.nodeMapByTransform.get(child.nestedMountSourceTransformId);
+          const cloneId = nestedNodeId == null ? undefined : flattened.idMap.get(nestedNodeId);
+          if (Number.isInteger(cloneId)) mountId = cloneId;
+          else reporter.medium('NESTED_ADDED_CHILD_PARENT_UNRESOLVED', model.file, child.fileId, `Added child's source parent ${child.nestedMountSourceTransformId} was not found in the flattened prefab; mounted on the instance root`);
+        }
+        emitNodeRecursive(child, mountId, model, builder, layerResolver, reporter, options, unityDb, cocosDb);
       }
       return;
     }
