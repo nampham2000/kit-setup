@@ -868,6 +868,15 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
     ...vsIncludes,
     '',
     '  ' + attributes.join('\n  '),
+    // Unity feeds (1,1,1,1) for COLOR when the mesh has no colour stream; WebGL feeds (0,0,0,1) for a
+    // disabled attribute, which blackened KriptoFX RFX4_Tornado. The porter sets this define on materials
+    // whose meshes all lack colours (mesh-vertex-color-binding.cjs).
+    ...(attributes.some(a => a.includes('a_color')) ? [
+      '  #pragma define-meta UNITY_MESH_NO_VERTEX_COLOR',
+      '  #if UNITY_MESH_NO_VERTEX_COLOR',
+      '    #define a_color vec4(1.0)',
+      '  #endif',
+    ] : []),
     '',
     '  ' + varyings.join('\n  '),
     '',
