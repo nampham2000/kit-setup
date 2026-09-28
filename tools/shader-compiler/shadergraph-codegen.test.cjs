@@ -179,3 +179,14 @@ test('CLI: --help writes nothing, generation is idempotent and --check is read-o
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('--latlong-cubes samples a Unity cube map through its equirect source image', () => {
+  const corpus = loadCorpus(path.join(FIXTURE, 'corpus.json.gz'));
+  const cube = generateEffect(corpus.SG_PortalMesh, { name: 'pm' });
+  assert.match(cube.effect, /uniform samplerCube _SampleCubemap_\w+;/);
+  assert.ok(cube.diagnostics.some((d) => d.code === 'SG_CUBEMAP'));
+  const latlong = generateEffect(corpus.SG_PortalMesh, { name: 'pm', latlongCubes: 'all' });
+  assert.match(latlong.effect, /uniform sampler2D _SampleCubemap_\w+;/);
+  assert.match(latlong.effect, /sgTexLod\(_SampleCubemap_\w+, sgLatLongUV\(/);
+  assert.ok(latlong.diagnostics.some((d) => d.code === 'SG_CUBEMAP_LATLONG'));
+});

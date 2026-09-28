@@ -352,17 +352,25 @@ function generateEffect(sourceText, options = {}) {
   const srgb = new Set(options.srgbTextures || []);
   const samplerDecls = [];
   const srgbTextures = [];
+  const latlongOption = options.latlongCubes || [];
+  const latlongCubes = new Set();
   for (const t of colorPass.textures) {
-    const kind = /CUBE/.test(t.kind) ? 'samplerCube' : /ARRAY|3D/.test(t.kind) ? null : 'sampler2D';
+    let kind = /CUBE/.test(t.kind) ? 'samplerCube' : /ARRAY|3D/.test(t.kind) ? null : 'sampler2D';
     if (!kind) { report('high', 'SG_UNSUPPORTED_TEXTURE', `${t.name}: ${t.kind} has no GLSL ES 1.00 form`); continue; }
     if (!ctx.usedTextures.has(t.name) && !new RegExp(`\\b${t.name}\\b`).test(funcs + vtx + pix + nPix + includeCode.join('\n'))) continue;
     const prop = propByName.get(t.name);
+    if (kind === 'samplerCube' && (latlongOption === 'all' || latlongOption.includes(t.name))) {
+      kind = 'sampler2D';
+      latlongCubes.add(t.name);
+      report('medium', 'SG_CUBEMAP_LATLONG', `${t.name}: Unity cube map sampled as its equirect source image (sgLatLongUV); check orientation against a Unity reference`);
+    } else if (kind === 'samplerCube') {
+      report('medium', 'SG_CUBEMAP', `${t.name}: sampled as a Cocos cube map; an equirect HDR imported as Cube in Unity needs a Cocos cube map import or --latlong-cubes ${t.name}`);
+    }
     samplerDecls.push(`uniform ${kind} ${t.name};`);
     yaml.push(`${t.name}: { value: ${kind === 'samplerCube' ? 'default-cube' : textureDefault(prop)} }`);
     const isData = linear.has(t.name) || (!srgb.has(t.name) && ((prop && (prop.normal || prop.value === 'bump')) || DATA_TEXTURE.test(t.name) || DATA_TEXTURE.test(prop ? prop.display : '')));
     if (!isData && colorSpace === 'gamma') srgbTextures.push(t.name);
-    result.textures.push({ unity: t.name, cocos: t.name, kind, srgb: !isData });
-    if (kind === 'samplerCube') report('medium', 'SG_CUBEMAP', `${t.name}: sampled as a Cocos cube map; an equirect HDR imported as Cube in Unity must be imported as a cube map in Cocos too`);
+    result.textures.push({ unity: t.name, cocos: t.name, kind, srgb: !isData, latlong: latlongCubes.has(t.name) || undefined });
   }
   if (colorSpace === 'gamma' && srgbTextures.length) {
     report('medium', 'SG_COLOR_SPACE', `sRGB decode applied to ${srgbTextures.join(', ')} (override with --linear-textures); 2D output is re-encoded per draw, so blending happens in gamma space unlike a Unity linear project`);
@@ -401,7 +409,7 @@ vec3 sgTangentViewDir () { return vec3(0.0); }`;
   const globals = [...globalTypes, ...overrideGlobals];
   for (const [n, [t]] of Object.entries(ENGINE_GLOBALS)) globals.push([n, t]);
   globals.push(['sgLightUse', 'vec4'], ['sgLightSample', 'vec4'], ['sgLightConst0', 'vec4'], ['sgLightConst1', 'vec4'], ['sgLightConst2', 'vec4'], ['sgLightConst3', 'vec4']);
-  for (const t of colorPass.textures) globals.push([t.name, /CUBE/.test(t.kind) ? 'samplerCube' : 'sampler2D']);
+  for (const t of colorPass.textures) globals.push([t.name, /CUBE/.test(t.kind) && !latlongCubes.has(t.name) ? 'samplerCube' : 'sampler2D']);
   for (const [n, t] of ['cc_time:vec4', 'cc_screenSize:vec4', 'cc_cameraPos:vec4', 'cc_matView:mat4', 'cc_matViewInv:mat4', 'cc_matProj:mat4', 'cc_matViewProj:mat4', 'cc_nearFar:vec4'].map((x) => x.split(':'))) globals.push([n, t]);
   globals.push(['sgMatWorld', 'mat4'], ['sgMatWorldIT', 'mat4']);
 
@@ -424,6 +432,11 @@ vec3 sgTangentViewDir () { return vec3(0.0); }`;
   }
   if (/\bSG_UNSUPPORTED_MATRIX_|\bUnity(Texture|SamplerState)\w*\b/.test(typed)) report('high', 'SG_UNLOWERED', 'HLSL-only texture/sampler or matrix types remain after lowering');
 
+  // equirect images standing in for Unity cube maps: direction -> lat-long uv
+  if (latlongCubes.size) {
+    typed = replaceCall(typed, 'texture', (args) => (args.length === 2 && latlongCubes.has(args[0].trim()) ? `texture(${args[0]}, sgLatLongUV(${args[1]}))` : null));
+    typed = replaceCall(typed, 'sgTexCubeLod', (args) => (args.length === 3 && latlongCubes.has(args[0].trim()) ? `sgTexLod(${args[0]}, sgLatLongUV(${args[1]}), ${args[2]})` : null));
+  }
   // sRGB decode of colour textures
   if (colorSpace === 'gamma' && srgbTextures.length) {
     const set = new Set(srgbTextures);

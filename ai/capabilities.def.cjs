@@ -824,7 +824,7 @@ const CAPABILITIES = [
     npm: null,
     cmd: `node ${TOOLS}/shader-compiler/shadergraph-codegen.cjs`,
     args: ['--src <dump dir|file.shader.txt>', '--out <assets/effects/dir>'],
-    optional: ['--unity-project <UnityProjectRoot>', '--color-space gamma|linear', '--linear-textures <a,b>', '--srgb-textures <a,b>', '--overrides <functions.glsl>', '--skip "<Graph>=<reason>"', '--no-normals', '--prefix <p>', '--report <file.json>', '--json', '--dry-run', '--check'],
+    optional: ['--unity-project <UnityProjectRoot>', '--color-space gamma|linear', '--linear-textures <a,b>', '--srgb-textures <a,b>', '--latlong-cubes <a,b|all>', '--overrides <functions.glsl>', '--skip "<Graph>=<reason>"', '--no-normals', '--prefix <p>', '--report <file.json>', '--json', '--dry-run', '--check'],
     when: 'Port material dùng Unity ShaderGraph. Dump code Unity sinh ra (ShaderGraphImporter.GetShaderText) bằng `npm run unity:script -- --project <Unity> --script playable-shared-kit/tools/unity-intel/dump-shadergraph-code.cs --set OUTPUT_DIR=<dir> --set SEARCH_FOLDERS=Assets/...`, rồi chạy lệnh này. Thay mọi generator ShaderGraph tự viết trong project.',
     outputs: ['<out>/<prefix><graph>.effect (self-contained)', '--report JSON: disposition, property/texture map, diagnostics từng graph'],
     limits: [

@@ -105,6 +105,14 @@ vec3 sgUnpackNormalRGBNoScale (vec4 c) { return c.rgb * 2.0 - 1.0; }
 
 vec2 sgTransformUV (vec4 st, vec2 uv) { return uv * st.xy + st.zw; }
 
+// A cube map Unity imported from an equirect (latitude-longitude) image, sampled as that 2D image (--latlong-cubes).
+// dirC is a Cocos (right-handed) direction; Unity's world space mirrors z. u = 0.5 at Unity -Z, v = 0 at the image's
+// top row (+Y) as Cocos uploads textures.
+vec2 sgLatLongUV (vec3 dirC) {
+  vec3 d = normalize(vec3(dirC.xy, -dirC.z));
+  return vec2(0.5 + atan(d.x, -d.z) * 0.15915494309, 0.5 - asin(clamp(d.y, -1.0, 1.0)) * 0.31830988618);
+}
+
 void sgClip (float x) { if (x < 0.0) discard; }
 void sgClip (vec2 x) { if (any(lessThan(x, vec2(0.0)))) discard; }
 void sgClip (vec3 x) { if (any(lessThan(x, vec3(0.0)))) discard; }

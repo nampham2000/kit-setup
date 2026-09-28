@@ -21,7 +21,7 @@ const USAGE = `Unity ShaderGraph generated code -> Cocos effects (gated by the e
 Usage:
   node shadergraph-codegen.cjs --src <file.shader.txt|dir> --out <assets/effects/dir>
        [--prefix sg-] [--unity-project <UnityProjectRoot>] [--color-space gamma|linear]
-       [--linear-textures a,b] [--srgb-textures a,b] [--overrides <functions.glsl>]
+       [--linear-textures a,b] [--srgb-textures a,b] [--latlong-cubes a,b|all] [--overrides <functions.glsl>]
        [--skip "<GraphName>=<reason>"]... [--no-normals] [--report <file.json>] [--json] [--dry-run] [--check]
 
   --src            Dumped generated code (tools/unity-intel/dump-shadergraph-code.cs) file or directory.
@@ -29,6 +29,7 @@ Usage:
   --unity-project  Resolves Custom Function file includes ("Assets/...hlsl").
   --color-space    gamma (default): decode sRGB colour textures + vertex colour, compute linear, re-encode output.
                    linear: pass-through for projects with their own linear pipeline.
+  --latlong-cubes  Cube maps Unity imported from an equirect image: sample the 2D image by direction instead.
   --overrides      GLSL file whose functions replace graph/custom functions of the same name (project hooks).
   --skip           Explicit disposition for a graph the playable does not render (repeatable).
   --check          Read-only: exit 1 when an output is missing or differs from what would be generated.
@@ -49,6 +50,7 @@ function parseArgs(argv) {
     else if (a === '--color-space') o.colorSpace = next();
     else if (a === '--linear-textures') o.linearTextures = next().split(',').map((x) => x.trim()).filter(Boolean);
     else if (a === '--srgb-textures') o.srgbTextures = next().split(',').map((x) => x.trim()).filter(Boolean);
+    else if (a === '--latlong-cubes') { const v = next(); o.latlongCubes = v === 'all' ? 'all' : v.split(',').map((x) => x.trim()).filter(Boolean); }
     else if (a === '--overrides') o.overrides = next();
     else if (a === '--skip') { const v = next(); const k = v.indexOf('='); if (k <= 0) throw new Error('--skip needs <GraphName>=<reason>'); o.skips.set(v.slice(0, k).trim(), v.slice(k + 1).trim()); }
     else if (a === '--no-normals') o.normals = false;
@@ -104,7 +106,7 @@ async function run(input) {
     let r;
     try {
       r = generateEffect(entry.text != null ? entry.text : fs.readFileSync(entry.file, 'utf8'), {
-        name: base, colorSpace: options.colorSpace, linearTextures: options.linearTextures, srgbTextures: options.srgbTextures,
+        name: base, colorSpace: options.colorSpace, linearTextures: options.linearTextures, srgbTextures: options.srgbTextures, latlongCubes: options.latlongCubes,
         resolveInclude, overrides, normalsTechnique: options.normals,
       });
     } catch (error) {
