@@ -3,6 +3,7 @@ const { particleRendererContract } = require('./particle-renderer-contract');
 const { unityMaterialRenderQueue } = require('./particle-sorting-binding');
 const { unityModelMeshName } = require('./model-import-basis');
 const { requestModelMeshBasis } = require('./model-mesh-basis-binding');
+const { reportModelMeshResolution } = require('./model-mesh-resolution');
 
 const {
   applyParticleRendererMesh,
@@ -80,6 +81,9 @@ module.exports = function createParticlePorter(deps = {}) {
       ? cocosDb.resolveModelMeshByStem(meshAsset.stem, meshNameHint, meshAsset.ext === '.asset' ? '.fbx' : meshAsset.ext,
         unityRefFileId ? unityRefFileId(meshRef) : String(meshRef?.fileID ?? ''))
       : null;
+    if (reportModelMeshResolution(reporter, resolved, meshAsset.relativePath, gameObject?.name || '') && !resolved.meshUuid) {
+      return { meshUuid: '', pendingImport: false, meshAsset: null };
+    }
     if (resolved?.meshUuid) {
       return { meshUuid: resolved.meshUuid, pendingImport: false, meshAsset, source: resolved.source };
     }
