@@ -50,7 +50,7 @@ module.exports = function createColliderPorter(deps) {
 
     refreshExportedUnityMesh(meshAsset, reporter, options);
     const resolved = cocosDb?.resolveModelMeshByStem
-      ? cocosDb.resolveModelMeshByStem(meshAsset.stem, gameObject.name, meshAsset.ext === '.asset' ? '.fbx' : meshAsset.ext, unityRefFileId(meshRef))
+      ? cocosDb.resolveModelMeshByStem(meshAsset.stem, gameObject.name, meshAsset.ext === '.asset' ? '.fbx' : meshAsset.ext, unityRefFileId(meshRef), meshAsset.relativePath)
       : null;
     // The model exists but none of its meshes is the referenced one: not a missing model.
     if (reportModelMeshResolution(reporter, resolved, model.file, gameObject.name) && !resolved.meshUuid) return '';

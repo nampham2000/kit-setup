@@ -2180,7 +2180,13 @@ class CocosAssetDatabase {
     }
     const classes = [];
     for (const match of source.matchAll(/@ccclass\(['"]([^'"]+)['"]\)/g)) classes.push(match[1]);
-    for (const match of source.matchAll(/export\s+class\s+([A-Za-z0-9_]+)/g)) classes.push(match[1]);
+    // Only a decorated class is a registered Cocos class. A plain exported helper that shares a Unity
+    // MonoBehaviour's name (Blast Shooter's `export class ConveyorBall` model) must not be bound as its
+    // component: the prefab would reference the file's class id and fail with "Can not find class".
+    for (const match of source.matchAll(/export\s+(?:default\s+)?(?:abstract\s+)?class\s+([A-Za-z0-9_]+)/g)) {
+      const decorators = /((?:@[\w.]+(?:\((?:[^()]|\([^()]*\))*\))?\s*)+)$/.exec(source.slice(Math.max(0, match.index - 2000), match.index));
+      if (decorators && /@ccclass\b/.test(decorators[1])) classes.push(match[1]);
+    }
     // Unity writes bools as 0/1 and vectors as bare {x,y[,z]}. Knowing which Cocos
     // fields are declared boolean / Vec2 / Vec3 lets the porter emit the right types
     // instead of a number where the inspector expects a checkbox.
@@ -2261,7 +2267,7 @@ class CocosAssetDatabase {
     return fuzzy;
   }
 
-  findModelRecordsByStem(stem) {
+  findModelRecordsByStem(stem, unityRelativePath = '') {
     // Model files are source-identity-bearing dependencies. A fuzzy prefix
     // match is unsafe here: `level_20.fbx` must never reuse and overwrite the
     // already imported `level_2.fbx`, and `level_1.fbx` must not bind
@@ -2269,8 +2275,9 @@ class CocosAssetDatabase {
     // resolver must require the exact normalized stem and let the missing-model
     // path create/import that exact file when it is absent.
     const key = normalizeKey(stem);
-    return (this.byStem.get(key) || [])
+    const records = (this.byStem.get(key) || [])
       .filter((record) => ['.fbx', '.gltf', '.glb'].includes(record.ext));
+    return unityRelativePath ? modelRecordsForUnitySource(records, unityRelativePath) : records;
   }
 
   findScriptClass(className) {
@@ -2305,8 +2312,8 @@ class CocosAssetDatabase {
     return '';
   }
 
-  resolveModelMaterialUuidsByStem(stem, materialNameHints = [], requiredExt = '') {
-    const candidates = this.findModelRecordsByStem(stem).filter((record) => !requiredExt || record.ext === requiredExt);
+  resolveModelMaterialUuidsByStem(stem, materialNameHints = [], requiredExt = '', unityRelativePath = '') {
+    const candidates = this.findModelRecordsByStem(stem, unityRelativePath).filter((record) => !requiredExt || record.ext === requiredExt);
     const hints = materialNameHints.map((hint) => String(hint || ''));
     for (const record of candidates) {
       const materials = subMetaRecords(record.uuid, record.subMetas, 'gltf-material');
@@ -2363,8 +2370,8 @@ class CocosAssetDatabase {
   //   'unresolved'     a Unity fileID was given and nothing matches it among several meshes:
   //                    meshUuid is '' (callers report high; the model itself exists, so it must
   //                    not be treated as a missing model)
-  resolveModelMeshByStem(stem, meshNameHint = '', requiredExt = '', unityFileId = '') {
-    const candidates = this.findModelRecordsByStem(stem).filter((record) => !requiredExt || record.ext === requiredExt);
+  resolveModelMeshByStem(stem, meshNameHint = '', requiredExt = '', unityFileId = '', unityRelativePath = '') {
+    const candidates = this.findModelRecordsByStem(stem, unityRelativePath).filter((record) => !requiredExt || record.ext === requiredExt);
     for (const record of candidates) {
       const meshRecords = subMetaRecords(record.uuid, record.subMetas, 'gltf-mesh')
         .filter(({ subMeta }) => !isPendingGeneratedSubMeta(subMeta));
@@ -2449,8 +2456,8 @@ class CocosAssetDatabase {
 
   // Skeleton the Cocos model prefab pairs with this mesh (its SkinnedMeshRenderer),
   // and the skeleton's joint paths, relative to the model root (skinningRoot).
-  resolveModelSkinByMesh(stem, meshUuid, requiredExt = '') {
-    const candidates = this.findModelRecordsByStem(stem).filter((record) => !requiredExt || record.ext === requiredExt);
+  resolveModelSkinByMesh(stem, meshUuid, requiredExt = '', unityRelativePath = '') {
+    const candidates = this.findModelRecordsByStem(stem, unityRelativePath).filter((record) => !requiredExt || record.ext === requiredExt);
     for (const record of candidates) {
       for (const scene of subMetaRecords(record.uuid, record.subMetas, 'gltf-scene')) {
         const objects = readJsonIfExists(libraryJsonPathForUuid({ cocosRoot: this.root }, scene.uuid));
@@ -2467,7 +2474,7 @@ class CocosAssetDatabase {
   }
 
   resolveModelPrefabByStem(stem, preferredUnityRelativePath = '') {
-    const records = this.findModelRecordsByStem(stem);
+    const records = this.findModelRecordsByStem(stem, preferredUnityRelativePath);
     const preferredSuffix = toPosix(preferredUnityRelativePath).toLowerCase();
     const candidates = records.sort((left, right) => {
         if (!preferredSuffix) return 0;
@@ -2540,10 +2547,10 @@ class CocosAssetDatabase {
     return null;
   }
 
-  resolveModelAnimationByStem(stem, animationNameHint = '') {
+  resolveModelAnimationByStem(stem, animationNameHint = '', unityRelativePath = '') {
     const normalizedHint = normalizeKey(animationNameHint);
     const shortHint = normalizeKey(String(animationNameHint || '').split('|').pop());
-    const candidates = this.findModelRecordsByStem(stem);
+    const candidates = this.findModelRecordsByStem(stem, unityRelativePath);
     for (const record of candidates) {
       const animations = subMetaRecords(record.uuid, record.subMetas, 'gltf-animation');
       const match = animations.find(({ subMeta }) => {
@@ -2563,9 +2570,10 @@ class CocosAssetDatabase {
     return null;
   }
 
-  resolveModelAnimationsByStem(stem) {
+  resolveModelAnimationsByStem(stem, unityRelativePath = '') {
     const records = this.findByStem(stem);
-    const candidates = records.filter((record) => ['.fbx', '.gltf', '.glb'].includes(record.ext));
+    const models = records.filter((record) => ['.fbx', '.gltf', '.glb'].includes(record.ext));
+    const candidates = unityRelativePath ? modelRecordsForUnitySource(models, unityRelativePath) : models;
     for (const record of candidates) {
       const animations = subMetaRecords(record.uuid, record.subMetas, 'gltf-animation')
         .sort((left, right) => (
@@ -5857,7 +5865,7 @@ function applyNestedParticlePrefabOverrides(builder, nestedPrefab, reporter, opt
         const meshAsset = builtin ? null : unityDb.get(unityRefGuid(meshOverride[1]));
         const meshName = meshAsset ? unityModelMeshName(meshAsset, unityRefFileId(meshOverride[1])) : '';
         const resolved = meshAsset && cocosDb?.resolveModelMeshByStem
-          ? cocosDb.resolveModelMeshByStem(meshAsset.stem, meshName || meshAsset.stem, meshAsset.ext === '.asset' ? '.fbx' : meshAsset.ext, unityRefFileId(meshOverride[1]))
+          ? cocosDb.resolveModelMeshByStem(meshAsset.stem, meshName || meshAsset.stem, meshAsset.ext === '.asset' ? '.fbx' : meshAsset.ext, unityRefFileId(meshOverride[1]), meshAsset.relativePath)
           : null;
         reportModelMeshResolution(reporter, resolved, nestedPrefab.sourceAsset?.relativePath || '', gameObject.name);
         const meshUuid = builtin || resolved?.meshUuid || '';
@@ -7243,7 +7251,7 @@ function repairPendingMeshRefs(prefabFile, cocosDb, reporter, options) {
 
     if (!meshOwner || meshOwner._mesh) continue;
 
-    const resolved = cocosDb.resolveModelMeshByStem(entry.modelStem, entry.meshNameHint);
+    const resolved = cocosDb.resolveModelMeshByStem(entry.modelStem, entry.meshNameHint, '', '', entry.source);
     if (!resolved?.meshUuid) continue;
 
     meshOwner._mesh = cocosUuid(resolved.meshUuid, 'cc.Mesh');
@@ -8362,6 +8370,18 @@ function copyUnityAssetToCocos(unityAsset, options, reporter, kind, severity = '
 
 function importedUnityAssetPath(unityAsset, options) {
   return importedUnityAssetPathImpl(unityAsset, options);
+}
+
+// Unity models are copied (or, for Mesh .asset, exported to .fbx) to assets/unity_imported/<Unity path>.
+// Given the Unity source, only that mirror is the model; a same-basename model imported from another
+// Unity folder is a different asset (Blast Shooter's Ver2/Pot.fbx square pot bound Model/Pot.fbx's round
+// pot and was never copied). Models placed outside unity_imported by hand stay eligible.
+function modelRecordsForUnitySource(records, unityRelativePath) {
+  const withoutExt = (value) => value.replace(/\.[^./]+$/, '').toLowerCase();
+  const mirror = withoutExt(`assets/unity_imported/${toPosix(unityRelativePath)}`);
+  const exact = records.filter((record) => withoutExt(record.relativePath) === mirror);
+  if (exact.length) return exact;
+  return records.filter((record) => !record.relativePath.toLowerCase().startsWith('assets/unity_imported/'));
 }
 
 function ensureAssetMeta(assetFile, kind, config = {}) {
