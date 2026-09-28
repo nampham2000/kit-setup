@@ -63,3 +63,24 @@ test('binding attaches mesh emitters and reports unmeasured billboards', () => {
   assert.deepEqual(JSON.parse(added[0].sourceContract).eulerSigns, MESH_SIGNS);
   assert.deepEqual(codes, ['PARTICLE_ALIGN_TO_DIRECTION_UNMEASURED', 'PARTICLE_ALIGN_TO_DIRECTION_BOUND']);
 });
+
+test('adapter waits for cc.ParticleSystem.onLoad (order 99) to create the processor instead of throwing', () => {
+  const decorator = () => (target) => target;
+  const cc = { _decorator: { ccclass: decorator, property: (...args) => (args.length >= 2 ? undefined : () => undefined) }, Component: class {}, ParticleSystem: class {}, Vec3 };
+  const modules = { cc, 'cc/env': { EDITOR_NOT_IN_PREVIEW: false }, './UnityParticleAlignToDirection': runtime };
+  const adapter = {};
+  new Function('exports', 'require', ts.transpileModule(fs.readFileSync(path.join(__dirname, 'runtime/UnityParticleAlignToDirectionAdapter.ts'), 'utf8'),
+    { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2019, experimentalDecorators: true } }).outputText)(adapter, id => modules[id]);
+  const component = new adapter.UnityParticleAlignToDirectionAdapter();
+  const shape = { emit(p) { p.velocity.x = 1; } };
+  const system = { processor: null, shapeModule: shape };
+  component.source = system; component.sourceContract = JSON.stringify({ eulerSigns: MESH_SIGNS });
+  assert.doesNotThrow(() => component.onLoad(), 'onLoad before the processor exists must not abort activation');
+  const originalEmit = shape.emit;
+  system.processor = { setNewParticle() {} };
+  component.start();
+  assert.notEqual(shape.emit, originalEmit, 'start installs the birth hook');
+  const particle = { velocity: new Vec3(), startEuler: new Vec3(), rotation: new Vec3() };
+  shape.emit(particle); system.processor.setNewParticle(particle);
+  assert.ok(Math.abs(particle.rotation.y) > 1, 'a +X birth direction yields a yaw delta');
+});
