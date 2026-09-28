@@ -6,6 +6,7 @@ const { toPosix, sanitizeFileId } = require('./core-utils');
 const { unityModelImportBasis, unityModelMeshName } = require('./model-import-basis');
 const { cocosSlotsForUnitySlots } = require('./fbx-submesh-order');
 const { requestModelMeshBasis } = require('./model-mesh-basis-binding');
+const { rebaseSkinnedSkeleton } = require('./fbx-skeleton-basis');
 
 module.exports = function createRendererPorter(deps) {
   const {
@@ -347,8 +348,9 @@ module.exports = function createRendererPorter(deps) {
   // Unity SkinnedMeshRenderer on an unpacked model instance. The Cocos model prefab
   // pairs the imported mesh with a skeleton whose joint paths are relative to the
   // model root; that root is the ancestor from which every joint path resolves.
-  // Unity's X reflection of the FBX and the scene's Z reflection compose to a Y
-  // rotation, the same for bind pose and animated bones, so skinning stays coherent.
+  // The bind poses stay in FBX space while the scene conversion puts every bone in
+  // R*W*R^-1 (R = Ry(180)), which splits the mesh at each joint; attachRealtimeSkinning
+  // rebases the skeleton into FBX space (fbx-skeleton-basis.js).
   function emitSkinnedMeshRenderer(gameObject, nodeId, componentId, doc, model, builder, reporter, options, unityDb, cocosDb) {
     const meshRef = getField(doc, 'm_Mesh');
     const meshAsset = unityDb.get(unityRefGuid(meshRef));
@@ -397,6 +399,19 @@ module.exports = function createRendererPorter(deps) {
       reporter.medium('SKINNED_MESH_MATERIAL_SLOT_EMPTY', meshAsset.relativePath, gameObject.name,
         'A SkinnedMeshRenderer material slot resolved to no Unity or model material; the slot renders with the default material.');
     }
+    // Nodes of the model's own hierarchy (every joint path prefix and the renderer's chain up to the
+    // root) switch to the FBX frame in attachRealtimeSkinning; other children are attachments.
+    if (!builder.fbxSkeletonNodes) builder.fbxSkeletonNodes = new Map();
+    const fbxNodes = builder.fbxSkeletonNodes.get(skinningRoot) || new Set();
+    for (const joint of skin.joints) {
+      const segments = String(joint).split('/').filter(Boolean);
+      for (let i = 1; i <= segments.length; i++) {
+        const id = nodeAtPath(builder, skinningRoot, segments.slice(0, i).join('/'));
+        if (Number.isInteger(id)) fbxNodes.add(id);
+      }
+    }
+    for (let id = nodeId; Number.isInteger(id) && id !== skinningRoot; id = parentNodeId(builder, id)) fbxNodes.add(id);
+    builder.fbxSkeletonNodes.set(skinningRoot, fbxNodes);
     builder.addSkinnedMeshRenderer(nodeId, componentId, resolved.meshUuid, materialUuids, skin.skeletonUuid, skinningRoot, componentFileId, {
       castShadows: Number(getField(doc, 'm_CastShadows', 1) || 0) !== 0,
       receiveShadows: Number(getField(doc, 'm_ReceiveShadows', 1) || 0) !== 0,
@@ -431,6 +446,15 @@ module.exports = function createRendererPorter(deps) {
           null, `cmp-skeletal-animation-${rootId}`);
       }
       reporter.low('SKINNED_MESH_REALTIME_SKINNING', '', root._name || '', `${renderers} skinned renderer(s) use real-time skinning under ${root._name || 'root'}.`);
+      const fbxNodes = builder.fbxSkeletonNodes?.get(rootId);
+      if (fbxNodes?.size && !builder.fbxSkeletonRebased?.has(rootId)) {
+        const rebased = rebaseSkinnedSkeleton(builder.objects, rootId, fbxNodes);
+        if (!builder.fbxSkeletonRebased) builder.fbxSkeletonRebased = new Set();
+        builder.fbxSkeletonRebased.add(rootId);
+        reporter.medium('SKINNED_SKELETON_FBX_FRAME', '', root._name || '',
+          `Skeleton under ${root._name || 'root'} rebased to the FBX frame (${rebased.joints} model nodes, ${rebased.attachments} attachments, root * Ry(180)). `
+          + 'Unity-authored bone curves (.anim, humanoid bakes) on this rig must use the FBX-frame conversion (fbx-skeleton-basis fbxBoneLocal).');
+      }
     }
   }
 
