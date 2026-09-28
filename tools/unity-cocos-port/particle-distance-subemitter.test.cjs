@@ -83,7 +83,8 @@ test('constant distance contract rejects approximations and preserves target spa
  const entry={type:0,properties:0,emitProbability:1},target={moveWithTransform:0,EmissionModule:{enabled:true,rateOverTime:{minMaxState:0,scalar:0},rateOverDistance:{minMaxState:0,scalar:6},m_BurstCount:0,m_Bursts:[]}};
  assert.deepEqual(distanceSubEmitterContract(entry,target),{rate:6,simulationSpace:1});
  for(const mutate of [t=>t.EmissionModule.rateOverTime.scalar=1,t=>t.EmissionModule.rateOverDistance.minMaxState=3,t=>t.EmissionModule.m_BurstCount=1,t=>t.moveWithTransform=2]){const t=structuredClone(target);mutate(t);assert.throws(()=>distanceSubEmitterContract(entry,t),/Unverified/);}
- assert.throws(()=>distanceSubEmitterContract({...entry,properties:1},target),/inheritance/);
+ assert.equal(distanceSubEmitterContract({...entry,properties:1},target),null,'Color inheritance stays on the per-instance follower');
+ for(const properties of [2,3,4,8,16])assert.throws(()=>distanceSubEmitterContract({...entry,properties},target),/inheritance/);
  assert.throws(()=>distanceSubEmitterContract({...entry,emitProbability:.5},target),/probability/);
 });
 test('reset clears old parents and native distance never moves the emitter node',()=>{
@@ -105,4 +106,19 @@ test('generic prefab porter binds source distance instead of hardcoded 36/second
  assert.equal(helper.entries[0].sourceDistanceRate,6);assert.equal(helper.entries[0].emitRatePerParticle,0);
  assert.equal(objects[3]._simulationSpace,1);assert.equal(objects[4].constant,0);assert.equal(objects[5].constant,0);
  assert.deepEqual(events,['PARTICLE_DISTANCE_SUB_EMITTER_BOUND']);
+});
+test('Color-inheriting distance sub-emitter keeps the per-instance follower (Hovl Magic circle chains)',()=>{
+ const objects=[{__type__:'cc.Node',_name:'parent',_components:[{__id__:1}]},{__type__:'cc.ParticleSystem',node:{__id__:0}},
+  {__type__:'cc.Node',_name:'child',_components:[{__id__:3}]},{__type__:'cc.ParticleSystem',node:{__id__:2},rateOverTime:{__id__:4},rateOverDistance:{__id__:5}},
+  {constant:0},{constant:6}];
+ const data={classId:198,ParticleSystem:{moveWithTransform:0,EmissionModule:{enabled:1,rateOverTime:{minMaxState:0,scalar:0},rateOverDistance:{minMaxState:0,scalar:6},m_BurstCount:0,m_Bursts:[]}}};
+ const source={classId:198,ParticleSystem:{SubModule:{enabled:1,subEmitters:[{type:0,properties:1,emitProbability:1,emitter:{fileID:'11'}}]}}};
+ const model={file:'inherit.prefab',componentDocs:new Map([['10',source],['11',data]])},events=[];
+ const builder={objects,componentMap:new Map([['10',1],['11',3]]),cocosDb:{findScriptClass:()=>({classId:'registered-helper'})},addComponent(node,type,props){const id=objects.length;objects.push({__type__:type,...props});objects[node]._components.push({__id__:id});return id;}};
+ const reporter={low(code){events.push(code);},medium(code){events.push(code);},high(code){events.push(code);}};
+ require('./runtime-component-porter')({}).attachParticleSubEmitterFollowers(model,builder,reporter);
+ const helper=objects.find(o=>o.__type__==='registered-helper');assert.equal(helper.entries.length,1);
+ const entry=helper.entries[0];assert.equal(entry.inherit,1);assert.equal(entry.unityInstances,true);assert.equal(entry.sourceDistanceRate,undefined);
+ assert.equal(objects[5].constant,6,'authored distance rate stays for the per-instance schedule');
+ assert.deepEqual(events,['PARTICLE_SUB_EMITTER_FOLLOWER']);
 });
