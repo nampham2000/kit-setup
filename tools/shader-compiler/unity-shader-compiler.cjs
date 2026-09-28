@@ -111,6 +111,25 @@ function findShadersInDir(dir) {
 /**
  * Transpiles a single Unity shader file to Cocos Creator .effect
  */
+/**
+ * Player Settings > Color Space of the source project decides UNITY_COLORSPACE_GAMMA, which vendor
+ * shaders branch on (KriptoFX RFX4_Tornado: `#ifndef UNITY_COLORSPACE_GAMMA _TwistScale = pow(...)`).
+ * An explicit --color-space wins; otherwise ProjectSettings.asset m_ActiveColorSpace (0 = Gamma,
+ * 1 = Linear) of --unity-project; otherwise linear. A multi-pack project may not use a pack author's
+ * colour space: port against the pack's own (isolated) project or pass --color-space.
+ */
+function resolveColorSpace(options) {
+  if (options.colorSpace) return { colorSpace: options.colorSpace, source: '--color-space' };
+  if (options.unityProject) {
+    const settings = path.join(options.unityProject, 'ProjectSettings', 'ProjectSettings.asset');
+    if (fs.existsSync(settings)) {
+      const m = /^\s*m_ActiveColorSpace:\s*(\d)/m.exec(fs.readFileSync(settings, 'utf8'));
+      if (m) return { colorSpace: m[1] === '0' ? 'gamma' : 'linear', source: 'ProjectSettings m_ActiveColorSpace' };
+    }
+  }
+  return { colorSpace: 'linear', source: 'default: no --color-space and no readable --unity-project settings' };
+}
+
 function transpileShaderFile(srcPath, outPath, options = {}) {
   const source = fs.readFileSync(srcPath, 'utf8');
   const srcDir = path.dirname(srcPath);
@@ -204,7 +223,9 @@ function transpileShaderFile(srcPath, outPath, options = {}) {
     if (options.report) {
       const baseOut = outPath.replace(/\.effect$/i, '');
       const mdReport = generateMarkdownReport(docIR, effectCode, validationResult, scoreInfo, variantInfo);
-      const jsonReport = generateJsonReport(docIR, effectCode, validationResult, scoreInfo, variantInfo);
+      // colorSpace decides every UNITY_COLORSPACE_GAMMA branch; record it so a port can audit it.
+      const jsonReport = JSON.stringify({ ...JSON.parse(generateJsonReport(docIR, effectCode, validationResult, scoreInfo, variantInfo)),
+        colorSpace: options.colorSpace || 'linear' }, null, 2);
       fs.writeFileSync(`${baseOut}.report.md`, mdReport, 'utf8');
       fs.writeFileSync(`${baseOut}.report.json`, jsonReport, 'utf8');
       fs.writeFileSync(`${baseOut}.shader-variants.json`, JSON.stringify(variantInfo.manifest, null, 2), 'utf8');
@@ -580,6 +601,10 @@ function main() {
     else if (arg === '--generate-material' || arg === '-m') options.generateMaterial = true;
     else if (arg === '--dry-run') options.dryRun = true;
     else if (arg === '--unity-uv') options.unityUv = true;
+    else if (arg === '--color-space') {
+      options.colorSpace = args[++i];
+      if (!['linear', 'gamma'].includes(options.colorSpace)) throw new Error(`--color-space must be linear or gamma, got ${options.colorSpace}`);
+    }
     // convert-mat: bind the material to its effect. --effect-uuid fills
     // _effectAsset; --effect additionally filters out properties the effect
     // does not declare.
@@ -611,6 +636,13 @@ function main() {
     requireProject: true,
   });
 
+  if (['convert', 'batch', 'chain'].includes(command)) {
+    const resolved = resolveColorSpace(options);
+    options.colorSpace = resolved.colorSpace;
+    // stderr: `chain --json` owns stdout.
+    console.error(`Color space: ${resolved.colorSpace} (${resolved.source})`);
+  }
+
   // Handle positionals
   if (command === 'scan') {
     cmdScan(args[1] || options.dir || '.');
@@ -638,11 +670,13 @@ UCShaderTranspiler - Unity HLSL/ShaderLab -> Cocos Creator 3.8.8 GLSL Effect Tra
 
 Usage:
   node unity-shader-compiler.cjs chain --src <Prefab|ScriptableObject.asset> --unity-root <Assets> [--out-dir <dir>] [--json] [--no-cache] [--max-closure-assets N] [--max-closure-depth N]
-  node unity-shader-compiler.cjs convert --src <Shader> --out <Effect> [-m] [--mode auto|unlit|surface-pbr] [--unity-project <UnityProject>] [--unity-uv] [--report|--no-report] [--dry-run]
+  node unity-shader-compiler.cjs convert --src <Shader> --out <Effect> [-m] [--mode auto|unlit|surface-pbr] [--unity-project <UnityProject>] [--unity-uv] [--color-space linear|gamma] [--report|--no-report] [--dry-run]
 
   --unity-uv  Lấy mẫu texture theo quy ước UV của Unity (gốc dưới-trái) bằng texU().
               Bật khi shader chạy trên hình học mang UV từ Unity. Mặc định TẮT vì
               bật lên sẽ đổi hình của mọi effect đã sinh trước đó.
+  --color-space linear|gamma  Player Color Space của project Unity nguồn (mặc định linear).
+              gamma định nghĩa UNITY_COLORSPACE_GAMMA như Unity làm trong project Gamma.
   node unity-shader-compiler.cjs convert-mat --src <UnityMat> --out <CocosMtl> [--effect <Effect>] [--effect-uuid <uuid>] [--texture-map <guid-to-uuid.json>]
   node unity-shader-compiler.cjs scan <UnityDir>
   node unity-shader-compiler.cjs inspect <Shader>
@@ -666,6 +700,7 @@ if (require.main === module) {
 
 module.exports = {
   transpileShaderFile,
+  resolveColorSpace,
   findShadersInDir,
   convertMatFile,
   convertUnityMatToCocosMtl,

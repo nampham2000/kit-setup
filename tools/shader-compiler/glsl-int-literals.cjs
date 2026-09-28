@@ -41,7 +41,10 @@ function guardedRanges(line, opener, closer, test) {
 
 function promoteLine(line, intNames) {
   if (SKIP_LINE.test(line) || /\bfor\s*\(/.test(line) || /\bcase\s+\d/.test(line)) return line;
-  for (const name of intNames) if (new RegExp(`\\b${name}\\b`).test(line)) return line;
+  // An int variable used only as an array index (`lights[i].w`) does not make the statement's
+  // arithmetic integral; mask subscripts before looking for int operands.
+  const outsideSubscripts = line.replace(/\[[^\[\]]*\]/g, '[]');
+  for (const name of intNames) if (new RegExp(`\\b${name}\\b`).test(outsideSubscripts)) return line;
   // A declaration of an integer-typed local keeps its initializer integral.
   if (/\b(?:int|uint|ivec[234]|uvec[234]|bool)\s+[A-Za-z_]\w*\s*(?:=|;|\[)/.test(line)) return line;
   const guarded = [

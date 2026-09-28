@@ -19,6 +19,8 @@ const { allocateBindings } = require('./binding-allocator.cjs');
 const { renameReservedInEffect } = require('./glsl-reserved-identifiers.cjs');
 const { promoteIntLiterals } = require('./glsl-int-literals.cjs');
 const { glslEs1Compat } = require('./glsl-es1-compat.cjs');
+const { shadowWrittenUniforms } = require('./glsl-uniform-writes.cjs');
+const { glslImplicitConversions } = require('./glsl-implicit-conversions.cjs');
 const { extractSurfaceShaderIntent, detectPackedMaps } = require('./surface-shader-intent-extractor.cjs');
 const {
   SRGB_SAMPLE_HELPER,
@@ -672,9 +674,12 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
   // Also include any explicit HLSL uniforms that weren't in Properties block
   for (const u of programIR.uniforms || []) {
     if (!propertyNameMap.has(u.name) && !uboFields.some(f => f.name === u.name)) {
+      // Keep `float4 RFX4_LightPositions[8]` an array: dropping the size declared a vec4
+      // and every `name[i].xyz` failed ("field selection requires ... vector").
       uboFields.push({
         name: u.name,
         type: u.type,
+        ...(u.arraySize > 0 ? { arraySize: u.arraySize } : {}),
       });
     }
   }
@@ -938,7 +943,7 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
   if (vertFunc && vertFunc.body) {
     // Translate custom vertex body
     let vBody = lowerHlslToGlsl(vertFunc.body, options);
-    vBody = remapIdentifiers(vBody);
+    vBody = shadowWrittenUniforms(remapIdentifiers(vBody), ubo.glsl);
     if (usesCocosSpriteTexture) {
       // Sprite.fillBuffers submits world-space vertices and commitComp passes
       // transform=null. Cocos builtin-sprite therefore multiplies those vertices
@@ -1218,7 +1223,7 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
 
   if (fragFunc && fragFunc.body) {
     let fBody = lowerHlslToGlsl(fragFunc.body, options);
-    fBody = remapIdentifiers(fBody);
+    fBody = shadowWrittenUniforms(remapIdentifiers(fBody), ubo.glsl);
     fBody = preserveCocosSpriteUvSampling(fBody);
 
     // Replace param references with varyings
@@ -1280,8 +1285,8 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
 
   // GLSL ES 1.0 has no implicit int->float conversion (HLSL does).
   return {
-    vsCode: glslEs1Compat(promoteIntLiterals(vsLines.join('\n'))),
-    fsCode: glslEs1Compat(promoteIntLiterals(fsLines.join('\n'))),
+    vsCode: glslEs1Compat(promoteIntLiterals(glslImplicitConversions(vsLines.join('\n')))),
+    fsCode: glslEs1Compat(promoteIntLiterals(glslImplicitConversions(fsLines.join('\n')))),
     ubo,
   };
 }

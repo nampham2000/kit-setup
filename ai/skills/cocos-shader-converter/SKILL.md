@@ -170,6 +170,35 @@ and direct library cache writes alone do not prove Editor import success.
     node playable-shared-kit/tools/work-memory.cjs remember --scope global --category porting-note --title "..." --content "..." --tags "shader,unity,cocos"
     ```
 
+## Generated effect import gate (GLSL ES 1.00 + colour space)
+
+Cocos imports every `.effect` for GLSL ES 3.00 (WebGL 2) **and** GLSL ES 1.00
+(`#version 100`, WebGL 1 / GL ES 2.0). One failing variant leaves the whole effect
+`imported: false`, even when `shader.validate` says PASS and the grade is A. Vendor HLSL
+(KriptoFX RFX4, 2026-09-28) relies on implicit conversions that 1.00 rejects.
+
+1. **Colour space first.** `UNITY_COLORSPACE_GAMMA` selects code paths
+   (`#ifndef UNITY_COLORSPACE_GAMMA _TwistScale = pow(_TwistScale, 0.4545);`). `convert`/`batch`
+   read `m_ActiveColorSpace` from `--unity-project`, or take `--color-space linear|gamma`. A
+   multi-pack project is often Linear while the pack author was Gamma: transpile against the
+   pack's own reference project or pass the flag. Check the `Color space:` stderr line and the
+   `colorSpace` field in `<effect>.report.json`.
+2. **After every convert:** reimport through AssetDB, then read the **latest**
+   `error: [Assets] <Name>.effect - vs:vert|fs:frag` block in the project log. Its `ERROR: 0:<line>`
+   numbers point into the expanded source Cocos prints right after it, not into the `.effect` file.
+   `npm run ai:verify:assets` must PASS before the next step.
+3. **Fix the transpiler, not the output.** Already lowered: uniform writes (local copy), `2.0f`/`0.5h`
+   suffixes, vec4->vec3 truncation (also `+=` and products), scalar->vecN broadcasts
+   (incl. `max(0.00001, col)`), int operands in float math, runtime `const int`, non-constant loop
+   bounds (capped loop + break; subscripts use the loop index), uniform array sizes, scalar returns.
+   Vendor files keep CRLF: line regexes must tolerate `\r`. A new pattern gets a regression test
+   copied from the vendor line in `tools/shader-compiler/*.test.cjs`, then regenerate.
+4. **Untranspilable inputs** (`_CameraDepthTexture`, `_CameraOpaqueTexture`, GrabPass): use the
+   pack pipeline's hand-written effect, rebind every material (UUID reference count 0), and only
+   then delete the transpiled copy through AssetDB with the user's confirmation.
+5. **Never leave an effect red silently.** Fix it now or report it to the user as a blocker with
+   the cause and plan.
+
 ## Hard prohibitions
 
 - Do not claim “90–95%” from static confidence or from a screenshot viewed by eye.

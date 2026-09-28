@@ -1120,6 +1120,14 @@ completion of one level from completion of the configured level sequence.
 
 ## 6. Visual and runtime parity traps
 
+**Transpiled shaders:** follow "Generated effect import gate" in the `cocos-shader-converter`
+skill. In short: transpile with the pack author's Player colour space (`--color-space` or the
+pack's own `--unity-project`); after every convert, reimport and require `ai:verify:assets` PASS,
+because Cocos also compiles `#version 100` and static PASS does not prove that; fix failures in
+the shared transpiler with a regression test; and report any effect still failing to the user
+at once. Texture and material pipeline steps must share the bind step's oracle and shader list,
+or materials stay stuck on untranspilable effects.
+
 Use [references/visual-parity.md](references/visual-parity.md) when debugging
 sprite FTUE animation, nested HUD prefabs, mirrored hidden objects, or particles.
 It explains which serialized values are easy to misinterpret and how to check

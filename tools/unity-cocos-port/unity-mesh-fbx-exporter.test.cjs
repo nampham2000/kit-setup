@@ -52,3 +52,64 @@ test('Cocos FBX-glTF-conv imports the exported mesh (skipped without a local Coc
   assert.equal((gltf.nodes || []).length, 1);
   assert.deepEqual((gltf.meshes || []).map(mesh => mesh.name), ['Quad']);
 });
+
+// Meshes extracted from a built player (m_MeshCompression > 0, as in ripped "HijackSource" folders)
+// keep an empty vertex stream and store PackedBitVectors in m_CompressedMesh. Candy Pop Sort's
+// funnel Bumper and Board_Corner failed with UNITY_MESH_ASSET_FBX_EXTRACT_FAILED before this path.
+function packBits(values, bitSize) {
+  const bytes = [];
+  let bitPos = 0;
+  let acc = 0;
+  let accBits = 0;
+  for (const value of values) {
+    for (let b = 0; b < bitSize; b += 1) {
+      acc |= ((value >> b) & 1) << accBits;
+      accBits += 1;
+      bitPos += 1;
+      if (accBits === 8) { bytes.push(acc); acc = 0; accBits = 0; }
+    }
+  }
+  if (accBits) bytes.push(acc);
+  return Buffer.from(bytes).toString('hex');
+}
+
+function packFloats(values, bitSize, start, range) {
+  const max = (2 ** bitSize) - 1;
+  return packBits(values.map(v => Math.round(((v - start) / range) * max)), bitSize);
+}
+
+test('m_CompressedMesh (CRLF YAML) decodes positions, UVs, normals and triangles', () => {
+  const { parseUnityMeshAsset } = require('./unity-mesh-fbx-exporter.js');
+  const positions = [[-1, 0, 0], [1, 0, 0], [1, 2, 0], [-1, 2, 0]];
+  const uvs = [[0, 0], [1, 0], [1, 1], [0, 1]];
+  const normals = [[0, 0, -1], [0, 0, -1], [0.6, 0, 0.8], [0, 0, 1]];
+  const indices = [0, 1, 2, 0, 2, 3];
+  const vector = (name, numItems, bitSize, data, start, range) => [
+    `    ${name}:`, `      m_NumItems: ${numItems}`,
+    ...(range === undefined ? [] : [`      m_Range: ${range}`, `      m_Start: ${start}`]),
+    `      m_Data: ${data}`, `      m_BitSize: ${bitSize}`,
+  ];
+  const yaml = [
+    '%YAML 1.1', '--- !u!43 &4300000', 'Mesh:', '  m_Name: Ramp', '  m_MeshCompression: 1',
+    '  m_VertexData:', '    m_VertexCount: 0', '    m_DataSize: 0', '    _typelessdata:',
+    '  m_CompressedMesh:',
+    ...vector('m_Vertices', 12, 20, packFloats(positions.flat(), 20, -1, 3), -1, 3),
+    ...vector('m_UV', 8, 16, packFloats(uvs.flat(), 16, 0, 1), 0, 1),
+    ...vector('m_Normals', 8, 10, packFloats(normals.map(n => [n[0], n[1]]).flat(), 10, -1, 2), -1, 2),
+    ...vector('m_NormalSigns', 4, 1, packBits(normals.map(n => (n[2] >= 0 ? 1 : 0)), 1)),
+    ...vector('m_Triangles', 6, 3, packBits(indices, 3)),
+    '    m_UVInfo: 5',
+    '  m_LocalAABB:', '    m_Center: {x: 0, y: 1, z: 0}',
+  ].join('\r\n');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'unity-compressed-mesh-'));
+  const file = path.join(dir, 'Ramp.asset');
+  fs.writeFileSync(file, `${yaml}\r\n`);
+  const mesh = parseUnityMeshAsset(file);
+  assert.ok(mesh, 'compressed mesh parsed');
+  assert.equal(mesh.meshName, 'Ramp');
+  assert.deepEqual(mesh.indices, indices);
+  mesh.positions.forEach((p, i) => p.forEach((v, a) => assert.ok(Math.abs(v - positions[i][a]) < 1e-5, `position ${i}.${a}`)));
+  mesh.uvs.forEach((p, i) => p.forEach((v, a) => assert.ok(Math.abs(v - uvs[i][a]) < 1e-4, `uv ${i}.${a}`)));
+  mesh.normals.forEach((n, i) => n.forEach((v, a) => assert.ok(Math.abs(v - normals[i][a]) < 5e-3, `normal ${i}.${a}`)));
+  fs.rmSync(dir, { recursive: true, force: true });
+});

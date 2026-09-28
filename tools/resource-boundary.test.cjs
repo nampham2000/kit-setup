@@ -128,6 +128,41 @@ test('catalog generation is deterministic and boundary passes only after AssetDB
   }
 });
 
+test('a resources folder of dynamic roots only passes without a catalog', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'resource-boundary-dyn-'));
+  try {
+    write(path.join(root, 'package.json'), '{}\n');
+    write(path.join(root, 'assets/resources/playable-config.json'), '{}\n');
+    write(path.join(root, 'assets/resources/sound/tap.mp3'), 'audio');
+    write(path.join(root, 'assets/script/Loader.ts'), 'resources.load(path)\n');
+    const manifest = {
+      schemaVersion: 1,
+      resourcesRoot: 'assets/resources',
+      dynamicRoots: [
+        { path: 'assets/resources/playable-config.json', kind: 'json', reason: 'Runtime config.', evidence: ['assets/script/Loader.ts#resources.load'] },
+        { path: 'assets/resources/sound', kind: 'audio-directory', reason: 'Runtime audio.', evidence: ['assets/script/Loader.ts#resources.load'] },
+      ],
+      staticMoves: [],
+    };
+    write(path.join(root, 'tools/resource-boundary.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+    const report = auditResourceBoundary(root);
+    assert.equal(report.status, 'PASS', report.errors.join('\n'));
+    assert.deepEqual(report.catalog, { prefab: null, status: 'not-required' });
+    assert.throws(() => writeCatalog(root), /no catalog/);
+
+    // An undeclared file still fails closed without a catalog.
+    write(path.join(root, 'assets/resources/extra.png'), 'png');
+    assert.equal(auditResourceBoundary(root).status, 'FAIL');
+
+    // A static move that catalogues assets still requires the catalog.
+    manifest.staticMoves.push({ from: 'assets/resources/extra.png', to: 'assets/game/extra.png', reason: 'Fixed sprite.', rules: [{ extensions: ['.png'] }] });
+    write(path.join(root, 'tools/resource-boundary.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+    assert.throws(() => auditResourceBoundary(root), /requires catalog/);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('unclassified resources fail closed even when their extension is commonly dynamic', () => {
   const root = fixture();
   try {

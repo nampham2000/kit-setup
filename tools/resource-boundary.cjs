@@ -144,7 +144,6 @@ function normalizeManifest(projectRoot, configPath) {
   if (!Array.isArray(manifest.dynamicRoots) || !Array.isArray(manifest.staticMoves)) {
     fail('Manifest requires dynamicRoots[] and staticMoves[].');
   }
-  if (!manifest.catalog || typeof manifest.catalog !== 'object') fail('Manifest requires catalog.');
   const resourcesRoot = resolveInside(projectRoot, manifest.resourcesRoot || 'assets/resources', 'resourcesRoot');
   if (!resourcesRoot.relative.startsWith('assets/')) fail('resourcesRoot must be under assets/.');
   const dynamicRoots = manifest.dynamicRoots.map((entry, index) => {
@@ -177,14 +176,23 @@ function normalizeManifest(projectRoot, configPath) {
     if (!Array.isArray(rules)) fail(`staticMoves[${index}].rules must be an array.`);
     return { ...move, from, to, rules };
   });
-  const catalog = {
-    ...manifest.catalog,
-    prefab: resolveInside(projectRoot, manifest.catalog.prefab, 'catalog.prefab'),
-    script: resolveInside(projectRoot, manifest.catalog.script, 'catalog.script'),
-  };
-  if (!String(catalog.resourcePath || '').trim()) fail('catalog.resourcePath is required.');
-  if (!(catalog.prefab.relative === resourcesRoot.relative || catalog.prefab.relative.startsWith(`${resourcesRoot.relative}/`))) {
-    fail('catalog.prefab must be a dynamic root under resourcesRoot.');
+  // The catalog is the serialized dependency root for moved static assets. A resources folder that
+  // holds only dynamic roots (config, JSON fragments, path-selected audio) has nothing for it to own,
+  // so it may be omitted; a static move that still catalogues assets requires it.
+  const needsCatalog = staticMoves.some((move) => move.rules.length > 0);
+  if (manifest.catalog !== undefined && (!manifest.catalog || typeof manifest.catalog !== 'object')) fail('catalog must be an object.');
+  if (!manifest.catalog && needsCatalog) fail('Manifest requires catalog: a static move declares catalog rules.');
+  let catalog = null;
+  if (manifest.catalog) {
+    catalog = {
+      ...manifest.catalog,
+      prefab: resolveInside(projectRoot, manifest.catalog.prefab, 'catalog.prefab'),
+      script: resolveInside(projectRoot, manifest.catalog.script, 'catalog.script'),
+    };
+    if (!String(catalog.resourcePath || '').trim()) fail('catalog.resourcePath is required.');
+    if (!(catalog.prefab.relative === resourcesRoot.relative || catalog.prefab.relative.startsWith(`${resourcesRoot.relative}/`))) {
+      fail('catalog.prefab must be a dynamic root under resourcesRoot.');
+    }
   }
   return {
     raw: manifest,
@@ -345,6 +353,7 @@ function buildCatalogPrefab(normalized, entries) {
 }
 
 function inspectCatalog(normalized, entries) {
+  if (!normalized.catalog) return { status: 'not-required', errors: [] };
   const errors = [];
   const file = normalized.catalog.prefab.absolute;
   if (!fs.existsSync(file)) return { status: 'missing', errors: [`Catalog prefab is missing: ${normalized.catalog.prefab.relative}`] };
@@ -414,7 +423,7 @@ function auditResourceBoundary(projectRoot, configPath = DEFAULT_CONFIG) {
     dynamicFileCount: dynamicFiles.length,
     staticCatalogEntryCount: closure.entries.length,
     moveStates: closure.moveStates,
-    catalog: { prefab: normalized.catalog.prefab.relative, status: catalog.status },
+    catalog: { prefab: normalized.catalog ? normalized.catalog.prefab.relative : null, status: catalog.status },
     misplacedStatic,
     unclassified,
     errors,
@@ -425,6 +434,7 @@ function auditResourceBoundary(projectRoot, configPath = DEFAULT_CONFIG) {
 
 function writeCatalog(projectRoot, configPath = DEFAULT_CONFIG) {
   const normalized = normalizeManifest(projectRoot, configPath);
+  if (!normalized.catalog) fail('Manifest declares no catalog: there are no static assets to catalogue.');
   const closure = collectCatalogEntries(projectRoot, normalized);
   if (closure.errors.length) fail(closure.errors.join('\n'));
   if (!closure.entries.length) fail('Catalog closure is empty.');
