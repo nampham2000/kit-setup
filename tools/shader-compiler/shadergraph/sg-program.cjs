@@ -9,6 +9,8 @@ const { tokenize, Parser, print, Typer, coerce, TYPE_WORDS, isIntLiteral } = req
 
 const PARAM_QUALS = new Set(['in', 'out', 'inout']);
 const PRECISION = new Set(['highp', 'mediump', 'lowp']);
+const GLOBAL_QUALS = new Set(['const', 'uniform', 'in', 'out', 'varying', 'attribute', 'flat', 'centroid', 'static', 'inline', 'layout']);
+const STATEMENT_KEYWORDS = new Set(['return', 'discard', 'break', 'continue', 'if', 'else', 'for', 'while', 'do', 'switch', 'case', 'default', 'struct', 'precision']);
 const ATTRIBUTES = new Set(['unroll', 'loop', 'branch', 'flatten', 'fastopt', 'call', 'forcecase']);
 
 function matchClose(tokens, i, open, close) {
@@ -91,7 +93,8 @@ class Program {
 
   /** Full typed rewrite. Returns rewritten code. */
   transform(code, options = {}) {
-    const tokens = tokenize(code);
+    this.src = String(code);
+    const tokens = tokenize(this.src);
     const out = [];
     let i = 0;
     while (i < tokens.length) {
@@ -135,36 +138,76 @@ class Program {
         const params = this.parseParams(tokens.slice(pOpen + 1, pClose));
         const sig = { name: nameTok.v, ret: typeTok.v, params };
         this.addFunction(sig);
-        const after = tokens[pClose + 1];
-        if (after && after.v === '{') {
-          const bClose = matchClose(tokens, pClose + 1, '{', '}');
+        let after = pClose + 1;
+        // HLSL output semantic on a helper signature: `float4 Frag(v2f i) : SV_Target {`
+        if (tokens[after] && tokens[after].v === ':' && tokens[after + 1] && tokens[after + 1].k === 'id') after += 2;
+        if (tokens[after] && tokens[after].v === '{') {
+          const bClose = matchClose(tokens, after, '{', '}');
           if (!options.signaturesOnly) {
             const scope = new Map(params.map((p) => [p.name, p.type]));
             const before = this.diagnostics.length;
-            const body = this.block(tokens.slice(pClose + 2, bClose), [scope], sig.ret, 1);
+            const body = this.block(tokens.slice(after + 1, bClose), [scope], sig.ret, 1);
             for (let k = before; k < this.diagnostics.length; k++) if (!this.diagnostics[k].fn) this.diagnostics[k].fn = nameTok.v;
             const paramText = params.map((p) => `${p.qual && p.qual !== 'in' ? `${p.qual} ` : ''}${p.type} ${p.name}${p.array || ''}`).join(', ');
-            out.push(`${typeTok.v} ${nameTok.v}(${paramText}) {\n${body.join('\n')}\n}`);
+            out.push(`${quals.filter((q) => PRECISION.has(q)).map((q) => `${q} `).join('')}${typeTok.v} ${nameTok.v}(${paramText}) {\n${body.join('\n')}\n}`);
           }
           i = bClose + 1;
         } else {
-          i = pClose + 2; // prototype
+          if (!options.signaturesOnly) out.push(this.raw(tokens, i, after));
+          i = after + 1; // prototype
         }
         continue;
       }
-      // global declaration statement
-      const end = tokens.findIndex((x, k) => k >= i && x.k === 'op' && x.v === ';');
-      const stmt = tokens.slice(i, end < 0 ? tokens.length : end);
-      if (!options.signaturesOnly) {
-        const decl = this.declaration(stmt.filter((x) => !(x.k === 'id' && (x.v === 'static' || x.v === 'inline'))), [this.globals], 0, true);
-        out.push(...(decl || [textOf(stmt) + ';']));
-      } else {
-        const d = stmt.filter((x) => !(x.k === 'id' && (PRECISION.has(x.v) || x.v === 'const' || x.v === 'uniform' || x.v === 'static')));
-        if (d.length >= 2 && d[0].k === 'id' && d[1].k === 'id') this.globals.set(d[1].v, d[0].v);
+      // global declaration statement (uniform blocks and anything unrecognised pass through verbatim)
+      let end = i;
+      let depth = 0;
+      for (; end < tokens.length; end++) {
+        const x = tokens[end];
+        if (x.k === 'op' && (x.v === '{' || x.v === '(' || x.v === '[')) depth++;
+        if (x.k === 'op' && (x.v === '}' || x.v === ')' || x.v === ']')) depth--;
+        if (depth === 0 && x.k === 'op' && x.v === ';') break;
       }
-      i = end < 0 ? tokens.length : end + 1;
+      const stmt = tokens.slice(i, end);
+      this.recordGlobal(stmt);
+      if (!options.signaturesOnly) {
+        const hasBlock = stmt.some((x) => x.k === 'op' && x.v === '{');
+        const decl = hasBlock ? null : this.declaration(stmt.filter((x) => !(x.k === 'id' && (x.v === 'static' || x.v === 'inline'))), [this.globals], 0, true);
+        out.push(...(decl || [this.raw(tokens, i, end)]));
+      }
+      i = end + 1;
     }
     return out.join('\n\n');
+  }
+
+  /** Original text of tokens[from..to] (inclusive), for constructs the typed pass leaves untouched. */
+  raw(tokens, from, to) {
+    const a = tokens[from];
+    const b = tokens[Math.min(to, tokens.length - 1)];
+    if (!a || !b || a.s == null || this.src == null) return textOf(tokens.slice(from, to + 1));
+    return this.src.slice(a.s, b.e);
+  }
+
+  /** Remember types of global declarations: `[in|out|uniform|varying|attribute|flat|const|precision] T a, b;` and blocks. */
+  recordGlobal(input) {
+    let stmt = input;
+    const layout = stmt.findIndex((x) => x.k === 'id' && x.v === 'layout');
+    if (layout >= 0 && stmt[layout + 1] && stmt[layout + 1].v === '(') {
+      const close = matchClose(stmt, layout + 1, '(', ')');
+      stmt = [...stmt.slice(0, layout), ...stmt.slice(close + 1)];
+    }
+    const blockOpen = stmt.findIndex((x) => x.k === 'op' && x.v === '{');
+    if (blockOpen >= 0) { // uniform Block { T a; T b; }
+      const close = matchClose(stmt, blockOpen, '{', '}');
+      for (const decl of splitTop(stmt.slice(blockOpen + 1, close), ';')) {
+        const d = decl.filter((x) => !(x.k === 'id' && PRECISION.has(x.v)));
+        if (d.length >= 2 && d[0].k === 'id' && d[1].k === 'id') this.globals.set(d[1].v, d[0].v);
+      }
+      return;
+    }
+    const d = stmt.filter((x) => !(x.k === 'id' && (PRECISION.has(x.v) || GLOBAL_QUALS.has(x.v))));
+    if (d.length >= 2 && d[0].k === 'id' && d[1].k === 'id') {
+      for (const part of splitTop(d.slice(1))) if (part[0] && part[0].k === 'id') this.globals.set(part[0].v, d[0].v);
+    }
   }
 
   parseParams(tokens) {
@@ -190,10 +233,14 @@ class Program {
     this._env = this.env(scopes);
     let node;
     try {
-      node = new Parser(tokens, (n) => this.isType(n)).expression(0);
+      const parser = new Parser(tokens, (n) => this.isType(n));
+      node = parser.expression(0);
+      if (!parser.done()) throw new Error(`unexpected '${parser.peek().v}'`);
     } catch (error) {
-      this.diagnostics.push({ severity: 'high', code: 'SG_PARSE', message: `${error.message}: ${textOf(tokens).slice(0, 160)}` });
-      return { text: textOf(tokens), t: null };
+      const original = tokens.length && tokens[0].s != null && this.src != null
+        ? this.src.slice(tokens[0].s, tokens[tokens.length - 1].e) : textOf(tokens);
+      this.diagnostics.push({ severity: 'high', code: 'SG_PARSE', message: `${error.message}: ${original.slice(0, 160)}` });
+      return { text: original, t: null };
     }
     const typer = this.typer();
     const r = typer.visit(node);
@@ -210,7 +257,13 @@ class Program {
     let k = 0;
     const quals = [];
     while (words[k] && words[k].k === 'id' && (PRECISION.has(words[k].v) || words[k].v === 'const' || words[k].v === 'uniform')) quals.push(words[k++].v);
-    if (!words[k] || words[k].k !== 'id' || !this.isType(words[k].v) || !words[k + 1] || words[k + 1].k !== 'id') return null;
+    if (!words[k] || words[k].k !== 'id' || !words[k + 1] || words[k + 1].k !== 'id') return null;
+    // `Type name` where Type is not a known type is still a declaration (engine structs from chunks, e.g.
+    // StandardVertInput); keywords never start one.
+    if (!this.isType(words[k].v)) {
+      const after = words[k + 2];
+      if (STATEMENT_KEYWORDS.has(words[k].v) || (after && !(after.k === 'op' && ['=', ',', '['].includes(after.v)))) return null;
+    }
     const type = words[k].v;
     const scope = scopes[scopes.length - 1];
     const lines = [];

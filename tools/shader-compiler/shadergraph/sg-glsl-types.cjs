@@ -26,7 +26,8 @@ const QUALIFIERS = new Set(['const', 'in', 'out', 'inout', 'highp', 'mediump', '
 // ---------------------------------------------------------------------------------------------------------------
 // tokenizer
 
-const MULTI_OPS = ['<<=', '>>=', '<<', '>>', '<=', '>=', '==', '!=', '&&', '||', '^^', '++', '--', '+=', '-=', '*=', '/=', '%=', '&=', '|=', '^='];
+const NUMBER = /0[xX][0-9a-fA-F]+[uU]?|(?:\d+\.\d*|\.\d+|\d+)(?:[eE][+-]?\d+)?[fFhHuUlL]?/y;
+const MULTI_OPS = ['<<=','>>=', '<<', '>>', '<=', '>=', '==', '!=', '&&', '||', '^^', '++', '--', '+=', '-=', '*=', '/=', '%=', '&=', '|=', '^='];
 
 function tokenize(src) {
   const out = [];
@@ -42,7 +43,7 @@ function tokenize(src) {
     if (c === '#' && lineStart) {
       let e = i;
       while (e < s.length && s[e] !== '\n') { if (s[e] === '\\' && s[e + 1] === '\n') e++; e++; }
-      out.push({ k: 'pp', v: s.slice(i, e).trim() });
+      out.push({ k: 'pp', v: s.slice(i, e).trim(), s: i, e });
       i = e;
       continue;
     }
@@ -50,19 +51,20 @@ function tokenize(src) {
     if (/[A-Za-z_]/.test(c)) {
       let e = i + 1;
       while (e < s.length && /\w/.test(s[e])) e++;
-      out.push({ k: 'id', v: s.slice(i, e) });
+      out.push({ k: 'id', v: s.slice(i, e), s: i, e });
       i = e;
       continue;
     }
     if (/\d/.test(c) || (c === '.' && /\d/.test(s[i + 1] || ''))) {
-      const m = /^(0[xX][0-9a-fA-F]+[uU]?|(?:\d+\.\d*|\.\d+|\d+)(?:[eE][+-]?\d+)?[fFhHuUlL]?)/.exec(s.slice(i));
-      out.push({ k: 'num', v: m[0] });
+      NUMBER.lastIndex = i;
+      const m = NUMBER.exec(s);
+      out.push({ k: 'num', v: m[0], s: i, e: i + m[0].length });
       i += m[0].length;
       continue;
     }
     const op = MULTI_OPS.find((o) => s.startsWith(o, i));
-    if (op) { out.push({ k: 'op', v: op }); i += op.length; continue; }
-    out.push({ k: 'op', v: c });
+    if (op) { out.push({ k: 'op', v: op, s: i, e: i + op.length }); i += op.length; continue; }
+    out.push({ k: 'op', v: c, s: i, e: i + 1 });
     i++;
   }
   return out;
@@ -497,7 +499,15 @@ class Typer {
       return result('bool');
     }
     if (name === 'not') return result(types[0]);
-    if (/^texture(2D|Cube)?(Lod|Proj)?$|^sgTex/.test(name)) return result('vec4');
+    if (/^texture(2D|Cube)?(Lod|Proj)?$|^sgTex/.test(name)) {
+      // HLSL tex2D(s, float4 uv) reads .xy; GLSL needs the exact coordinate size (Proj takes vec3/vec4)
+      const coord = types[0] === 'sampler2D' ? 2 : types[0] === 'samplerCube' ? 3 : 0;
+      if (coord && !/Proj$/.test(name) && types[1] && vecSize(types[1]) > coord && family(types[1]) === 'float') {
+        args[1] = coerce(args[1], types[1], makeType('float', coord));
+      }
+      for (let i = 2; i < args.length; i++) if (isIntLiteral(args[i])) args[i] = coerce(args[i], 'int', 'float');
+      return result('vec4');
+    }
     if (name === 'transpose' || name === 'sgTranspose') return result(types[0]);
     if (name === 'determinant') return result('float');
     return result(null);

@@ -39,7 +39,37 @@ const { convertMatFile, convertUnityMatToCocosMtl } = require('./unity-material-
 const { generateVariantManifest } = require('./shader-variant-manager.cjs');
 const { assertUnityPortPreflight } = require('../unity-intel/preflight.cjs');
 const { createPathBoundary, inspectContainedPath } = require('../lib/path-boundary.cjs');
-const { assertEffectCompilesSync } = require('./effect-compile-gate.cjs');
+const { pickPublishableEffectSync } = require('./glsl-es-typed-repair.cjs');
+
+/**
+ * Soft particles fade against _CameraDepthTexture, which a Cocos forward playable never renders (the importer fails
+ * with EFX2300 "sampler does not exist"). Compile the SOFTPARTICLES_ON branches out, as Unity does with soft
+ * particles disabled in the quality settings.
+ */
+function disableSoftParticles(effect) {
+  if (!/_CameraDepthTexture/.test(effect)) return { text: effect, disabled: false };
+  // Drop the branch text itself (keep an #else branch): the effect compiler reports the missing sampler even
+  // inside `#if 0`.
+  const lines = effect.split('\n');
+  const out = [];
+  let disabled = false;
+  for (let i = 0; i < lines.length; i++) {
+    if (!/^\s*#\s*(?:ifdef\s+SOFTPARTICLES_ON\b|if\s+defined\s*\(\s*SOFTPARTICLES_ON\s*\)\s*$)/.test(lines[i])) { out.push(lines[i]); continue; }
+    disabled = true;
+    let depth = 0;
+    let keep = false;
+    for (i++; i < lines.length; i++) {
+      const t = lines[i].trim();
+      if (/^#\s*if/.test(t)) depth++;
+      else if (/^#\s*endif/.test(t)) { if (depth === 0) break; depth--; }
+      else if (depth === 0 && /^#\s*else/.test(t)) { keep = true; continue; }
+      else if (depth === 0 && /^#\s*elif/.test(t)) { keep = false; continue; }
+      if (keep) out.push(lines[i]);
+    }
+    out.push(`${(/^\s*/.exec(lines[i] || '') || [''])[0]}// SOFTPARTICLES_ON branch removed: no camera depth texture in a Cocos forward playable`);
+  }
+  return { text: out.join('\n'), disabled };
+}
 
 function ensureDir(dir) {
   fs.mkdirSync(dir, { recursive: true });
@@ -118,10 +148,15 @@ function transpileShaderFile(srcPath, outPath, options = {}) {
       emitOptions.autoSelectedMode = true;
     }
   }
-  const effectCode = emitCocosEffect(docIR, emitOptions);
+  let effectCode = emitCocosEffect(docIR, emitOptions);
+  const softParticles = disableSoftParticles(effectCode);
+  effectCode = softParticles.text;
 
   // 5. Validate generated effect
   const validationResult = validateCceffectStructure(effectCode, { effectPath: outPath });
+  if (softParticles.disabled) {
+    validationResult.warnings.push('[SOFT_PARTICLES_DISABLED] SOFTPARTICLES_ON blocks read _CameraDepthTexture, which a Cocos forward playable does not render; they are compiled out (Unity with soft particles off).');
+  }
   const lintResult = lintPlayableShader(docIR, effectCode);
   for (const issue of (lintResult.issues || [])) {
     validationResult.warnings.push(`[${issue.severity.toUpperCase()}] ${issue.message}`);
@@ -146,9 +181,14 @@ function transpileShaderFile(srcPath, outPath, options = {}) {
   if (!options.dryRun && outPath) {
     if (validationResult.propertyBindings.errors.length) throw Object.assign(
       new Error(validationResult.propertyBindings.errors.join('\n')), { code: 'EFX3302_PROPERTY_UNIFORM_MISSING' });
-    // Editor effect compiler + real GLSL ES 1.00/3.00 compile. Throws EFFECT_COMPILE_GATE_FAILED (high) instead of
-    // publishing an effect the Cocos importer would reject with EFX2406.
-    assertEffectCompilesSync(effectCode, outPath);
+    // Editor effect compiler + real GLSL ES 1.00/3.00 compile. A failing effect gets the typed GLSL ES repair
+    // (implicit HLSL conversions made explicit) and is published only if that passes; otherwise this throws
+    // EFFECT_COMPILE_GATE_FAILED (high) instead of publishing an effect the Cocos importer rejects with EFX2406.
+    const publishable = pickPublishableEffectSync(effectCode, outPath);
+    if (publishable.repaired) {
+      effectCode = publishable.text;
+      validationResult.warnings.push('[ES_TYPED_REPAIR] implicit HLSL conversions were made explicit so the effect compiles as GLSL ES 1.00/3.00');
+    }
     ensureDir(path.dirname(outPath));
     fs.writeFileSync(outPath, effectCode, 'utf8');
 
@@ -629,4 +669,5 @@ module.exports = {
   findShadersInDir,
   convertMatFile,
   convertUnityMatToCocosMtl,
+  disableSoftParticles,
 };

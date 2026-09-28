@@ -28,7 +28,7 @@ const { lintWebGLPlayable } = require('./webgl-playable-optimizer.cjs');
 const { generateMaterialAssetManifest } = require('./unity-material-converter.cjs');
 const { generateUcstAiJson, generateReadmeAiPolishMd } = require('./ai-polish-patch-generator.cjs');
 const { scoreConfidence } = require('./shader-reporter.cjs');
-const { assertEffectCompilesSync } = require('./effect-compile-gate.cjs');
+const { pickPublishableEffectSync } = require('./glsl-es-typed-repair.cjs');
 
 const RULE_PACK_VERSION = '2.4.0';
 
@@ -213,9 +213,9 @@ async function cmdBatch(srcDir, outDir, options = {}) {
       const docIR = parseShaderLab(content, file);
       const effectCode = emitCocosEffect(docIR);
       const outFile = path.join(outDir, `${path.basename(file, '.shader')}.effect`);
-      // Editor effect compiler + GLSL ES 1.00/3.00: failing effects are counted as failed, never written.
-      assertEffectCompilesSync(effectCode, outFile);
-      fs.writeFileSync(outFile, effectCode, 'utf8');
+      // Editor effect compiler + GLSL ES 1.00/3.00 (typed repair when needed): failing effects are counted as failed, never written.
+      const publishable = pickPublishableEffectSync(effectCode, outFile);
+      fs.writeFileSync(outFile, publishable.text, 'utf8');
 
       cache[file] = {
         key,
