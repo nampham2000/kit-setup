@@ -6611,10 +6611,28 @@ class CocosPrefabBuilder {
     }, unityComponentId, fileId);
   }
 
+  // Unity Light m_Enabled (a disabled Light component renders nothing; an enabled cc.DirectionalLight
+  // would also become the scene main light) and m_Shadows {m_Type 0 None / 1 Hard / 2 Soft, m_Strength,
+  // m_Bias, m_NormalBias}. getField reads the nested block as an object ('m_Shadows.m_Type' never matched).
+  unityLightState(doc) {
+    const shadows = getField(doc, 'm_Shadows', null);
+    const block = shadows && typeof shadows === 'object' ? shadows : {};
+    const type = Number(block.m_Type ?? 0) || 0;
+    return {
+      enabled: Number(getField(doc, 'm_Enabled', 1) ?? 1) !== 0,
+      shadowType: type,
+      shadowStrength: Number.isFinite(Number(block.m_Strength)) ? Number(block.m_Strength) : 1,
+      shadowBias: Number.isFinite(Number(block.m_Bias)) ? Number(block.m_Bias) : 0.05,
+      shadowNormalBias: Number.isFinite(Number(block.m_NormalBias)) ? Number(block.m_NormalBias) : 0.4,
+    };
+  }
+
   addDirectionalLight(nodeId, unityComponentId, doc, fileId) {
     const intensity = Number(getField(doc, 'm_Intensity', 1) || 1);
+    const state = this.unityLightState(doc);
     const staticSettings = this.add({ __type__: 'cc.StaticLightSettings', _baked: false, _editorOnly: false, _castShadow: false });
     return this.addComponent(nodeId, 'cc.DirectionalLight', {
+      _enabled: state.enabled,
       _color: unityColorToCocos(getField(doc, 'm_Color', { r: 1, g: 1, b: 1, a: 1 })),
       _useColorTemperature: false,
       _colorTemperature: 6570,
@@ -6623,11 +6641,12 @@ class CocosPrefabBuilder {
       _illuminanceHDR: intensity * 65000,
       _illuminance: intensity * 65000,
       _illuminanceLDR: intensity * 1.6927083333333333,
-      _shadowEnabled: Number(getField(doc, 'm_Shadows.m_Type', 0) || 0) !== 0,
-      _shadowPcf: 0,
-      _shadowBias: 0.05,
-      _shadowNormalBias: 0.4,
-      _shadowSaturation: 1,
+      _shadowEnabled: state.shadowType !== 0,
+      // Unity Soft shadows filter with a wide PCF tent; SOFT_4X is the widest Cocos kernel.
+      _shadowPcf: state.shadowType === 2 ? 3 : 0,
+      _shadowBias: state.shadowBias,
+      _shadowNormalBias: state.shadowNormalBias,
+      _shadowSaturation: Math.min(1, Math.max(0, state.shadowStrength)),
       _shadowDistance: 50,
       _shadowInvisibleOcclusionRange: 200,
       _csmLevel: 4,
@@ -6648,6 +6667,7 @@ class CocosPrefabBuilder {
     const range = Number(getField(doc, 'm_Range', 10) || 10);
     const staticSettings = this.add({ __type__: 'cc.StaticLightSettings', _baked: false, _editorOnly: false, _castShadow: false });
     return this.addComponent(nodeId, 'cc.SphereLight', {
+      _enabled: this.unityLightState(doc).enabled,
       _color: unityColorToCocos(getField(doc, 'm_Color', { r: 1, g: 1, b: 1, a: 1 })),
       _useColorTemperature: false,
       _colorTemperature: 6570,
@@ -6667,7 +6687,9 @@ class CocosPrefabBuilder {
     const spotAngleDeg = Number(getField(doc, 'm_SpotAngle', 30) || 30);
     const spotAngleRad = (spotAngleDeg * Math.PI) / 180;
     const staticSettings = this.add({ __type__: 'cc.StaticLightSettings', _baked: false, _editorOnly: false, _castShadow: false });
+    const state = this.unityLightState(doc);
     return this.addComponent(nodeId, 'cc.SpotLight', {
+      _enabled: state.enabled,
       _color: unityColorToCocos(getField(doc, 'm_Color', { r: 1, g: 1, b: 1, a: 1 })),
       _useColorTemperature: false,
       _colorTemperature: 6570,
@@ -6679,7 +6701,7 @@ class CocosPrefabBuilder {
       _range: range,
       _size: 0.15,
       _spotAngle: spotAngleRad,
-      _shadowEnabled: Number(getField(doc, 'm_Shadows.m_Type', 0) || 0) !== 0,
+      _shadowEnabled: state.shadowType !== 0,
     }, unityComponentId, fileId);
   }
 
