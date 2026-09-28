@@ -247,6 +247,104 @@ module.exports = function createAnimationPorter(deps) {
     return order === 4 && (still('x') || (still('y') && still('z')));
   }
 
+  // Raw slope of a Unity key channel; Unity writes constant (stepped) tangents as Infinity, which
+  // curveChannelNumber would clamp to 0.
+  function rawSlope(value, channel) {
+    if (value == null) return 0;
+    const raw = typeof value === 'object' ? value[channel] : value;
+    if (raw === 'Infinity' || raw === '-Infinity') return Number(raw);
+    const number = Number(raw);
+    return Number.isNaN(number) ? 0 : number;
+  }
+
+  // Unity AnimationCurve evaluation on one channel: cubic Hermite between keys (outSlope of the
+  // left key, inSlope of the right key), constant when either tangent is infinite, clamped outside.
+  function evaluateUnityCurveChannel(keyframes, channel, time) {
+    const keys = keyframes;
+    if (!keys.length) return 0;
+    const valueOf = (key) => curveChannelNumber(key.value, channel, 0);
+    if (time <= finiteNumber(keys[0].time)) return valueOf(keys[0]);
+    const last = keys[keys.length - 1];
+    if (time >= finiteNumber(last.time)) return valueOf(last);
+    let i = 0;
+    while (i < keys.length - 2 && time > finiteNumber(keys[i + 1].time)) i++;
+    const k0 = keys[i];
+    const k1 = keys[i + 1];
+    const t0 = finiteNumber(k0.time);
+    const dt = finiteNumber(k1.time) - t0;
+    if (dt <= 1e-9) return valueOf(k1);
+    const m0 = rawSlope(k0.outSlope, channel);
+    const m1 = rawSlope(k1.inSlope, channel);
+    if (!Number.isFinite(m0) || !Number.isFinite(m1)) return valueOf(k0);
+    const s = (time - t0) / dt;
+    const s2 = s * s;
+    const s3 = s2 * s;
+    return (2 * s3 - 3 * s2 + 1) * valueOf(k0) + (s3 - 2 * s2 + s) * m0 * dt
+      + (-2 * s3 + 3 * s2) * valueOf(k1) + (s3 - s2) * m1 * dt;
+  }
+
+  function multiplyQuat(a, b) {
+    return {
+      x: a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
+      y: a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
+      z: a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w,
+      w: a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z,
+    };
+  }
+
+  // Unity Euler (degrees) in m_RotationOrder 4 (ZXY: R = Ry * Rx * Rz) as a quaternion, then the
+  // porter's Z reflection (x, y negate).
+  function unityZxyEulerToCocosQuat(x, y, z) {
+    const axis = (deg, ax) => {
+      const half = (deg * Math.PI) / 360;
+      const s = Math.sin(half);
+      return { x: ax === 'x' ? s : 0, y: ax === 'y' ? s : 0, z: ax === 'z' ? s : 0, w: Math.cos(half) };
+    };
+    const q = multiplyQuat(multiplyQuat(axis(y, 'y'), axis(x, 'x')), axis(z, 'z'));
+    return { x: -q.x, y: -q.y, z: q.z, w: q.w };
+  }
+
+  // A Cocos eulerAngles track composes YZX, so an order-4 Unity Euler curve that turns about X
+  // together with Y/Z is baked into a quaternion track: key times plus one sample per clip frame,
+  // SLERP between samples, hemisphere kept continuous.
+  function cocosBakedEulerQuatTrack(entry, sampleRate) {
+    const keys = [...entry.keyframes].sort((a, b) => finiteNumber(a.time) - finiteNumber(b.time));
+    const start = finiteNumber(keys[0].time);
+    const end = finiteNumber(keys[keys.length - 1].time);
+    const step = 1 / Math.max(1, finiteNumber(sampleRate, 60));
+    const times = new Set(keys.map((key) => finiteNumber(key.time)));
+    for (let t = start; t < end; t += step) times.add(Math.round(t * 1e6) / 1e6);
+    const sorted = [...times].sort((a, b) => a - b);
+    let previous = null;
+    const values = sorted.map((time) => {
+      let q = unityZxyEulerToCocosQuat(
+        evaluateUnityCurveChannel(keys, 'x', time),
+        evaluateUnityCurveChannel(keys, 'y', time),
+        evaluateUnityCurveChannel(keys, 'z', time));
+      if (previous && previous.x * q.x + previous.y * q.y + previous.z * q.z + previous.w * q.w < 0) {
+        q = { x: -q.x, y: -q.y, z: -q.z, w: -q.w };
+      }
+      previous = q;
+      return {
+        __type__: 'cc.QuatKeyframeValue',
+        interpolationMode: 0,
+        value: { __type__: 'cc.Quat', x: q.x, y: q.y, z: q.z, w: q.w },
+        easingMethod: 0,
+      };
+    });
+    return {
+      __type__: 'cc.animation.QuatTrack',
+      _binding: {
+        __type__: 'cc.animation.TrackBinding',
+        path: cocosTrackPathForUnityPath(entry.path, 'rotation'),
+      },
+      _channel: {
+        __type__: 'cc.animation.Channel',
+        _curve: { __type__: 'cc.QuatCurve', _times: sorted, _values: values, preExtrapolation: 1, postExtrapolation: 1 },
+      },
+    };
+  }
+
   function mapUnityVectorKeyframes(property, keyframes) {
     return keyframes.map((keyframe) => ({
       ...keyframe,
@@ -635,11 +733,17 @@ module.exports = function createAnimationPorter(deps) {
     for (const entry of parseUnityVectorCurveEntries(doc, 'm_PositionCurves')) tracks.push(cocosVectorTrack(entry.path, 'position', entry.keyframes));
     for (const entry of parseUnityVectorCurveEntries(doc, 'm_ScaleCurves')) tracks.push(cocosVectorTrack(entry.path, 'scale', entry.keyframes));
     for (const entry of parseUnityVectorCurveEntries(doc, 'm_EulerCurves')) {
-      if (!eulerTrackOrderCompatible(entry)) {
+      if (eulerTrackOrderCompatible(entry)) {
+        tracks.push(cocosVectorTrack(entry.path, 'eulerAngles', entry.keyframes));
+      } else if (Number(entry.rotationOrder ?? 4) === 4) {
+        tracks.push(cocosBakedEulerQuatTrack(entry, sample));
+        reporter.low('ANIMATION_EULER_BAKED_TO_QUATERNION', file, entry.path || '<root>',
+          `Unity ZXY Euler curve rotates about X together with Y/Z; baked into a quaternion track at ${sample} fps (Cocos eulerAngles tracks compose YZX)`);
+      } else {
         reporter.high('ANIMATION_EULER_ORDER_UNSUPPORTED', file, entry.path || '<root>',
-          `Unity Euler curve (rotation order ${entry.rotationOrder}) rotates about X together with Y/Z; a Cocos eulerAngles track (YZX) cannot reproduce it without baking a quaternion track`);
+          `Unity Euler curve uses rotation order ${entry.rotationOrder}; only the default ZXY order is mapped`);
+        tracks.push(cocosVectorTrack(entry.path, 'eulerAngles', entry.keyframes));
       }
-      tracks.push(cocosVectorTrack(entry.path, 'eulerAngles', entry.keyframes));
     }
 
     for (const lines of splitUnityListEntries(getIndentedBlock(doc, 'm_PPtrCurves'))) {
@@ -1112,6 +1216,42 @@ module.exports = function createAnimationPorter(deps) {
     };
   }
 
+  // Normalised linear blend (nlerp) between the baked samples: they are one clip frame apart, so it
+  // matches the engine's SLERP to well below a degree.
+  function evaluateQuatTrack(track, time) {
+    const curve = track?._channel?._curve;
+    const times = curve?._times || [];
+    const values = curve?._values || [];
+    if (!times.length) return null;
+    let i = 0;
+    while (i < times.length - 1 && time >= times[i + 1]) i++;
+    const a = values[i].value;
+    if (i >= times.length - 1 || time <= times[0]) return { x: a.x, y: a.y, z: a.z, w: a.w };
+    const b = values[i + 1].value;
+    const r = (time - times[i]) / Math.max(1e-9, times[i + 1] - times[i]);
+    const q = { x: a.x + (b.x - a.x) * r, y: a.y + (b.y - a.y) * r, z: a.z + (b.z - a.z) * r, w: a.w + (b.w - a.w) * r };
+    const n = Math.hypot(q.x, q.y, q.z, q.w) || 1;
+    return { x: q.x / n, y: q.y / n, z: q.z / n, w: q.w / n };
+  }
+
+  // Cocos Quat.toEuler (YZX) in degrees, for the serialized _euler of a posed node.
+  function quatToCocosEuler(q) {
+    const { x, y, z, w } = q;
+    const test = x * y + z * w;
+    let bank; let heading; let attitude;
+    if (test > 0.499999) {
+      bank = 0; heading = 2 * Math.atan2(x, w); attitude = Math.PI / 2;
+    } else if (test < -0.499999) {
+      bank = 0; heading = -2 * Math.atan2(x, w); attitude = -Math.PI / 2;
+    } else {
+      bank = Math.atan2(2 * x * w - 2 * y * z, 1 - 2 * x * x - 2 * z * z);
+      heading = Math.atan2(2 * y * w - 2 * x * z, 1 - 2 * y * y - 2 * z * z);
+      attitude = Math.asin(2 * test);
+    }
+    const deg = 180 / Math.PI;
+    return vec3(bank * deg, heading * deg, attitude * deg);
+  }
+
   function evaluateSizeTrack(track, current, time) {
     const channels = track?._channels || [];
     return {
@@ -1153,6 +1293,13 @@ module.exports = function createAnimationPorter(deps) {
           const value = evaluateVectorTrack(track, node._euler, time);
           node._euler = vec3(value.x, value.y, value.z);
           applied = true;
+        } else if (track.__type__ === 'cc.animation.QuatTrack' && binding.property === 'rotation') {
+          const q = evaluateQuatTrack(track, time);
+          if (q) {
+            node._lrot = { __type__: 'cc.Quat', x: q.x, y: q.y, z: q.z, w: q.w };
+            node._euler = quatToCocosEuler(q);
+            applied = true;
+          }
         } else if (track.__type__ === 'cc.animation.ObjectTrack' && binding.property === 'active') {
           node._active = Boolean(objectCurveValueAt(track._channel?._curve, time, node._active));
           applied = true;

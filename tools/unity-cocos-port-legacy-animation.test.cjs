@@ -119,13 +119,49 @@ test('Euler keys follow the Z reflection: X and Y angles negate, Z stays', () =>
   assert.equal(clip.wrapMode, 2);
 });
 
-test('Euler tracks whose ZXY and YZX compositions differ are reported', () => {
+// Unity ZXY (R = Ry * Rx * Rz) through rotation matrices, then the porter's Z reflection
+// (quaternion x, y negate): an independent reference for the baked quaternion track.
+function unityZxyReflectedQuat([ex, ey, ez]) {
+  const r = (d) => (d * Math.PI) / 180;
+  const [cx, sx, cy, sy, cz, sz] = [Math.cos(r(ex)), Math.sin(r(ex)), Math.cos(r(ey)), Math.sin(r(ey)), Math.cos(r(ez)), Math.sin(r(ez))];
+  const mul = (a, b) => a.map((row, i) => row.map((_, j) => a[i][0] * b[0][j] + a[i][1] * b[1][j] + a[i][2] * b[2][j]));
+  const m = mul(mul([[cy, 0, sy], [0, 1, 0], [-sy, 0, cy]], [[1, 0, 0], [0, cx, -sx], [0, sx, cx]]), [[cz, -sz, 0], [sz, cz, 0], [0, 0, 1]]);
+  const w = Math.sqrt(Math.max(0, 1 + m[0][0] + m[1][1] + m[2][2])) / 2;
+  const q = { x: (m[2][1] - m[1][2]) / (4 * w), y: (m[0][2] - m[2][0]) / (4 * w), z: (m[1][0] - m[0][1]) / (4 * w), w };
+  return { x: -q.x, y: -q.y, z: q.z, w: q.w };
+}
+
+test('ZXY Euler tracks that YZX cannot compose are baked into a quaternion track', () => {
   const reporter = reports();
-  parseUnityAnimationClip(writeClip('Tumble', [[0, [10, 20, 0]], [1, [30, 20, 5]]], { legacy: 0 }), reporter);
-  assert.deepEqual(reporter.entries.filter((entry) => entry.level === 'high').map((entry) => entry.code), ['ANIMATION_EULER_ORDER_UNSUPPORTED']);
+  const keys = [[0, [10, 20, 0]], [1, [30, 20, 5]]];
+  const clip = parseUnityAnimationClip(writeClip('Tumble', keys, { legacy: 0 }), reporter);
+  assert.equal(reporter.entries.filter((entry) => entry.level === 'high').length, 0);
+  assert.ok(reporter.entries.some((entry) => entry.code === 'ANIMATION_EULER_BAKED_TO_QUATERNION'));
+  const track = clip._tracks.find((t) => t.__type__ === 'cc.animation.QuatTrack');
+  assert.ok(track, 'quaternion track emitted');
+  assert.equal(track._binding.path._paths.at(-1), 'rotation');
+  assert.equal(clip._tracks.some((t) => t._binding?.path?._paths?.at(-1) === 'eulerAngles'), false);
+  const curve = track._channel._curve;
+  assert.equal(curve._times.length, 61, 'key times plus one sample per 1/60 s');
+  for (const [time, euler] of keys) {
+    const q = curve._values[curve._times.indexOf(time)].value;
+    const e = unityZxyReflectedQuat(euler);
+    const dot = Math.abs(q.x * e.x + q.y * e.y + q.z * e.z + q.w * e.w);
+    assert.ok(dot > 1 - 1e-9, `t=${time}: ${JSON.stringify(q)} != ${JSON.stringify(e)}`);
+  }
+  // Flat tangents: the curve at t=0.5 is the Hermite midpoint (20, 20, 2.5).
+  const mid = curve._values[curve._times.findIndex((t) => Math.abs(t - 0.5) < 1e-6)].value;
+  const e = unityZxyReflectedQuat([20, 20, 2.5]);
+  assert.ok(Math.abs(mid.x * e.x + mid.y * e.y + mid.z * e.z + mid.w * e.w) > 1 - 1e-9);
   const pure = reports();
   parseUnityAnimationClip(writeClip('Spin', [[0, [0, 0, 0]], [1, [90, 0, 0]]], { legacy: 0 }), pure);
   assert.equal(pure.entries.filter((entry) => entry.level === 'high').length, 0);
+});
+
+test('Euler tracks in a non-default rotation order are still reported', () => {
+  const reporter = reports();
+  parseUnityAnimationClip(writeClip('Order0', [[0, [10, 20, 0]], [1, [30, 20, 5]]], { legacy: 0, order: 0 }), reporter);
+  assert.deepEqual(reporter.entries.filter((entry) => entry.level === 'high').map((entry) => entry.code), ['ANIMATION_EULER_ORDER_UNSUPPORTED']);
 });
 
 test('legacy clip WrapMode maps when LoopTime is off', () => {
