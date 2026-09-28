@@ -179,6 +179,13 @@ function resolveColorSpace(options) {
 }
 
 function transpileShaderFile(srcPath, outPath, options = {}) {
+  // Callers without --color-space (the prefab/material porter) still get the source project's Player
+  // Color Space: the porter transpiled KriptoFX RFX4_Tornado (a Gamma project) with its Linear-only
+  // `#ifndef UNITY_COLORSPACE_GAMMA` pow() branches active.
+  if (!options.colorSpace) {
+    const project = owningUnityProject(srcPath, options);
+    if (project) options = { ...options, colorSpace: resolveColorSpace({ unityProject: project }).colorSpace };
+  }
   const source = fs.readFileSync(srcPath, 'utf8');
   const srcDir = path.dirname(srcPath);
 

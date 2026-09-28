@@ -968,6 +968,7 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
   }
 
   let customVertAssignedClipPos = false;
+  let writesVertexOS = false;
 
   if (vertFunc && vertFunc.body) {
     // Translate custom vertex body
@@ -1042,8 +1043,17 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
       // đọc, shader không compile. Prologue đã có `vec4 pos = vec4(a_position, 1.0);`
       // và chính `pos` mới là thứ được biến đổi ở cuối, nên đó là đích đúng.
       // Any component write (`v.vertex.x += ...`, `.xz`), not only `.xyz`.
-      vBody = vBody.replace(new RegExp(`\\b${pName}\\.(?:vertex|pos|position|positionOS)\\.([xyzw]{1,4})\\s*([-+*/]?=)(?!=)\\s*`, 'g'), 'pos.$1 $2 ');
-      vBody = vBody.replace(new RegExp(`\\b${pName}\\.(?:vertex|pos|position|positionOS)\\s*([-+*/]?=)\\s*`, 'g'), 'pos $1 ');
+      // Once the body writes the vertex, later reads (`UnityObjectToClipPos(v.vertex)`) must see the
+      // displaced value: reading the attribute dropped KriptoFX RFX4_Tornado's whole twist. Writes and reads
+      // go through a local copy; the default projection below uses it when the body sets no clip position.
+      const vertexWrite = new RegExp(`\\b${pName}\\.(?:vertex|pos|position|positionOS)(?:\\.[xyzw]{1,4})?\\s*[-+*/]?=(?!=)`).test(vBody);
+      if (vertexWrite) {
+        writesVertexOS = true;
+        vBody = vBody.replace(new RegExp(`\\b${pName}\\.(?:vertex|pos|position|positionOS)\\.([xyzw]{1,4})\\s*([-+*/]?=)(?!=)\\s*`, 'g'), 'unityVertexOS.$1 $2 ');
+        vBody = vBody.replace(new RegExp(`\\b${pName}\\.(?:vertex|pos|position|positionOS)\\s*([-+*/]?=)(?!=)\\s*`, 'g'), 'unityVertexOS $1 ');
+        vBody = vBody.replace(new RegExp(`\\b${pName}\\.(?:vertex|positionOS)\\b`, 'g'), 'unityVertexOS');
+        vBody = `vec4 unityVertexOS = pos;\n${vBody}`;
+      }
 
       vBody = vBody.replace(new RegExp(`\\b${pName}\\.vertex\\.xyz\\b`, 'g'), 'a_position');
       vBody = vBody.replace(new RegExp(`\\b${pName}\\.vertex\\b`, 'g'), 'vec4(a_position, 1.0)');
@@ -1148,6 +1158,8 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
     }
   }
 
+  // The body displaced the object-space vertex but set no clip position: project the displaced one.
+  if (writesVertexOS && !customVertAssignedClipPos) vsLines.push('    pos = unityVertexOS;');
   if (customVertAssignedClipPos) {
     vsLines.push('    return pos;');
   } else if (varyings.some(v => v.includes('v_screenPos')) && !vertFunc) {
