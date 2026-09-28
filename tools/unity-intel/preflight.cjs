@@ -338,7 +338,8 @@ function loadSourceDispositions(projectRoot, snapshot, coreScope, input = {}, st
       if (entry.owners.some(owner => !(item.fields || []).includes(owner.field))) {
         throw preflightError('UNITY_SOURCE_DISPOSITION_OWNER_MISMATCH', `Owner field của ${key} không khớp live evidence.`);
       }
-      if (stableStringify(ownerSources) !== stableStringify(unresolvedSourcePaths(item))) {
+      // Live evidence order is the Editor's enumeration order; compare the owner set, not the order.
+      if (stableStringify(ownerSources) !== stableStringify([...unresolvedSourcePaths(item)].sort())) {
         throw preflightError('UNITY_SOURCE_DISPOSITION_OWNER_MISMATCH', `Owner paths của ${key} không khớp đầy đủ live evidence.`);
       }
     }

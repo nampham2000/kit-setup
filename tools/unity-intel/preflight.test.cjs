@@ -591,7 +591,8 @@ test('stale-reference disposition accepts one GUID shared by more than eight own
     }));
     return file;
   };
-  push(owners.slice(0, 10));
+  // The Editor enumerates owners in its own order (not the sorted order of the disposition file).
+  push(owners.slice(0, 10).reverse());
   const brief = createImplementationBrief(result, { project: fixture.root, sourceDispositions: write(owners.slice(0, 10)), now: 0 });
   assert.equal(brief.sourceDispositions.acceptedCount, 1);
   push(owners);
