@@ -1298,6 +1298,56 @@ const UNITY_MONOBEHAVIOUR_HEADER_FIELDS = new Set([
   'm_Enabled', 'm_EditorHideFlags', 'm_Script', 'm_Name', 'm_EditorClassIdentifier',
 ]);
 
+// Unity YAML block value under a key (struct, list, list of structs, nested lists) as plain JS.
+// Unity writes a list either deeper than its key or at the key's own indent ("m_Curve:" then
+// "- serializedVersion: 2" at the same column); a "- key: value" item opens a mapping whose other keys sit
+// two columns further in. Flow values ({fileID: ...}, [a, b]) and scalars go through parseUnityScalar.
+const UNITY_YAML_KEY = /^([A-Za-z_][A-Za-z0-9_ ]*?)\s*:(?:\s+(.*))?$/;
+function unityLineIndent(line) { return line.match(/^\s*/)[0].length; }
+function nextUnityYamlLine(lines, j) { while (j < lines.length && !lines[j].trim()) j++; return j; }
+
+function parseUnityYamlSequence(lines, i, indent) {
+  const items = [];
+  let j = nextUnityYamlLine(lines, i);
+  while (j < lines.length && unityLineIndent(lines[j]) === indent && lines[j].trim().startsWith('- ')) {
+    const content = lines[j].trim().slice(2).trim();
+    const key = !content.startsWith('{') && !content.startsWith('[') ? UNITY_YAML_KEY.exec(content) : null;
+    if (!key) { items.push(parseUnityScalar(content)); j = nextUnityYamlLine(lines, j + 1); continue; }
+    // "- key: value" opens a mapping item; its remaining keys sit at indent + 2.
+    const synthetic = [' '.repeat(indent + 2) + content, ...lines.slice(j + 1)];
+    const item = parseUnityYamlMapping(synthetic, 0, indent + 2);
+    items.push(item.value);
+    j = nextUnityYamlLine(lines, j + item.next);
+  }
+  return { value: items, next: j };
+}
+
+function parseUnityYamlMapping(lines, i, indent) {
+  const out = {};
+  let j = nextUnityYamlLine(lines, i);
+  while (j < lines.length && unityLineIndent(lines[j]) === indent && !lines[j].trim().startsWith('- ')) {
+    const key = UNITY_YAML_KEY.exec(lines[j].trim());
+    if (!key) break;
+    const raw = (key[2] || '').trim();
+    if (raw !== '') { out[key[1]] = parseUnityScalar(raw, key[1]); j = nextUnityYamlLine(lines, j + 1); continue; }
+    const child = parseUnityYamlBlockValue(lines, j + 1, indent);
+    out[key[1]] = child.value;
+    j = child.next;
+  }
+  return { value: out, next: j };
+}
+
+// Value of a key at keyIndent whose inline value is empty: the following deeper block, or a list at keyIndent.
+function parseUnityYamlBlockValue(lines, i, keyIndent) {
+  const j = nextUnityYamlLine(lines, i);
+  if (j >= lines.length) return { value: null, next: j };
+  const indent = unityLineIndent(lines[j]);
+  const isItem = lines[j].trim().startsWith('- ');
+  if (isItem && indent >= keyIndent) return parseUnityYamlSequence(lines, j, indent);
+  if (!isItem && indent > keyIndent) return parseUnityYamlMapping(lines, j, indent);
+  return { value: null, next: j };
+}
+
 function getTopLevelSerializedFields(doc, options) {
   const fields = {};
   for (let i = 0; i < doc.lines.length; i++) {
@@ -1314,28 +1364,12 @@ function getTopLevelSerializedFields(doc, options) {
       fields[key] = parseUnityScalar(raw);
       continue;
     }
-
-    const items = [];
-    const nested = {};
-    for (let j = i + 1; j < doc.lines.length; j++) {
-      const next = doc.lines[j];
-      if (!next.trim()) continue;
-      const indent = next.match(/^\s*/)[0].length;
-      const trimmed = next.trim();
-      if (indent < 2) break;
-      if (indent === 2 && !trimmed.startsWith('- ')) break;
-      if (trimmed.startsWith('- ')) {
-        items.push(parseUnityScalar(trimmed.slice(2)));
-        continue;
-      }
-      // Unity writes structs on their own indented lines: LayerMask as
-      // `serializedVersion` + `m_Bits`, Vector2/Vector3 as `x`/`y`/`z`. Collecting them
-      // keeps the field instead of dropping it for having no inline value.
-      const child = /^([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(.+)$/.exec(trimmed);
-      if (child && indent >= 4) nested[child[1]] = parseUnityScalar(child[2]);
-    }
-    if (items.length) fields[key] = items;
-    else if (Object.keys(nested).length) fields[key] = nested;
+    // Structs (LayerMask serializedVersion + m_Bits, Vector3 x/y/z), lists of references and lists of
+    // structs (AnimationCurve m_Curve keys: KriptoFX RFX4_LightCurves serialized as
+    // ["serializedVersion: 2", ...] and every effect light stayed at intensity 0) parse recursively.
+    const block = parseUnityYamlBlockValue(doc.lines, i + 1, 2);
+    const value = block.value;
+    if (Array.isArray(value) ? value.length : value && Object.keys(value).length) fields[key] = value;
   }
   return fields;
 }
@@ -9324,6 +9358,8 @@ if (require.main === module) {
 module.exports = {
   collectUnityModelExternalMaterialRemaps,
   parseUnityYaml,
+  parseUnityScalar,
+  getIndentedBlock,
   getField,
   getNestedList,
   unityRefGuid,

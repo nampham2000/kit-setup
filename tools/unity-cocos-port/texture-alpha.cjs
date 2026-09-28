@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const zlib = require('node:zlib');
 const { decodePng } = require('../resource-stats.cjs');
+const { isTiff, unityTiffAlphaBytes } = require('./texture-alpha-tiff.cjs');
 
 function chunk(type, data) {
   const body = Buffer.concat([Buffer.from(type), data]);
@@ -33,6 +34,8 @@ function unityTextureAlphaBytes(source, bytes) {
   const mode = unityAlphaUsage(source);
   if (mode === 1) return bytes;
   if (mode === 0 && bytes[0] === 0xff && bytes[1] === 0xd8) return bytes; // JPEG is already opaque.
+  // TIFF (KriptoFX GroundDecalEmission/Crack alpha-from-grayscale decals): decoded and re-encoded by sharp.
+  if (isTiff(bytes)) return unityTiffAlphaBytes(source, bytes, mode);
   if (bytes.length<29 || !bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])) || ![8,16].includes(bytes[24]) || bytes[28]!==0) {
     throw Error('Unity alpha import requires a non-interlaced 8/16-bit PNG or a live Unity texture export: '+source);
   }
