@@ -51,6 +51,12 @@ test('Cocos FBX-glTF-conv imports the exported mesh (skipped without a local Coc
   const gltf = JSON.parse(fs.readFileSync(out, 'utf8'));
   assert.equal((gltf.nodes || []).length, 1);
   assert.deepEqual((gltf.meshes || []).map(mesh => mesh.name), ['Quad']);
+  // Unity mesh data is in metres. With UnitScaleFactor 1 (centimetres) the converter divided every
+  // vertex by 100 (Candy Pop Sort funnel bumpers and board corners rendered 1/100 size).
+  const position = gltf.accessors[gltf.meshes[0].primitives[0].attributes.POSITION];
+  const extent = Math.max(...position.max.map((v, i) => v - position.min[i]));
+  const scale = (gltf.nodes[0].scale || [1, 1, 1]).map(Math.abs);
+  assert.ok(Math.abs(extent * Math.max(...scale) - 1) < 1e-4, `quad extent ${extent} x node scale ${scale}`);
 });
 
 // Meshes extracted from a built player (m_MeshCompression > 0, as in ripped "HijackSource" folders)
