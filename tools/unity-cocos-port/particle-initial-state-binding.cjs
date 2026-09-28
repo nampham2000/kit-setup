@@ -47,6 +47,32 @@ function stageInitialStateRuntime(options){
   fs.mkdirSync(path.dirname(target),{recursive:true});if(!fs.existsSync(target)||fs.readFileSync(target,'utf8')!==text)fs.writeFileSync(target,text);
  }
 }
+// Serialized adapter contract of one particle (spec minus porter-only fields, native radius
+// version and renderer Euler signs).
+function adapterContract(p,version){
+ const {reasons,constantPrewarm,...spec}=p.unityInitialStateContract,signs=p.unityRendererContract?.eulerSigns;
+ return JSON.stringify({...spec,...(version==='6000.3.1f1'?{nativeRadiusVersion:version}:{}),signs,...(p.unityRendererContract?.meshScalarAxis?{meshScalarAxis:true}:{})});
+}
+// A flattened nested particle prefab is built (and its adapters attached) from the source prefab,
+// then the PrefabInstance m_Modifications are merged into the particle (applyUnityParticleDataToCocos
+// recomputes unityInitialStateContract). The adapter must follow the merged contract, otherwise the
+// runtime re-samples the source prefab's start lifetime/speed/size/rotation/colour and silently undoes
+// the instance override (ScrewOut SOF_Box/smoke: startSize 0.85-1.1 instead of the override 1.5-2).
+function refreshInitialStateContract(builder,particleId,reporter,options={}){
+ const p=builder.objects[particleId];if(!p?.unityInitialStateContract)return 0;
+ let refreshed=0;
+ for(const c of builder.objects){
+  if(!c||c.source?.__id__!==particleId||typeof c.sourceContract!=='string')continue;
+  const fileId=builder.objects[c.__prefab?.__id__]?.fileId||'';
+  if(!fileId.startsWith('cmp-unity-initial-state-'))continue;
+  const node=builder.objects[p.node?.__id__]?._name||'';
+  if(p.unityInitialStateContract.reasons.length){reporter?.high?.('PARTICLE_INITIAL_STATE_ADAPTER_REQUIRED',options.src||'',node,'Instance override: '+p.unityInitialStateContract.reasons.join(', '));continue;}
+  let version=null;try{version=JSON.parse(c.sourceContract).nativeRadiusVersion||null;}catch{}
+  const next=adapterContract(p,version);
+  if(next!==c.sourceContract){c.sourceContract=next;refreshed++;reporter?.low?.('PARTICLE_INITIAL_STATE_OVERRIDE_SYNCED',options.src||'',node,'Initial-state adapter contract re-derived from the prefab instance overrides');}
+ }
+ return refreshed;
+}
 function attachInitialStateRuntime(builder,reporter,options){
  const particles=builder.objects.map((p,id)=>({p,id})).filter(({p})=>p?.unityInitialStateContract);
  if(!particles.length)return;stageInitialStateRuntime(options);
@@ -62,7 +88,7 @@ function attachInitialStateRuntime(builder,reporter,options){
    reporter.low('PARTICLE_INITIAL_STATE_CONSTANT_PREWARM',options.src||'',node,'Native-verified constant point billboard initialization; prewarm timing uses UnityParticlePrewarmAdapter. No initialization RNG claim.');continue;
   }
   if(reasons.length||!classId||signs?.length!==3){reporter.high('PARTICLE_INITIAL_STATE_ADAPTER_REQUIRED',options.src||'',node,reasons.join(', ')||(!classId?'Refresh AssetDB and rerun to import UnityParticleInitialStateAdapter':'Missing native renderer Euler signs'));continue;}
-  builder.addComponent(p.node.__id__,classId,{source:{__id__:id},sourceContract:JSON.stringify({...spec,...(version==='6000.3.1f1'?{nativeRadiusVersion:version}:{}),signs,...(p.unityRendererContract?.meshScalarAxis?{meshScalarAxis:true}:{})})},null,`cmp-unity-initial-state-${id}`);
+  builder.addComponent(p.node.__id__,classId,{source:{__id__:id},sourceContract:adapterContract(p,version)},null,`cmp-unity-initial-state-${id}`);
  }
 }
-module.exports={nativeBurstCountContract,initialStateContract,constantPointPrewarm,stageInitialStateRuntime,attachInitialStateRuntime};
+module.exports={nativeBurstCountContract,initialStateContract,refreshInitialStateContract,constantPointPrewarm,stageInitialStateRuntime,attachInitialStateRuntime};

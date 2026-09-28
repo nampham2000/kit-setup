@@ -101,7 +101,7 @@ namespace CcPlayable.UnityIntelligence.Capture
         internal sealed class ParticlePose {
             public uint randomSeed;
             public float[] position; public float[] velocity; public float[] size;
-            public float[] color; public float[] rotation; public float remainingLifetime; public float startLifetime;
+            public float[] color; public float[] rotation; public float[] axisOfRotation; public float remainingLifetime; public float startLifetime;
         }
         [Serializable]
         internal sealed class SystemRecord {

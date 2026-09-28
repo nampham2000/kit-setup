@@ -157,18 +157,90 @@ function hasFact(evidence, name) {
   return Boolean(evidence?.facts?.[normalizeComponent(name)]?.count);
 }
 
+const CODE_SOURCE = /\.(?:[cm]?[jt]s|[jt]sx)$/i;
+
+/**
+ * TypeScript/JavaScript without comments and string literals (blanked to spaces, so offsets and line
+ * numbers stay stable). A class-name string (`getClassName(c) === 'cc.Graphics'`) or a doc comment naming
+ * `cc.Graphics` is not a use of the engine module and must not request it. The one string that does
+ * instantiate a component by name, the first argument of `addComponent('cc.X')`, is kept. Template
+ * literal text is blanked while its `${...}` expressions stay code.
+ */
+function stripCodeNoise(text) {
+  const out = text.split('');
+  const blank = (from, to) => { for (let k = from; k < to; k++) if (out[k] !== '\n') out[k] = ' '; };
+  const keepsString = (start) => /\baddComponent\s*\(\s*$/.test(text.slice(Math.max(0, start - 40), start));
+  const templateDepth = [];
+  // Blank template text from `from` to the closing backtick or the next ${ (code resumes inside it).
+  const scanTemplate = (from) => {
+    let j = from;
+    while (j < text.length) {
+      if (text[j] === '\\') { j += 2; continue; }
+      if (text[j] === '`') { blank(from, j); return j + 1; }
+      if (text[j] === '$' && text[j + 1] === '{') { blank(from, j); templateDepth.push(0); return j + 2; }
+      j++;
+    }
+    blank(from, text.length);
+    return text.length;
+  };
+  let i = 0;
+  while (i < text.length) {
+    const ch = text[i];
+    const next = text[i + 1];
+    if (templateDepth.length) {
+      const top = templateDepth.length - 1;
+      if (ch === '}' && templateDepth[top] === 0) {
+        templateDepth.pop();
+        i = scanTemplate(i + 1);
+        continue;
+      }
+      if (ch === '{') templateDepth[top]++;
+      else if (ch === '}') templateDepth[top]--;
+    }
+    if (ch === '/' && next === '/') {
+      const end = text.indexOf('\n', i);
+      const stop = end < 0 ? text.length : end;
+      blank(i, stop);
+      i = stop;
+      continue;
+    }
+    if (ch === '/' && next === '*') {
+      const end = text.indexOf('*/', i + 2);
+      const stop = end < 0 ? text.length : end + 2;
+      blank(i, stop);
+      i = stop;
+      continue;
+    }
+    if (ch === '\'' || ch === '"') {
+      let j = i + 1;
+      while (j < text.length && text[j] !== ch && text[j] !== '\n') j += text[j] === '\\' ? 2 : 1;
+      if (!keepsString(i)) blank(i + 1, Math.min(j, text.length));
+      i = j + 1;
+      continue;
+    }
+    if (ch === '`') {
+      i = scanTemplate(i + 1);
+      continue;
+    }
+    i++;
+  }
+  return out.join('');
+}
+
 function scanTextEvidence(text, source = '', evidence = createEvidence()) {
-  const body = String(text || '');
+  const raw = String(text || '');
+  // Code sources are matched without comments/strings; serialized assets keep their JSON strings.
+  const body = CODE_SOURCE.test(String(source || '')) ? stripCodeNoise(raw) : raw;
   let match;
 
   const serializedType = /["']__type__["']\s*:\s*["'](?:cc\.|physics\.)?([A-Za-z0-9_.]+)["']/g;
-  while ((match = serializedType.exec(body))) addFact(evidence, match[1], source, 'serialized-component');
+  while ((match = serializedType.exec(raw))) addFact(evidence, match[1], source, 'serialized-component');
 
   // Cocos generates cc.SkeletalAnimation in the imported model prefab when a
   // model meta contains a skeleton sub-asset. The authored wrapper prefab only
   // stores a nested-prefab UUID, so component-only scans otherwise miss this
   // runtime dependency until preview deserialization fails.
-  if (/["']importer["']\s*:\s*["'](?:gltf|fbx)-skeleton["']/.test(body)) {
+  if (/["']importer["']\s*:\s*["'](?:gltf|fbx)-skeleton["']/.test(raw)) {
     addFact(evidence, 'SkeletalAnimation', source, 'model-importer-skeleton');
   }
 
@@ -176,7 +248,7 @@ function scanTextEvidence(text, source = '', evidence = createEvidence()) {
   while ((match = ccNamespace.exec(body))) addFact(evidence, match[1], source, 'cc-namespace-use');
 
   const namedImport = /import\s*\{([\s\S]*?)\}\s*from\s*["']cc["']/g;
-  while ((match = namedImport.exec(body))) {
+  while ((match = namedImport.exec(raw))) {
     for (const token of match[1].split(',')) {
       const imported = token.trim().split(/\s+as\s+/i)[0]?.trim();
       if (imported && /^[A-Z][A-Za-z0-9_]*$/.test(imported)) addFact(evidence, imported, source, 'cc-named-import');
@@ -1377,6 +1449,7 @@ module.exports = {
   createEvidence,
   addFact,
   scanTextEvidence,
+  stripCodeNoise,
   scanSerializedObjects,
   scanCocosProject,
   decidePhysicsBackend,

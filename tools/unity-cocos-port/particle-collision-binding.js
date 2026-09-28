@@ -70,6 +70,20 @@ function stageCollisionRuntime(options) {
 function attachCollisionRuntime(builder, reporter, options) {
   const particles = builder.objects.map((p, id) => ({ p, id })).filter(({ p }) => p?.unityCollisionContract?.enabled);
   if (!particles.length) return;
+  if (options.skipPhysics) {
+    // --skip-physics strips every Collider, so the world-collision adapter would have nothing to hit
+    // while its collider imports still pull a physics backend into the build. The project replaces
+    // the collision (e.g. an analytic ground plane) from this contract and registers a regression.
+    for (const { p } of particles) {
+      const spec = p.unityCollisionContract;
+      const name = builder.objects[p.node.__id__]?._name || '';
+      reporter.high('PARTICLE_COLLISION_PHYSICS_SKIPPED', options.src || '', name,
+        'Unity particle collision was not bound because --skip-physics removes the colliders it tests against; replace it in the project.',
+        JSON.stringify({ type: spec.type, dampen: spec.dampen, bounce: spec.bounce, lifetimeLoss: spec.lifetimeLoss,
+          minKillSpeed: spec.minKillSpeed, maxKillSpeed: spec.maxKillSpeed, radiusScale: spec.radiusScale }));
+    }
+    return;
+  }
   stageCollisionRuntime(options);
   let classId = builder.cocosDb?.findScriptClass?.('UnityParticleCollisionAdapter')?.classId;
   const meta = path.join(options.cocosRoot, 'assets/script/UnityParticleCollisionAdapter.ts.meta');

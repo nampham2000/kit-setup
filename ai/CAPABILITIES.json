@@ -2085,6 +2085,7 @@
           "--receipt <file>",
           "--output <dir>",
           "--suite <id>",
+          "--suite-timeout-ms <ms>",
           "--no-refresh",
           "--json"
         ],
@@ -2101,7 +2102,7 @@
           "Trước run, tool gọi Cocos `editorRuntime_reload_preview` với refreshAssets=true để tránh test bundle TypeScript cũ. `--no-refresh` chỉ dùng khi chủ ý và được ghi rõ trong receipt.",
           "Receipt schema v2 bind SHA-256 của registry, matrix, eval/reference và watchFiles theo contract `sha256-text-lf-v1` (text gộp CRLF->LF, binary giữ byte-exact) nên checkout CRLF/LF của cùng commit cho cùng digest; receipt v1 raw-byte báo stale và phải chạy lại. Thay đổi nội dung sau PASS làm `check` fail stale; `check` không ghi receipt. Tool không tự đánh giá pixel parity ngoài oracle/reference contract.",
           "`--suite <id>` chỉ re-run suite đã chọn rồi merge vào receipt base khi base cùng snapshot và đủ mọi suite còn lại; receipt thiếu/stale hoặc suite lạ phải fail trước preview. Không dùng selective rerun để bỏ qua suite fail.",
-          "Mỗi run của một suite mặc định có ngân sách 10 phút; suite playthrough thời gian thực dài có thể khai báo `timeoutMinutes` nguyên 1-60. Không dùng timeout lớn để che case treo: mọi case vẫn phải tự kết thúc bằng eval/postActionSeconds có giới hạn."
+          "Mỗi lần chạy matrix của một suite có timeout riêng: field `suites[].timeoutMs` (integer 60000-2700000 ms) trong registry, hoặc CLI `--suite-timeout-ms <ms>` (cùng bound, chỉ cho `run`); thứ tự ưu tiên CLI > registry > mặc định 600000. `timeoutMs` đã khai báo được hash vào receipt snapshot nên đổi giá trị làm receipt stale; CLI override là tham số local của máy, ghi vào receipt nhưng không vào digest. Giá trị sai/ngoài bound fail `REGRESSION_SUITE_TIMEOUT_INVALID` trước mọi I/O. Run vượt timeout báo `REGRESSION_SUITE_TIMEOUT` (suite id, timeout hiệu dụng, số case, gợi ý tách matrix hoặc tăng timeoutMs) thay vì `spawnSync ETIMEDOUT` trống. Trước khi chạy, tool ước lượng mỗi case = seconds + postActionSeconds (fallback matrix) + gestureDelaysMs + gestureGapMs x (gestures-1) + 8 s reload overhead; vượt timeout hiệu dụng chỉ phát warning `REGRESSION_SUITE_TIMEOUT_RISK` (JSON `warnings[]`, stderr ở text mode), không fail gate. Matrix 20+ case với postActionSeconds dài nên tách suite hoặc khai báo timeoutMs. Registry cũ có thể dùng alias `timeoutMinutes` (số nguyên 1-45, không khai báo cùng timeoutMs)."
         ],
         "verify": null,
         "status": "partial"

@@ -57,3 +57,28 @@ test('scalar Sphere mesh axis and rotated vertices match independent native Bake
   world.forEach((x,j)=>assert.ok(Math.abs(x-f.vertices[i][j]*(j===2?-1:1))<2e-6));
  }
 });
+
+test('nested prefab instance overrides re-derive the attached initial-state adapter contract',()=>{
+ const {initialStateContract,refreshInitialStateContract}=require('./particle-initial-state-binding.cjs');
+ // ScrewOut SOF_Box/smoke: smoke.prefab startSize 0.85-1.1, SOF_Box instance override 1.5-2.
+ const curve=(a,b)=>({minMaxState:3,minScalar:a,scalar:b}),white={r:1,g:1,b:1,a:1};
+ const source={InitialModule:{startLifetime:curve(0.4,0.7),startSpeed:curve(8,11),startSize:curve(0.85,1.1),startRotation:curve(0,6.283185),startColor:{minMaxState:0,maxColor:white}}};
+ const particle={node:{__id__:0}};
+ const define=data=>Object.defineProperty(particle,'unityInitialStateContract',{value:initialStateContract(data),configurable:true});
+ Object.defineProperty(particle,'unityRendererContract',{value:{eulerSigns:[-1,-1,-1]},configurable:true});
+ define(source);
+ const stale=JSON.stringify({...(({reasons,constantPrewarm,...spec})=>spec)(particle.unityInitialStateContract),nativeRadiusVersion:'6000.3.1f1',signs:[-1,-1,-1]});
+ const adapter={source:{__id__:1},sourceContract:stale,__prefab:{__id__:3}},other={source:{__id__:1},sourceContract:'{"path":"smoke"}',__prefab:{__id__:4}};
+ const builder={objects:[{_name:'smoke'},particle,adapter,{fileId:'cmp-unity-initial-state-1'},{fileId:'cmp-unity-sorting-1'},other]};
+ const codes=[],reporter={low:c=>codes.push(c),high:c=>codes.push(c)};
+ assert.equal(refreshInitialStateContract(builder,1,reporter),0,'unchanged source keeps the contract');
+ define({...source,InitialModule:{...source.InitialModule,startSize:curve(1.5,2)}});
+ assert.equal(refreshInitialStateContract(builder,1,reporter),1);
+ const next=JSON.parse(adapter.sourceContract);
+ assert.deepEqual(next.size[0],{minMaxState:3,scalar:2,minScalar:1.5});
+ assert.equal(next.nativeRadiusVersion,'6000.3.1f1');assert.deepEqual(next.signs,[-1,-1,-1]);
+ assert.equal(other.sourceContract,'{"path":"smoke"}','other adapters are untouched');
+ assert.deepEqual(codes,['PARTICLE_INITIAL_STATE_OVERRIDE_SYNCED']);
+ const porter=fs.readFileSync(path.join(__dirname,'..','unity-cocos-port.cjs'),'utf8');
+ assert.match(porter,/applyUnityParticleDataToCocos\(builder, particleId, particleData, rendererData\);[\s\S]{0,200}refreshInitialStateContract\(builder, particleId/);
+});
