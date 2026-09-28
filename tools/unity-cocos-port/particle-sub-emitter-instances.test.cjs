@@ -202,6 +202,7 @@ test('death instances of a Local-simulation sub system stay at their own parent 
     assert.equal(burst.node.position.x, 0, 'the Local sub system node is not moved');
     assert.deepEqual(pool.data.slice(0, pool.length).map((p) => p.position.x), [4, 4.5, 5, -7, -6.5, -6]);
   } finally { Vec3.transformMat4 = saved.transformMat4; cc.Mat4.invert = saved.invert; }
+});
 
 test('instances emit the sub system Rate over Distance along their parent path (Hovl Magic circle 1 SubGlow)', () => {
   const mod = load();
