@@ -5414,11 +5414,11 @@ function buildNestedChildTransformOverrides(sourceModel, sourceTransform, props,
       ? 'target is the root of a linked nested prefab instance (needs a nested TargetInfo path)'
       : parentGameObject?.syntheticModelAsset
         ? 'target is mounted under a model instance (basis-rebased transform)'
-        : gameObjectHasWorldScaledParticleSystem(gameObject, sourceModel)
-          ? 'target carries a world-scaled ParticleSystem (parent-compensated scale)'
-          : sourceTransform.isRect && wantsPosition
-            ? 'RectTransform position needs the parent layout'
-            : '';
+        // Particle nodes keep their resolved transform (no parent-compensated scale since 25022f6), so
+        // an override of a ParticleSystem object merges like any other node.
+        : sourceTransform.isRect && wantsPosition
+          ? 'RectTransform position needs the parent layout'
+          : '';
   if (unsupported) {
     reporter?.medium('NESTED_CHILD_TRANSFORM_OVERRIDE_UNMAPPED', where, gameObject?.name || String(sourceTransform.fileId),
       `Outer prefab overrides a nested child Transform that was not ported: ${unsupported}`, keys.join(','));
@@ -9395,6 +9395,7 @@ module.exports = {
   correctNestedModelForwardAxis,
   mergedModelRootTransform,
   transformOverrideFlags,
+  buildNestedChildTransformOverrides,
   buildNestedPrefabPropertyOverrides,
   rebaseNestedModelMountedChildTransform,
   fbxMeshOwnerNode,
