@@ -33,7 +33,17 @@ const BUILTIN_PARTICLE_SHADERS = {
   10721: { name: 'Mobile/Particles/Alpha Blended', technique: 'alpha', formula: 'standard' },
   10722: { name: 'Mobile/Particles/VertexLit Blended', technique: 'alpha', formula: 'standard', approximate: 'fixed-function vertex lighting is not ported' },
   10723: { name: 'Mobile/Particles/Multiply', technique: 'multiply', formula: 'legacyMultiply' },
+  // UI shaders a ParticleSystemRenderer can use directly (fixtures/unity-particle-oracle-ui-shaders.json):
+  // UI-Unlit-Transparent = tex * vertex colour * _Color, Blend SrcAlpha OneMinusSrcAlpha.
+  10760: { name: 'UI/Unlit/Transparent', technique: 'alpha', formula: 'standard', colorKey: '_Color', colorDefault: 1 },
 };
+
+// Package particle shaders, identified by their package GUID (stable across projects, also when the
+// package lives outside the scanned roots) or ShaderLab name. Oracle: fixtures/unity-particle-oracle-ui-shaders.json.
+const PACKAGE_PARTICLE_SHADERS = [
+  // com.coffee.ui-particle Shaders/UIAdditive.shader: color = tex * vertex * _Color; rgb *= a; Blend One One.
+  { guid: 'ecfa8f5732b504ef98fba10aa18d0326', name: 'UI/Additive', technique: 'additive-one', formula: 'premultiplyAlpha', colorKey: '_Color', colorDefault: 1 },
+];
 
 // Unity built-in materials a ParticleSystemRenderer can reference directly (unity_builtin_extra). Their state was
 // read in Unity 6 (psdump + oracle): Default-ParticleSystem is Particles/Standard Unlit alpha blended, white _Color;
@@ -88,7 +98,8 @@ function vec4(x, y, z, w) {
 function resolveUnityParticleSemantics(input) {
   const { shaderGuid = '', shaderFileId = '', shaderName = '', keywords = new Set(), floats = {} } = input;
   const notes = [];
-  const builtin = shaderGuid === UNITY_BUILTIN_RESOURCE_GUID ? BUILTIN_PARTICLE_SHADERS[Number(shaderFileId)] : null;
+  const builtin = shaderGuid === UNITY_BUILTIN_RESOURCE_GUID ? BUILTIN_PARTICLE_SHADERS[Number(shaderFileId)]
+    : PACKAGE_PARTICLE_SHADERS.find((entry) => entry.guid === shaderGuid || entry.name === String(shaderName || '').trim()) || null;
   const urp = !builtin ? URP_PARTICLE_SHADERS.find((entry) => entry.pattern.test(String(shaderName || '').trim())) : null;
   const semantics = {
     technique: 'alpha', formula: 'standard', lighting: 'unlit', vertexColor: 1, colorKey: '_BaseColor', colorDefault: 1,
@@ -289,6 +300,7 @@ module.exports = {
   UNITY_BUILTIN_TEXTURE_DIR,
   BUILTIN_PARTICLE_MATERIALS,
   BUILTIN_PARTICLE_SHADERS,
+  PACKAGE_PARTICLE_SHADERS,
   TECHNIQUE,
   FORMULA,
   LIGHTING,

@@ -1,8 +1,9 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),ts=require('typescript');
-const m={exports:{}};
-new Function('exports','module',ts.transpileModule(fs.readFileSync(path.join(__dirname,'runtime/UnityParticleLimitVelocity.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText)(m.exports,m);
-const {installUnityParticleLimitVelocity,unityDampenKeep}=m.exports;
+function compile(name,deps={}){const m={exports:{}};new Function('exports','module','require',ts.transpileModule(fs.readFileSync(path.join(__dirname,'runtime',name+'.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText)(m.exports,m,k=>deps[k]||{});return m.exports;}
+const kernel=compile('UnityNoiseKernel');
+const {installUnityParticleLimitVelocity,unityDampenKeep,unityDragSpeed}=compile('UnityParticleLimitVelocity',{'./UnityNoiseKernel':kernel});
+const dragNative=require('./fixtures/limit-drag-native.json');
 const {attachLimitVelocityRuntime}=require('./particle-limit-velocity-binding');
 const {applyUnityParticleDataToCocos}=require('./particle-system-converter');
 const native=require('./fixtures/limit-velocity-native.json');
@@ -43,17 +44,56 @@ test('converter maps Unity separateAxis and keeps drag/speed modifier for the bi
   const builder={objects:[{},{_limitVelocityOvertimeModule:{__id__:2}},{}]};
   applyUnityParticleDataToCocos(builder,1,{ClampVelocityModule:{enabled:1,separateAxis:1,dampen:0.15,drag:{minMaxState:0,scalar:0.5}},NoiseModule:{enabled:1}});
   assert.equal(builder.objects[2].separateAxes,true);
-  assert.deepEqual(builder.objects[1].unityLimitVelocityContract,{enabled:true,separateAxes:true,dampen:0.15,drag:{minMaxState:0,scalar:0.5},animatedVelocity:true,speedModifier:{minMaxState:0,scalar:1}});
+  assert.deepEqual(builder.objects[1].unityLimitVelocityContract,{enabled:true,separateAxes:true,dampen:0.15,drag:{minMaxState:0,scalar:0.5},multiplyBySize:false,multiplyByVelocity:false,animatedVelocity:true,speedModifier:{minMaxState:0,scalar:1}});
 });
 test('porter binds enabled limits, keeps drag honest and waits for AssetDB',()=>{
+  const drag={drag:{minMaxState:0,scalar:0.5},multiplyBySize:true,multiplyByVelocity:false};
   for(const imported of [true,false])for(const enabled of [true,false]){
     const objects=[{__type__:'cc.Node',_name:'Spikes'},{__type__:'cc.ParticleSystem',node:{__id__:0}}],issues=[];
-    Object.defineProperty(objects[1],'unityLimitVelocityContract',{value:{enabled,separateAxes:false,dampen:0.15,drag:{minMaxState:0,scalar:enabled?0.5:0},animatedVelocity:true,speedModifier:{minMaxState:0,scalar:1}}});
+    Object.defineProperty(objects[1],'unityLimitVelocityContract',{value:{enabled,separateAxes:false,dampen:0.15,...drag,drag:{minMaxState:0,scalar:enabled?0.5:0},animatedVelocity:true,speedModifier:{minMaxState:0,scalar:1}}});
     const builder={objects,cocosDb:{findScriptClass:()=>imported?{classId:'registered'}:null},addComponent(node,type,props){objects.push({node,type,...props});}};
     attachLimitVelocityRuntime(builder,{high:code=>issues.push(code),medium:code=>issues.push(code),low(){}},{dryRun:true,cocosRoot:path.join(__dirname,'fixtures/no-project')});
     assert.equal(objects.length,enabled&&imported?3:2);
     if(!enabled)assert.deepEqual(issues,[]);
-    else assert.deepEqual(issues,imported?['PARTICLE_LIMIT_VELOCITY_ADAPTER_REQUIRED']:['PARTICLE_LIMIT_VELOCITY_ADAPTER_REQUIRED','PARTICLE_LIMIT_VELOCITY_ADAPTER_REQUIRED']);
-    if(objects[2])assert.deepEqual(objects[2].source,{__id__:1});
+    else assert.deepEqual(issues,imported?[]:['PARTICLE_LIMIT_VELOCITY_ADAPTER_REQUIRED']);
+    if(objects[2]){assert.deepEqual(objects[2].source,{__id__:1});assert.deepEqual(JSON.parse(objects[2].sourceContract),drag);}
   }
+});
+
+// Mirrors the CPU processor for the drag fixture: size is animated before the limit (end-of-step
+// age), then the limit/drag module, then position integrates the limited total velocity.
+function runDrag(sample){
+  const module=cocosModule({dampen:sample.dampen,separateAxes:false,limit:[sample.limit]});
+  const drag=sample.dragCurve?{minMaxState:1,scalar:sample.drag,maxCurve:{m_Curve:[{time:0,value:1,inSlope:-1,outSlope:-1},{time:1,value:0,inSlope:-1,outSlope:-1}]}}:{minMaxState:0,scalar:sample.drag};
+  installUnityParticleLimitVelocity({limitVelocityOvertimeModule:module},{drag,multiplyBySize:sample.multiplyBySize,multiplyByVelocity:sample.multiplyByVelocity});
+  const size=Array.isArray(sample.size)?sample.size:[sample.size,sample.size,sample.size];
+  const animated=[sample.animatedVelocityX||0,0,0];
+  const [x,y,z]=sample.startVelocity,p={velocity:{x,y,z},ultimateVelocity:{x:0,y:0,z:0},animatedVelocity:{x:animated[0],y:0,z:0},
+    size:{x:size[0],y:size[1],z:size[2]},startSize:{x:size[0],y:size[1],z:size[2]},startLifetime:sample.startLifetime,remainingLifetime:sample.startLifetime,randomSeed:1};
+  const pos=[0,0,0];
+  return sample.velocity.map(()=>{
+    p.remainingLifetime-=sample.dt;
+    const k=sample.sizeOverLifetime?1-(1-p.remainingLifetime/p.startLifetime):1;
+    p.size.x=size[0]*k;p.size.y=size[1]*k;p.size.z=size[2]*k;
+    p.ultimateVelocity.x=p.velocity.x+animated[0];p.ultimateVelocity.y=p.velocity.y;p.ultimateVelocity.z=p.velocity.z;
+    module.animate(p,sample.dt);
+    pos[0]+=p.ultimateVelocity.x*sample.dt;pos[1]+=p.ultimateVelocity.y*sample.dt;pos[2]+=p.ultimateVelocity.z*sample.dt;
+    return {velocity:[p.velocity.x,p.velocity.y,p.velocity.z],position:pos.slice()};
+  });
+}
+for(const sample of dragNative)test(`native Limit Velocity drag: ${sample.case}`,()=>{
+  const got=runDrag(sample);
+  const tolerance=2e-5;
+  sample.velocity.forEach((velocity,step)=>velocity.forEach((value,axis)=>assert.ok(Math.abs(got[step].velocity[axis]-value)<tolerance,`step ${step} axis ${axis}: ${got[step].velocity[axis]} vs ${value}`)));
+  sample.position.forEach((position,step)=>position.forEach((value,axis)=>assert.ok(Math.abs(got[step].position[axis]-value)<tolerance*10,`position step ${step} axis ${axis}: ${got[step].position[axis]} vs ${value}`)));
+});
+test('drag speed rule: area, velocity squared, zero clamp',()=>{
+  const spec={multiplyBySize:true,multiplyByVelocity:true};
+  assert.ok(Math.abs(unityDragSpeed(1.3,4.71,0.45,spec,1/60)-(1.3-4.71*Math.PI*0.225*0.225*1.69/60))<1e-12);
+  assert.equal(unityDragSpeed(1,1000,1,{multiplyBySize:false,multiplyByVelocity:false},1/60),0);
+});
+test('drag fixture binds its producer',()=>{
+  const text=fs.readFileSync(path.join(__dirname,'fixtures/capture-limit-drag.cs'),'utf8');
+  assert.match(text,/limit-drag-native.json/);
+  assert.equal(dragNative.length,20);
 });

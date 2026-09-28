@@ -3,11 +3,16 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { compressUuid } = require('./core-utils');
 const { unsupportedNoiseReasons } = require('./particle-noise-binding');
+const { orbitCurveActive } = require('./particle-orbit-contract');
 const names = ['UnityNoiseKernel', 'UnityParticleLimitVelocity', 'UnityParticleOrbit', 'UnityParticleOrbitAdapter'];
 
 function unsupportedOrbitReasons(spec) {
   const reasons=[];
-  if(![0,1].includes(spec.simulationSpace)||spec.inWorldSpace)reasons.push('world-velocity-or-custom-space');
+  if(![0,1].includes(spec.simulationSpace))reasons.push('custom-simulation-space');
+  // fixtures/orbit-velocity-space-native.json: Velocity over Lifetime `space` moves only the
+  // linear X/Y/Z axes; orbital and radial motion is identical in Local and World. World linear
+  // velocity is not measured into the simulation frame yet.
+  if(spec.inWorldSpace&&['x','y','z'].some(k=>orbitCurveActive(spec.velocity?.[k])))reasons.push('world-linear-velocity');
   if(spec.simulationSpace===1&&spec.scalingMode!==0)reasons.push('world-nonhierarchical-scaling');
   if(spec.simulationSpace===1&&spec.noiseEnabled)reasons.push('world-noise-composition');
   // Unity limits stored + orbital/radial velocity and stores only the non-animated part
