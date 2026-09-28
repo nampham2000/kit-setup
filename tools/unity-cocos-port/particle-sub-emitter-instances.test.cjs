@@ -176,3 +176,30 @@ test('birth rate emission is placed along the parent path within the step', () =
   assert.ok(Math.min(...xs) > 0 && Math.min(...xs) <= 0.11 && Math.max(...xs) === 1, JSON.stringify(xs));
   for (let i = 1; i < xs.length; i++) assert.ok(Math.abs(xs[i] - xs[i - 1] - 0.1) < 1e-9, 'evenly spaced along the path');
 });
+
+test('instances emit the sub system Rate over Distance along their parent path (Hovl Magic circle 1 SubGlow)', () => {
+  const mod = load();
+  Vec3.distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+  const sub = target('SubGlow', { loop: true });
+  // The porter binds UnityParticleRateOverDistanceEmitter (15 per unit) on the sub system node.
+  const distanceEmitter = { rateOverDistance: 15, enabled: true };
+  sub.node.getComponent = (name) => (name === 'UnityParticleRateOverDistanceEmitter' ? distanceEmitter : null);
+  const { follower, spawn } = rig(mod, [sub]);
+  const dt = 1 / 60;
+  const parent = spawn(0);
+  follower.lateUpdate(dt);
+  // The parent moves 3 units in 60 frames: 15 * 3 = 45 particles, each placed along the path.
+  for (let frame = 1; frame <= 60; frame++) { parent.position.x = frame * 0.05; follower.lateUpdate(dt); }
+  assert.equal(distanceEmitter.enabled, false, 'the node-bound distance emitter is taken over by the instances');
+  assert.ok(Math.abs(sub.total() - 45) <= 1, `emitted ${sub.total()} over 3 units`);
+  const xs = sub.emitted.map((e) => e.x);
+  assert.ok(xs.every((x, i) => i === 0 || x >= xs[i - 1] - 1e-9), 'placed in travel order');
+  assert.ok(Math.abs(xs[1] - xs[0] - 1 / 15) < 1e-6, 'one particle per 1/15 unit');
+  // A static parent emits nothing by distance.
+  const idle = target('Idle', { loop: true });
+  idle.node.getComponent = () => ({ rateOverDistance: 15, enabled: true });
+  const still = rig(mod, [idle]);
+  still.spawn(1);
+  for (let frame = 0; frame < 30; frame++) still.follower.lateUpdate(dt);
+  assert.equal(idle.total(), 0);
+});

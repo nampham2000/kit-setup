@@ -31,7 +31,9 @@ type BurstLike = { time: number; repeatCount: number; repeatInterval: number; co
 
 // The sub system's own emission, taken over at runtime: every Unity sub-emitter
 // event starts an instance that replays it from time 0.
-type EmissionSchedule = { duration: number; loop: boolean; rate: CurveRange; bursts: BurstLike[] };
+// distanceRate: the sub system's Rate over Distance, which Unity measures per instance along the parent
+// particle's path (Hovl Magic circle 1: SubGlow draws its dotted chains only this way).
+type EmissionSchedule = { duration: number; loop: boolean; rate: CurveRange; bursts: BurstLike[]; distanceRate: number };
 
 type EmissionInstance = {
     entry: UnityParticleSubEmitterEntry;
@@ -46,6 +48,7 @@ type EmissionInstance = {
     time: number;
     fresh: boolean;
     rateAccumulator: number;
+    distanceAccumulator: number;
     cycles: number[];
 };
 
@@ -493,7 +496,7 @@ export class UnityParticleSubEmitterFollower extends Component {
             const schedule = this.captureSchedule(entry);
             this.ensureTargetRunning(entry);
             const instance = this._freeInstances.pop() || {
-                entry, schedule, particle: null, track: null, seed: 0, position: new Vec3(), from: new Vec3(), time: 0, fresh: true, rateAccumulator: 0, cycles: [],
+                entry, schedule, particle: null, track: null, seed: 0, position: new Vec3(), from: new Vec3(), time: 0, fresh: true, rateAccumulator: 0, distanceAccumulator: 0, cycles: [],
             };
             instance.entry = entry;
             instance.schedule = schedule;
@@ -505,6 +508,7 @@ export class UnityParticleSubEmitterFollower extends Component {
             instance.time = 0;
             instance.fresh = true;
             instance.rateAccumulator = 0;
+            instance.distanceAccumulator = 0;
             instance.cycles.length = schedule.bursts.length;
             instance.cycles.fill(0);
             this._instances.push(instance);
@@ -561,6 +565,7 @@ export class UnityParticleSubEmitterFollower extends Component {
         window.step = step;
         window.end = instance.time + step;
         let alive = true;
+        if (schedule.distanceRate > 0 && (schedule.loop || window.start < schedule.duration)) this.emitAlongPath(instance);
         if (window.end >= schedule.duration) {
             this.emitSpan(instance, instance.time, schedule.duration, 0, dt);
             if (!schedule.loop) {
@@ -590,6 +595,24 @@ export class UnityParticleSubEmitterFollower extends Component {
             this.emitPlaced(instance.entry, from + (k - instance.rateAccumulator) / rate + base, 1);
         }
         instance.rateAccumulator = Math.max(0, owed - count);
+    }
+
+    /**
+     * Rate over Distance of one instance: a particle each time the instance (its parent particle) has moved
+     * 1/rate along this step's path, placed at that point and aged by the rest of the step.
+     */
+    private emitAlongPath (instance: EmissionInstance): void {
+        const w = this._window;
+        const rate = instance.schedule.distanceRate;
+        const travelled = Vec3.distance(w.from, w.to) * rate;
+        if (!(travelled > 0)) return;
+        const owed = instance.distanceAccumulator + travelled;
+        const count = Math.floor(owed + EMISSION_EPSILON);
+        for (let k = 1; k <= count; k += 1) {
+            const fraction = Math.min(1, (k - instance.distanceAccumulator) / travelled);
+            this.emitPlaced(instance.entry, w.start + fraction * w.step, 1);
+        }
+        instance.distanceAccumulator = Math.max(0, owed - count);
     }
 
     private emitDueBursts (instance: EmissionInstance, time: number, dt: number, base: number): void {
@@ -660,11 +683,17 @@ export class UnityParticleSubEmitterFollower extends Component {
         const target = entry.subEmitter!;
         let schedule = schedules.get(target);
         if (schedule) return schedule;
+        // UnityParticleRateOverDistanceEmitter owns the authored distance rate when the porter bound one; it
+        // measures the sub system node, which instances do not move, so the instances take it over.
+        const distanceEmitter = (target.node as any)?.getComponent?.('UnityParticleRateOverDistanceEmitter') as { rateOverDistance: number; enabled: boolean } | null;
+        const distanceRate = distanceEmitter ? distanceEmitter.rateOverDistance : this.curveConstant(target.rateOverDistance);
+        if (distanceEmitter) distanceEmitter.enabled = false;
         schedule = {
             duration: Math.max(1e-4, target.duration),
             loop: target.loop,
             rate: target.rateOverTime,
             bursts: target.bursts.slice(),
+            distanceRate: distanceRate > 0 ? distanceRate : 0,
         };
         schedules.set(target, schedule);
         // The target keeps simulating what the instances emit but must not emit by itself.
@@ -692,6 +721,13 @@ export class UnityParticleSubEmitterFollower extends Component {
         instance.particle = null;
         instance.track = null;
         this._freeInstances.push(instance);
+    }
+
+    /** A constant curve's value (curve modes read their value at t = 0, like the porter's constant rates). */
+    private curveConstant (curveRange: any): number {
+        if (!curveRange) return 0;
+        const value = curveRange.mode === CURVE_MODE_CONSTANT ? curveRange.constant * (curveRange.multiplier ?? 1) : curveRange.evaluate?.(0, 0.5);
+        return Number.isFinite(value) ? value : 0;
     }
 
     private setCurveConstant (curveRange: any, value: number): void {
