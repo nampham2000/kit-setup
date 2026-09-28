@@ -41,3 +41,9 @@ test('GLSL ES 1.0 compat: preprocessor literals, transpose, scalar returns, pow 
   assert.match(out, /pow\(col\.rgb, \(col\.rgb\) \* 0\.0 \+ 0\.4545\)/);
   assert.match(out, /return vec4\(0\.0\);/);
 });
+
+test('scalar return inside a CCProgram %{ }% wrapper (RFX4_PortalMask frag)', () => {
+  const { glslEs1Compat } = require('./glsl-es1-compat.cjs');
+  const code = 'CCProgram fs %{\n  uniform Constant {\n    vec4 noiseScale;\n  };\n  vec4 frag () {\n    return 0.0;\n  }\n}%';
+  assert.match(glslEs1Compat(code), /return vec4\(0\.0\);/);
+});

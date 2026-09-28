@@ -39,7 +39,9 @@ function scalarReturns(code) {
     const header = /^\s*(vec[234])\s+\w+\s*\([^;]*\)\s*\{?\s*$/.exec(line);
     if (header && depth === 0) type = header[1];
     const out = type ? line.replace(new RegExp(`\\breturn\\s+(${NUMBER})\\s*;`), `return ${type}($1);`) : line;
-    for (const ch of line) { if (ch === '{') depth++; else if (ch === '}') { depth--; if (depth === 0) type = null; } }
+    // `CCProgram fs %{ ... }%` delimiters are not GLSL scopes; counting them kept depth >= 1, so
+    // no function header was ever seen at depth 0 (RFX4_PortalMask `half4 frag() { return 0; }`).
+    for (const ch of line.replace(/%\{|\}%/g, '')) { if (ch === '{') depth++; else if (ch === '}') { depth--; if (depth === 0) type = null; } }
     return out;
   }).join('\n');
 }
