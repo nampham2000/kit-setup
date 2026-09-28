@@ -41,6 +41,28 @@ function findConverter() {
   return roots.find(file => fs.existsSync(file)) || null;
 }
 
+test('the FBX holds the Unity mesh in the ported (Z-reflected) frame with front faces kept', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'unity-mesh-fbx-'));
+  const file = path.join(dir, 'Tray.fbx');
+  // Unity: a triangle 2 m in front of its pivot (+Z), clockwise from +Y, normal +Y.
+  writeUnityMeshAssetAsFbx({
+    meshName: 'Tray', positions: [[0, 0, 2], [1, 0, 3], [1, 0, 2]], normals: [[0, 1, 0.5], [0, 1, 0.5], [0, 1, 0.5]],
+    uvs: [[0, 0], [1, 1], [1, 0]], indices: [0, 1, 2],
+  }, file);
+  const text = fs.readFileSync(file, 'utf8');
+  const array = (label) => text.match(new RegExp(`${label}: \\*\\d+ \\{\\s*a: ([^\\n]+)`))[1].split(',').map(Number);
+  assert.deepEqual(array('Vertices'), [0, 0, -2, 1, 0, -3, 1, 0, -2]);
+  assert.deepEqual(array('Normals'), [0, 1, -0.5, 0, 1, -0.5, 0, 1, -0.5]);
+  assert.deepEqual(array('PolygonVertexIndex'), [0, 2, -2]);
+  // Counter-clockwise seen from +Y in the right-handed frame: the face still points up.
+  const v = array('Vertices');
+  const [a, b, c] = [0, 2, 1].map(i => v.slice(i * 3, i * 3 + 3));
+  const cross = (u, w) => [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]];
+  const n = cross(b.map((x, i) => x - a[i]), c.map((x, i) => x - a[i]));
+  assert.ok(n[1] > 0, `face normal ${n}`);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
 test('Cocos FBX-glTF-conv imports the exported mesh (skipped without a local Cocos install)', (t) => {
   const converter = findConverter();
   if (!converter) { t.skip('FBX-glTF-conv not installed'); return; }
