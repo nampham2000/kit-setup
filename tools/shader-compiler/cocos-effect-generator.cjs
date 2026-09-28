@@ -19,6 +19,7 @@ const { allocateBindings } = require('./binding-allocator.cjs');
 const { renameReservedInEffect } = require('./glsl-reserved-identifiers.cjs');
 const { promoteIntLiterals } = require('./glsl-int-literals.cjs');
 const { glslEs1Compat } = require('./glsl-es1-compat.cjs');
+const { shadowWrittenUniforms } = require('./glsl-uniform-writes.cjs');
 const { extractSurfaceShaderIntent, detectPackedMaps } = require('./surface-shader-intent-extractor.cjs');
 const {
   SRGB_SAMPLE_HELPER,
@@ -938,7 +939,7 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
   if (vertFunc && vertFunc.body) {
     // Translate custom vertex body
     let vBody = lowerHlslToGlsl(vertFunc.body, options);
-    vBody = remapIdentifiers(vBody);
+    vBody = shadowWrittenUniforms(remapIdentifiers(vBody), ubo.glsl);
     if (usesCocosSpriteTexture) {
       // Sprite.fillBuffers submits world-space vertices and commitComp passes
       // transform=null. Cocos builtin-sprite therefore multiplies those vertices
@@ -1218,7 +1219,7 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
 
   if (fragFunc && fragFunc.body) {
     let fBody = lowerHlslToGlsl(fragFunc.body, options);
-    fBody = remapIdentifiers(fBody);
+    fBody = shadowWrittenUniforms(remapIdentifiers(fBody), ubo.glsl);
     fBody = preserveCocosSpriteUvSampling(fBody);
 
     // Replace param references with varyings

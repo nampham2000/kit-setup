@@ -190,10 +190,18 @@ function lowerMatrixCasts(code) {
     return code;
 }
 
+// HLSL float/half literal suffixes (`2.0f`, `0.5h`, `3.f`, `1e-3f`, `2f`) are a syntax error in GLSL ES 1.0
+// ("Floating-point suffix unsupported prior to GLSL ES 3.00"). A suffixed integer (`2f`) is a float.
+// The lookbehind keeps identifiers and hex literals (`uv2f`, `0x1f`) intact.
+function stripFloatSuffixes(code) {
+  return code.replace(/(?<![\w.])(\d+\.\d*|\.\d+|\d+)([eE][-+]?\d+)?[fFhH](?!\w)/g,
+    (m, mantissa, exponent = '') => (/[.eE]/.test(mantissa + exponent) ? mantissa + exponent : `${mantissa}.0`));
+}
+
 function lowerHlslToGlsl(code, options = {}) {
   if (!code) return '';
 
-  let out = code;
+  let out = stripFloatSuffixes(code);
   const precisionConfig = { ...DEFAULT_PRECISION_CONFIG, ...(options.precision || {}) };
 
   // 1. Strip Unity Boilerplate / Stereo / Instancing / Loop Macros
@@ -307,7 +315,9 @@ function lowerHlslToGlsl(code, options = {}) {
   out = out.replace(/\bUNITY_NEAR_CLIP_VALUE\b/g, '(-1.0)');
   out = out.replace(/\bUNITY_RAW_FAR_CLIP_VALUE\b/g, '(1.0)');
   out = out.replace(/\bUNITY_REVERSED_Z\b/g, '0');
-  out = out.replace(/\bUNITY_COLORSPACE_GAMMA\b/g, '0');
+  // Unity defines UNITY_COLORSPACE_GAMMA only when Player Settings > Color Space is Gamma. Packs
+  // authored for Gamma (e.g. KriptoFX) branch on it, so the source project's colour space is an option.
+  out = out.replace(/\bUNITY_COLORSPACE_GAMMA\b/g, options.colorSpace === 'gamma' ? '1' : '0');
   out = out.replace(/\bUNITY_PI\b/g, '3.14159265359');
   out = out.replace(/\bUNITY_TWO_PI\b/g, '6.28318530718');
   out = out.replace(/\bUNITY_HALF_PI\b/g, '1.57079632679');

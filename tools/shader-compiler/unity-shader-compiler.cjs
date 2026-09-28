@@ -533,6 +533,10 @@ function main() {
     else if (arg === '--generate-material' || arg === '-m') options.generateMaterial = true;
     else if (arg === '--dry-run') options.dryRun = true;
     else if (arg === '--unity-uv') options.unityUv = true;
+    else if (arg === '--color-space') {
+      options.colorSpace = args[++i];
+      if (!['linear', 'gamma'].includes(options.colorSpace)) throw new Error(`--color-space must be linear or gamma, got ${options.colorSpace}`);
+    }
     // convert-mat: bind the material to its effect. --effect-uuid fills
     // _effectAsset; --effect additionally filters out properties the effect
     // does not declare.
@@ -591,11 +595,13 @@ UCShaderTranspiler - Unity HLSL/ShaderLab -> Cocos Creator 3.8.8 GLSL Effect Tra
 
 Usage:
   node unity-shader-compiler.cjs chain --src <Prefab|ScriptableObject.asset> --unity-root <Assets> [--out-dir <dir>] [--json] [--no-cache] [--max-closure-assets N] [--max-closure-depth N]
-  node unity-shader-compiler.cjs convert --src <Shader> --out <Effect> [-m] [--mode auto|unlit|surface-pbr] [--unity-project <UnityProject>] [--unity-uv] [--report|--no-report] [--dry-run]
+  node unity-shader-compiler.cjs convert --src <Shader> --out <Effect> [-m] [--mode auto|unlit|surface-pbr] [--unity-project <UnityProject>] [--unity-uv] [--color-space linear|gamma] [--report|--no-report] [--dry-run]
 
   --unity-uv  Lấy mẫu texture theo quy ước UV của Unity (gốc dưới-trái) bằng texU().
               Bật khi shader chạy trên hình học mang UV từ Unity. Mặc định TẮT vì
               bật lên sẽ đổi hình của mọi effect đã sinh trước đó.
+  --color-space linear|gamma  Player Color Space của project Unity nguồn (mặc định linear).
+              gamma định nghĩa UNITY_COLORSPACE_GAMMA như Unity làm trong project Gamma.
   node unity-shader-compiler.cjs convert-mat --src <UnityMat> --out <CocosMtl> [--effect <Effect>] [--effect-uuid <uuid>] [--texture-map <guid-to-uuid.json>]
   node unity-shader-compiler.cjs scan <UnityDir>
   node unity-shader-compiler.cjs inspect <Shader>
