@@ -19,7 +19,9 @@ function unsupportedOrbitReasons(spec) {
   // (velocity-limit-composition-native.json); its speed modifier acts after the limit.
   if(spec.limitEnabled&&(spec.velocity.speedModifier?.minMaxState!==0||spec.velocity.speedModifier?.scalar!==1))reasons.push('velocity-limit-speed-modifier');
   if(spec.noiseEnabled && (!spec.noise?.enabled || unsupportedNoiseReasons(spec.noise,spec.limitEnabled).length || spec.velocity.speedModifier?.minMaxState!==0 || spec.velocity.speedModifier?.scalar!==1))reasons.push('noise-composition');
-  for(const key of ['orbitalOffsetX','orbitalOffsetY','orbitalOffsetZ'])if(spec.velocity[key]?.minMaxState!==0||spec.velocity[key]?.scalar!==0)reasons.push(key);
+  // fixtures/particle-orbit-offset-native.json: Local simulation orbits (and pushes radially) around the
+  // offset point, measured to 6e-7; the world-simulation frame of the offset is not measured yet.
+  if(spec.simulationSpace!==0)for(const key of ['orbitalOffsetX','orbitalOffsetY','orbitalOffsetZ'])if(orbitCurveActive(spec.velocity[key]))reasons.push(key+'-world-simulation');
   for(const [key,c] of Object.entries(spec.velocity))if(c?.maxCurve&&[c.maxCurve,c.minCurve].some(v=>v?.m_Curve?.some(k=>k.weightedMode)))reasons.push(key+'-weighted');
   return reasons;
 }

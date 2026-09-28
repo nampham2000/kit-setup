@@ -48,9 +48,11 @@ export function installUnityParticleOrbit(system: ParticleSystem,spec: UnityOrbi
         installUnityParticleLimitVelocity(system);
         if(!(system.limitVelocityOvertimeModule as any)?.unityAnimatedComposition)throw new Error('Orbital velocity limit requires the Unity limit composition runtime');
     }
-    for(const key of ['orbitalOffsetX','orbitalOffsetY','orbitalOffsetZ']) {
-        if(curves[key].minMaxState!==0||curves[key].scalar!==0)throw new Error('Orbital offsets require a measured adapter');
-    }
+    // fixtures/particle-orbit-offset-native.json: the orbit and radial push are centred on the offset
+    // (Unity local frame) for Local simulation; the world-simulation offset frame is not measured.
+    const offsetKeys=['orbitalOffsetX','orbitalOffsetY','orbitalOffsetZ'];
+    const hasOffset=offsetKeys.some(k=>linearActive(curves[k]));
+    if(hasOffset&&spec.simulationSpace!==0)throw new Error('World-simulation orbital offsets require a measured adapter');
     const delta=new Float64Array(3);
     const worldSpace=spec.simulationSpace===1;
     const world=worldSpace?new Mat4():null,inverse=worldSpace?new Mat4():null,local=worldSpace?new Vec3():null;
@@ -80,7 +82,8 @@ export function installUnityParticleOrbit(system: ParticleSystem,spec: UnityOrbi
         // fixtures/particle-orbit-speed-modifier-native.json: the speed modifier scales the orbital rotation angle
         // and the radial step, applied as an exact rotation. Solving the step over dt*speed keeps the later
         // (velocity+delta)*speed*dt integration on that rotation instead of overshooting the chord.
-        if(speed!==0)orbitalDelta(delta,position.x,position.y,-position.z,sampleNoiseCurve(curves.orbitalX,age,random),sampleNoiseCurve(curves.orbitalY,age,random),sampleNoiseCurve(curves.orbitalZ,age,random),sampleNoiseCurve(curves.radial,age,random),dt*speed);
+        const ox=hasOffset?sampleNoiseCurve(curves.orbitalOffsetX,age,random):0,oy=hasOffset?sampleNoiseCurve(curves.orbitalOffsetY,age,random):0,oz=hasOffset?sampleNoiseCurve(curves.orbitalOffsetZ,age,random):0;
+        if(speed!==0)orbitalDelta(delta,position.x-ox,position.y-oy,-position.z-oz,sampleNoiseCurve(curves.orbitalX,age,random),sampleNoiseCurve(curves.orbitalY,age,random),sampleNoiseCurve(curves.orbitalZ,age,random),sampleNoiseCurve(curves.radial,age,random),dt*speed);
         else delta.fill(0);
         let x=delta[0]+sampleNoiseCurve(curves.x,age,random),y=delta[1]+sampleNoiseCurve(curves.y,age,random),z=-(delta[2]+sampleNoiseCurve(curves.z,age,random));
         if(worldSpace){
