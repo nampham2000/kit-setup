@@ -18,6 +18,7 @@ function fakeChecks(buildCalls) {
     checkEngineFeatureCropping: () => pass('features'),
     checkMetaIntegrity: () => pass('meta'),
     checkAssetImport: () => pass('import'),
+    checkEffectCompile: () => pass('effects'),
     checkBuildSize: () => {
       buildCalls.count += 1;
       return { name: 'size', status: 'FAIL', errors: ['old build too large'], warnings: [], details: '' };
@@ -38,13 +39,13 @@ test('skip-build-size does not read the build-size check while preserving every 
   const skippedCalls = { count: 0 };
   const skipped = runVerificationSuite({ skipBuildSize: true }, fakeChecks(skippedCalls));
   assert.equal(skipped.status, 'PASS');
-  assert.equal(skipped.totalChecks, 7);
+  assert.equal(skipped.totalChecks, 8);
   assert.equal(skippedCalls.count, 0);
 
   const normalCalls = { count: 0 };
   const normal = runVerificationSuite({}, fakeChecks(normalCalls));
   assert.equal(normal.status, 'FAIL');
-  assert.equal(normal.totalChecks, 8);
+  assert.equal(normal.totalChecks, 9);
   assert.equal(normalCalls.count, 1);
 });
 

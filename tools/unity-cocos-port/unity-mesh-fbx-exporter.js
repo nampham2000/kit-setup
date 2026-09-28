@@ -34,11 +34,115 @@ function readFloat(buffer, offset, fallback = 0) {
   return buffer.readFloatLE(offset);
 }
 
+// Unity PackedBitVector (m_CompressedMesh fields): m_NumItems values of m_BitSize bits, packed
+// little-endian from the low bit of each byte. Float vectors map an integer x to
+// m_Start + x * m_Range / (2^m_BitSize - 1).
+function readPackedBitVector(block, name) {
+  const re = new RegExp(`\\n(\\s*)${name}:\\s*\\n((?:\\1\\s+.*\\n?)*)`);
+  const match = re.exec(block);
+  if (!match) return null;
+  const body = match[2];
+  const field = (key) => yamlValue(body, new RegExp(`\\n?\\s*${key}:\\s*([^\\n]*)`), '').trim();
+  return {
+    numItems: Number(field('m_NumItems')) || 0,
+    range: Number(field('m_Range')) || 0,
+    start: Number(field('m_Start')) || 0,
+    data: Buffer.from(field('m_Data'), 'hex'),
+    bitSize: Number(field('m_BitSize')) || 0,
+  };
+}
+
+function unpackBitInts(vector, count, startItem = 0) {
+  const out = [];
+  if (!vector || !vector.bitSize) return out;
+  let bitPos = vector.bitSize * startItem;
+  let indexPos = Math.floor(bitPos / 8);
+  bitPos %= 8;
+  const mask = vector.bitSize >= 32 ? 0xffffffff : (2 ** vector.bitSize) - 1;
+  for (let i = 0; i < count; i += 1) {
+    let x = 0;
+    let bits = 0;
+    while (bits < vector.bitSize) {
+      const byte = indexPos < vector.data.length ? vector.data[indexPos] : 0;
+      x += ((byte >> bitPos) * (2 ** bits));
+      const num = Math.min(vector.bitSize - bits, 8 - bitPos);
+      bitPos += num;
+      bits += num;
+      if (bitPos === 8) { indexPos += 1; bitPos = 0; }
+    }
+    out.push(x % (mask + 1));
+  }
+  return out;
+}
+
+function unpackBitFloats(vector, count, startItem = 0) {
+  const maxValue = (2 ** vector.bitSize) - 1;
+  return unpackBitInts(vector, count, startItem).map(x => vector.start + (x * vector.range) / maxValue);
+}
+
+// m_MeshCompression > 0 (typical of meshes extracted from a built player): the vertex stream is
+// empty and positions, UV channels (m_UVInfo: 4 bits per channel, bit 2 = present, bits 0-1 =
+// dimension - 1), two-component normals (z from the unit length, sign in m_NormalSigns) and the
+// triangle list live in m_CompressedMesh.
+function parseUnityCompressedMesh(source, meshName) {
+  const block = yamlValue(source, /\n(\s*m_CompressedMesh:\s*\n[\s\S]*?)\n\s*m_LocalAABB:/, '');
+  if (!block) return null;
+  const verticesVec = readPackedBitVector(block, 'm_Vertices');
+  const trianglesVec = readPackedBitVector(block, 'm_Triangles');
+  if (!verticesVec || !verticesVec.numItems || !trianglesVec || !trianglesVec.numItems) return null;
+  const vertexCount = Math.floor(verticesVec.numItems / 3);
+  const flat = unpackBitFloats(verticesVec, vertexCount * 3);
+  const positions = [];
+  for (let i = 0; i < vertexCount; i += 1) positions.push([flat[i * 3], flat[i * 3 + 1], flat[i * 3 + 2]]);
+
+  let uvs = positions.map(() => [0, 0]);
+  const uvVec = readPackedBitVector(block, 'm_UV');
+  const uvInfo = Number(yamlValue(block, /\n\s*m_UVInfo:\s*(\d+)/, 0));
+  if (uvVec && uvVec.numItems) {
+    const bits = uvInfo & 0xf;
+    const dimension = uvInfo ? ((bits & 4) ? 1 + (bits & 3) : 0) : 2;
+    if (dimension >= 2) {
+      const values = unpackBitFloats(uvVec, vertexCount * dimension);
+      uvs = positions.map((_, i) => [values[i * dimension], values[i * dimension + 1]]);
+    }
+  }
+
+  let normals = positions.map(() => [0, 0, 1]);
+  const normalVec = readPackedBitVector(block, 'm_Normals');
+  if (normalVec && normalVec.numItems >= vertexCount * 2) {
+    const values = unpackBitFloats(normalVec, vertexCount * 2);
+    const signs = unpackBitInts(readPackedBitVector(block, 'm_NormalSigns'), vertexCount);
+    normals = positions.map((_, i) => {
+      let x = values[i * 2];
+      let y = values[i * 2 + 1];
+      const zsqr = 1 - x * x - y * y;
+      let z = 0;
+      if (zsqr >= 0) z = Math.sqrt(zsqr);
+      else {
+        const length = Math.hypot(x, y) || 1;
+        x /= length;
+        y /= length;
+      }
+      if (signs[i] === 0) z = -z;
+      return [x, y, z];
+    });
+  }
+
+  const indices = unpackBitInts(trianglesVec, trianglesVec.numItems);
+  if (indices.length < 3 || indices.some(index => index >= vertexCount)) return null;
+  return { meshName, positions, normals, uvs, indices, compressed: true };
+}
+
 function parseUnityMeshAsset(meshFile) {
-  const source = fs.readFileSync(meshFile, 'utf8');
+  // Unity writes CRLF on Windows checkouts; every field regex below is line based.
+  const source = fs.readFileSync(meshFile, 'utf8').replace(/\r\n?/g, '\n');
   if (!/--- !u!43\b/.test(source) || !/\bMesh:\s*\n/.test(source)) return null;
 
   const meshName = sanitizeFbxName(yamlValue(source, /\n\s*m_Name:\s*(.+)\n/, path.basename(meshFile, path.extname(meshFile))));
+  if (Number(yamlValue(source, /\n\s*m_MeshCompression:\s*(\d+)/, 0)) > 0) {
+    const compressed = parseUnityCompressedMesh(source, meshName);
+    if (compressed) return compressed;
+  }
   const vertexCount = Number(yamlValue(source, /\n\s*m_VertexCount:\s*(\d+)/, 0));
   const dataSize = Number(yamlValue(source, /\n\s*m_DataSize:\s*(\d+)/, 0));
   const vertexHex = yamlValue(source, /\n\s*_typelessdata:\s*([0-9a-fA-F]+)/, '');

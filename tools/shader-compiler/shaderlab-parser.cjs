@@ -295,6 +295,16 @@ function parsePropertiesBlock(propertiesContent, diagnostics = []) {
     }
   }
 
+  // Unity property names are case-sensitive; toCocosPropertyName folds `_Cutoff` and `_cutoff` onto `cutoff`,
+  // which emitted a duplicated CCEffect property key (EFX1001) and one uniform for two properties. Keep every
+  // Cocos name unique; the shader body rename map reads cocosName, so references stay consistent.
+  const used = new Set();
+  for (const prop of properties) {
+    let cocosName = prop.cocosName;
+    for (let n = 2; used.has(cocosName); n++) cocosName = `${prop.cocosName}${n}`;
+    prop.cocosName = cocosName;
+    used.add(cocosName);
+  }
   return properties;
 }
 

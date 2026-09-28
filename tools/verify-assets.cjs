@@ -27,6 +27,7 @@ require('./lib/auto-strip-ansi.cjs');
 const fs = require('fs');
 const path = require('path');
 const { auditResourceBoundary } = require('./resource-boundary.cjs');
+const { checkEffects, findEffects, formatDiagnostic } = require('./shader-compiler/effect-compile-gate.cjs');
 
 const FONT_MAX_BYTES = 100 * 1024;
 
@@ -42,7 +43,11 @@ Options:
   --quiet        Chỉ in dòng tổng kết.
   --help         Hiện trợ giúp và thoát.
 
-Exit 1 khi có asset chưa import được.`;
+Mọi *.effect trong phạm vi quét còn phải qua effect compile gate offline (Cocos effect compiler của
+editor đã cài + compile GLSL ES 1.00/3.00 thật trong WebGL của Chrome/Edge). Gate fail-closed khi thiếu
+editor hoặc browser.
+
+Exit 1 khi có asset chưa import được hoặc effect không compile.`;
 
 function findProjectRoot (startDir) {
     let current = path.resolve(startDir);
@@ -341,7 +346,42 @@ function run (options = {}) {
     return result;
 }
 
-function main () {
+/**
+ * Effect compile gate over every .effect in the scan scope. An effect the Cocos importer would reject with
+ * EFX2406 (or that WebGL2 cannot compile) is a FAIL here even when its .meta still says imported:true from an
+ * older revision, and even when no editor is open.
+ */
+async function runEffectGate (report, options = {}) {
+    const projectRoot = options.projectRoot ? path.resolve(options.projectRoot) : ROOT_DIR;
+    const assetsDir = path.join(projectRoot, 'assets');
+    const scanRoot = options.scanPath ? path.resolve(projectRoot, options.scanPath) : assetsDir;
+    const files = fs.existsSync(scanRoot) ? findEffects(scanRoot) : [];
+    report.effectGate = { status: 'PASS', effects: files.length, failed: [] };
+    if (!files.length) return report;
+    const gate = await checkEffects(files.map((file) => ({ file, assetsRoot: assetsDir })),
+        { projectRoot, assetsRoot: assetsDir, mode: 'basic' });
+    if (gate.unavailable) {
+        report.effectGate.status = 'FAIL';
+        report.effectGate.unavailable = gate.unavailable;
+        report.errors.push(`EFFECT COMPILE GATE — ${gate.unavailable}`);
+    }
+    for (const effect of gate.effects) {
+        if (effect.ok) continue;
+        const rel = path.relative(projectRoot, effect.file).split(path.sep).join('/');
+        const errors = effect.diagnostics.filter((d) => d.severity === 'error');
+        report.effectGate.failed.push({ asset: rel, errorCount: effect.errorCount, diagnostics: errors.slice(0, 8) });
+        report.errors.push(`${rel} — EFFECT COMPILE FAIL (${effect.errorCount}) — `
+            + errors.slice(0, 3).map((d) => formatDiagnostic(rel, d)).join(' | '));
+    }
+    if (report.effectGate.failed.length) report.effectGate.status = 'FAIL';
+    if (report.errors.length) report.status = 'FAIL';
+    report.details += report.effectGate.status === 'FAIL'
+        ? ` Effect compile gate: ${report.effectGate.failed.length}/${files.length} effect lỗi${gate.unavailable ? ' (gate unavailable)' : ''}.`
+        : ` ${files.length} effect qua compile gate GLSL ES 1.00/3.00.`;
+    return report;
+}
+
+async function main () {
     const args = process.argv.slice(2);
     if (args.includes('--help') || args.includes('-h')) { console.log(USAGE); return; }
 
@@ -350,6 +390,7 @@ function main () {
     if (pathIdx >= 0 && args[pathIdx + 1]) options.scanPath = args[pathIdx + 1];
 
     const report = run(options);
+    await runEffectGate(report, options);
 
     if (args.includes('--json')) {
         console.log(JSON.stringify(report, null, 2));
@@ -372,6 +413,6 @@ function main () {
     if (report.status === 'FAIL') process.exitCode = 1;
 }
 
-if (require.main === module) main();
+if (require.main === module) main().catch((error) => { console.error(error && error.stack || error); process.exitCode = 1; });
 
-module.exports = { FONT_MAX_BYTES, run, collectImportFailures, inspectJsonAssetCache, stableJsonStringify };
+module.exports = { FONT_MAX_BYTES, run, runEffectGate, collectImportFailures, inspectJsonAssetCache, stableJsonStringify };
