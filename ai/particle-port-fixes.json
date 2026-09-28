@@ -873,6 +873,30 @@
         "tools/unity-cocos-port/unity-particle-material.test.cjs"
       ],
       "acceptance": "Unity render oracle (unity-particle-oracle-ui-shaders.json, Linear): Coffee UI/Additive (package GUID ecfa8f57..., additive-one + premultiplied alpha) and built-in UI/Unlit/Transparent (10760, alpha) within 2/255 over three backgrounds and four vertex colours. UIParticle bridge scale/ordering is a separate gate."
+    },
+    {
+      "id": "ui-particle-bridge",
+      "origin": "35ce357",
+      "applicability": "recipe",
+      "sharedPaths": [
+        "tools/unity-cocos-port/runtime/UnityUIParticleBridge.ts"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/particle-ui-particle-bridge.test.cjs"
+      ],
+      "acceptance": "Coffee UIParticle (PositionMode Relative, AutoScaling off): bind per UIParticle node with m_Scale3D and the canvas reference size (the porter does not bind it yet). Unity Play Mode frames of the popup at matched times, member particle counts per system, draw order against canvas siblings and colour of a sampled particle; trails hidden only with reference-frame evidence."
+    },
+    {
+      "id": "local-sub-emitter-instances",
+      "origin": "35ce357",
+      "applicability": "automatic",
+      "sharedPaths": [
+        "tools/unity-cocos-port/runtime/UnityParticleSubEmitterFollower.ts"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/particle-sub-emitter-instances.test.cjs"
+      ],
+      "acceptance": "Death/birth instances of a Local-simulation sub system stay at their own parent points (unit test) and the preview shows one burst per parent event; per-burst spread against Unity frames."
     }
   ]
 }
