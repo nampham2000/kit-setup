@@ -3675,11 +3675,37 @@ const importWaitBudget = {
   },
 };
 
+// A model copied into a folder the AssetDB has never seen is only imported once the editor is asked
+// to refresh it: the editor's file watcher does not run while its window is unfocused, so polling
+// alone times out, the prefab keeps pre-import mesh ids and the next pass stops with
+// COCOS_STALE_SUBASSET_UNRESOLVED (Candy Pop Sort: every model in new folders). Refresh the folder
+// through Cocos-MCP once per folder per run; failures fall back to plain polling.
+function requestAssetFolderRefreshSync(assetFile, options, timeoutMs) {
+  // The top folder under assets/ (e.g. db://assets/unity_imported) is registered; a refresh there
+  // discovers new nested folders, while a refresh of an unregistered folder url may be ignored.
+  const fileUrl = assetDbUrlForFile(assetFile, options);
+  const top = fileUrl.slice('db://assets/'.length).split('/')[0];
+  const folderUrl = fileUrl && top && top !== path.basename(assetFile) ? `db://assets/${top}` : '';
+  if (!folderUrl || options.dryRun || options.noAssetRefresh) return false;
+  options._refreshedAssetFolders = options._refreshedAssetFolders || new Set();
+  if (options._refreshedAssetFolders.has(folderUrl)) return false;
+  options._refreshedAssetFolders.add(folderUrl);
+  const auditModule = path.join(__dirname, 'cocos-engine-feature-audit.cjs');
+  const script = `const {createMcpClient,unwrapToolResult}=require(${JSON.stringify(auditModule)});
+(async()=>{const c=await createMcpClient(${JSON.stringify(options.cocosRoot)},{timeoutMs:${Math.max(5000, timeoutMs)}});
+const r=unwrapToolResult(await c.call('project_refresh_assets',{folder:${JSON.stringify(folderUrl)}}));
+await c.close();process.stdout.write(JSON.stringify({success:r?.success!==false}));})()
+.catch(e=>process.stdout.write(JSON.stringify({success:false,error:String(e&&e.message||e)})));`;
+  const result = spawnSync(process.execPath, ['-e', script], { encoding: 'utf8', timeout: Math.max(5000, timeoutMs) + 5000 });
+  try { return JSON.parse(result.stdout || '{}').success === true; } catch { return false; }
+}
+
 function waitForImportedModelAsset(assetFile, options, meshNameHint = '') {
   let resolved = resolveImportedModelAsset(assetFile, options, meshNameHint);
   if (resolved && !resolved.pendingImport) return resolved;
 
   const timeout = importWaitBudget.budgetFor(options);
+  if (timeout > 0) requestAssetFolderRefreshSync(assetFile, options, timeout);
   const startedAt = Date.now();
   const deadline = startedAt + timeout;
   while ((!resolved || resolved.pendingImport) && Date.now() < deadline) {
