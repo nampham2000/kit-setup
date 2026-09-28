@@ -3690,18 +3690,30 @@ const importWaitBudget = {
 // A model copied into a folder the AssetDB has never seen is only imported once the editor is asked
 // to refresh it: the editor's file watcher does not run while its window is unfocused, so polling
 // alone times out, the prefab keeps pre-import mesh ids and the next pass stops with
-// COCOS_STALE_SUBASSET_UNRESOLVED (Candy Pop Sort: every model in new folders). Refresh the folder
-// through Cocos-MCP once per folder per run; failures fall back to plain polling.
-function requestAssetFolderRefreshSync(assetFile, options, timeoutMs) {
-  // The top folder under assets/ (e.g. db://assets/unity_imported) is registered; a refresh there
-  // discovers new nested folders, while a refresh of an unregistered folder url may be ignored.
+// COCOS_STALE_SUBASSET_UNRESOLVED (Candy Pop Sort: every model in new folders). Refresh through
+// Cocos-MCP once per pending file: a folder refresh only discovers files that already exist, so a
+// model exported later in the same run (Dock_30's cannon meshes, written after the first refresh)
+// needs its own refresh. Failures fall back to plain polling.
+function registeredAssetFolderUrl(assetFile, options) {
+  // The nearest ancestor folder the AssetDB already registered (it has a .meta); a refresh there
+  // discovers new files and nested folders, while a refresh of an unregistered folder url may be
+  // ignored. The top folder under assets/ is the fallback.
+  const assetsRoot = path.join(options.cocosRoot, 'assets');
+  for (let dir = path.dirname(assetFile); dir.startsWith(assetsRoot) && dir !== assetsRoot; dir = path.dirname(dir)) {
+    if (fs.existsSync(`${dir}.meta`)) return assetDbUrlForFile(dir, options);
+  }
   const fileUrl = assetDbUrlForFile(assetFile, options);
   const top = fileUrl.slice('db://assets/'.length).split('/')[0];
-  const folderUrl = fileUrl && top && top !== path.basename(assetFile) ? `db://assets/${top}` : '';
+  return fileUrl && top && top !== path.basename(assetFile) ? `db://assets/${top}` : '';
+}
+
+function requestAssetFolderRefreshSync(assetFile, options, timeoutMs) {
+  const folderUrl = registeredAssetFolderUrl(assetFile, options);
   if (!folderUrl || options.dryRun || options.noAssetRefresh) return false;
-  options._refreshedAssetFolders = options._refreshedAssetFolders || new Set();
-  if (options._refreshedAssetFolders.has(folderUrl)) return false;
-  options._refreshedAssetFolders.add(folderUrl);
+  options._refreshedAssetFiles = options._refreshedAssetFiles || new Set();
+  const key = path.resolve(assetFile);
+  if (options._refreshedAssetFiles.has(key)) return false;
+  options._refreshedAssetFiles.add(key);
   const auditModule = path.join(__dirname, 'cocos-engine-feature-audit.cjs');
   const script = `const {createMcpClient,unwrapToolResult}=require(${JSON.stringify(auditModule)});
 (async()=>{const c=await createMcpClient(${JSON.stringify(options.cocosRoot)},{timeoutMs:${Math.max(5000, timeoutMs)}});
