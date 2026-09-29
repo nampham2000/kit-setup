@@ -1,0 +1,57 @@
+NOTICE
+======
+
+Origin
+------
+
+Most of this repository is a mirror of:
+
+    https://github.com/minhdptpuzzle/playable-shared-kit
+
+taken from branch `main` on 2026-09-29. The upstream repository carries no
+LICENSE file, so nothing in it is offered under open-source terms; the grant
+recorded below is the only permission that applies.
+
+Permission
+----------
+
+Minh (the upstream maintainer) granted Nam Pham permission to reuse this
+work, on these terms as stated by the grantor:
+
+  - Personal use.
+  - Anything Nam Pham develops on top of it belongs to Nam Pham.
+
+Scope worth being precise about, because this file exists to be read later by
+someone who no longer remembers the conversation: the grant covers personal
+use and ownership of new work. It does not, on its face, cover redistributing
+or selling the original upstream code. Ask again before doing either.
+
+Keep the message in which the permission was given. This file records it but
+does not evidence it.
+
+Additions owned by Nam Pham
+---------------------------
+
+Written for this repository and not derived from upstream:
+
+  - packages/scene-view/            runtime Scene view for Cocos Creator 3.8
+  - tools/sync-scene-view-source.cjs  one-way mirror for the above
+  - the scene view hooks in tools/sync-shared-kit.cjs
+    (syncSceneView, ensureGeometryRenderer)
+
+These also live in their own repository, which is the source of truth for
+them: https://github.com/nampham2000/scene-view-kit
+
+Third-party components
+----------------------
+
+Vendored binaries and node_modules under this tree keep their own licences,
+which neither the grant above nor this file alters. Notably
+tools/dependency/ carries ffmpeg, uv and a Python distribution.
+
+Project data
+------------
+
+tools/work-memory/data/ may still hold memory captured while working on
+company projects. That is data, not tooling, and the grant above is about
+tooling. Clear it before using this kit for unrelated work.
