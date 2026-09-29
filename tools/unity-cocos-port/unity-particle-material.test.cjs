@@ -109,3 +109,18 @@ test('UI particle shaders (Coffee UI/Additive, UI/Unlit/Transparent) reproduce t
   assert.ok(worst.error <= 2, `worst ${worst.error}/255 on ${worst.material}: ${JSON.stringify(worst)}`);
   assert.equal(resolveUnityParticleSemantics({ shaderGuid: 'x', shaderName: 'UI/Additive', floats: {} }).technique, 'additive-one');
 });
+
+test('SpeedTree leaf particles are lit and alpha-tested at _Cutoff', () => {
+  const semantics = resolveUnityParticleSemantics({ shaderName: 'Nature/SpeedTree', keywords: new Set(['GEOM_TYPE_LEAF']), floats: { _Cutoff: 0.6 } });
+  assert.equal(semantics.technique, 'opaque');
+  assert.equal(semantics.alphaClip, 0.6);
+  assert.equal(semantics.lighting, 'lit');
+  const branch = resolveUnityParticleSemantics({ shaderName: 'Nature/SpeedTree', keywords: new Set(['GEOM_TYPE_BRANCH']), floats: { _Cutoff: 0.6 } });
+  assert.equal(branch.alphaClip, 0);
+});
+
+test('built-in SpeedTree referenced by fileID 14000 gets the leaf alpha test', () => {
+  const semantics = resolveUnityParticleSemantics({ shaderGuid: '0000000000000000f000000000000000', shaderFileId: '14000', keywords: new Set(['GEOM_TYPE_LEAF']), floats: { _Cutoff: 0.6 } });
+  assert.equal(semantics.technique, 'opaque');
+  assert.equal(semantics.alphaClip, 0.6);
+});
