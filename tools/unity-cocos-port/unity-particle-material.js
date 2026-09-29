@@ -11,6 +11,8 @@ const UNITY_PARTICLE_EFFECT_TEMPLATE = path.join(__dirname, 'unity-particle.effe
 // (ParticleSystemRenderer.cpuMaterial setter, warning 6035), so the file name must keep it.
 const UNITY_PARTICLE_EFFECT_PATH = path.join('assets', 'effects', 'unity-particle.effect');
 const UNITY_BUILTIN_RESOURCE_GUID = '0000000000000000f000000000000000';
+// Built-in "Nature/SpeedTree" (materials reference it by fileID only; the name is not serialized).
+const BUILTIN_SPEEDTREE_FILE_ID = 14000;
 
 const TECHNIQUE = { alpha: 0, premultiply: 1, additive: 2, 'additive-one': 3, 'soft-additive': 4, multiply: 5, 'multiply-double': 6, opaque: 7 };
 const FORMULA = { standard: 0, legacyTinted: 1, legacyPremultiply: 2, legacySoftAdditive: 3, legacyMultiply: 4, legacyMultiplyDouble: 5, premultiplyAlpha: 6 };
@@ -118,7 +120,8 @@ function resolveUnityParticleSemantics(input) {
     semantics.lighting = urp.lighting;
     semantics.vertexColor = urp.vertexColor;
     if (urp.vertexColor && num(floats._ColorMode, 0) !== 0) notes.push(`URP particle _ColorMode ${floats._ColorMode} is not ported (multiply used)`);
-  } else if (/^Nature\/SpeedTree/.test(String(shaderName || '').trim())) {
+  } else if (/^Nature\/SpeedTree/.test(String(shaderName || '').trim())
+    || (shaderGuid === UNITY_BUILTIN_RESOURCE_GUID && Number(shaderFileId) === BUILTIN_SPEEDTREE_FILE_ID)) {
     // Built-in SpeedTree (e.g. KriptoFX v1 falling leaves on mesh particles): lit, and leaf/frond
     // geometry is alpha-tested at _Cutoff; without the test every leaf mesh drew as a solid quad.
     semantics.lighting = 'lit';
