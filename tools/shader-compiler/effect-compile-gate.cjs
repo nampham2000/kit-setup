@@ -24,8 +24,12 @@ const crypto = require('node:crypto');
 const { loadEffectCompiler, cacheRoot } = require('./cocos-effect-compiler-host.cjs');
 const { startWebglCompiler, parseInfoLog } = require('./webgl-glsl-compiler.cjs');
 
-const GATE_VERSION = 1;
+const GATE_VERSION = 2;
 const MAX_PERMUTATIONS = 24;
+// Full mode also compiles every value of an owned number range define (e.g. an uber effect's
+// AOE_VARIANT branch selector): the editor/off permutations only reach range[0], so a branch that
+// only a material define selects never compiled here. Bounded separately from the boolean toggles.
+const MAX_RANGE_PERMUTATIONS = 32;
 
 function macroValue(define, mode) {
   switch (define.type) {
@@ -70,8 +74,16 @@ function permutationsFor(shader, mode, ownedMacros) {
   perms.push({ name: 'off', values: off });
   if (mode !== 'full') return perms;
   const byName = new Map(defines.map((d) => [d.name, d]));
+  let ranged = 0;
   for (const d of defines) {
-    if (perms.length >= MAX_PERMUTATIONS) break;
+    if (d.type !== 'number' || !Array.isArray(d.range) || !ownedMacros.has(d.name)) continue;
+    const [low, high] = d.range.map(Number);
+    for (let v = low + 1; Number.isInteger(low) && Number.isInteger(high) && v <= high && ranged < MAX_RANGE_PERMUTATIONS; v++, ranged++) {
+      perms.push({ name: `value:${d.name}=${v}`, values: { ...off, [d.name]: v } });
+    }
+  }
+  for (const d of defines) {
+    if (perms.length - ranged >= MAX_PERMUTATIONS) break;
     if (d.type !== 'boolean' || !ownedMacros.has(d.name)) continue;
     const values = { ...off, [d.name]: 1 };
     for (const dep of d.defines || []) {
