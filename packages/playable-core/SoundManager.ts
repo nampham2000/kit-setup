@@ -37,11 +37,12 @@ export class SoundManager extends Component {
       const path = config.sounds[id].path;
       if (!path) return;
       const clip = await this.preload(path);
-      if (!this._destroyed && generation === this._managedGeneration) system.bind(id, clip);
+      if (!this._destroyed && generation === this._managedGeneration) { system.bind(id, clip); backend.adoptContext(clip); }
     }));
   }
 
-  public playSound(id: string, gain: number = 1): number { return this.audio?.play(id, gain) ?? 0; }
+  /** rate = playback rate (Unity pitch), pan = stereo pan in [-1, 1]; see AudioSystem.play. */
+  public playSound(id: string, gain: number = 1, rate: number = 1, pan: number = 0): number { return this.audio?.play(id, gain, rate, pan) ?? 0; }
   public stopSound(handle: number): boolean { return this.audio?.stop(handle) ?? false; }
   public getCachedAudio(path: string): AudioClip | null { return this._audioCache.get(path) ?? null; }
   public update(dt: number): void { this.audio?.update(dt); }
