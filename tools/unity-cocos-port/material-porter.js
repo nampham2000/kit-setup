@@ -138,7 +138,9 @@ module.exports = function createMaterialPorter(deps) {
   // every property as "- first: {name: X}" + "second: <value | block>" instead of "- X: <value>".
   // Returns { name, value, lines, consumed } for a legacy entry starting at block[i], else null.
   function legacySerializedEntry(block, i, entryIndent) {
-    if (!/^-\s*first\s*:\s*$/.test(String(block[i] || '').trim())) return null;
+    // Unity 5.x: `- first: {name} second: ...` list items, or (5.0-5.5, e.g. KriptoFX RFX4 portal
+    // materials) repeated `data:` keys holding `first: name:` and `second:`.
+    if (!/^(?:-\s*first|data)\s*:\s*$/.test(String(block[i] || '').trim())) return null;
     const lines = [];
     for (let j = i + 1; j < block.length; j += 1) {
       const line = String(block[j] || '');
@@ -1533,6 +1535,7 @@ module.exports = function createMaterialPorter(deps) {
   return {
     parseUnitySerializedScalarMap,
     parseUnityTextureEnvMap,
+    customShaderMaterialProps,
     readUnityMaterialDoc,
     firstDefinedMaterialValue,
     clamp01,
