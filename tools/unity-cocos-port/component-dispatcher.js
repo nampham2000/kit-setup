@@ -63,6 +63,7 @@ function createComponentDispatcher(handlers) {
     [137, (ctx) => handlers.emitSkinnedMeshRenderer(ctx.gameObject, ctx.nodeId, ctx.componentId, ctx.doc, ctx.model, ctx.builder, ctx.reporter, ctx.options, ctx.unityDb, ctx.cocosDb)],
     [136, (ctx) => handlers.emitCapsuleCollider(ctx.nodeId, ctx.componentId, ctx.doc, ctx.gameObject, ctx.model, ctx.builder, ctx.reporter, ctx.options, ctx.unityDb)],
     [143, (ctx) => handlers.emitCharacterController(ctx.nodeId, ctx.componentId, ctx.doc, ctx.gameObject, ctx.model, ctx.builder)],
+    [225, (ctx) => handlers.emitCanvasGroup(ctx.nodeId, ctx.componentId, ctx.doc, ctx.gameObject, ctx.model, ctx.builder, ctx.reporter)],
     [212, (ctx) => handlers.emitSpriteRenderer(ctx.nodeId, ctx.componentId, ctx.doc, ctx.builder, ctx.reporter, ctx.options, ctx.unityDb, ctx.cocosDb)],
     // Screen-space Unity Canvas still needs an explicit Cocos camera decision,
     // but a world-space Canvas maps directly to RenderRoot2D. Without that
