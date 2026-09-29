@@ -607,6 +607,54 @@ module.exports = function createMaterialPorter(deps) {
     }
   }
 
+  /**
+   * Material props of an auto-transpiled custom effect: every Unity material property the effect declares
+   * under its converted name (toCocosPropertyName: _TintColor -> tintColor, _MainTex -> mainTexture +
+   * mainTexture_ST). The builtin-standard fallback (mainColor, roughness, tilingOffset) left these effects
+   * on their defaults: KriptoFX RFX4_Tornado rendered with no tint, texture or twist parameters.
+   * Colours: a Gamma project uploads stored values, a Linear one GammaToLinear of them (Color properties);
+   * values above 1 ([HDR]) keep a Vec4 so bytes do not clamp them.
+   */
+  function customShaderMaterialProps(effectStem, colors, floats, texEnvs, unityDb, options, reporter) {
+    const effectFile = path.join(options.cocosRoot, 'assets', 'effects', `${effectStem}.effect`);
+    if (!fs.existsSync(effectFile)) return null;
+    const header = /CCEffect\s*%\{([\s\S]*?)\}%/.exec(fs.readFileSync(effectFile, 'utf8'))?.[1] || '';
+    const declared = new Map();
+    for (const m of header.matchAll(/^\s+([A-Za-z_]\w*)\s*:\s*\{\s*value:[^\n]*$/gm)) {
+      declared.set(m[1], { color: /type:\s*color/.test(m[0]), texture: /value:\s*(white|black|grey|gray|normal|default)\b/.test(m[0]) });
+    }
+    if (!declared.size) return null;
+    const { toCocosPropertyName } = require('../shader-compiler/shaderlab-parser.cjs');
+    const linear = unityProjectIsLinear(options.unityRoot);
+    const toLinear = (c) => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+    const props = {};
+    for (const [unityName, value] of Object.entries(colors || {})) {
+      const name = toCocosPropertyName(unityName);
+      const entry = declared.get(name);
+      if (!entry || !value || typeof value !== 'object') continue;
+      const r = Number(value.r ?? value.x ?? 0), g = Number(value.g ?? value.y ?? 0), b = Number(value.b ?? value.z ?? 0), a = Number(value.a ?? value.w ?? 1);
+      if (!entry.color) { props[name] = { __type__: 'cc.Vec4', x: r, y: g, z: b, w: a }; continue; }
+      const rgb = linear ? [r, g, b].map(toLinear) : [r, g, b];
+      props[name] = rgb.some(c => c > 1) || a > 1
+        ? { __type__: 'cc.Vec4', x: rgb[0], y: rgb[1], z: rgb[2], w: a }
+        : { __type__: 'cc.Color', r: Math.round(rgb[0] * 255), g: Math.round(rgb[1] * 255), b: Math.round(rgb[2] * 255), a: Math.round(Math.max(0, a) * 255) };
+    }
+    for (const [unityName, value] of Object.entries(floats || {})) {
+      const name = toCocosPropertyName(unityName);
+      if (declared.has(name) && Number.isFinite(Number(value))) props[name] = Number(value);
+    }
+    for (const unityName of Object.keys(texEnvs || {})) {
+      const name = toCocosPropertyName(unityName);
+      if (!declared.has(name)) continue;
+      const uuid = resolveUnityMaterialTextureUuid(texEnvs, [unityName], unityDb, options, reporter);
+      if (uuid) props[name] = cocosUuid(uuid, 'cc.Texture2D');
+      const env = texEnvs[unityName] || {};
+      const scale = env.m_Scale || { x: 1, y: 1 }, offset = env.m_Offset || { x: 0, y: 0 };
+      if (declared.has(`${name}_ST`)) props[`${name}_ST`] = { __type__: 'cc.Vec4', x: Number(scale.x ?? 1), y: Number(scale.y ?? 1), z: Number(offset.x ?? 0), w: Number(offset.y ?? 0) };
+    }
+    return props;
+  }
+
   // Writes assets/effects/unity-particle.effect and returns its uuid once Cocos AssetDB has imported it; the porter
   // never authors the effect .meta. Until then callers keep the previous builtin-particle conversion.
   function importedUnityParticleEffectUuid(options, reporter) {
@@ -1025,7 +1073,8 @@ module.exports = function createMaterialPorter(deps) {
           ? tcp2Props
           : urpUnlitEffectUuid
             ? urpUnlitProps
-            : props],
+            : (customShaderEffectUuid && customShaderMaterialProps(shaderAsset.stem || path.basename(shaderAsset.path, path.extname(shaderAsset.path)),
+              colors, floats, texEnvs, unityDb, options, reporter)) || props],
     };
 
     if (options.dryRun) return fs.existsSync(convertedDest) ? convertedDest : '';
