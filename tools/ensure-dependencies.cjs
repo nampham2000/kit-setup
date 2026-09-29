@@ -19,6 +19,27 @@ const { execSync, spawnSync } = require('child_process');
 const os = require('os');
 
 const IS_WIN = process.platform === 'win32';
+
+/**
+ * Run a PowerShell script.
+ *
+ * spawnSync with an argument array, not execSync with an interpolated command
+ * line: a multi-line script embedded in a quoted cmd.exe command silently runs
+ * nothing at all and still exits 0, so every download here reported success
+ * while provisioning nothing.
+ */
+function runPowerShell(script, timeout = 900000) {
+  const result = spawnSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script], {
+    encoding: 'utf8',
+    timeout,
+    windowsHide: true,
+  });
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    throw new Error((result.stderr || '').trim().split('\n')[0] || ('powershell exited ' + result.status));
+  }
+  return result.stdout;
+}
 const HOME_DIR = os.homedir();
 const SHARED_KIT_DIR = path.resolve(__dirname, '..');
 const DEPENDENCY_DIR = path.join(__dirname, 'dependency');
@@ -122,7 +143,8 @@ function downloadPortablePython() {
   console.log('  [download] Downloading portable Python 3.11 for Windows...');
   const psScript = `
     $ErrorActionPreference = 'Stop'
-    Invoke-WebRequest -Uri "https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip" -OutFile "${pythonZip.replace(/\\/g, '\\\\')}"
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    Invoke-WebRequest -UseBasicParsing -Uri "https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip" -OutFile "${pythonZip.replace(/\\/g, '\\\\')}"
     Expand-Archive -Path "${pythonZip.replace(/\\/g, '\\\\')}" -DestinationPath "${pythonDir.replace(/\\/g, '\\\\')}" -Force
     Remove-Item -Force "${pythonZip.replace(/\\/g, '\\\\')}"
     $pthFile = Join-Path "${pythonDir.replace(/\\/g, '\\\\')}" "python311._pth"
@@ -131,8 +153,11 @@ function downloadPortablePython() {
     }
   `;
   try {
-    execSync(`powershell -NoProfile -ExecutionPolicy Bypass -Command "${psScript}"`, { stdio: 'inherit', timeout: 60000 });
-  } catch (_) {}
+    runPowerShell(psScript, 180000);
+  } catch (error) {
+      // Silence here used to make a failed download look like a success.
+      console.log('  [warn] download failed: ' + (error.message || error));
+    }
   return resolvePython3().ok;
 }
 
@@ -193,7 +218,8 @@ function downloadPortableUv() {
   console.log('  [download] Downloading standalone uv for Windows...');
   const psScript = `
     $ErrorActionPreference = 'Stop'
-    Invoke-WebRequest -Uri "https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-pc-windows-msvc.zip" -OutFile "${uvZip.replace(/\\/g, '\\\\')}"
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    Invoke-WebRequest -UseBasicParsing -Uri "https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-pc-windows-msvc.zip" -OutFile "${uvZip.replace(/\\/g, '\\\\')}"
     Expand-Archive -Path "${uvZip.replace(/\\/g, '\\\\')}" -DestinationPath "${uvDir.replace(/\\/g, '\\\\')}" -Force
     Remove-Item -Force "${uvZip.replace(/\\/g, '\\\\')}"
     if (Test-Path "${path.join(uvDir, 'uv.exe').replace(/\\/g, '\\\\')}") {
@@ -201,8 +227,11 @@ function downloadPortableUv() {
     }
   `;
   try {
-    execSync(`powershell -NoProfile -ExecutionPolicy Bypass -Command "${psScript}"`, { stdio: 'inherit', timeout: 60000 });
-  } catch (_) {}
+    runPowerShell(psScript, 180000);
+  } catch (error) {
+      // Silence here used to make a failed download look like a success.
+      console.log('  [warn] download failed: ' + (error.message || error));
+    }
   return resolveUv().ok;
 }
 
@@ -236,7 +265,10 @@ function downloadPortableFfmpeg() {
       fs.copyFileSync(ffmpegStatic, path.join(ffmpegDir, IS_WIN ? 'ffmpeg.exe' : 'ffmpeg'));
       return resolveFfmpeg().ok;
     }
-  } catch (_) {}
+  } catch (error) {
+      // Silence here used to make a failed download look like a success.
+      console.log('  [warn] download failed: ' + (error.message || error));
+    }
 
   // 2. Download from Gyan.dev essentials for Windows
   if (IS_WIN) {
@@ -244,7 +276,8 @@ function downloadPortableFfmpeg() {
     const ffmpegZip = path.join(DEPENDENCY_DIR, 'ffmpeg.zip');
     const psScript = `
       $ErrorActionPreference = 'Stop'
-      Invoke-WebRequest -Uri "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip" -OutFile "${ffmpegZip.replace(/\\/g, '\\\\')}"
+      [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+      Invoke-WebRequest -UseBasicParsing -Uri "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip" -OutFile "${ffmpegZip.replace(/\\/g, '\\\\')}"
       $tmpDir = Join-Path "${DEPENDENCY_DIR.replace(/\\/g, '\\\\')}" "ffmpeg-tmp"
       Expand-Archive -Path "${ffmpegZip.replace(/\\/g, '\\\\')}" -DestinationPath $tmpDir -Force
       $binExe = Get-ChildItem -Path $tmpDir -Recurse -Filter "ffmpeg.exe" | Select-Object -First 1
@@ -256,8 +289,11 @@ function downloadPortableFfmpeg() {
       Remove-Item -Force "${ffmpegZip.replace(/\\/g, '\\\\')}"
     `;
     try {
-      execSync(`powershell -NoProfile -ExecutionPolicy Bypass -Command "${psScript}"`, { stdio: 'inherit', timeout: 120000 });
-    } catch (_) {}
+      runPowerShell(psScript, 900000);
+    } catch (error) {
+        // Silence here used to make a failed download look like a success.
+        console.log('  [warn] download failed: ' + (error.message || error));
+      }
     return resolveFfmpeg().ok;
   }
   return false;
