@@ -80,6 +80,8 @@ export class UnityParticleCollision {
     private readonly sinks: SubEmitterSink[];
     private shapes: Shape[] | null = null;
     public collisions = 0;
+    /** Unity CollisionModule.enabled at runtime (e.g. KriptoFX RFX4_CollisionPropertyDeactiavtion). */
+    public active = true;
     /**
      * Unity sendCollisionMessages: called per collision with the surface point and
      * normal (ParticleCollisionEvent.intersection/normal, Cocos world space). Both
@@ -102,7 +104,7 @@ export class UnityParticleCollision {
             (p.unityCollisionPrev ||= new Vec3()).set(p.position);
         }
         const count = this.before.call(this.processor, dt);
-        if (!this.bounds()) return count;
+        if (!this.active || !this.bounds()) return count;
         const localSpace = this.source.simulationSpace !== 0;
         const world = this.source.node.worldMatrix;
         if (localSpace) Mat4.invert(inverse, world);

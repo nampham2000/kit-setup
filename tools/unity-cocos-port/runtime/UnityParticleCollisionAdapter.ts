@@ -24,6 +24,10 @@ export class UnityParticleCollisionAdapter extends Component {
 
     get collisions(): number { return this.collision?.collisions ?? 0; }
 
+    /** Unity ParticleSystem.collision.enabled: disabling the adapter stops collisions, keeping the particles. */
+    protected onEnable(): void { if (this.collision) this.collision.active = true; }
+    protected onDisable(): void { if (this.collision) this.collision.active = false; }
+
     protected start(): void {
         if (!this.source || !this.sourceContract) throw new Error('Missing Unity collision source contract');
         const contract = JSON.parse(this.sourceContract) as UnityCollisionSpec & { subEmitters: SubEmitterContract[]; messages?: boolean };
