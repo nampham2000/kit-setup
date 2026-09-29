@@ -205,3 +205,15 @@ test('--color-space linear passes 3D output through; --vertex-color srgb decodes
   assert.match(decoded.effect, /vec4\(sgSRGBToLinear\(a_color\.rgb\), a_color\.a\)/);
   assert.match(decoded.effect, /return color;/);
 });
+
+test('mesh targets skin object-space position / normal / tangent under CC_USE_SKINNING; sprite targets do not', () => {
+  const corpus = loadCorpus(path.join(FIXTURE, 'corpus.json.gz'));
+  const rabbit = generateEffect(corpus.SG_3d_Rabbit, { name: 'r', colorSpace: 'linear' });
+  assert.match(rabbit.effect, /#if CC_USE_SKINNING\n\s*#pragma format\(RGBA16UI\)\n\s*in vec4 a_joints;\n\s*in vec4 a_weights;/);
+  assert.match(rabbit.effect, /#include <legacy\/skinning>/);
+  assert.match(rabbit.effect, /CCSkin\(sgSkinPosition, sgSkinNormal, sgSkinTangent\);/);
+  assert.match(rabbit.effect, /IN\.ObjectSpacePosition = sgSkinPosition\.xyz;/);
+  assert.doesNotMatch(rabbit.effect.slice(rabbit.effect.indexOf('vec4 vert ()')), /\ba_position\b(?!, 1\.0\))/);
+  const tiles = generateEffect(corpus.SG_Tilemaps, { name: 't', colorSpace: 'linear' });
+  assert.doesNotMatch(tiles.effect, /CC_USE_SKINNING|sgSkin/);
+});
