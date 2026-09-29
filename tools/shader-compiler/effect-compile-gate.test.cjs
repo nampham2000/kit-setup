@@ -94,3 +94,13 @@ test('a missing editor fails closed', async () => {
   assert.equal(res.ok, false);
   assert.match(res.unavailable, /effect compiler unavailable/);
 });
+
+test('full mode compiles every value of an owned number range define', () => {
+  const { permutationsFor } = require('./effect-compile-gate.cjs');
+  const shader = { defines: [{ name: 'VARIANT', type: 'number', range: [0, 3] }, { name: 'FLAG', type: 'boolean' }, { name: 'FOREIGN', type: 'number', range: [0, 2] }] };
+  const owned = new Set(['VARIANT', 'FLAG']);
+  const names = permutationsFor(shader, 'full', owned).map(p => p.name);
+  assert.deepEqual(names.filter(n => n.startsWith('value:')), ['value:VARIANT=1', 'value:VARIANT=2', 'value:VARIANT=3']);
+  assert.ok(names.includes('only:FLAG'));
+  assert.equal(permutationsFor(shader, 'basic', owned).some(p => p.name.startsWith('value:')), false);
+});
