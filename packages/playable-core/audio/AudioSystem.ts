@@ -18,11 +18,18 @@ export type AudioDecision = 'played' | 'locked' | 'muted' | 'suspended' | 'unkno
   | 'not-ready' | 'cooldown' | 'concurrency' | 'budget' | 'backend-error';
 
 export interface AudioVoiceBackend<T> {
-  start(slot: number, handle: number, clip: T, loop: boolean, volume: number): void;
+  /** rate = playback rate (Unity pitch, 1 = unchanged), pan = stereo pan in [-1, 1] (0 = centre). */
+  start(slot: number, handle: number, clip: T, loop: boolean, volume: number, rate?: number, pan?: number): void;
   stop(slot: number): void;
   pause(slot: number): void;
   resume(slot: number): void;
   volume(slot: number, volume: number): void;
+  /** Optional: stereo pan of a playing voice. Backends without panning ignore it (report the gap). */
+  pan?(slot: number, pan: number): void;
+  /** Optional: called from the unlocking gesture (e.g. resume a suspended browser audio context). */
+  unlock?(): void;
+  /** Optional: true when rate / pan are rendered (not silently ignored). */
+  readonly supportsRatePan?: boolean;
 }
 
 interface SoundState<T> {
@@ -38,6 +45,7 @@ interface Voice<T> {
   sound: SoundState<T> | null;
   gain: number;
   playbackGain: number;
+  pan: number;
   fadeRemaining: number;
   fadeDuration: number;
 }
@@ -79,7 +87,7 @@ export class AudioSystem<T> {
       this.sounds.set(id, { policy: { ...config.sounds[id] }, clip: null, lastPlayMs: -Infinity, active: 0 });
     }
     for (let i = 0; i < config.maxSfxVoices; i++) {
-      this.voices.push({ handle: 0, paused: false, sound: null, gain: 1, playbackGain: 1, fadeRemaining: 0, fadeDuration: 0 });
+      this.voices.push({ handle: 0, paused: false, sound: null, gain: 1, playbackGain: 1, pan: 0, fadeRemaining: 0, fadeDuration: 0 });
     }
   }
 
@@ -90,7 +98,12 @@ export class AudioSystem<T> {
   }
 
   public has(id: string): boolean { return this.sounds.has(id); }
-  public unlockFromGesture(): void { this.unlocked = true; }
+  public unlockFromGesture(): void {
+    this.unlocked = true;
+    if (this.backend.unlock) this.backend.unlock();
+  }
+  /** true when the backend renders playback rate and stereo pan */
+  public get supportsRatePan(): boolean { return !!this.backend.supportsRatePan; }
   public get isUnlocked(): boolean { return this.unlocked; }
   public get activeVoices(): number {
     let count = 0;
@@ -98,8 +111,12 @@ export class AudioSystem<T> {
     return count;
   }
 
-  /** Positive handle means backend start was requested, not proof of audible output. */
-  public play(id: string, playbackGain: number = 1): number {
+  /**
+   * Positive handle means backend start was requested, not proof of audible output.
+   * rate: playback rate (Unity pitch; 2^(cents / 1200) for AudioRandomContainer pitch randomisation), clamped to
+   * [1/16, 16]; pan: stereo pan in [-1, 1] (source position relative to the listener). Both need backend support.
+   */
+  public play(id: string, playbackGain: number = 1, rate: number = 1, pan: number = 0): number {
     this.counters.requested++;
     if (!this.unlocked) return this.reject('locked');
     if (this.muted) return this.reject('muted');
@@ -134,10 +151,12 @@ export class AudioSystem<T> {
     voice.sound = sound;
     voice.gain = 1;
     voice.playbackGain = Number.isFinite(playbackGain) ? Math.max(0, Math.min(1, playbackGain)) : 1;
+    voice.pan = Number.isFinite(pan) ? Math.max(-1, Math.min(1, pan)) : 0;
     voice.fadeRemaining = 0;
+    const playbackRate = Number.isFinite(rate) && rate > 0 ? Math.max(1 / 16, Math.min(16, rate)) : 1;
     sound.active++;
     try {
-      this.backend.start(slot, handle, sound.clip, sound.policy.loop, sound.policy.volume * this.masterVolume * voice.playbackGain);
+      this.backend.start(slot, handle, sound.clip, sound.policy.loop, sound.policy.volume * this.masterVolume * voice.playbackGain, playbackRate, voice.pan);
     } catch {
       this.backend.stop(slot);
       this.clear(slot);
@@ -162,6 +181,15 @@ export class AudioSystem<T> {
     if (slot < 0 || !Number.isFinite(gain)) return false;
     this.voices[slot].playbackGain = Math.max(0, Math.min(1, gain));
     this.applyVolume(slot);
+    return true;
+  }
+  /** Stereo pan of a playing voice (moving source / listener); false when the handle is stale. */
+  public setPlaybackPan(handle: number, pan: number): boolean {
+    const slot = this.find(handle);
+    if (slot < 0 || !Number.isFinite(pan)) return false;
+    const p = Math.max(-1, Math.min(1, pan));
+    this.voices[slot].pan = p;
+    if (this.backend.pan) this.backend.pan(slot, p);
     return true;
   }
   private find(handle: number): number {
