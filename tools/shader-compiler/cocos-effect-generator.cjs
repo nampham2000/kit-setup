@@ -631,7 +631,7 @@ function emitSurfaceShaderEffect(docIR, passIR, options = {}) {
   const yaml = buildCceffectYaml(docIR, passIR, ubo, { mode: 'surface-pbr' });
 
   const { buildSurfacePbrEffect } = require('./surface-pbr-emitter.cjs');
-  const built = buildSurfacePbrEffect({ docIR, passIR, yaml, ubo, samplers, propertyNameMap });
+  const built = buildSurfacePbrEffect({ docIR, passIR, yaml, ubo, samplers, propertyNameMap, colorSpace: options.colorSpace });
 
   // Surface diagnostics have to reach the caller: the channels this mode cannot
   // map (tangent-space normals, engine-supplied GI) are the difference between
@@ -848,7 +848,9 @@ function generateCocosPrograms(docIR, passIR, options = {}) {
       helperFunctions.push(funcGlsl);
     }
   }
-  const colorSamplerNames = srgbSamplerNames(samplers);
+  // Gamma projects sample sRGB textures without hardware decoding (KriptoFX RFX4_Tornado rendered dark red
+  // through SRGBToLinear): only Linear projects decode colour samples.
+  const colorSamplerNames = options.colorSpace === 'gamma' ? [] : srgbSamplerNames(samplers);
   const fragmentHelperFunctions = helperFunctions.map(code =>
     lowerSrgbTextureSamples(code, colorSamplerNames));
 
