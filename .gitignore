@@ -20,3 +20,8 @@ Thumbs.db
 
 # GitHub Workflows (avoids workflow scope rejection on submodule PR sync)
 .github/workflows/
+
+# Portable runtimes (python, uv, ffmpeg). Provisioned on demand by
+# `npm run dependencies:setup`, which downloads them, so committing them only
+# bloated the history - they were 128 of the repo's 129 MB.
+tools/dependency/
