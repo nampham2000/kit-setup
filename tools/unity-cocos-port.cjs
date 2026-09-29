@@ -322,7 +322,23 @@ const componentDispatcher = createComponentDispatcher({
   emitFixedJoint,
   emitSpringJoint,
   emitCanvas,
+  emitCanvasGroup,
 });
+
+// UGUI CanvasGroup (class 225): m_Alpha multiplies the subtree like cc.UIOpacity (popup fades animate it).
+// Interactable / BlocksRaycasts / IgnoreParentGroups have no Cocos component; non-default values are reported.
+function emitCanvasGroup(nodeId, componentId, doc, gameObject, model, builder, reporter) {
+  const alpha = Math.min(1, Math.max(0, finiteNumber(getField(doc, 'm_Alpha', 1), 1)));
+  builder.addComponent(nodeId, 'cc.UIOpacity', { _opacity: Math.round(alpha * 255) }, componentId, `cmp-ui-opacity-${componentId}`);
+  const flags = [['m_Interactable', 1], ['m_BlocksRaycasts', 1], ['m_IgnoreParentGroups', 0]]
+    .filter(([key, fallback]) => Number(getField(doc, key, fallback)) !== fallback).map(([key]) => key);
+  if (flags.length) {
+    reporter.medium('CANVAS_GROUP_INPUT_FLAGS_UNMAPPED', model.file, gameObject.name,
+      `CanvasGroup ${flags.join(', ')} changes input for the subtree; Cocos UIOpacity only carries the alpha`);
+  } else {
+    reporter.low('CANVAS_GROUP_UI_OPACITY', model.file, gameObject.name, `CanvasGroup alpha ${alpha} ported as cc.UIOpacity`);
+  }
+}
 
 function printHelp() {
   console.log(`
@@ -9513,6 +9529,7 @@ module.exports = {
   emitCanvas,
   resolveTransformLayout,
   unityRectEdgeWidget,
+  emitCanvasGroup,
   unityCanvasScalerReferenceResolution,
   resolveNestedPrefabEffectiveTransform,
   unityCanvasRenderMode,
