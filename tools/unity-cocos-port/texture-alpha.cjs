@@ -42,7 +42,9 @@ function unityTextureAlphaBytes(source, bytes) {
   const image=decodePng(bytes);
   if(!image)throw Error('Cannot decode texture for Unity alpha import: '+source);
   const data=image.rgba;
-  for(let i=0;i<data.length;i+=4) data[i+3]=mode===0?255:Math.round(data[i]*0.299+data[i+1]*0.587+data[i+2]*0.114);
+  // TextureImporterAlphaSource.FromGrayScale: the average of the input RGB channels (Unity manual; the
+  // AOE/Hovl aoe-particle shader measured the same), not luma weights.
+  for(let i=0;i<data.length;i+=4) data[i+3]=mode===0?255:Math.round((data[i]+data[i+1]+data[i+2])/3);
   const output=encodeRgba(image.width,image.height,data);
   return output.equals(bytes) ? bytes : output;
 }

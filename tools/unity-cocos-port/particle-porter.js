@@ -81,7 +81,7 @@ module.exports = function createParticlePorter(deps = {}) {
     refreshExportedUnityMesh(meshAsset, reporter, options);
     const resolved = cocosDb?.resolveModelMeshByStem
       ? cocosDb.resolveModelMeshByStem(meshAsset.stem, meshNameHint, meshAsset.ext === '.asset' ? '.fbx' : meshAsset.ext,
-        unityRefFileId ? unityRefFileId(meshRef) : String(meshRef?.fileID ?? ''))
+        unityRefFileId ? unityRefFileId(meshRef) : String(meshRef?.fileID ?? ''), meshAsset.relativePath)
       : null;
     if (reportModelMeshResolution(reporter, resolved, meshAsset.relativePath, gameObject?.name || '') && !resolved.meshUuid) {
       return { meshUuid: '', pendingImport: false, meshAsset: null };
@@ -105,6 +105,7 @@ module.exports = function createParticlePorter(deps = {}) {
         meshAsset.stem,
         meshNameHint,
         meshAsset.relativePath,
+        unityRefFileId ? unityRefFileId(meshRef) : String(meshRef?.fileID ?? ''),
       );
     }
 

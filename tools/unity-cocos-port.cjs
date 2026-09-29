@@ -322,7 +322,23 @@ const componentDispatcher = createComponentDispatcher({
   emitFixedJoint,
   emitSpringJoint,
   emitCanvas,
+  emitCanvasGroup,
 });
+
+// UGUI CanvasGroup (class 225): m_Alpha multiplies the subtree like cc.UIOpacity (popup fades animate it).
+// Interactable / BlocksRaycasts / IgnoreParentGroups have no Cocos component; non-default values are reported.
+function emitCanvasGroup(nodeId, componentId, doc, gameObject, model, builder, reporter) {
+  const alpha = Math.min(1, Math.max(0, finiteNumber(getField(doc, 'm_Alpha', 1), 1)));
+  builder.addComponent(nodeId, 'cc.UIOpacity', { _opacity: Math.round(alpha * 255) }, componentId, `cmp-ui-opacity-${componentId}`);
+  const flags = [['m_Interactable', 1], ['m_BlocksRaycasts', 1], ['m_IgnoreParentGroups', 0]]
+    .filter(([key, fallback]) => Number(getField(doc, key, fallback)) !== fallback).map(([key]) => key);
+  if (flags.length) {
+    reporter.medium('CANVAS_GROUP_INPUT_FLAGS_UNMAPPED', model.file, gameObject.name,
+      `CanvasGroup ${flags.join(', ')} changes input for the subtree; Cocos UIOpacity only carries the alpha`);
+  } else {
+    reporter.low('CANVAS_GROUP_UI_OPACITY', model.file, gameObject.name, `CanvasGroup alpha ${alpha} ported as cc.UIOpacity`);
+  }
+}
 
 function printHelp() {
   console.log(`
@@ -2180,7 +2196,13 @@ class CocosAssetDatabase {
     }
     const classes = [];
     for (const match of source.matchAll(/@ccclass\(['"]([^'"]+)['"]\)/g)) classes.push(match[1]);
-    for (const match of source.matchAll(/export\s+class\s+([A-Za-z0-9_]+)/g)) classes.push(match[1]);
+    // Only a decorated class is a registered Cocos class. A plain exported helper that shares a Unity
+    // MonoBehaviour's name (Blast Shooter's `export class ConveyorBall` model) must not be bound as its
+    // component: the prefab would reference the file's class id and fail with "Can not find class".
+    for (const match of source.matchAll(/export\s+(?:default\s+)?(?:abstract\s+)?class\s+([A-Za-z0-9_]+)/g)) {
+      const decorators = /((?:@[\w.]+(?:\((?:[^()]|\([^()]*\))*\))?\s*)+)$/.exec(source.slice(Math.max(0, match.index - 2000), match.index));
+      if (decorators && /@ccclass\b/.test(decorators[1])) classes.push(match[1]);
+    }
     // Unity writes bools as 0/1 and vectors as bare {x,y[,z]}. Knowing which Cocos
     // fields are declared boolean / Vec2 / Vec3 lets the porter emit the right types
     // instead of a number where the inspector expects a checkbox.
@@ -2261,7 +2283,7 @@ class CocosAssetDatabase {
     return fuzzy;
   }
 
-  findModelRecordsByStem(stem) {
+  findModelRecordsByStem(stem, unityRelativePath = '') {
     // Model files are source-identity-bearing dependencies. A fuzzy prefix
     // match is unsafe here: `level_20.fbx` must never reuse and overwrite the
     // already imported `level_2.fbx`, and `level_1.fbx` must not bind
@@ -2269,8 +2291,9 @@ class CocosAssetDatabase {
     // resolver must require the exact normalized stem and let the missing-model
     // path create/import that exact file when it is absent.
     const key = normalizeKey(stem);
-    return (this.byStem.get(key) || [])
+    const records = (this.byStem.get(key) || [])
       .filter((record) => ['.fbx', '.gltf', '.glb'].includes(record.ext));
+    return unityRelativePath ? modelRecordsForUnitySource(records, unityRelativePath) : records;
   }
 
   findScriptClass(className) {
@@ -2305,8 +2328,8 @@ class CocosAssetDatabase {
     return '';
   }
 
-  resolveModelMaterialUuidsByStem(stem, materialNameHints = [], requiredExt = '') {
-    const candidates = this.findModelRecordsByStem(stem).filter((record) => !requiredExt || record.ext === requiredExt);
+  resolveModelMaterialUuidsByStem(stem, materialNameHints = [], requiredExt = '', unityRelativePath = '') {
+    const candidates = this.findModelRecordsByStem(stem, unityRelativePath).filter((record) => !requiredExt || record.ext === requiredExt);
     const hints = materialNameHints.map((hint) => String(hint || ''));
     for (const record of candidates) {
       const materials = subMetaRecords(record.uuid, record.subMetas, 'gltf-material');
@@ -2363,8 +2386,8 @@ class CocosAssetDatabase {
   //   'unresolved'     a Unity fileID was given and nothing matches it among several meshes:
   //                    meshUuid is '' (callers report high; the model itself exists, so it must
   //                    not be treated as a missing model)
-  resolveModelMeshByStem(stem, meshNameHint = '', requiredExt = '', unityFileId = '') {
-    const candidates = this.findModelRecordsByStem(stem).filter((record) => !requiredExt || record.ext === requiredExt);
+  resolveModelMeshByStem(stem, meshNameHint = '', requiredExt = '', unityFileId = '', unityRelativePath = '') {
+    const candidates = this.findModelRecordsByStem(stem, unityRelativePath).filter((record) => !requiredExt || record.ext === requiredExt);
     for (const record of candidates) {
       const meshRecords = subMetaRecords(record.uuid, record.subMetas, 'gltf-mesh')
         .filter(({ subMeta }) => !isPendingGeneratedSubMeta(subMeta));
@@ -2449,8 +2472,8 @@ class CocosAssetDatabase {
 
   // Skeleton the Cocos model prefab pairs with this mesh (its SkinnedMeshRenderer),
   // and the skeleton's joint paths, relative to the model root (skinningRoot).
-  resolveModelSkinByMesh(stem, meshUuid, requiredExt = '') {
-    const candidates = this.findModelRecordsByStem(stem).filter((record) => !requiredExt || record.ext === requiredExt);
+  resolveModelSkinByMesh(stem, meshUuid, requiredExt = '', unityRelativePath = '') {
+    const candidates = this.findModelRecordsByStem(stem, unityRelativePath).filter((record) => !requiredExt || record.ext === requiredExt);
     for (const record of candidates) {
       for (const scene of subMetaRecords(record.uuid, record.subMetas, 'gltf-scene')) {
         const objects = readJsonIfExists(libraryJsonPathForUuid({ cocosRoot: this.root }, scene.uuid));
@@ -2467,7 +2490,7 @@ class CocosAssetDatabase {
   }
 
   resolveModelPrefabByStem(stem, preferredUnityRelativePath = '') {
-    const records = this.findModelRecordsByStem(stem);
+    const records = this.findModelRecordsByStem(stem, preferredUnityRelativePath);
     const preferredSuffix = toPosix(preferredUnityRelativePath).toLowerCase();
     const candidates = records.sort((left, right) => {
         if (!preferredSuffix) return 0;
@@ -2540,10 +2563,10 @@ class CocosAssetDatabase {
     return null;
   }
 
-  resolveModelAnimationByStem(stem, animationNameHint = '') {
+  resolveModelAnimationByStem(stem, animationNameHint = '', unityRelativePath = '') {
     const normalizedHint = normalizeKey(animationNameHint);
     const shortHint = normalizeKey(String(animationNameHint || '').split('|').pop());
-    const candidates = this.findModelRecordsByStem(stem);
+    const candidates = this.findModelRecordsByStem(stem, unityRelativePath);
     for (const record of candidates) {
       const animations = subMetaRecords(record.uuid, record.subMetas, 'gltf-animation');
       const match = animations.find(({ subMeta }) => {
@@ -2563,9 +2586,10 @@ class CocosAssetDatabase {
     return null;
   }
 
-  resolveModelAnimationsByStem(stem) {
+  resolveModelAnimationsByStem(stem, unityRelativePath = '') {
     const records = this.findByStem(stem);
-    const candidates = records.filter((record) => ['.fbx', '.gltf', '.glb'].includes(record.ext));
+    const models = records.filter((record) => ['.fbx', '.gltf', '.glb'].includes(record.ext));
+    const candidates = unityRelativePath ? modelRecordsForUnitySource(models, unityRelativePath) : models;
     for (const record of candidates) {
       const animations = subMetaRecords(record.uuid, record.subMetas, 'gltf-animation')
         .sort((left, right) => (
@@ -3243,7 +3267,11 @@ function ensureImageAssetMeta(assetFile, config = {}) {
   const borderRight = Number.isFinite(Number(spriteBorder.right)) ? Number(spriteBorder.right) : 0;
   const pixelsToUnit = Number.isFinite(Number(config.pixelsToUnit)) ? Number(config.pixelsToUnit) : 100;
   const requestedImageType = String(config.imageType || '').toLowerCase();
-  const wantsTextureType = isParticleTexture || requestedImageType === 'texture';
+  // A sprite-frame image also carries the texture sub-asset particles and materials sample, so a texture
+  // request never downgrades it: a UI sprite sharing a particle texture lost its SpriteFrame on every re-port
+  // (Blast Shooter's glow1.png / star.png: "The asset <uuid>@f9941 is missing").
+  const keepsSpriteFrame = existing.userData?.type === 'sprite-frame' && requestedImageType !== 'texture-only';
+  const wantsTextureType = (isParticleTexture || requestedImageType === 'texture') && !keepsSpriteFrame;
   const wantsSpriteFrameType = requestedImageType === 'sprite-frame' || !wantsTextureType;
   const meta = {
     ver: existing.ver || '1.0.27',
@@ -5156,6 +5184,56 @@ function unityCanvasRenderMode(gameObject, model) {
   return null;
 }
 
+// CanvasScaler (a MonoBehaviour with m_UiScaleMode / m_ReferenceResolution) in Scale With Screen Size mode:
+// the canvas lays out at its reference resolution whatever the Game view size saved in the prefab.
+function unityCanvasScalerReferenceResolution(gameObject, model) {
+  for (const componentId of gameObject?.components || []) {
+    const doc = model?.componentDocs?.get(componentId);
+    if (Number(doc?.classId || 0) !== 114 || !hasField(doc, 'm_ReferenceResolution')) continue;
+    if (Number(getField(doc, 'm_UiScaleMode', 0)) !== 1) return null;
+    const reference = getField(doc, 'm_ReferenceResolution', null);
+    const x = finiteNumber(reference?.x, 0);
+    const y = finiteNumber(reference?.y, 0);
+    return x > 0 && y > 0 ? { x, y } : null;
+  }
+  return null;
+}
+
+/**
+ * Unity anchors a RectTransform edge to its parent per axis: stretched (anchorMin 0, anchorMax 1) keeps both
+ * edges, a point anchor at 0 or 1 keeps the left/bottom or right/top edge. A Cocos Widget reproduces that
+ * when the parent is resized (screen-fit canvases, stretched panels); centre anchors need nothing. Offsets
+ * are measured on the resolved reference layout. Returns { flags, left, right, top, bottom } or null.
+ */
+function unityRectEdgeWidget(transform, resolvedTransform, parentTransform) {
+  const parentLayout = parentTransform?.isRect ? parentTransform.resolvedLayout : null;
+  if (!parentLayout?.size) return null;
+  const near = (a, b) => Math.abs(a - b) < 1e-6;
+  const axis = (min, max) => (near(min, 0) && near(max, 1) ? 'stretch' : near(min, max) && near(min, 0) ? 'low' : near(min, max) && near(min, 1) ? 'high' : '');
+  const min = transform.anchorMin || {};
+  const max = transform.anchorMax || {};
+  const horizontal = axis(finiteNumber(min.x, 0.5), finiteNumber(max.x, finiteNumber(min.x, 0.5)));
+  const vertical = axis(finiteNumber(min.y, 0.5), finiteNumber(max.y, finiteNumber(min.y, 0.5)));
+  if (!horizontal && !vertical) return null;
+  const pw = finiteNumber(parentLayout.size.x, 0);
+  const ph = finiteNumber(parentLayout.size.y, 0);
+  const pax = finiteNumber(parentLayout.anchor?.x, 0.5);
+  const pay = finiteNumber(parentLayout.anchor?.y, 0.5);
+  const w = finiteNumber(resolvedTransform.sizeDelta?.x, 0);
+  const h = finiteNumber(resolvedTransform.sizeDelta?.y, 0);
+  const ax = finiteNumber(resolvedTransform.anchor?.x, 0.5);
+  const ay = finiteNumber(resolvedTransform.anchor?.y, 0.5);
+  const x = finiteNumber(resolvedTransform.localPosition?.x, 0);
+  const y = finiteNumber(resolvedTransform.localPosition?.y, 0);
+  const round = (v) => Math.round(v * 1e4) / 1e4;
+  const widget = { flags: 0, left: 0, right: 0, top: 0, bottom: 0 };
+  if (horizontal === 'stretch' || horizontal === 'low') { widget.flags |= 8; widget.left = round((x - ax * w) + pax * pw); }
+  if (horizontal === 'stretch' || horizontal === 'high') { widget.flags |= 32; widget.right = round((1 - pax) * pw - (x + (1 - ax) * w)); }
+  if (vertical === 'stretch' || vertical === 'high') { widget.flags |= 1; widget.top = round((1 - pay) * ph - (y + (1 - ay) * h)); }
+  if (vertical === 'stretch' || vertical === 'low') { widget.flags |= 4; widget.bottom = round((y - ay * h) + pay * ph); }
+  return widget;
+}
+
 function resolveTransformLayout(transform, parentTransform, options = {}) {
   const localPosition = {
     x: finiteNumber(transform?.localPosition?.x, 0),
@@ -5518,6 +5596,16 @@ function buildNestedPrefabPropertyOverrides(gameObject, transform, sourceModel, 
         value: Number(props.m_IsActive) !== 0,
       });
     }
+    // Outer prefabs re-layer nested children (Blast Shooter's conveyors put their Block tray on layer 8,
+    // lit by its own light); the root's layer is written by addNestedPrefabInstance.
+    const rootGameObjectId = rootTransform?.gameObjectId;
+    if (sourceGameObject && sourceFileId !== rootGameObjectId && hasPrefabOverrideKey(props, 'm_Layer') && scriptContext?.layerResolver) {
+      overrides.push({
+        localId: `node-${sanitizeFileId(sourceGameObject.name)}-${sourceGameObject.transformId}`,
+        propertyPath: '_layer',
+        value: scriptContext.layerResolver(Number(props.m_Layer), sourceGameObject.name),
+      });
+    }
     const sourceDoc = sourceModel.componentDocs.get(sourceFileId);
     const rendererEnabled = nestedRendererEnabledOverride(sourceDoc, sourceFileId, props);
     if (rendererEnabled) overrides.push(rendererEnabled);
@@ -5747,9 +5835,13 @@ function nestedPrefabHasExternallyReferencedObjects(nestedPrefab, outerModel) {
  */
 function syncNestedRateOverDistanceHelper(builder, particleId, particleData, reporter, nestedPrefab) {
   const rateRange = particleData?.EmissionModule?.rateOverDistance;
-  if (!rateRange || Number(rateRange.minMaxState || 0) !== 0) return;
-  const effectiveRate = Number(rateRange.scalar || 0);
-  if (!(effectiveRate > 0)) return;
+  const rateMode = Number(rateRange?.minMaxState || 0);
+  if (!rateRange || (rateMode !== 0 && rateMode !== 3)) return;
+  const effectiveMax = Number(rateRange.scalar || 0);
+  if (!(effectiveMax > 0)) return;
+  // Random Between Two Constants: rateOverDistance holds the lower bound, rateOverDistanceMax the upper.
+  const effectiveRate = rateMode === 3 ? Math.max(0, Math.min(effectiveMax, Number(rateRange.minScalar || 0))) : effectiveMax;
+  const effectiveRateMax = rateMode === 3 && effectiveMax > effectiveRate ? effectiveMax : 0;
 
   const particle = builder.objects[particleId];
   const nodeId = Number(particle?.node?.__id__);
@@ -5760,14 +5852,17 @@ function syncNestedRateOverDistanceHelper(builder, particleId, particleData, rep
     const component = builder.objects[Number(componentRef?.__id__)];
     if (!component || Number(component.particleSystem?.__id__) !== particleId) continue;
     if (typeof component.rateOverDistance !== 'number') continue;
-    if (component.rateOverDistance === effectiveRate) return;
+    const currentMax = Number(component.rateOverDistanceMax || 0);
+    if (component.rateOverDistance === effectiveRate && currentMax === effectiveRateMax) return;
     reporter.low(
       'PARTICLE_RATE_OVER_DISTANCE_OVERRIDE_SYNCED',
       nestedPrefab?.sourceAsset?.relativePath || '',
       node._name || '',
-      `Rate over Distance ${component.rateOverDistance} -> ${effectiveRate} from the prefab instance override`,
+      `Rate over Distance ${component.rateOverDistance}${currentMax ? `-${currentMax}` : ''} -> ${effectiveRate}${effectiveRateMax ? `-${effectiveRateMax}` : ''} from the prefab instance override`,
     );
     component.rateOverDistance = effectiveRate;
+    if (effectiveRateMax) component.rateOverDistanceMax = effectiveRateMax;
+    else delete component.rateOverDistanceMax;
     return;
   }
 }
@@ -5850,7 +5945,7 @@ function applyNestedParticlePrefabOverrides(builder, nestedPrefab, reporter, opt
         const meshAsset = builtin ? null : unityDb.get(unityRefGuid(meshOverride[1]));
         const meshName = meshAsset ? unityModelMeshName(meshAsset, unityRefFileId(meshOverride[1])) : '';
         const resolved = meshAsset && cocosDb?.resolveModelMeshByStem
-          ? cocosDb.resolveModelMeshByStem(meshAsset.stem, meshName || meshAsset.stem, meshAsset.ext === '.asset' ? '.fbx' : meshAsset.ext, unityRefFileId(meshOverride[1]))
+          ? cocosDb.resolveModelMeshByStem(meshAsset.stem, meshName || meshAsset.stem, meshAsset.ext === '.asset' ? '.fbx' : meshAsset.ext, unityRefFileId(meshOverride[1]), meshAsset.relativePath)
           : null;
         reportModelMeshResolution(reporter, resolved, nestedPrefab.sourceAsset?.relativePath || '', gameObject.name);
         const meshUuid = builtin || resolved?.meshUuid || '';
@@ -6795,6 +6890,30 @@ class CocosPrefabBuilder {
     }, null, fileId);
   }
 
+  /** Widget for a RectTransform anchored to parent edges (see unityRectEdgeWidget). */
+  addEdgeWidget(nodeId, edge, fileId) {
+    return this.addComponent(nodeId, 'cc.Widget', {
+      _alignFlags: edge.flags,
+      _target: null,
+      _left: edge.left,
+      _right: edge.right,
+      _top: edge.top,
+      _bottom: edge.bottom,
+      _horizontalCenter: 0,
+      _verticalCenter: 0,
+      _isAbsLeft: true,
+      _isAbsRight: true,
+      _isAbsTop: true,
+      _isAbsBottom: true,
+      _isAbsHorizontalCenter: true,
+      _isAbsVerticalCenter: true,
+      _originalWidth: 0,
+      _originalHeight: 0,
+      _alignMode: 2,
+      _lockFlags: 0,
+    }, null, fileId);
+  }
+
   addCanvas(nodeId, unityComponentId, fileId) {
     return this.addComponent(nodeId, 'cc.Canvas', {
       _cameraComponent: null,
@@ -7188,7 +7307,7 @@ function syncImportedMaterialLibraryCache(materialData, meta, options) {
   return syncImportedMaterialLibraryCacheImpl(materialData, meta, options);
 }
 
-function recordPendingMeshRepair(options, prefabFile, componentFileId, modelStem, meshNameHint, source) {
+function recordPendingMeshRepair(options, prefabFile, componentFileId, modelStem, meshNameHint, source, unityFileId = '') {
   if (!options || !prefabFile || !componentFileId || !modelStem) return;
   if (!options._pendingMeshRepairs) options._pendingMeshRepairs = new Map();
   const key = path.resolve(prefabFile);
@@ -7198,6 +7317,7 @@ function recordPendingMeshRepair(options, prefabFile, componentFileId, modelStem
     modelStem,
     meshNameHint: meshNameHint || '',
     source: source || '',
+    unityFileId: unityFileId ? String(unityFileId) : '',
   });
   options._pendingMeshRepairs.set(key, entries);
 }
@@ -7236,7 +7356,7 @@ function repairPendingMeshRefs(prefabFile, cocosDb, reporter, options) {
 
     if (!meshOwner || meshOwner._mesh) continue;
 
-    const resolved = cocosDb.resolveModelMeshByStem(entry.modelStem, entry.meshNameHint);
+    const resolved = cocosDb.resolveModelMeshByStem(entry.modelStem, entry.meshNameHint, '', entry.unityFileId || '', entry.source);
     if (!resolved?.meshUuid) continue;
 
     meshOwner._mesh = cocosUuid(resolved.meshUuid, 'cc.Mesh');
@@ -7899,6 +8019,14 @@ function emitNodeRecursive(transform, parentNodeId, model, builder, layerResolve
     };
     reporter.low('SCREEN_SPACE_CANVAS_ROOT_NORMALIZED', model.file, gameObject.name,
       'Screen-space Canvas root transform is runtime-driven in Unity; emitted as identity for the Cocos host Canvas');
+    // Its size is runtime-driven too: the prefab keeps whatever Game view it was last saved in (Blast Shooter's
+    // Canvas - Gameplay: 1081x605, so top-anchored HUD sat mid-screen). Lay out at the CanvasScaler reference.
+    const reference = unityCanvasScalerReferenceResolution(gameObject, model);
+    if (reference && transform.isRect) {
+      resolvedTransform = { ...resolvedTransform, sizeDelta: { ...reference } };
+      reporter.low('SCREEN_SPACE_CANVAS_ROOT_REFERENCE_SIZE', model.file, gameObject.name,
+        `Canvas root laid out at the CanvasScaler reference resolution ${reference.x}x${reference.y} instead of the saved ${transform.sizeDelta?.x}x${transform.sizeDelta?.y}`);
+    }
   }
   if (emissionContext?.rebaseNestedModelMountedChild) {
     resolvedTransform = rebaseNestedModelMountedChildTransform(resolvedTransform, emissionContext.modelBasisScale ?? 1);
@@ -8050,7 +8178,7 @@ function emitNodeRecursive(transform, parentNodeId, model, builder, layerResolve
   }
 
   if (gameObject.nestedPrefab?.prefabUuid && gameObject.nestedPrefab?.rootLocalId) {
-    const nestedOverrides = buildNestedPrefabPropertyOverrides(gameObject, resolvedTransform, gameObject.nestedPrefab.model, { builder, reporter, unityDb, cocosDb });
+    const nestedOverrides = buildNestedPrefabPropertyOverrides(gameObject, resolvedTransform, gameObject.nestedPrefab.model, { builder, reporter, unityDb, cocosDb, layerResolver });
     const nodeId = builder.addNestedPrefabInstance(
       gameObject.name,
       parentNodeId,
@@ -8265,6 +8393,11 @@ function emitNodeRecursive(transform, parentNodeId, model, builder, layerResolve
       && Math.abs(finiteNumber(sizeDelta.x, 0)) < 1e-6
       && Math.abs(finiteNumber(sizeDelta.y, 0)) < 1e-6;
     if (isFullStretch) builder.addFullStretchWidget(nodeId, `cmp-widget-${transform.fileId}`);
+    else if (!parentTransform || !gameObjectHasParticleSystem(model.gameObjects.get(parentTransform.gameObjectId), model)) {
+      // A particle parent gets no cc.UITransform, so a Widget would have no rect to align against.
+      const edge = unityRectEdgeWidget(transform, resolvedTransform, parentTransform);
+      if (edge) builder.addEdgeWidget(nodeId, edge, `cmp-widget-${transform.fileId}`);
+    }
   }
 
   for (const childId of transform.children) {
@@ -8355,6 +8488,18 @@ function copyUnityAssetToCocos(unityAsset, options, reporter, kind, severity = '
 
 function importedUnityAssetPath(unityAsset, options) {
   return importedUnityAssetPathImpl(unityAsset, options);
+}
+
+// Unity models are copied (or, for Mesh .asset, exported to .fbx) to assets/unity_imported/<Unity path>.
+// Given the Unity source, only that mirror is the model; a same-basename model imported from another
+// Unity folder is a different asset (Blast Shooter's Ver2/Pot.fbx square pot bound Model/Pot.fbx's round
+// pot and was never copied). Models placed outside unity_imported by hand stay eligible.
+function modelRecordsForUnitySource(records, unityRelativePath) {
+  const withoutExt = (value) => value.replace(/\.[^./]+$/, '').toLowerCase();
+  const mirror = withoutExt(`assets/unity_imported/${toPosix(unityRelativePath)}`);
+  const exact = records.filter((record) => withoutExt(record.relativePath) === mirror);
+  if (exact.length) return exact;
+  return records.filter((record) => !record.relativePath.toLowerCase().startsWith('assets/unity_imported/'));
 }
 
 function ensureAssetMeta(assetFile, kind, config = {}) {
@@ -9388,6 +9533,12 @@ module.exports = {
   emitMeshRenderer,
   emitCanvas,
   resolveTransformLayout,
+  unityRectEdgeWidget,
+  ensureImageAssetMeta,
+  recordPendingMeshRepair,
+  repairPendingMeshRefs,
+  emitCanvasGroup,
+  unityCanvasScalerReferenceResolution,
   resolveNestedPrefabEffectiveTransform,
   unityCanvasRenderMode,
   convertNodePosition,

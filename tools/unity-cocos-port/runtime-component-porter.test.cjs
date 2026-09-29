@@ -120,3 +120,38 @@ test('refuses to delete a legacy adapter when canonical and legacy UUIDs conflic
   }
 });
 
+
+// KriptoFX RFX4 Effect1 "Collision/Particles": rateOverDistance Random Between Two Constants 100..200 on a fast
+// projectile. The helper was attached only for Constant rates, so Cocos emitted per-frame clumps at the
+// current position and the Unity streak along the flight path was missing.
+test('attaches the rate-over-distance emitter for Random Between Two Constants rates', () => {
+  const lines = [
+    'ParticleSystem:',
+    '  EmissionModule:',
+    '    enabled: 1',
+    '    rateOverDistance:',
+    '      serializedVersion: 2',
+    '      minMaxState: 3',
+    '      scalar: 200',
+    '      minScalar: 100',
+  ];
+  const objects = [
+    { __type__: 'cc.Node', _name: 'Particles', _components: [{ __id__: 1 }] },
+    { __type__: 'cc.ParticleSystem', node: { __id__: 0 }, rateOverDistance: { __id__: 2 } },
+    { __type__: 'cc.CurveRange', mode: 3, multiplier: 1, constantMin: 100, constantMax: 200 },
+  ];
+  const added = [];
+  const builder = {
+    objects,
+    componentMap: new Map([[7, 1]]),
+    cocosDb: { findScriptClass: () => ({ classId: 'RateHelper' }) },
+    addComponent(nodeId, type, props) { added.push({ nodeId, type, props }); },
+  };
+  const reporter = makeReporter();
+  makePorter().attachParticleRateOverDistanceEmitters({ file: 'Effect1.prefab', componentDocs: new Map([[7, { classId: 198, lines }]]) }, builder, reporter);
+  assert.equal(added.length, 1);
+  assert.equal(added[0].props.rateOverDistance, 100);
+  assert.equal(added[0].props.rateOverDistanceMax, 200);
+  assert.equal(objects[2].mode, 0, 'native distance emission is switched off');
+  assert.equal(objects[2].constant, 0);
+});

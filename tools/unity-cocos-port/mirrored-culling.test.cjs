@@ -334,7 +334,8 @@ test('game-owned material instances are flipped in place and flipped back', () =
 });
 
 test('runtime template: one Component per module and no zero-GC violations in update paths', () => {
-  const source = fs.readFileSync(TEMPLATE, 'utf8');
+  // CRLF checkouts (Windows autocrlf) must find the same method ends as LF ones.
+  const source = fs.readFileSync(TEMPLATE, 'utf8').replace(/\r\n/g, '\n');
   assert.equal((source.match(/@ccclass\(/g) || []).length, 1);
   assert.ok(!/LabelOutline|LabelShadow/.test(source));
   const violations = lintFile(TEMPLATE).filter((v) => /^ZERO_GC/.test(v.rule));

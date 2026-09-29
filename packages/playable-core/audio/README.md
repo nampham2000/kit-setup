@@ -19,10 +19,20 @@ signal using a real gesture. Counters distinguish requested, played, rejected,
 stolen and completed voices. Gameplay callbacks must still complete if playback
 is rejected. Late completion and stale handles cannot release a reused voice.
 
-The backend uses Cocos AudioSource and its existing browser context. It does not
-create a second context or play silent sounds to unlock autoplay. Pitch, spatial
-panning/spread, mixer routing, and Unity virtual-voice ranking are not implemented
-by this API. Report these gaps; a caller's attenuation gain alone is not 3D parity.
+The backend plays Web Audio clips through nodes on the context the Cocos web
+player already uses (decoded buffer of the loaded clip: BufferSource -> Gain ->
+StereoPanner -> destination); other clips use a Cocos AudioSource. It does not
+create a second context or play silent sounds to unlock autoplay (unlockFromGesture
+resumes the shared context from the gesture).
+
+`playSound(id, gain, rate, pan)`: `rate` is the playback rate (Unity pitch;
+AudioRandomContainer cents -> 2^(cents / 1200)), `pan` the stereo pan in [-1, 1]
+(Unity 3D panning of the source relative to the listener; update moving sources
+with `audio.setPlaybackPan(handle, pan)`). Distance rolloff stays a caller gain
+computed from the source AudioSource min/max distance and rolloff mode.
+`audio.supportsRatePan` is true once a voice rendered rate/pan through Web Audio;
+on other backends they are ignored and must be reported as a gap. Mixer routing,
+spread and Unity virtual-voice ranking are not implemented.
 
 Commit `tools/audio-port-map.json` with source path/hash/callback, runtime consumer,
 regression, and preserved/adapted policy disposition. Include two owner lifecycle
