@@ -15,7 +15,18 @@ require('./lib/auto-strip-ansi.cjs');
 
 const fs = require('fs');
 const path = require('path');
-const ts = require('typescript');
+
+// Loaded on first use, not at import time. --help and the module that wraps this
+// one both have to work without TypeScript installed; requiring it up here made
+// `headless-verifier --help` crash, which in turn made the command contract
+// verifier see no flags and report drift that did not exist.
+let typescriptModule = null;
+const ts = new Proxy({}, {
+  get(_target, property) {
+    if (typescriptModule === null) typescriptModule = require('typescript');
+    return typescriptModule[property];
+  },
+});
 const { lintCocosComponentModules } = require('./cocos-component-module-linter.cjs');
 const { lintManagedAudio } = require('./managed-audio-linter.cjs');
 

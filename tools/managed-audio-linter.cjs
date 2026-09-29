@@ -1,5 +1,14 @@
 'use strict';
-const fs=require('node:fs'),path=require('node:path'),ts=require('typescript');
+const fs=require('node:fs'),path=require('node:path');
+
+// Lazy for the same reason as zero-gc-linter: --help must not need TypeScript.
+let typescriptModule = null;
+const ts = new Proxy({}, {
+  get(_target, property) {
+    if (typescriptModule === null) typescriptModule = require('typescript');
+    return typescriptModule[property];
+  },
+});
 function lintManagedAudio(files,{projectRoot}){
   const sources=files.map(file=>({file,relative:path.relative(projectRoot,file).replace(/\\/g,'/'),tree:ts.createSourceFile(file,fs.readFileSync(file,'utf8'),ts.ScriptTarget.Latest,true)}));
   const mapFile=path.join(projectRoot,'tools/audio-port-map.json');

@@ -14,7 +14,15 @@
 
 const fs = require('fs');
 const path = require('path');
-const ts = require('typescript');
+
+// Lazy for the same reason as zero-gc-linter: --help must not need TypeScript.
+let typescriptModule = null;
+const ts = new Proxy({}, {
+  get(_target, property) {
+    if (typescriptModule === null) typescriptModule = require('typescript');
+    return typescriptModule[property];
+  },
+});
 
 const RULE_ID = 'COCOS_MULTIPLE_COMPONENTS';
 
