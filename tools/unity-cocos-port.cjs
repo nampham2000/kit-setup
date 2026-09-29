@@ -7851,7 +7851,7 @@ function portPrefabBatch(options) {
     totals.high += result.counts.high;
     totals.medium += result.counts.medium;
     totals.low += result.counts.low;
-    if (!result.failed) cache.record(entry.sourceFile, entry.outputFile, result.counts);
+    if (!result.failed && !reporter.needsRerun()) cache.record(entry.sourceFile, entry.outputFile, result.counts);
   }
 
   cache.save();
