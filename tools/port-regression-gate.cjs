@@ -32,6 +32,8 @@ const REGISTRY_KIND = 'cc-playable-port-regression-registry';
 // receipts hashed raw working-copy bytes and are reported stale, never reused.
 const RECEIPT_SCHEMA_VERSION = 2;
 const RECEIPT_KIND = 'cc-playable-port-regression-receipt';
+// Mirrors verify-runtime.PREVIEW_INFRA_CHUNK_LOAD without loading the browser runner here.
+const PREVIEW_INFRA_CHUNK_LOAD = 'PREVIEW_INFRA_CHUNK_LOAD';
 const DEFAULT_CONFIG = 'tools/port-regressions.json';
 const DEFAULT_RECEIPT = '.ai/port/regression-receipt.json';
 const DEFAULT_OUTPUT = '.unity/port-regressions';
@@ -1023,12 +1025,24 @@ function executeMatrix(projectRoot, suite, runNumber, options = {}) {
   try { payload = parseJsonOutput(child.stdout); } catch (error) {
     if (ok) throw error;
   }
+  // Infra chunk-load retries (preview-checkpoints -> verify-runtime.runOne) are receipt evidence only:
+  // they live in suites[].runs[], never in the snapshot, so the receipt digest is unaffected.
+  const payloadCases = payload && Array.isArray(payload.cases) ? payload.cases : [];
+  const infraRetries = payloadCases.filter(entry => entry && entry.infraRetry).map(entry => ({
+    case: entry.name,
+    reason: entry.infraRetry.reason,
+    firstError: entry.infraRetry.firstError,
+    recovered: entry.infraRetry.recovered === true,
+    ...(entry.code ? { code: entry.code } : {}),
+  }));
+  const infraCode = payload && payload.code === PREVIEW_INFRA_CHUNK_LOAD ? PREVIEW_INFRA_CHUNK_LOAD : undefined;
   return {
     run: runNumber,
     ok: ok && payload && payload.ok === true,
     exitCode: Number.isInteger(child.status) ? child.status : null,
     timedOut: timedOut || undefined,
-    code: timedOut ? 'REGRESSION_SUITE_TIMEOUT' : spawnErrorCode,
+    code: timedOut ? 'REGRESSION_SUITE_TIMEOUT' : (spawnErrorCode || infraCode),
+    ...(infraRetries.length ? { infraRetries } : {}),
     ...(timedOut ? {
       spawnErrorCode: spawnErrorCode || undefined,
       signal: child.signal || undefined,
@@ -1037,7 +1051,12 @@ function executeMatrix(projectRoot, suite, runNumber, options = {}) {
     } : {}),
     manifest: payload && payload.manifest,
     contactSheet: payload && payload.contactSheet,
-    cases: payload && Array.isArray(payload.cases) ? payload.cases.map(entry => ({ name: entry.name, ok: entry.ok })) : [],
+    cases: payloadCases.map(entry => ({
+      name: entry.name,
+      ok: entry.ok,
+      ...(entry.infraRetry ? { infraRetry: { reason: entry.infraRetry.reason, firstError: entry.infraRetry.firstError } } : {}),
+      ...(entry.code ? { code: entry.code } : {}),
+    })),
     output: ok ? undefined : redactOutput(`${child.stdout || ''}\n${child.stderr || ''}\n${child.error || ''}`, projectRoot),
   };
 }
@@ -1234,6 +1253,10 @@ async function runRegressionGate(options = {}, dependencies = {}) {
       runs.push(await Promise.resolve(result));
     }
     const timedOutRun = runs.find(item => item && item.code === 'REGRESSION_SUITE_TIMEOUT');
+    const failedRuns = runs.filter(item => item && !item.ok);
+    const infraOnly = !timedOutRun && failedRuns.length > 0
+      && failedRuns.every(item => item.code === PREVIEW_INFRA_CHUNK_LOAD);
+    const infraRetryCount = runs.reduce((sum, item) => sum + ((item && item.infraRetries) || []).length, 0);
     results.push({
       id: suite.id,
       risks: suite.risks,
@@ -1244,6 +1267,11 @@ async function runRegressionGate(options = {}, dependencies = {}) {
       runs,
       ok: runs.every(item => item.ok),
       ...(timedOutRun ? { code: 'REGRESSION_SUITE_TIMEOUT', message: suiteTimeoutMessage(suite, timeout.timeoutMs) } : {}),
+      ...(infraOnly ? {
+        code: PREVIEW_INFRA_CHUNK_LOAD,
+        message: `${suite.id}: engine/editor chunk load failed twice (preview infrastructure, not the product); re-run the suite.`,
+      } : {}),
+      ...(infraRetryCount ? { infraRetries: infraRetryCount } : {}),
     });
   }
   const after = registrySnapshot(projectRoot, registry);
@@ -1296,7 +1324,9 @@ async function runRegressionGate(options = {}, dependencies = {}) {
     ...(selectedSuiteIds.length ? { selectiveRerun: selectedSuiteIds } : {}),
     nextActions: mergedResults.filter(item => item.mandatory && !item.ok).map(item => (item.code === 'REGRESSION_SUITE_TIMEOUT'
       ? `Split ${item.id} matrix or raise its timeoutMs (REGRESSION_SUITE_TIMEOUT at ${item.timeoutMs} ms)`
-      : `Fix/re-run ${item.id}`)),
+      : item.code === PREVIEW_INFRA_CHUNK_LOAD
+        ? `Re-run ${item.id} (--suite ${item.id}): ${PREVIEW_INFRA_CHUNK_LOAD} is a preview infrastructure failure`
+        : `Fix/re-run ${item.id}`)),
   };
 }
 
