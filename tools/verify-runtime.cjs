@@ -22,7 +22,10 @@ const { spawn, spawnSync } = require('child_process');
 const { color } = require('./lib/term-color.cjs');
 const { createRuntimeProfile, closeRuntimeProfile } = require('./lib/runtime-profile.cjs');
 const { validateCheckpoints, captureRuntimeCheckpoints } = require('./lib/runtime-checkpoints.cjs');
-const { contentProbeClips } = require('./lib/runtime-content-probes.cjs');
+const {
+  RUNTIME_BOOT_TIMEOUT, DEFAULT_BOOT_TIMEOUT_SECONDS, parseBootTimeoutSeconds, resolveBootTimeoutSeconds,
+  captureUniformFrame, waitForRuntimeBoot,
+} = require('./lib/runtime-boot.cjs');
 const { assertPreviewProjectIdentity, identityReceipt, MISMATCH_CODE } = require('./preview-project-identity.cjs');
 
 const WEBSOCKET_REEXEC_ENV = 'PLAYABLE_VERIFY_RUNTIME_WEBSOCKET_REEXEC';
@@ -75,7 +78,12 @@ Options:
   --allow-foreign-preview
                        Chủ ý smoke-test preview của project khác; ghi vào JSON.
   --all                Kiểm tra mọi file HTML trong build/.
-  --seconds <n>        Thời gian chạy để đo FPS. Default: 6.
+  --seconds <n>        Thời gian chạy để đo FPS, tính từ lúc boot xong. Default: 6.
+  --boot-timeout <s>   (--url) Trước cửa sổ đo, poll ~250 ms tới khi trang boot:
+                       có cc, cc.director.getScene() khác null và khung hình
+                       không đơn sắc. Hết hạn => item FAIL với code
+                       RUNTIME_BOOT_TIMEOUT (khác exception). Default: ${DEFAULT_BOOT_TIMEOUT_SECONDS}, bound 5..120.
+                       Kết quả ghi bootMs/bootTimedOut. File build (file://) bỏ qua boot phase.
   --min-fps <n>        FPS tối thiểu coi là đạt. Default: 20.
   --window-size <WxH>  Kích thước cửa sổ Chrome. Default: 720x1280 (dọc).
   --viewport-size <WxH> Set the exact page viewport at device scale 1 for aligned reference captures.
@@ -285,6 +293,7 @@ const PROBE = `
       firstFrameAt: window.__playableFirstFrameAt || 0,
       hasCocos: typeof window.cc !== 'undefined',
       sceneRunning: !!(window.cc && cc.director && cc.director.getScene && cc.director.getScene()),
+      now: Date.now(),
       title: document.title || ''
     });
   })();
@@ -703,6 +712,41 @@ async function runOne(target, options, dependencies = {}) {
   return second;
 }
 
+/**
+ * Boot phase for one navigation. URL targets (editor preview) poll until booted or --boot-timeout; build
+ * files (file://) keep the historical fixed wait and record `bootSkipped`. Mutates `result` with bootMs,
+ * bootTimedOut, bootStage, bootPolls, bootTimeoutSeconds and, on timeout, code=RUNTIME_BOOT_TIMEOUT +
+ * bootError. Returns the post-boot FPS baseline or null.
+ */
+async function runBootPhase(session, sessionId, isUrl, options, result, timing = {}) {
+  if (!isUrl) {
+    result.bootSkipped = 'file-target';
+    return null;
+  }
+  const boot = await (timing.waitForBoot || waitForRuntimeBoot)(session, sessionId, {
+    bootTimeout: options.bootTimeout, contentProbePoints: options.contentProbePoints,
+  }, timing);
+  result.bootMs = (Number(result.bootMs) || 0) + boot.bootMs;
+  result.bootTimedOut = boot.timedOut === true;
+  result.bootStage = boot.stage;
+  result.bootPolls = (Number(result.bootPolls) || 0) + boot.polls;
+  result.bootTimeoutSeconds = boot.timeoutSeconds;
+  if (boot.timedOut) {
+    result.code = RUNTIME_BOOT_TIMEOUT;
+    result.bootError = boot.message;
+  }
+  return boot.baseline || null;
+}
+
+/** FPS over the post-boot window when the probe is from the same document as the boot baseline. */
+function measureWindowFps(data, baseline) {
+  if (!baseline || !(baseline.now > 0) || !(Number(data.now) > baseline.now)) return null;
+  // The document reloaded after the baseline (FRAME_COUNTER restarted): fall back to first-frame timing.
+  if (Number(data.firstFrameAt) > baseline.now) return null;
+  const frames = Math.max(0, (Number(data.frames) || 0) - baseline.frames);
+  return { frames, seconds: Math.max(0.001, (Number(data.now) - baseline.now) / 1000) };
+}
+
 async function runOneAttempt(target, options) {
   if(options.checkpoints)validateCheckpoints(options.checkpoints);
   const isUrl = isUrlTarget(target);
@@ -748,6 +792,8 @@ async function runOneAttempt(target, options) {
     screenshot: null,
     screenshotBytes: 0,
     uniformFrame: false,
+    bootMs: null,
+    bootTimedOut: false,
     previewDevice: null,
     previewDeviceError: '',
     previewDeviceRestored: null,
@@ -847,18 +893,28 @@ async function runOneAttempt(target, options) {
     const targetUrl = isUrl ? String(target) : `file:///${htmlFile.replace(/\\/g, '/')}`;
     await session.send('Page.navigate', { url: targetUrl }, sessionId);
 
-    await wait(Math.max(1, options.seconds) * 1000);
+    // Boot phase (URL targets): wait until the page really runs before the measurement window, so a
+    // slow-but-healthy preview is not judged on its loading frame. evalBefore/gestures start after it.
+    let bootBaseline = await runBootPhase(session, sessionId, isUrl, options, result);
+    if (!result.bootTimedOut) {
+      await wait(Math.max(1, options.seconds) * 1000);
 
-    if (options.previewDevice) {
-      try {
-        result.previewDevice = await selectCocosPreviewDevice(session, sessionId, options.previewDevice);
-        if (result.previewDevice.reloaded) await wait(Math.max(1, options.seconds) * 1000);
-      } catch (error) {
-        result.previewDeviceError = String(error && error.message ? error.message : error);
+      if (options.previewDevice) {
+        try {
+          result.previewDevice = await selectCocosPreviewDevice(session, sessionId, options.previewDevice);
+          if (result.previewDevice.reloaded) {
+            // The reload restarts the document: boot it again before a fresh measurement window.
+            bootBaseline = await runBootPhase(session, sessionId, isUrl, options, result);
+            if (!result.bootTimedOut) await wait(Math.max(1, options.seconds) * 1000);
+          }
+        } catch (error) {
+          result.previewDeviceError = String(error && error.message ? error.message : error);
+        }
       }
     }
 
-    if (options.evalBeforeExpression) {
+    // A boot timeout already fails the item; do not drive gameplay on a page that never booted.
+    if (options.evalBeforeExpression && !result.bootTimedOut) {
       try {
         const evaluatedBefore = await evaluatePageWithNavigationRetry(
           session,
@@ -875,7 +931,7 @@ async function runOneAttempt(target, options) {
     let dynamicGesture = null;
     let dynamicGestures = [];
     if ((options.gestureFromEvalBefore || options.gesturesFromEvalBefore?.length)
-      && !result.evalBeforeError) {
+      && !result.evalBeforeError && !result.bootTimedOut) {
       try {
         if (options.gestureFromEvalBefore) {
           dynamicGesture = resolveGestureFromEvalBefore(
@@ -896,7 +952,7 @@ async function runOneAttempt(target, options) {
     const gestureSequence = options.gestures?.length ? options.gestures
       : (options.gesture ? [options.gesture]
         : (dynamicGestures.length ? dynamicGestures : (dynamicGesture ? [dynamicGesture] : [])));
-    if (gestureSequence.length) {
+    if (gestureSequence.length && !result.bootTimedOut) {
       try {
         const sequence = await dispatchTouchGestureSequence(session, sessionId, gestureSequence, {
           gapMs: options.gestureGapMs,
@@ -916,7 +972,7 @@ async function runOneAttempt(target, options) {
       }
     }
     const postActionSeconds = Math.max(0, Math.min(60, Number(options.postActionSeconds) || 0));
-    if (postActionSeconds > 0) await wait(postActionSeconds * 1000);
+    if (postActionSeconds > 0 && !result.bootTimedOut) await wait(postActionSeconds * 1000);
 
     const probe = await session.send('Runtime.evaluate', {
       expression: PROBE, returnByValue: true, awaitPromise: false,
@@ -934,10 +990,18 @@ async function runOneAttempt(target, options) {
     // FRAME_COUNTER is reinstalled on every navigation/reload, so measuring
     // from its first frame keeps FPS tied to the current preview document even
     // when selecting a Cocos preview device reloads the page.
-    result.observationSeconds = data.firstFrameAt > 0
-      ? Math.max(0.001, (Date.now() - data.firstFrameAt) / 1000)
-      : Math.max(1, Number(options.seconds) || 1);
-    result.fps = Math.round((result.frames / result.observationSeconds) * 10) / 10;
+    const windowFps = measureWindowFps(data, bootBaseline);
+    if (windowFps) {
+      // FPS over the post-boot window: loading frames are not the game's frame rate.
+      result.windowFrames = windowFps.frames;
+      result.observationSeconds = windowFps.seconds;
+      result.fps = Math.round((windowFps.frames / windowFps.seconds) * 10) / 10;
+    } else {
+      result.observationSeconds = data.firstFrameAt > 0
+        ? Math.max(0.001, (Date.now() - data.firstFrameAt) / 1000)
+        : Math.max(1, Number(options.seconds) || 1);
+      result.fps = Math.round((result.frames / result.observationSeconds) * 10) / 10;
+    }
 
     // KHUNG ĐƠN SẮC — kiểm tra này ra đời từ một ca thật: bản build của chính
     // repo này boot được, báo 55 FPS, WebGL bật, scene "đang chạy", nhưng màn
@@ -946,21 +1010,15 @@ async function runOneAttempt(target, options) {
     //
     // Không decode PNG (tránh thêm dependency): chụp 3 vùng nhỏ ở ba góc khác
     // nhau; nếu cả ba byte-identical thì khung hình gần như chắc chắn đơn sắc.
-    const w = Math.max(1, Number(data.canvasWidth) || 720);
-    const h = Math.max(1, Number(data.canvasHeight) || 1280);
     // Narrow VFX can miss all three default locations. Callers may add source-
     // derived locations; this supplements the blank-frame guard, never bypasses
-    // it. Record the exact rectangles so acceptance remains reviewable.
-    const clips = contentProbeClips(w,h,options.contentProbePoints);
-    result.contentProbeClips = clips;
-    const patches = [];
-    for (const clip of clips) {
-      try {
-        const patch = await session.send('Page.captureScreenshot', { format: 'png', clip }, sessionId);
-        if (patch && patch.data) patches.push(patch.data);
-      } catch (_) { /* vùng nằm ngoài viewport — bỏ qua */ }
-    }
-    result.uniformFrame = patches.length >= 2 && patches.every((p) => p === patches[0]);
+    // it. Record the exact rectangles so acceptance remains reviewable. The boot
+    // phase uses the same detector (lib/runtime-boot.cjs).
+    const frame = await captureUniformFrame(session, sessionId,
+      Math.max(1, Number(data.canvasWidth) || 720), Math.max(1, Number(data.canvasHeight) || 1280),
+      options.contentProbePoints);
+    result.contentProbeClips = frame.clips;
+    result.uniformFrame = frame.uniform;
 
     // --eval: chạy một biểu thức TRONG trang đang chạy và trả kết quả ra JSON.
     //
@@ -969,7 +1027,7 @@ async function runOneAttempt(target, options) {
     // đâu". Không có bước này agent phải rải console.log rồi build lại từng
     // vòng. Đây là đường duy nhất đọc được cây scene lúc chạy mà không cần
     // trình duyệt hiển thị.
-    if (options.evalExpression) {
+    if (options.evalExpression && !result.bootTimedOut) {
       try {
         result.evalResult = await evaluatePage(session, sessionId, options.evalExpression, USER_EVAL_TIMEOUT_MS);
       } catch (err) {
@@ -977,7 +1035,7 @@ async function runOneAttempt(target, options) {
       }
     }
 
-    if(options.checkpoints){
+    if(options.checkpoints && !result.bootTimedOut){
       result.checkpoints=await captureRuntimeCheckpoints(session,sessionId,options.checkpoints,{
         directory:path.resolve(PROJECT_ROOT,options.screenshotDir),viewportSize:options.viewportSize,
         eventCounts:result.eventCounts,onCheckpoint:options.onCheckpoint,
@@ -1045,7 +1103,8 @@ async function runOneAttempt(target, options) {
  * never decides the verdict.
  */
 function runtimeVerdict(result, options) {
-  return result.exceptions.length === 0
+  return result.bootTimedOut !== true
+    && result.exceptions.length === 0
     && !result.evalError && !result.evalBeforeError
     && result.checkpoints?.ok !== false
     && result.consoleErrors.length === 0
@@ -1077,7 +1136,7 @@ async function applyViewportSize(session,sessionId,size) {
 
 function parseArgs(argv) {
   const o = {
-    seconds: 6, minFps: 20, all: false, json: false, noScreenshot: false,
+    seconds: 6, bootTimeout: DEFAULT_BOOT_TIMEOUT_SECONDS, minFps: 20, all: false, json: false, noScreenshot: false,
     screenshotDir: path.join('.unity', 'runtime-shots'), help: false, evalExpression: '',
     evalBeforeExpression: '', gesture: null, gestures: [], gestureGapMs: 0,
     gestureHoldBeforeMoveMs: 0, gestureKeepPressed: false, postActionSeconds: 0,
@@ -1097,6 +1156,8 @@ function parseArgs(argv) {
     if (a.startsWith('--file=')) { o.file = a.split('=')[1]; continue; }
     if (a === '--seconds') { o.seconds = Number(argv[++i]) || 6; continue; }
     if (a.startsWith('--seconds=')) { o.seconds = Number(a.split('=')[1]) || 6; continue; }
+    if (a === '--boot-timeout') { o.bootTimeout = parseBootTimeoutSeconds(argv[++i]); continue; }
+    if (a.startsWith('--boot-timeout=')) { o.bootTimeout = parseBootTimeoutSeconds(a.slice('--boot-timeout='.length)); continue; }
     if (a === '--min-fps') { o.minFps = Number(argv[++i]) || 20; continue; }
     if (a.startsWith('--min-fps=')) { o.minFps = Number(a.split('=')[1]) || 20; continue; }
     if (a === '--window-size') { o.windowSize = normaliseWindowSize(argv[++i]); continue; }
@@ -1213,7 +1274,12 @@ async function main() {
       summary: { files: results.length, passed: results.length - failed.length, failed: failed.length },
       items: results,
       nextActions: failed.length
-        ? ['Mở ảnh chụp trong .unity/runtime-shots/ và sửa exception/console.error được liệt kê.']
+        ? [
+          ...(failed.some((r) => r.bootTimedOut)
+            ? [`${RUNTIME_BOOT_TIMEOUT}: preview chưa boot (cc/scene/khung đơn sắc) trong --boot-timeout; kiểm preview/Editor, hoặc tăng --boot-timeout (<=120) trên máy chậm.`]
+            : []),
+          'Mở ảnh chụp trong .unity/runtime-shots/ và sửa exception/console.error được liệt kê.',
+        ]
         : [],
     }, null, 2));
     if (failed.length) process.exit(1);
@@ -1228,7 +1294,9 @@ async function main() {
     const verdict = r.ok ? color('green', 'PASS') : color('red', 'FAIL');
     console.log(`\n[${verdict}] ${r.file}  (${r.sizeKb} KB)`);
     console.log(`   canvas=${r.canvasSize || 'không có'}  webgl=${r.hasWebgl}  cocos=${r.hasCocos}  scene=${r.sceneRunning}`);
-    console.log(`   frames=${r.frames} trong ${options.seconds}s => ${r.fps} FPS (ngưỡng ${options.minFps})`);
+    if (r.bootTimedOut) console.log(`   ${color('red', RUNTIME_BOOT_TIMEOUT)} ${r.bootError}`);
+    else if (r.bootMs !== null && r.bootMs !== undefined) console.log(`   boot=${r.bootMs} ms (${r.bootPolls} polls, timeout ${r.bootTimeoutSeconds}s)`);
+    console.log(`   frames=${r.frames} (window ${r.windowFrames ?? r.frames}) trong ${r.observationSeconds ?? options.seconds}s => ${r.fps} FPS (ngưỡng ${options.minFps})`);
     if (r.uniformFrame) {
       console.log(`   ${color('red', 'KHUNG ĐƠN SẮC')} — 3 vùng lấy mẫu giống hệt nhau: playable chạy nhưng KHÔNG vẽ nội dung.`);
     }
@@ -1268,5 +1336,6 @@ module.exports = {
   isNavigationEvaluationError, evaluatePageWithNavigationRetry,
   dispatchTouchGesture, dispatchTouchGestureSequence, selectCocosPreviewDevice,
   parseViewportSize,applyViewportSize,
+  runBootPhase, measureWindowFps, RUNTIME_BOOT_TIMEOUT, resolveBootTimeoutSeconds,
   CdpSession,
 };

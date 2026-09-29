@@ -8,6 +8,7 @@ const { spawnSync } = require('node:child_process');
 
 const { isPathInside } = require('./lib/path-boundary.cjs');
 const { PORTABLE_HASH_CONTRACT, hashPortableFile } = require('./lib/portable-content-hash.cjs');
+const { parseBootTimeoutSeconds } = require('./lib/runtime-boot.cjs');
 const { digest: digestPortReport } = require('./report-digest.cjs');
 const {
   DEFAULT_CONFIG: DEFAULT_REGRESSION_REGISTRY,
@@ -112,6 +113,9 @@ Options:
   --no-run-gates         Verify manifest only; result cannot be accepted as runnable.
   --preview-only         Skip build and verify the active Cocos editor preview; never claims build acceptance.
   --preview-url <url>    Loopback editor preview URL. Default: ${DEFAULT_PREVIEW_URL}.
+  --runtime-boot-timeout <s>
+                         With --preview-only: forwarded to the runtime gate as --boot-timeout
+                         (seconds 5..120, default 30) for slow machines where the preview boots late.
   --json                 Compact JSON output.
   --help                 Show help.
 
@@ -153,7 +157,7 @@ function parseArgs(argv) {
     if (argument === '--refresh-cache') { options.refreshCache = true; continue; }
     const equal = /^--([a-z-]+)=(.*)$/.exec(argument);
     const name = equal ? equal[1] : argument.startsWith('--') ? argument.slice(2) : null;
-    if (!['unity-project', 'cocos-project', 'manifest', 'wiring', 'scaffold-receipt', 'entry-scene', 'packet', 'target-scene', 'provider', 'dispositions', 'engine-feature-replacements', 'cache-dir', 'preview-url'].includes(name)) {
+    if (!['unity-project', 'cocos-project', 'manifest', 'wiring', 'scaffold-receipt', 'entry-scene', 'packet', 'target-scene', 'provider', 'dispositions', 'engine-feature-replacements', 'cache-dir', 'preview-url', 'runtime-boot-timeout'].includes(name)) {
       throw corePortError('CORE_PORT_OPTION_INVALID', `Option khong ho tro: ${argument}`);
     }
     const value = equal ? equal[2] : argv[++index];
@@ -170,8 +174,22 @@ function parseArgs(argv) {
   if (options.previewUrl && !options.previewOnly) {
     throw corePortError('CORE_PORT_PREVIEW_MODE_INVALID', '--preview-url can --preview-only.');
   }
+  if (options.runtimeBootTimeout !== undefined) {
+    if (options.command !== 'verify' || !options.previewOnly) {
+      throw corePortError('CORE_PORT_PREVIEW_MODE_INVALID', '--runtime-boot-timeout chi dung voi verify --preview-only.');
+    }
+    options.runtimeBootTimeout = normalizeRuntimeBootTimeout(options.runtimeBootTimeout);
+  }
   if (options.previewOnly) options.previewUrl = normalizePreviewUrl(options.previewUrl || DEFAULT_PREVIEW_URL);
   return options;
+}
+
+function normalizeRuntimeBootTimeout(value) {
+  try {
+    return parseBootTimeoutSeconds(value, '--runtime-boot-timeout');
+  } catch (error) {
+    throw corePortError('CORE_PORT_RUNTIME_BOOT_TIMEOUT_INVALID', error.message);
+  }
 }
 
 function normalizePreviewUrl(value) {
@@ -1369,7 +1387,9 @@ function runRequiredGates(cocosRoot, options = {}) {
     const gateArgs = options.previewOnly && gate.id === 'verify.all'
       ? ['--', '--skip-build-size']
       : options.previewOnly && gate.id === 'verify.runtime'
-        ? ['--', '--url', normalizePreviewUrl(options.previewUrl || DEFAULT_PREVIEW_URL)]
+        ? ['--', '--url', normalizePreviewUrl(options.previewUrl || DEFAULT_PREVIEW_URL),
+          ...(options.runtimeBootTimeout !== undefined
+            ? ['--boot-timeout', String(normalizeRuntimeBootTimeout(options.runtimeBootTimeout))] : [])]
         : [];
     const child = (options.spawnSync || spawnSync)(executable, [...prefixArgs, 'run', gate.script, ...gateArgs], {
       cwd: cocosRoot,
@@ -1468,6 +1488,8 @@ function verifyCorePort(options, dependencies = {}) {
       ...(dependencies.gateOptions || {}),
       previewOnly,
       previewUrl: previewOnly ? normalizePreviewUrl(options.previewUrl || DEFAULT_PREVIEW_URL) : undefined,
+      ...(previewOnly && options.runtimeBootTimeout !== undefined
+        ? { runtimeBootTimeout: normalizeRuntimeBootTimeout(options.runtimeBootTimeout) } : {}),
       redactRoots: [unityRoot, ...((dependencies.gateOptions && dependencies.gateOptions.redactRoots) || [])],
     });
   const gatesPassed = gateResults.length === requiredScripts.length && gateResults.every((item, index) => item.ok && item.id === requiredScripts[index].id);

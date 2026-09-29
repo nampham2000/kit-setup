@@ -1107,6 +1107,9 @@ async function main() {
         fps: runtime.fps,
         frames: runtime.frames,
         observationSeconds: runtime.observationSeconds,
+        bootMs: runtime.bootMs,
+        bootTimedOut: runtime.bootTimedOut,
+        ...(runtime.bootError ? { bootError: runtime.bootError } : {}),
         postActionSeconds: caseEntry.postActionSeconds === undefined
           ? config.postActionSeconds : caseEntry.postActionSeconds,
         canvasSize: runtime.canvasSize,
