@@ -89,3 +89,84 @@ test('modern "- name: value" properties are unchanged', () => {
   assert.deepEqual(parseUnitySerializedScalarMap(doc, 'm_Floats'), { _InvFade: 1 });
   assert.deepEqual(parseUnitySerializedScalarMap(doc, 'm_Colors')._TintColor, { r: 0.5, g: 0.5, b: 0.5, a: 0.5 });
 });
+
+// Unity 5.0-5.5 (KriptoFX RFX4 portal Sky.mat): repeated `data:` keys, each with `first: name:` and `second:`.
+const DATA_FORM = `--- !u!21 &2100000
+Material:
+  serializedVersion: 6
+  m_Name: Sky
+  m_SavedProperties:
+    serializedVersion: 2
+    m_TexEnvs:
+      data:
+        first:
+          name: _MainTex
+        second:
+          m_Texture: {fileID: 2800000, guid: 81905021aee3aa1429c2826151a1cb05, type: 3}
+          m_Scale: {x: 3, y: 1}
+          m_Offset: {x: 0, y: 0}
+      data:
+        first:
+          name: _BumpMap
+        second:
+          m_Texture: {fileID: 0}
+          m_Scale: {x: 1, y: 1}
+          m_Offset: {x: 0, y: 0}
+    m_Floats:
+      data:
+        first:
+          name: _InvFade
+        second: 2
+    m_Colors:
+      data:
+        first:
+          name: _TintColor
+        second: {r: 0.84, g: 0.63, b: 1, a: 1}
+      data:
+        first:
+          name: _NoiseScale
+        second: {r: 0.2, g: 0.2, b: 1, a: 0.2}
+`;
+
+test('Unity 5.0 `data:` texture envs, floats and colours parse by property name', () => {
+  const { parseUnityTextureEnvMap, parseUnitySerializedScalarMap } = porter();
+  const doc = materialDoc(DATA_FORM);
+  const tex = parseUnityTextureEnvMap(doc);
+  assert.deepEqual(Object.keys(tex), ['_MainTex', '_BumpMap']);
+  assert.equal(unityRefGuid(tex._MainTex.m_Texture), '81905021aee3aa1429c2826151a1cb05');
+  assert.deepEqual(tex._MainTex.m_Scale, { x: 3, y: 1 });
+  assert.deepEqual(parseUnitySerializedScalarMap(doc, 'm_Floats'), { _InvFade: 2 });
+  assert.deepEqual(parseUnitySerializedScalarMap(doc, 'm_Colors')._NoiseScale, { r: 0.2, g: 0.2, b: 1, a: 0.2 });
+});
+
+// Auto-transpiled custom effects declare the Unity properties under their converted names; the material
+// used to receive builtin-standard props (mainColor, roughness, tilingOffset) instead (RFX4 Tornado).
+test('custom-effect materials receive the properties the effect declares', () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const cocosRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'custom-effect-props-'));
+  fs.mkdirSync(path.join(cocosRoot, 'assets', 'effects'), { recursive: true });
+  fs.writeFileSync(path.join(cocosRoot, 'assets', 'effects', 'Tornado.effect'), `CCEffect %{
+  techniques:
+  - name: opaque
+    passes:
+    - vert: vs:vert
+      properties:
+        tintColor: { value: [0.5, 0.5, 0.5, 0.5], editor: { type: color } }
+        mainTexture: { value: white }
+        mainTexture_ST: { value: [1, 1, 0, 0] }
+        twistScale: { value: [1, 0.2, 2, 0] }
+        speed: { value: 1 }
+}%
+`);
+  const { customShaderMaterialProps } = porter();
+  const colors = { _TintColor: { r: 0.5, g: 0.25, b: 1, a: 0.4 }, _TwistScale: { r: 2, g: 0.3, b: 4, a: 1 }, _Color: { r: 1, g: 1, b: 1, a: 1 } };
+  const texEnvs = { _MainTex: { m_Texture: { fileID: 0 }, m_Scale: { x: 2, y: 2 }, m_Offset: { x: 0, y: 0.5 } } };
+  const gamma = customShaderMaterialProps('Tornado', colors, { _Speed: 3, _Glossiness: 0.5 }, texEnvs, new Map(), { cocosRoot, unityRoot: '' }, { low() {}, medium() {}, high() {} });
+  assert.deepEqual(Object.keys(gamma).sort(), ['mainTexture_ST', 'speed', 'tintColor', 'twistScale']);
+  assert.deepEqual(gamma.twistScale, { __type__: 'cc.Vec4', x: 2, y: 0.3, z: 4, w: 1 });
+  assert.deepEqual(gamma.mainTexture_ST, { __type__: 'cc.Vec4', x: 2, y: 2, z: 0, w: 0.5 });
+  assert.equal(gamma.speed, 3);
+  assert.equal(gamma.tintColor.__type__, 'cc.Color');
+});
