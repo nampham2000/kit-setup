@@ -886,7 +886,9 @@ module.exports = function createAnimationPorter(deps) {
   }
 
   function animationOutputDirForController(options, controllerAsset) {
-    return path.join(options.cocosRoot, 'assets', 'animations', sanitizeFileId(controllerAsset.stem).toLowerCase());
+    // --animations-dir: packs that share Unity controller names (KriptoFX v1/v4 Anim1) keep separate outputs.
+    const base = options.animationsDir ? path.resolve(options.cocosRoot, options.animationsDir) : path.join(options.cocosRoot, 'assets', 'animations');
+    return path.join(base, sanitizeFileId(controllerAsset.stem).toLowerCase());
   }
 
   function writeConvertedAnimationClip(clipAsset, outDir, options, reporter, animationContext = null) {
