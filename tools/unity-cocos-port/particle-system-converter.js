@@ -6,6 +6,7 @@ const { edgeShapeContract } = require('./particle-edge-shape-binding.cjs');
 const { startRotationContract } = require('./particle-start-rotation-binding.cjs');
 const { particleOrbitContract } = require('./particle-orbit-contract');
 const { particleLimitVelocityContract } = require('./particle-limit-velocity-binding');
+const { particleExternalForcesContract } = require('./wind-zone-binding');
 const { particleCollisionContract } = require('./particle-collision-binding');
 const { particleCustomDataContract } = require('./particle-custom-data-binding');
 const { particleAlignToDirectionContract } = require('./particle-align-to-direction-binding');
@@ -1449,6 +1450,7 @@ function applyUnityParticleDataToCocos(builder, particleId, data = {}, rendererD
   Object.defineProperty(particle, 'unityEdgeShapeContract', { value: edgeShapeContract(data), configurable: true });
   Object.defineProperty(particle, 'unityStartRotationContract', { value: startRotationContract(data), configurable: true });
   Object.defineProperty(particle, 'unityLimitVelocityContract', { value: particleLimitVelocityContract(data), configurable: true });
+  Object.defineProperty(particle, 'unityExternalForcesContract', { value: particleExternalForcesContract(data), configurable: true });
   Object.defineProperty(particle, 'unityCollisionContract', { value: particleCollisionContract(data), configurable: true });
   Object.defineProperty(particle, 'unityCustomDataContract', { value: particleCustomDataContract(data, rendererData || {}), configurable: true });
   Object.defineProperty(particle, 'unityAlignToDirectionContract', { value: particleAlignToDirectionContract(data, rendererData || {}), configurable: true });

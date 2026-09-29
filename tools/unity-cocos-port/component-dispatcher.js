@@ -62,6 +62,7 @@ function createComponentDispatcher(handlers) {
     [120, (ctx) => handlers.emitLineRenderer(ctx.gameObject, ctx.nodeId, ctx.componentId, ctx.doc, ctx.model, ctx.builder, ctx.reporter, ctx.options, ctx.unityDb, ctx.cocosDb)],
     [137, (ctx) => handlers.emitSkinnedMeshRenderer(ctx.gameObject, ctx.nodeId, ctx.componentId, ctx.doc, ctx.model, ctx.builder, ctx.reporter, ctx.options, ctx.unityDb, ctx.cocosDb)],
     [136, (ctx) => handlers.emitCapsuleCollider(ctx.nodeId, ctx.componentId, ctx.doc, ctx.gameObject, ctx.model, ctx.builder, ctx.reporter, ctx.options, ctx.unityDb)],
+    [182, (ctx) => handlers.emitWindZone(ctx)],
     [143, (ctx) => handlers.emitCharacterController(ctx.nodeId, ctx.componentId, ctx.doc, ctx.gameObject, ctx.model, ctx.builder)],
     [225, (ctx) => handlers.emitCanvasGroup(ctx.nodeId, ctx.componentId, ctx.doc, ctx.gameObject, ctx.model, ctx.builder, ctx.reporter)],
     [212, (ctx) => handlers.emitSpriteRenderer(ctx.nodeId, ctx.componentId, ctx.doc, ctx.builder, ctx.reporter, ctx.options, ctx.unityDb, ctx.cocosDb)],
