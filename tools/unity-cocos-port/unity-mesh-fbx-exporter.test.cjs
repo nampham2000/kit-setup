@@ -141,3 +141,26 @@ test('m_CompressedMesh (CRLF YAML) decodes positions, UVs, normals and triangles
   mesh.normals.forEach((n, i) => n.forEach((v, a) => assert.ok(Math.abs(v - normals[i][a]) < 5e-3, `normal ${i}.${a}`)));
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+// Blast Shooter's conveyor trays store normals as Float16 x4 ("format: 1, dimension: 52" - the dimension
+// byte carries flags above its low nibble). A Float32-only reader exported every normal as (0, 0, 1).
+test('Float16 normals (flagged dimension) are decoded from the vertex stream', () => {
+  const { parseUnityMeshAsset } = require('./unity-mesh-fbx-exporter.js');
+  const half = (v) => { const b = Buffer.alloc(2); const s = v < 0 ? 0x8000 : 0; const a = Math.abs(v);
+    if (a === 0) { b.writeUInt16LE(s); return b; }
+    const e = Math.floor(Math.log2(a)); b.writeUInt16LE(s | ((e + 15) << 10) | Math.round((a / 2 ** e - 1) * 1024)); return b; };
+  const vertex = (p, n) => { const f = Buffer.alloc(12); p.forEach((v, i) => f.writeFloatLE(v, i * 4)); return Buffer.concat([f, ...n.map(half)]); };
+  const data = Buffer.concat([vertex([0, 0, 0], [0, 1, 0, 0]), vertex([1, 0, 0], [0, 1, 0, 0]), vertex([0, 0, 1], [0, -0.5, 0, 0])]);
+  const channel = (offset, format, dimension) => [`    - stream: 0`, `      offset: ${offset}`, `      format: ${format}`, `      dimension: ${dimension}`];
+  const yaml = ['%YAML 1.1', '--- !u!43 &4300000', 'Mesh:', '  m_Name: Tray', '  m_MeshCompression: 0', '  m_IndexFormat: 0',
+    '  m_SubMeshes:', '  - firstByte: 0', '    indexCount: 3', '  m_IndexBuffer: 000001000200', '  m_VertexData:', '    m_VertexCount: 3',
+    '    m_Channels:', ...channel(0, 0, 3), ...channel(12, 1, 52), ...Array.from({ length: 12 }, () => channel(0, 0, 0)).flat(),
+    `    m_DataSize: ${data.length}`, `    _typelessdata: ${data.toString('hex')}`, ''].join('\n');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'unity-mesh-half-'));
+  const file = path.join(dir, 'Tray.asset');
+  fs.writeFileSync(file, yaml);
+  const mesh = parseUnityMeshAsset(file);
+  assert.deepEqual(mesh.positions, [[0, 0, 0], [1, 0, 0], [0, 0, 1]]);
+  assert.deepEqual(mesh.normals, [[0, 1, 0], [0, 1, 0], [0, -0.5, 0]]);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
