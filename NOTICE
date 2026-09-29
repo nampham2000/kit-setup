@@ -52,6 +52,14 @@ tools/dependency/ carries ffmpeg, uv and a Python distribution.
 Project data
 ------------
 
-tools/work-memory/data/ may still hold memory captured while working on
-company projects. That is data, not tooling, and the grant above is about
-tooling. Clear it before using this kit for unrelated work.
+Audited on 2026-09-29: tools/work-memory/data/ holds 211 entries, every one
+scoped `global` — Cocos and porting lessons, bug traps and workflow notes.
+None are project records, none carry client specifics or credentials. The one
+entry naming a company game does so only as the setting for a general lesson.
+
+So this is tooling knowledge, not company project data, and the grant above
+covers it. Do not clear it: it is the most portable thing in the kit, and the
+part that cannot be rewritten from scratch.
+
+Re-audit before sharing this kit with anyone else, since the store keeps
+growing as it is used.
