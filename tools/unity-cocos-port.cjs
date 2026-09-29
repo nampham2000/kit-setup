@@ -373,6 +373,7 @@ Options:
   --shadergraph-dump <dir> Code ShaderGraph do Unity sinh (tools/unity-intel/dump-shadergraph-code.cs); material
                             dùng .shadergraph được sinh bằng shadergraph-codegen thay vì đọc JSON graph.
   --jobs <n>                Chạy song song n tiến trình con cho batch prefab.
+  --animations-dir <assets/...>  Thư mục gốc cho AnimatorController output (mặc định assets/animations).
   --only-prefabs <names>    Batch từ folder: chỉ port các prefab trong danh sách (tên không đuôi hoặc
                             path tương đối với --src; phân tách bằng dấu phẩy hoặc @file JSON/dòng).
   --quiet                   Chỉ in tổng kết (ít token hơn cho AI agent).
@@ -597,6 +598,14 @@ function parseArgs(argv) {
     }
     if (arg === '--no-engine-feature-repair') {
       options.engineFeatureRepair = false;
+      continue;
+    }
+    if (arg === '--animations-dir' || arg.startsWith('--animations-dir=')) {
+      // Root (relative to the Cocos project) for AnimatorController outputs; default assets/animations.
+      const value = arg.startsWith('--animations-dir=') ? arg.slice('--animations-dir='.length) : readValue(arg);
+      const normalized = String(value || '').replace(/\\/g, '/').replace(/\/+$/, '');
+      if (!/^assets(\/[^/]+)+$/.test(normalized) || normalized.split('/').includes('..')) fail('--animations-dir phải là đường dẫn tương đối dưới assets/');
+      options.animationsDir = normalized;
       continue;
     }
     if (arg === '--keep-existing-imports') {
@@ -8921,7 +8930,9 @@ function ensureAnimationGraphMeta(file, uuid) {
 }
 
 function animationOutputDirForController(options, controllerAsset) {
-  return path.join(options.cocosRoot, 'assets', 'animations', sanitizeFileId(controllerAsset.stem).toLowerCase());
+  // --animations-dir: packs that share Unity controller names (KriptoFX v1/v4 Anim1) keep separate outputs.
+  const base = options.animationsDir ? path.resolve(options.cocosRoot, options.animationsDir) : path.join(options.cocosRoot, 'assets', 'animations');
+  return path.join(base, sanitizeFileId(controllerAsset.stem).toLowerCase());
 }
 
 function writeConvertedAnimationClip(clipAsset, outDir, options, reporter) {
