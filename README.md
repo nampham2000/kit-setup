@@ -4,6 +4,75 @@ Bộ thư viện chia sẻ và công cụ cốt lõi cho Cocos Creator 3.8.x Pla
 
 ---
 
+## Cài vào một project mới
+
+Bốn bước. Đã chạy thử trọn vẹn trên project trắng ngày 2026-09-29.
+
+```bash
+# 1. Trong thư mục project Cocos, biến nó thành repo git
+git init
+
+# 2. Thêm kit làm submodule
+git submodule add https://github.com/nampham2000/kit-setup.git playable-shared-kit
+
+# 3. Chép launcher ra gốc project (chỉ lần đầu)
+cp playable-shared-kit/scripts/*.bat .
+
+# 4. Chạy setup (vài phút, có npm install)
+0_setup-all.bat
+```
+
+Xong thì mở bằng `1_open-project.bat`. Scene view đã nằm sẵn trong
+`assets/scene-view/` — bấm Play, `F1` để bật/tắt, không phải tạo node hay kéo
+component.
+
+Bước 4 in ra, theo đúng thứ tự:
+
+```
+[setup] regenerate legacy lockfile
+[setup] install locked project dependencies
+[setup] install Cocos MCP runtime
+[setup] sync packages, extensions, scripts and launchers
+  [ok] Synced: playable-sdk -> assets\script\shared\sdk
+  [ok] Synced: playable-core -> assets\script\shared\core
+  [ok] Synced extension: cocos-mcp
+  [ok] Synced extension: json-scriptable-inspector
+  [ok] Synced extension: super-html
+  [ok] Synced: scene-view -> assets/scene-view
+[setup] deploy AI skills and command contract
+  [ok] 73 capabilities -> ai/CAPABILITIES.json + ai/CORE.md
+[setup] Complete.
+```
+
+Kết quả mong đợi: 138 npm script, 3 editor extension, 16 file scene-view, và
+`node playable-shared-kit/tools/contract-verify.cjs` báo **PASS 73/73**.
+
+Hai dòng nhiễu vô hại: cảnh báo `npm deprecated prebuild-install` và
+`ExperimentalWarning: SQLite` của Node.
+
+### Ba điểm dễ vấp
+
+- **Bước 1 bắt buộc.** Không phải repo git thì `submodule add` hỏng. Project
+  không dùng git thì thay bằng
+  `git clone https://github.com/nampham2000/kit-setup.git playable-shared-kit`.
+- **Bước 3 chỉ làm một lần.** Kit không chứa `sync-tools.bat`; các file
+  `0_`…`6_` nằm trong `scripts/` và được chép ra thủ công lần đầu. Từ đó
+  `sync-shared-kit.cjs` tự làm mới chúng mỗi lần chạy setup.
+- **`tools/dependency/` không nằm trong git.** Python, uv và FFmpeg được tải khi
+  cần bằng `npm run dependencies:setup`. Nếu mạng chặn, lấy lại từ bản backup
+  `kit-setup-backup-before-rewrite.bundle`.
+
+### Cập nhật về sau
+
+```bash
+git submodule update --remote playable-shared-kit
+0_setup-all.bat
+```
+
+Hoặc dùng sẵn `3_update-submodule-remote.bat`.
+
+---
+
 ## ⚡ Lệnh Nhanh Thường Dùng
 
 | Công cụ | Lệnh thực thi | Mục đích |
