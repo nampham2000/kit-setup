@@ -105,6 +105,7 @@ module.exports = function createParticlePorter(deps = {}) {
         meshAsset.stem,
         meshNameHint,
         meshAsset.relativePath,
+        unityRefFileId ? unityRefFileId(meshRef) : String(meshRef?.fileID ?? ''),
       );
     }
 

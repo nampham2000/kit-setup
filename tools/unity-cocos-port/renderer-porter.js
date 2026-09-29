@@ -311,7 +311,10 @@ module.exports = function createRendererPorter(deps) {
     }
 
     if (!meshUuid && meshPendingImport && meshAsset) {
-      recordPendingMeshRepair(options, options.out, componentFileId, meshAsset.stem, gameObject.name, meshAsset.relativePath);
+      // Keep the Unity mesh name and fileID: the repair runs after import and must pick the same sub-mesh
+      // (Blast Shooter's Center tile repaired by its GameObject name onto Base_All.fbx's first mesh).
+      recordPendingMeshRepair(options, options.out, componentFileId, meshAsset.stem, unityMeshName || gameObject.name, meshAsset.relativePath,
+        deps.unityRefFileId(meshRef));
     }
     if (!meshUuid && !meshPendingImport && !meshReported) reporter.high('MESH_UNRESOLVED', model.file, gameObject.name, 'MeshRenderer has no resolved Cocos mesh');
     // Geometry cross-check: Unity draws a submesh only when a material slot covers it, while a Cocos

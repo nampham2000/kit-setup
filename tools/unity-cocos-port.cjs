@@ -7303,7 +7303,7 @@ function syncImportedMaterialLibraryCache(materialData, meta, options) {
   return syncImportedMaterialLibraryCacheImpl(materialData, meta, options);
 }
 
-function recordPendingMeshRepair(options, prefabFile, componentFileId, modelStem, meshNameHint, source) {
+function recordPendingMeshRepair(options, prefabFile, componentFileId, modelStem, meshNameHint, source, unityFileId = '') {
   if (!options || !prefabFile || !componentFileId || !modelStem) return;
   if (!options._pendingMeshRepairs) options._pendingMeshRepairs = new Map();
   const key = path.resolve(prefabFile);
@@ -7313,6 +7313,7 @@ function recordPendingMeshRepair(options, prefabFile, componentFileId, modelStem
     modelStem,
     meshNameHint: meshNameHint || '',
     source: source || '',
+    unityFileId: unityFileId ? String(unityFileId) : '',
   });
   options._pendingMeshRepairs.set(key, entries);
 }
@@ -7351,7 +7352,7 @@ function repairPendingMeshRefs(prefabFile, cocosDb, reporter, options) {
 
     if (!meshOwner || meshOwner._mesh) continue;
 
-    const resolved = cocosDb.resolveModelMeshByStem(entry.modelStem, entry.meshNameHint, '', '', entry.source);
+    const resolved = cocosDb.resolveModelMeshByStem(entry.modelStem, entry.meshNameHint, '', entry.unityFileId || '', entry.source);
     if (!resolved?.meshUuid) continue;
 
     meshOwner._mesh = cocosUuid(resolved.meshUuid, 'cc.Mesh');
@@ -9529,6 +9530,8 @@ module.exports = {
   emitCanvas,
   resolveTransformLayout,
   unityRectEdgeWidget,
+  recordPendingMeshRepair,
+  repairPendingMeshRefs,
   emitCanvasGroup,
   unityCanvasScalerReferenceResolution,
   resolveNestedPrefabEffectiveTransform,
