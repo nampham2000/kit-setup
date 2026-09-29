@@ -15,7 +15,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const { runOne, parseGesture, normalizeEnvironmentHosts } = require('./verify-runtime.cjs');
+const { runOne, parseGesture, normalizeEnvironmentHosts, PREVIEW_INFRA_CHUNK_LOAD } = require('./verify-runtime.cjs');
 const { contentProbeClips } = require('./lib/runtime-content-probes.cjs');
 const { assertPreviewProjectIdentity, identityReceipt, MISMATCH_CODE } = require('./preview-project-identity.cjs');
 
@@ -96,6 +96,12 @@ evalHelpers (manifest hoặc case, 0-8 file .js trong project, ví dụ
 "playable-shared-kit/tools/qa/ui-layout-balance.js") được nối vào trước
 evalBefore/eval để eval dùng helper QA dùng chung; nội dung helper được đọc lại
 mỗi lần chạy và regression gate hash chúng như evalFile.
+
+Case có lỗi hạ tầng tải engine/chunk (SystemJS Error#3 trên cce:/internal/...
+hoặc /scripting/x/chunks/..., hay net::ERR_* trên URL đó) được chạy lại đúng một
+lần trong browser mới và ghi infraRetry {reason, firstError}; lỗi script project
+(assets/..., db://assets) hay assertion fail không bao giờ retry. Retry cũng fail
+thì case mang code PREVIEW_INFRA_CHUNK_LOAD.
 
 Mỗi case reload preview trong browser session riêng. Tool sinh từng PNG,
 manifest.json và index.html dạng contact sheet. Khi khai báo
@@ -986,6 +992,35 @@ async function guardPreviewProject(url, options = {}) {
   return identityReceipt(record);
 }
 
+/** Case-level infra retry evidence from verify-runtime.runOne (absent when no retry happened). */
+function infraCaseFields(runtime) {
+  return {
+    ...(runtime && runtime.infraRetry ? { infraRetry: runtime.infraRetry } : {}),
+    ...(runtime && runtime.code ? { code: runtime.code } : {}),
+  };
+}
+
+/**
+ * Manifest summary of infra retries. `code` is set only when every failing case failed on the
+ * infra chunk-load path, so a product failure is never hidden behind an infra code.
+ */
+function infraManifestFields(results) {
+  const retried = results.filter(entry => entry.infraRetry);
+  if (!retried.length) return {};
+  const failing = results.filter(entry => !entry.ok);
+  const allInfra = failing.length > 0 && failing.every(entry => entry.code === PREVIEW_INFRA_CHUNK_LOAD);
+  return {
+    infraRetries: retried.map(entry => ({
+      case: entry.name,
+      reason: entry.infraRetry.reason,
+      firstError: entry.infraRetry.firstError,
+      recovered: entry.infraRetry.recovered === true,
+      ...(entry.code ? { code: entry.code } : {}),
+    })),
+    ...(allInfra ? { code: PREVIEW_INFRA_CHUNK_LOAD } : {}),
+  };
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) { console.log(USAGE); return; }
@@ -1062,6 +1097,7 @@ async function main() {
       description: caseEntry.description || '',
       screenshot: runtime.screenshot,
       referenceImage,
+      ...infraCaseFields(runtime),
       ok: runtime.ok && !!runtime.screenshot && !runtime.evalBeforeError && !runtime.evalError
         && !runtime.previewDeviceError && !runtime.previewDeviceRestoreError
         && !runtime.gestureError && evalBeforeAssertion.ok && metricBeforeAssertion.ok
@@ -1091,6 +1127,7 @@ async function main() {
         evalBeforeError: runtime.evalBeforeError,
         gestureError: runtime.gestureError,
         evalError: runtime.evalError,
+        ...infraCaseFields(runtime),
         evalBeforeAssertion,
         metricBeforeAssertion,
         evalAssertion,
@@ -1111,6 +1148,7 @@ async function main() {
     previewIdentity,
     ...(args.allowForeignPreview === true ? { allowForeignPreview: true } : {}),
     ok: results.every(entry => entry.ok),
+    ...infraManifestFields(results),
     note: 'Runtime-clean screenshots prove visual parity only when an explicit reference metric contract passes.',
     cases: results,
   };
@@ -1125,7 +1163,10 @@ async function main() {
   if (args.json) console.log(JSON.stringify(output, null, 2));
   else {
     console.log(`[preview-checkpoints] ${results.filter(entry => entry.ok).length}/${results.length} runtime-clean`);
-    for (const entry of results) console.log(`  [${entry.ok ? 'ok' : 'fail'}] ${entry.name}: ${entry.screenshot || 'no screenshot'}`);
+    for (const entry of results) {
+      const infra = entry.infraRetry ? ` (infra-retry ${entry.infraRetry.reason}${entry.code ? `, ${entry.code}` : ''})` : '';
+      console.log(`  [${entry.ok ? 'ok' : 'fail'}] ${entry.name}: ${entry.screenshot || 'no screenshot'}${infra}`);
+    }
     console.log(`  manifest: ${output.manifest}`);
     console.log(`  contact sheet: ${output.contactSheet}`);
   }
@@ -1145,6 +1186,8 @@ if (require.main === module) {
 }
 
 module.exports = {
+  infraCaseFields,
+  infraManifestFields,
   slugify,
   normalizeWindowSize,
   resolveInsideProject,
