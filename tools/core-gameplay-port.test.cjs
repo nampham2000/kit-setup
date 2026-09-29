@@ -290,6 +290,7 @@ test('preview-only verify can pass preview gates without build artifact or build
     },
   });
   assert.equal(gateOptions.previewOnly, true);
+  assert.equal(Object.hasOwn(gateOptions, 'runtimeBootTimeout'), false);
   assert.equal(result.ok, true);
   assert.equal(result.status, 'preview-accepted');
   assert.equal(result.previewAccepted, true);
@@ -298,6 +299,15 @@ test('preview-only verify can pass preview gates without build artifact or build
   assert.equal(result.runnable.passed, false);
   assert.equal(Object.hasOwn(result.runnable.artifacts, 'builtHtml'), false);
   assert.match(result.claim, /build acceptance was not run and is not claimed/);
+  let bootGateOptions;
+  verifyCorePort({
+    unityProject: fixture.unity, cocosProject: fixture.cocos, runGates: true,
+    previewOnly: true, previewUrl: DEFAULT_PREVIEW_URL, runtimeBootTimeout: 45,
+  }, {
+    assertPreflight: () => ({ receipt: { receiptId: 'rcp:test', briefId: 'brf:test', stateFingerprint: 'state' } }),
+    runGates: (_root, options) => { bootGateOptions = options; return PREVIEW_REQUIRED_SCRIPTS.map(item => ({ id: item.id, ok: true })); },
+  });
+  assert.equal(bootGateOptions.runtimeBootTimeout, 45);
   assert.equal(result.nextActions.includes('Create/import builtHtml'), false);
 });
 
@@ -909,4 +919,38 @@ test('explicit preview delivery runs runtime against the URL without invoking a 
  assert.equal(result.length,REQUIRED_SCRIPTS.length-1);assert.equal(result.some(g=>g.id==='build.playable'),false);
  assert.ok(calls.at(-1).includes('--url'));assert.ok(calls.at(-1).includes('http://localhost:7456/'));
  assert.throws(()=>parseArgs(['verify','--unity-project',fixture.unity,'--preview-only','--preview-url','http://localhost/;echo']), error => error.code === 'CORE_PORT_PREVIEW_URL_INVALID');
+});
+
+test('preview-only verify forwards --runtime-boot-timeout to the runtime gate as --boot-timeout', t => {
+  const fixture = projectFixture(t);
+  const parsed = parseArgs(['verify', '--unity-project', fixture.unity, '--preview-only',
+    '--preview-url', 'http://localhost:7458/', '--runtime-boot-timeout', '45']);
+  assert.equal(parsed.runtimeBootTimeout, 45);
+  assert.equal(parseArgs(['verify', '--unity-project', fixture.unity, '--preview-only',
+    '--runtime-boot-timeout=120']).runtimeBootTimeout, 120);
+  for (const bad of ['4', '121', 'abc', '-10', '1e2', '30s']) {
+    assert.throws(() => parseArgs(['verify', '--unity-project', fixture.unity, '--preview-only',
+      '--runtime-boot-timeout', bad]), error => error.code === 'CORE_PORT_RUNTIME_BOOT_TIMEOUT_INVALID', bad);
+  }
+  assert.throws(() => parseArgs(['verify', '--unity-project', fixture.unity, '--runtime-boot-timeout', '30']),
+    error => error.code === 'CORE_PORT_PREVIEW_MODE_INVALID');
+  assert.throws(() => parseArgs(['init', '--unity-project', fixture.unity, '--runtime-boot-timeout', '30']),
+    error => error.code === 'CORE_PORT_PREVIEW_MODE_INVALID');
+  assert.throws(() => parseArgs(['verify', '--unity-project', fixture.unity, '--preview-only', '--runtime-boot-timeout']),
+    error => error.code === 'CORE_PORT_OPTION_VALUE_REQUIRED');
+
+  const calls = [];
+  const gates = runRequiredGates(fixture.cocos, {
+    previewOnly: true, previewUrl: 'http://localhost:7458/', runtimeBootTimeout: 45, platform: 'linux',
+    spawnSync: (_exe, args) => { calls.push(args); return { status: 0, stdout: '', stderr: '' }; },
+  });
+  assert.equal(gates.every(gate => gate.ok), true);
+  assert.deepEqual(calls.at(-1), ['run', 'ai:verify:runtime', '--', '--url', 'http://localhost:7458/', '--boot-timeout', '45']);
+  assert.equal(calls.slice(0, -1).some(args => args.includes('--boot-timeout')), false);
+  const defaults = [];
+  runRequiredGates(fixture.cocos, {
+    previewOnly: true, previewUrl: 'http://localhost:7458/', platform: 'linux',
+    spawnSync: (_exe, args) => { defaults.push(args); return { status: 0, stdout: '', stderr: '' }; },
+  });
+  assert.equal(defaults.at(-1).includes('--boot-timeout'), false, 'default 30 s lives in verify-runtime');
 });
