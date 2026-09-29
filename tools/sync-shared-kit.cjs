@@ -29,6 +29,9 @@ const SHARED_KIT_ROOT = path.join(PROJECT_ROOT, 'playable-shared-kit');
 const TARGET_SHARED_DIR = path.join(PROJECT_ROOT, 'assets', 'script', 'shared');
 const SHARED_EXTENSIONS_DIR = path.join(SHARED_KIT_ROOT, 'packages', 'extensions');
 const TARGET_EXTENSIONS_DIR = path.join(PROJECT_ROOT, 'extensions');
+const SCENE_VIEW_SOURCE_DIR = path.join(SHARED_KIT_ROOT, 'packages', 'scene-view');
+const TARGET_SCENE_VIEW_DIR = path.join(PROJECT_ROOT, 'assets', 'scene-view');
+const ENGINE_SETTINGS_FILE = path.join(PROJECT_ROOT, 'settings', 'v2', 'packages', 'engine.json');
 
 const PACKAGE_MAPPING = [
   { source: path.join(SHARED_KIT_ROOT, 'packages', 'playable-sdk'), dest: path.join(TARGET_SHARED_DIR, 'sdk') },
@@ -307,6 +310,43 @@ export const PLAYABLE_SHARED_MODULE_LAYOUT = 1;
   ensureScriptMeta(indexPath);
 }
 
+/**
+ * Runtime Scene view: a debug tool that lives in the running game, so it ships
+ * as plain sources under assets/ rather than as an editor extension.
+ */
+function syncSceneView() {
+  if (!fs.existsSync(SCENE_VIEW_SOURCE_DIR)) return;
+
+  console.log('[sync-shared-kit] Syncing scene view -> assets/scene-view ...');
+  copyDirectoryRecursive(SCENE_VIEW_SOURCE_DIR, TARGET_SCENE_VIEW_DIR);
+  console.log('  [ok] Synced: scene-view -> assets/scene-view');
+  ensureGeometryRenderer();
+}
+
+/**
+ * The scene view draws every gizmo through GeometryRenderer, so a project that
+ * cropped that module away renders nothing but the split screen. Absent config
+ * means the project is on engine defaults, where the module is already on.
+ */
+function ensureGeometryRenderer() {
+  if (!fs.existsSync(ENGINE_SETTINGS_FILE)) return;
+
+  let parsed;
+  try {
+    parsed = JSON.parse(fs.readFileSync(ENGINE_SETTINGS_FILE, 'utf8').replace(/^\uFEFF/, ''));
+  } catch (error) {
+    console.warn('  [warn] Could not read engine.json, check Feature Cropping by hand:', error.message);
+    return;
+  }
+
+  const cache = parsed?.modules?.configs?.defaultConfig?.cache;
+  const entry = cache?.['geometry-renderer'];
+  if (!entry || entry._value === true) return;
+
+  entry._value = true;
+  fs.writeFileSync(ENGINE_SETTINGS_FILE, JSON.stringify(parsed, null, 2) + '\n', 'utf8');
+  console.log('  [ok] Enabled geometry-renderer (scene view gizmos need it)');
+}
 function syncPackageJson() {
   const tmplPath = path.join(SHARED_KIT_ROOT, 'template-config', 'package.scripts_TEMPLATE.json');
   const pkgPath = path.join(PROJECT_ROOT, 'package.json');
@@ -393,6 +433,7 @@ function syncSharedKit(options = {}) {
 
   generateSharedIndex(TARGET_SHARED_DIR);
   syncExtensions(true);
+  syncSceneView();
   syncPackageJson();
   // Launchers are part of the kit contract too; updating only packages leaves
   // fresh projects running an older setup/open workflow.
@@ -419,11 +460,14 @@ if (require.main === module) {
 module.exports = {
   syncSharedKit,
   syncExtensions,
+  syncSceneView,
+  ensureGeometryRenderer,
   reconcileDestinationWithSource,
   prepareCocosMcpForSync,
   resolveNodeModuleSearchPath,
   TARGET_SHARED_DIR,
   TARGET_EXTENSIONS_DIR,
+  TARGET_SCENE_VIEW_DIR,
   SHARED_EXTENSIONS_DIR,
   SHARED_KIT_ROOT,
   PROJECT_ROOT,
