@@ -3267,7 +3267,11 @@ function ensureImageAssetMeta(assetFile, config = {}) {
   const borderRight = Number.isFinite(Number(spriteBorder.right)) ? Number(spriteBorder.right) : 0;
   const pixelsToUnit = Number.isFinite(Number(config.pixelsToUnit)) ? Number(config.pixelsToUnit) : 100;
   const requestedImageType = String(config.imageType || '').toLowerCase();
-  const wantsTextureType = isParticleTexture || requestedImageType === 'texture';
+  // A sprite-frame image also carries the texture sub-asset particles and materials sample, so a texture
+  // request never downgrades it: a UI sprite sharing a particle texture lost its SpriteFrame on every re-port
+  // (Blast Shooter's glow1.png / star.png: "The asset <uuid>@f9941 is missing").
+  const keepsSpriteFrame = existing.userData?.type === 'sprite-frame' && requestedImageType !== 'texture-only';
+  const wantsTextureType = (isParticleTexture || requestedImageType === 'texture') && !keepsSpriteFrame;
   const wantsSpriteFrameType = requestedImageType === 'sprite-frame' || !wantsTextureType;
   const meta = {
     ver: existing.ver || '1.0.27',
@@ -9530,6 +9534,7 @@ module.exports = {
   emitCanvas,
   resolveTransformLayout,
   unityRectEdgeWidget,
+  ensureImageAssetMeta,
   recordPendingMeshRepair,
   repairPendingMeshRefs,
   emitCanvasGroup,
