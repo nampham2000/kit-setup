@@ -1,0 +1,4 @@
+# Mirrored from scene-view-kit, which pins LF. Without this the checkout would
+# differ from the source on every byte-compare and the mirror would churn.
+packages/scene-view/*.ts text eol=lf
+packages/scene-view/*.md text eol=lf

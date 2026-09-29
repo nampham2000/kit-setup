@@ -70,12 +70,20 @@ function locateSources(root) {
   throw new Error(`[scene-view] no ${SENTINEL} under ${root}`);
 }
 
+/**
+ * Read as text with line endings normalised.
+ *
+ * The source repo pins LF through .gitattributes while a consumer may check out
+ * CRLF, and a byte comparison then calls every single file changed - the mirror
+ * would rewrite all of them on every run and never report real drift.
+ */
 function readDir(dir) {
   if (!fs.existsSync(dir)) return new Map();
   const files = new Map();
   for (const name of fs.readdirSync(dir)) {
     if (!isTracked(name)) continue;
-    files.set(name, fs.readFileSync(path.join(dir, name)));
+    const text = fs.readFileSync(path.join(dir, name), 'utf8');
+    files.set(name, text.replace(/\r\n/g, '\n'));
   }
   return files;
 }
@@ -85,9 +93,9 @@ function diff(source, target) {
   const changed = [];
   const removed = [];
 
-  for (const [name, bytes] of source) {
+  for (const [name, text] of source) {
     if (!target.has(name)) added.push(name);
-    else if (!bytes.equals(target.get(name))) changed.push(name);
+    else if (text !== target.get(name)) changed.push(name);
   }
   for (const name of target.keys()) {
     if (!source.has(name)) removed.push(name);
@@ -98,7 +106,7 @@ function diff(source, target) {
 function apply(sourceDir, source, result) {
   fs.mkdirSync(TARGET_DIR, { recursive: true });
   for (const name of [...result.added, ...result.changed]) {
-    fs.writeFileSync(assertInside(path.join(TARGET_DIR, name), TARGET_DIR, 'write'), source.get(name));
+    fs.writeFileSync(assertInside(path.join(TARGET_DIR, name), TARGET_DIR, 'write'), source.get(name), 'utf8');
   }
   for (const name of result.removed) {
     fs.rmSync(assertInside(path.join(TARGET_DIR, name), TARGET_DIR, 'delete'), { force: true });
