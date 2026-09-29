@@ -122,3 +122,16 @@ test('model external material remaps keep 3ds Max names containing #', () => {
   const remaps = collectUnityModelExternalMaterialRemaps({ path: file }, unityDb);
   assert.deepEqual(remaps.map((entry) => [entry.name, entry.materialAsset.guid]), [['Material #137', 'aaaa'], ['Material #138', 'bbbb']]);
 });
+
+// Importers without an internalIDToNameTable reference FBX meshes by xxHash64("Type:Mesh-><name><i>").
+// The mesh name then comes from the FBX Model names; without it the material reorder above never ran
+// (Blast Shooter's Base_All.fbx edge tiles drew their top with the wall material).
+test('unityModelMeshName resolves a hashed mesh fileID through the FBX model names', () => {
+  const { unityModelMeshName } = require('./unity-cocos-port/model-import-basis');
+  const { unitySubAssetFileId } = require('./unity-cocos-port/unity-file-id');
+  const file = chestFbx();
+  fs.writeFileSync(`${file}.meta`, 'fileFormatVersion: 2\nguid: 0123456789abcdef0123456789abcdef\nModelImporter:\n  serializedVersion: 22200\n  meshes:\n    globalScale: 1\n');
+  const asset = { path: file, ext: '.fbx' };
+  assert.equal(unityModelMeshName(asset, unitySubAssetFileId('Mesh', 'Base', 0)), 'Base');
+  assert.equal(unityModelMeshName(asset, '12345'), '');
+});
