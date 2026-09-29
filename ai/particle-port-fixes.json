@@ -916,7 +916,7 @@
     },
     {
       "id": "wind-zone-external-forces",
-      "origin": "kriptofx-rep4 review",
+      "origin": "d1ff63a",
       "applicability": "automatic",
       "sharedPaths": [
         "tools/unity-cocos-port/wind-zone-binding.js",
