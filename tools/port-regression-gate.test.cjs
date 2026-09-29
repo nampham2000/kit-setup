@@ -619,6 +619,42 @@ test('mandatory suite failure writes evidence but keeps the gate red', async t =
     error => error.code === 'REGRESSION_RECEIPT_STALE');
 });
 
+test('infra chunk-load retries are marked in the receipt without changing its digest', async t => {
+  const root = fixture(t);
+  const matrix = 'tools/qa/input.json';
+  writeMatrix(root, matrix, [{
+    name: 'tap', gesture: '0.5,0.5,0.5,0.5,100,1', eval: 'true', requireEvalOk: true,
+  }]);
+  writeRegistry(root, registry([{
+    id: 'input', risks: ['input-response'], matrix, watchFiles: ['assets/script/Game.ts'],
+  }], ['input-response']));
+  const firstError = 'Error loading cce:/internal/x/cc-fu/2d from http://localhost:7458/scripting/x/chunks/93/93.js (SystemJS Error#3 https://git.io/JvFET#3)';
+  const deps = run => ({
+    assertPortable() { return { ok: true, files: 3 }; },
+    runMatrix() { return run; },
+  });
+  const clean = await runRegressionGate({ project: root, refresh: false }, deps({ run: 1, ok: true, cases: [{ name: 'tap', ok: true }] }));
+  const retried = await runRegressionGate({ project: root, refresh: false }, deps({
+    run: 1, ok: true,
+    infraRetries: [{ case: 'tap', reason: 'systemjs-chunk-load', firstError, recovered: true }],
+    cases: [{ name: 'tap', ok: true, infraRetry: { reason: 'systemjs-chunk-load', firstError } }],
+  }));
+  assert.equal(retried.ok, true);
+  assert.equal(retried.snapshotDigest, clean.snapshotDigest);
+  assert.equal(retried.suites[0].infraRetries, 1);
+  const receipt = JSON.parse(fs.readFileSync(path.join(root, ...DEFAULT_RECEIPT.split('/')), 'utf8'));
+  assert.equal(receipt.suites[0].runs[0].cases[0].infraRetry.reason, 'systemjs-chunk-load');
+  assert.equal(checkRegressionReceipt({ project: root, portabilityCheck: false }).ok, true);
+
+  const infraFailed = await runRegressionGate({ project: root, refresh: false }, deps({
+    run: 1, ok: false, code: 'PREVIEW_INFRA_CHUNK_LOAD',
+    cases: [{ name: 'tap', ok: false, code: 'PREVIEW_INFRA_CHUNK_LOAD' }],
+  }));
+  assert.equal(infraFailed.ok, false);
+  assert.equal(infraFailed.suites[0].code, 'PREVIEW_INFRA_CHUNK_LOAD');
+  assert.match(infraFailed.nextActions[0], /PREVIEW_INFRA_CHUNK_LOAD/);
+});
+
 test('selective suite rerun merges only into a current complete receipt', async t => {
   const root = fixture(t);
   const firstMatrix = 'tools/qa/first.json';

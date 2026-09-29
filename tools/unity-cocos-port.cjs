@@ -323,6 +323,8 @@ const componentDispatcher = createComponentDispatcher({
   emitSpringJoint,
   emitCanvas,
   emitCanvasGroup,
+  emitTrailRenderer,
+  emitWindZone: (ctx) => require('./unity-cocos-port/wind-zone-binding').emitWindZone(ctx, getField),
 });
 
 // UGUI CanvasGroup (class 225): m_Alpha multiplies the subtree like cc.UIOpacity (popup fades animate it).
@@ -7264,6 +7266,7 @@ function buildCocosPrefabBuilder(model, outputFile, options, reporter, unityDb, 
   require('./unity-cocos-port/particle-edge-shape-binding.cjs').attachEdgeShapeRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-burst-emission-binding').attachBurstEmissionRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-limit-velocity-binding').attachLimitVelocityRuntime(builder, reporter, options);
+  require('./unity-cocos-port/wind-zone-binding').attachExternalForcesRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-prewarm-binding').attachPrewarmRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-euler-rotation-binding').attachEulerRotationRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-mesh-frame-binding').attachMeshFrameRuntime(builder, reporter, options);
@@ -7849,7 +7852,7 @@ function portPrefabBatch(options) {
     totals.high += result.counts.high;
     totals.medium += result.counts.medium;
     totals.low += result.counts.low;
-    if (!result.failed) cache.record(entry.sourceFile, entry.outputFile, result.counts);
+    if (!result.failed && !reporter.needsRerun()) cache.record(entry.sourceFile, entry.outputFile, result.counts);
   }
 
   cache.save();
@@ -8481,6 +8484,30 @@ function emitLineRenderer(gameObject, nodeId, componentId, doc, model, builder, 
     positions,
   }, componentId, `cmp-line-renderer-${componentId}`);
   reporter.low('LINE_RENDERER_BOUND', model.file, gameObject.name, `LineRenderer strip runtime attached (${positions.length} points); live visual acceptance still required.`);
+}
+
+// Unity TrailRenderer (class 96): runtime/UnityTrailRendererAdapter.ts appends the node's world
+// position each frame and builds the native View/Stretch strip; the material slot 0 is the trail
+// material (pack material passes may rebind it, like LineRenderer materials).
+function emitTrailRenderer(gameObject, nodeId, componentId, doc, model, builder, reporter, options, unityDb, cocosDb) {
+  const { emitTrailRendererComponent, stageTrailRendererRuntime } = require('./unity-cocos-port/trail-renderer-binding');
+  const { unityMaterialRenderQueue, unitySortingLayerValue } = require('./unity-cocos-port/particle-sorting-binding');
+  const parsed = parseUnityRendererDoc(doc);
+  const trail = parsed.TrailRenderer || parsed;
+  const materialRef = getNestedList(doc, 'm_Materials')[0];
+  const materialAsset = unityDb.get(unityRefGuid(materialRef));
+  const materialUuid = materialAsset ? resolveUnityMaterialUuid(materialAsset, options, unityDb, cocosDb, reporter, gameObject.name) : '';
+  if (!options.dryRun) stageTrailRendererRuntime(options.cocosRoot);
+  let classId = cocosDb?.findScriptClass?.('UnityTrailRendererAdapter')?.classId;
+  const meta = path.join(options.cocosRoot, 'assets/script/UnityTrailRendererAdapter.ts.meta');
+  if (!classId && fs.existsSync(meta)) {
+    try { classId = compressUuid(JSON.parse(fs.readFileSync(meta, 'utf8')).uuid); } catch (_) { classId = ''; }
+  }
+  emitTrailRendererComponent({
+    nodeId, componentId, trail, materialUuid, classId, name: gameObject.name, file: model.file,
+    queue: materialAsset ? unityMaterialRenderQueue(materialAsset, unityDb) : null,
+    layer: unitySortingLayerValue(trail.m_SortingLayerID, options),
+  }, builder, reporter);
 }
 
 function emitMeshCollider(nodeId, componentId, doc, gameObject, model, builder, reporter, options, unityDb, cocosDb) {

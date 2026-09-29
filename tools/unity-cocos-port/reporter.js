@@ -133,6 +133,15 @@ class Reporter {
     }
   }
 
+  /**
+   * True when a binding could not finish until AssetDB imports a staged script/effect/model
+   * ("... refresh and rerun porter"). Such output must not be cached: the source is unchanged,
+   * so a cached entry would replay the unbound output on the rerun the message asks for.
+   */
+  needsRerun() {
+    return this.issues.some((issue) => /rerun (the )?porter/i.test(`${issue.message} ${issue.detail}`));
+  }
+
   summary() {
     const counts = { high: 0, medium: 0, low: 0 };
     for (const issue of this.issues) counts[issue.severity] += 1;

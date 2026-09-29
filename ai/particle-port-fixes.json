@@ -913,6 +913,21 @@
         "tools/unity-cocos-port/fixtures/capture-inherit-velocity.cs"
       ],
       "acceptance": "World-simulation InheritVelocity Initial with a constant multiplier adds multiplier * emitter velocity (transform displacement / frame dt) to the base velocity at birth, matching native Unity 6000.3.1f1 within 1e-4 (fixtures/inherit-velocity-native.json). Local simulation is a measured no-op; Current mode and curve multipliers stay reported high until bound."
+    },
+    {
+      "id": "wind-zone-external-forces",
+      "origin": "d1ff63a",
+      "applicability": "automatic",
+      "sharedPaths": [
+        "tools/unity-cocos-port/wind-zone-binding.js",
+        "tools/unity-cocos-port/runtime/UnityWindZone.ts",
+        "tools/unity-cocos-port/runtime/UnityParticleExternalForces.ts",
+        "tools/unity-cocos-port/runtime/UnityParticleExternalForcesAdapter.ts"
+      ],
+      "testPaths": [
+        "tools/unity-cocos-port/wind-zone.test.cjs"
+      ],
+      "acceptance": "Native WindZone law (spherical 1 - r^2/R^2 falloff, directional forward, pulse, multiplier, Local simulation space). Scripts that animate windMain (e.g. KriptoFX RFX4_WindCurves) must be ported per project; influence filters and multiplier curves are refused."
     }
   ]
 }

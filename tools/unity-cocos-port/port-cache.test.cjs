@@ -40,3 +40,17 @@ test('an entry recorded by different porter code is never reused', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('output that waits for an AssetDB import is not cached, so the requested rerun binds it', () => {
+  const { Reporter } = require('./reporter');
+  const reporter = new Reporter();
+  reporter.high('LINE_RENDERER_ADAPTER_REQUIRED', 'Fx.prefab', 'Line', 'unsupported alignment');
+  assert.equal(reporter.needsRerun(), false);
+  reporter.high('WIND_ZONE_RUNTIME_REQUIRED', 'Fx.prefab', 'Wind', 'AssetDB must import assets/script/UnityWindZone.ts; refresh and rerun porter.');
+  assert.equal(reporter.needsRerun(), true);
+  const skinned = new Reporter();
+  skinned.medium('SKINNED_MESH_PENDING', 'Fx.prefab', 'Body', 'Model copied for AssetDB import; refresh and rerun the porter to bind the skinned mesh.');
+  assert.equal(skinned.needsRerun(), true);
+  const batch = fs.readFileSync(path.join(__dirname, '..', 'unity-cocos-port.cjs'), 'utf8');
+  assert.match(batch, /if \(!result\.failed && !reporter\.needsRerun\(\)\) cache\.record\(/);
+});

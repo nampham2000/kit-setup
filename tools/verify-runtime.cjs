@@ -618,7 +618,92 @@ function isEnvironmentError(texts, environmentHosts, previewUrl) {
   return injected;
 }
 
-async function runOne(target, options) {
+// ─────────────────────────────────────────────── infra chunk-load retry ──
+//
+// A Cocos editor preview boots its engine from one ~19 MB named-register bundle
+// (/scripting/engine/bin/.cache/dev/preview/bundled/index.js) plus project/engine
+// chunks under /scripting/x/chunks/. On a loaded machine (several editors and
+// headless Chromes at once) that transfer occasionally fails; the engine modules
+// ("cce:/internal/x/cc-fu/2d" -> "q-bundled:///fs/exports/2d.js") are then never
+// registered, SystemJS falls back to fetching the specifier itself and throws
+// "Error loading cce:/internal/... from .../scripting/x/chunks/... (SystemJS
+// Error#3 ...)". The game never boots, so every assertion of the case fails for a
+// reason that is not the product. Such a case is retried exactly once in a fresh
+// browser; project-script errors, assertion failures and anything else are never
+// retried, and a second infra failure is reported as PREVIEW_INFRA_CHUNK_LOAD.
+const PREVIEW_INFRA_CHUNK_LOAD = 'PREVIEW_INFRA_CHUNK_LOAD';
+const SYSTEMJS_LOAD_ERROR = /Error loading (\S+?)(?: from (\S+?))?\s*\(SystemJS (?:Error#3 )?https?:\/\/git\.io\/JvFET#3\)/;
+const NET_ERROR = /net::(ERR_[A-Z0-9_]+)/;
+const PROJECT_SCRIPT_REFERENCE = /db:\/\/assets|(?:^|[\s/\\(<"'])assets[/\\]/i;
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+/** True for an engine module or an editor-served preview chunk; never for a project asset path. */
+function isEngineChunkUrl(value) {
+  const url = String(value || '');
+  if (!url || PROJECT_SCRIPT_REFERENCE.test(url)) return false;
+  if (/^cce:\/internal\//.test(url) || /^q-bundled:\/\/\/fs\//.test(url)) return true;
+  let parsed;
+  try { parsed = new URL(url); } catch (_) { return false; }
+  if (!/^https?:$/.test(parsed.protocol) || !LOOPBACK_HOSTS.has(parsed.hostname.toLowerCase())) return false;
+  return /^\/scripting\/x\/chunks\//.test(parsed.pathname) || /^\/scripting\/engine\//.test(parsed.pathname);
+}
+
+/**
+ * Classify one attempt. Returns {reason, firstError} only when the page recorded an
+ * engine/editor chunk-load failure and nothing in its errors references a project
+ * script (assets/..., db://assets). Everything else returns null (no retry).
+ */
+function classifyInfraChunkLoadFailure(result) {
+  if (!result || result.ok) return null;
+  const texts = [
+    ...(result.exceptions || []),
+    ...(result.consoleErrors || []),
+    ...(result.exceptionDetails || []).flatMap(item => [item.message, item.url,
+      ...(item.stack || []).map(frame => frame.url)]),
+    ...(result.consoleErrorDetails || []).flatMap(item => [item.message, item.url]),
+  ].filter(Boolean).map(String);
+  // Project stack frames/urls in the preview are chunk URLs, so a project reference here is explicit
+  // (db://assets, a source path in the message): that failure belongs to the product.
+  if (texts.some(text => PROJECT_SCRIPT_REFERENCE.test(text))) return null;
+  for (const text of texts) {
+    const match = SYSTEMJS_LOAD_ERROR.exec(text);
+    if (match && isEngineChunkUrl(match[1]) && (!match[2] || isEngineChunkUrl(match[2]))) {
+      return { reason: 'systemjs-chunk-load', firstError: text.slice(0, 500) };
+    }
+  }
+  for (const item of result.consoleErrorDetails || []) {
+    const net = NET_ERROR.exec(String(item.message || ''));
+    if (net && isEngineChunkUrl(item.url)) {
+      return { reason: 'net-error-chunk-load', firstError: `${net[0]} <${String(item.url).slice(0, 300)}>` };
+    }
+  }
+  return null;
+}
+
+/**
+ * Run one target with at most one infra retry. `dependencies.attempt` replaces the real
+ * browser attempt (tests). The returned result is the final attempt's own evidence; a retry
+ * is recorded as `infraRetry` and never changes what counts toward the verdict.
+ */
+async function runOne(target, options, dependencies = {}) {
+  const attempt = dependencies.attempt || runOneAttempt;
+  const first = await attempt(target, options);
+  const infra = classifyInfraChunkLoadFailure(first);
+  if (!infra) return first;
+  const second = await attempt(target, options);
+  const secondInfra = classifyInfraChunkLoadFailure(second);
+  second.infraRetry = {
+    reason: infra.reason,
+    firstError: infra.firstError,
+    attempts: 2,
+    recovered: second.ok === true,
+    ...(secondInfra ? { secondError: secondInfra.firstError } : {}),
+  };
+  if (secondInfra) second.code = PREVIEW_INFRA_CHUNK_LOAD;
+  return second;
+}
+
+async function runOneAttempt(target, options) {
   if(options.checkpoints)validateCheckpoints(options.checkpoints);
   const isUrl = isUrlTarget(target);
   const htmlFile = isUrl ? null : target;
@@ -1148,6 +1233,7 @@ async function main() {
       console.log(`   ${color('red', 'KHUNG ĐƠN SẮC')} — 3 vùng lấy mẫu giống hệt nhau: playable chạy nhưng KHÔNG vẽ nội dung.`);
     }
     if (r.screenshot) console.log(`   ảnh chụp: ${r.screenshot} (${Math.round(r.screenshotBytes / 1024)} KB)`);
+    if (r.infraRetry) console.log(`   ${color('yellow', 'infra-retry')} ${r.infraRetry.reason}: ${r.infraRetry.firstError}${r.code ? ` -> ${r.code}` : ''}`);
     for (const e of r.exceptions.slice(0, 5)) console.log(`   ${color('red', 'exception')} ${e}`);
     for (const e of r.consoleErrors.slice(0, 5)) console.log(`   ${color('red', 'console.error')} ${e}`);
     if (r.consoleWarnings.length) console.log(`   ${color('yellow', 'warning')} ${r.consoleWarnings.length} cảnh báo (dùng --json để xem)`);
@@ -1176,7 +1262,8 @@ if (require.main === module) {
 module.exports = {
   normalizeEnvironmentHosts,
   isEnvironmentError,
-  runOne, runtimeVerdict, findBuiltHtml, findBrowser, ensureWebSocketRuntime,
+  runOne, runOneAttempt, runtimeVerdict, findBuiltHtml,
+  classifyInfraChunkLoadFailure, isEngineChunkUrl, PREVIEW_INFRA_CHUNK_LOAD, findBrowser, ensureWebSocketRuntime,
   parseArgs, parseGesture, resolveGestureFromEvalBefore, guardRuntimePreviewProject,
   isNavigationEvaluationError, evaluatePageWithNavigationRetry,
   dispatchTouchGesture, dispatchTouchGestureSequence, selectCocosPreviewDevice,
