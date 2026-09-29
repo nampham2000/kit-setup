@@ -17,6 +17,7 @@ const {
 const { parseUnityParticleDoc } = require('./particle-system-converter');
 const { distanceSubEmitterContract } = require('./particle-distance-subemitter-contract.cjs');
 const { writeGeneratedAssetText } = require('./generated-asset-writer.cjs');
+const { findMirroredRendererNodes } = require('./mirrored-culling-detect.cjs');
 
 const RUNTIME_DIR = path.join(__dirname, 'runtime');
 const SCRIPT_TARGET_DIR = path.join('assets', 'script');
@@ -60,6 +61,11 @@ const RUNTIME_SCRIPTS = {
     className: 'UnitySpriteRendererColorAdapter',
     missingCode: 'SPRITE_RENDERER_COLOR_ADAPTER_TEMPLATE_MISSING',
     missingMessage: 'Unity SpriteRenderer color animation needs a runtime script adapter, but the template is missing',
+  },
+  mirroredCulling: {
+    className: 'UnityMirroredCulling',
+    missingCode: 'MIRRORED_CULLING_TEMPLATE_MISSING',
+    missingMessage: 'Mirrored Unity renderers need the UnityMirroredCulling winding adapter, but the template is missing',
   },
 };
 
@@ -713,10 +719,13 @@ function createRuntimeComponentPorter(deps) {
 
       const data = parseUnityParticleDoc(doc);
       const rateRange = data?.EmissionModule?.rateOverDistance;
-      if (Number(rateRange?.minMaxState || 0) !== 0) continue;
+      const rateMode = Number(rateRange?.minMaxState || 0);
+      // Constant, or Random Between Two Constants (minScalar..scalar); curve modes stay native.
+      if (rateMode !== 0 && rateMode !== 3) continue;
 
       const rateOverDistance = Number(rateRange?.scalar || 0);
       if (!(rateOverDistance > 0)) continue;
+      const rateOverDistanceMin = rateMode === 3 ? Math.max(0, Math.min(rateOverDistance, Number(rateRange?.minScalar || 0))) : rateOverDistance;
 
       const particleId = builder.componentMap.get(componentId);
       const particle = builder.objects[particleId];
@@ -728,10 +737,17 @@ function createRuntimeComponentPorter(deps) {
       // nested PrefabInstance, the effective rate is whatever the flattening pass
       // already wrote onto the Cocos curve, so prefer that.
       const emittedCurve = objectByRef(builder.objects, particle.rateOverDistance);
-      const effectiveRate = Number(emittedCurve?.constant);
-      const rate = Number.isFinite(effectiveRate) && effectiveRate > 0
-        ? effectiveRate
-        : rateOverDistance;
+      let rate = rateOverDistance;
+      let rateMax = 0;
+      if (rateMode === 3) {
+        const low = Number(emittedCurve?.constantMin), high = Number(emittedCurve?.constantMax);
+        const multiplier = Number.isFinite(Number(emittedCurve?.multiplier)) ? Number(emittedCurve.multiplier) : 1;
+        rate = Number.isFinite(low) && Number.isFinite(high) && high > 0 ? low * multiplier : rateOverDistanceMin;
+        rateMax = Number.isFinite(low) && Number.isFinite(high) && high > 0 ? high * multiplier : rateOverDistance;
+      } else {
+        const effectiveRate = Number(emittedCurve?.constant);
+        if (Number.isFinite(effectiveRate) && effectiveRate > 0) rate = effectiveRate;
+      }
 
       if (!helperClassId) {
         reporter.medium(
@@ -748,6 +764,7 @@ function createRuntimeComponentPorter(deps) {
         builder.addComponent(nodeId, helperClassId, {
           particleSystem: cocosRef(particleId),
           rateOverDistance: rate,
+          ...(rateMax > rate ? { rateOverDistanceMax: rateMax } : {}),
         }, null, `cmp-unity-particle-rate-over-distance-${componentId}`);
       }
 
@@ -755,7 +772,7 @@ function createRuntimeComponentPorter(deps) {
         'PARTICLE_RATE_OVER_DISTANCE_EMITTER',
         model.file,
         node._name || '',
-        `Attached ${script.className} to distribute ${rate} particle(s) per world unit along high-speed movement`
+        `Attached ${script.className} to distribute ${rateMax > rate ? `${rate}-${rateMax} (uniform per update; Unity's draw frequency unmeasured)` : rate} particle(s) per world unit along high-speed movement`
       );
     }
   }
@@ -794,7 +811,47 @@ function createRuntimeComponentPorter(deps) {
     }, null, `cmp-unity-sprite-renderer-color-${unityComponentId}`);
   }
 
+  // Unity flips winding for a negative world determinant; Cocos does not. Attach
+  // the runtime adapter to every renderer node (or nested instance root) whose
+  // prefab-local chain is mirrored. The adapter re-checks the world sign at runtime.
+  function attachMirroredCulling(builder, reporter, options = {}) {
+    const script = RUNTIME_SCRIPTS.mirroredCulling;
+    const targets = findMirroredRendererNodes(builder);
+    if (!targets.length) return [];
+    const classId = readRuntimeScriptClassId(script, builder.cocosDb)
+      || (options.dryRun ? compressUuid(stableUuid(scriptRuntimeSeed(script))) : '');
+    if (!classId) {
+      reporter.medium(
+        'MIRRORED_CULLING_SCRIPT_MISSING',
+        '',
+        '',
+        `${targets.length} mirrored renderer node(s) need ${toPosix(scriptTargetPath(script))} but the script was not found in Cocos assets; they will render inside out`
+      );
+      return [];
+    }
+    const attached = [];
+    for (const target of targets) {
+      const node = builder.objects[target.nodeId];
+      if (nodeHasComponentType(builder, target.nodeId, classId)) continue;
+      builder.addComponent(target.nodeId, classId, {
+        includeDescendants: target.includeDescendants,
+      }, null, `cmp-unity-mirrored-culling-${target.nodeId}`);
+      attached.push(target.nodeId);
+      reporter.low(
+        'MIRRORED_RENDERER_CULLING',
+        '',
+        node?._name || '',
+        target.includeDescendants
+          ? `Nested prefab instance has a negative-determinant transform chain; ${script.className} flips front-face winding of its renderers like Unity`
+          : `Renderer transform chain has a negative determinant (odd count of negative scale axes); ${script.className} flips front-face winding like Unity`
+      );
+    }
+    return attached;
+  }
+
   return {
+    ensureMirroredCullingScript: (options, reporter) => ensureRuntimeScript(RUNTIME_SCRIPTS.mirroredCulling, options, reporter),
+    attachMirroredCulling,
     ensureParticleRendererVisibilityScript: (options, reporter) => ensureRuntimeScript(RUNTIME_SCRIPTS.particleRendererVisibility, options, reporter),
     attachParticleRendererVisibility,
     ensureParticleSubEmitterFollowerScript: (options, reporter) => {

@@ -41,6 +41,28 @@ function findConverter() {
   return roots.find(file => fs.existsSync(file)) || null;
 }
 
+test('the FBX holds the Unity mesh in the ported (Z-reflected) frame with front faces kept', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'unity-mesh-fbx-'));
+  const file = path.join(dir, 'Tray.fbx');
+  // Unity: a triangle 2 m in front of its pivot (+Z), clockwise from +Y, normal +Y.
+  writeUnityMeshAssetAsFbx({
+    meshName: 'Tray', positions: [[0, 0, 2], [1, 0, 3], [1, 0, 2]], normals: [[0, 1, 0.5], [0, 1, 0.5], [0, 1, 0.5]],
+    uvs: [[0, 0], [1, 1], [1, 0]], indices: [0, 1, 2],
+  }, file);
+  const text = fs.readFileSync(file, 'utf8');
+  const array = (label) => text.match(new RegExp(`${label}: \\*\\d+ \\{\\s*a: ([^\\n]+)`))[1].split(',').map(Number);
+  assert.deepEqual(array('Vertices'), [0, 0, -2, 1, 0, -3, 1, 0, -2]);
+  assert.deepEqual(array('Normals'), [0, 1, -0.5, 0, 1, -0.5, 0, 1, -0.5]);
+  assert.deepEqual(array('PolygonVertexIndex'), [0, 2, -2]);
+  // Counter-clockwise seen from +Y in the right-handed frame: the face still points up.
+  const v = array('Vertices');
+  const [a, b, c] = [0, 2, 1].map(i => v.slice(i * 3, i * 3 + 3));
+  const cross = (u, w) => [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]];
+  const n = cross(b.map((x, i) => x - a[i]), c.map((x, i) => x - a[i]));
+  assert.ok(n[1] > 0, `face normal ${n}`);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
 test('Cocos FBX-glTF-conv imports the exported mesh (skipped without a local Cocos install)', (t) => {
   const converter = findConverter();
   if (!converter) { t.skip('FBX-glTF-conv not installed'); return; }
@@ -51,6 +73,50 @@ test('Cocos FBX-glTF-conv imports the exported mesh (skipped without a local Coc
   const gltf = JSON.parse(fs.readFileSync(out, 'utf8'));
   assert.equal((gltf.nodes || []).length, 1);
   assert.deepEqual((gltf.meshes || []).map(mesh => mesh.name), ['Quad']);
+  // Unity mesh data is in metres. With UnitScaleFactor 1 (centimetres) the converter divided every
+  // vertex by 100 (Candy Pop Sort funnel bumpers and board corners rendered 1/100 size).
+  const position = gltf.accessors[gltf.meshes[0].primitives[0].attributes.POSITION];
+  const extent = Math.max(...position.max.map((v, i) => v - position.min[i]));
+  const scale = (gltf.nodes[0].scale || [1, 1, 1]).map(Math.abs);
+  assert.ok(Math.abs(extent * Math.max(...scale) - 1) < 1e-4, `quad extent ${extent} x node scale ${scale}`);
+});
+
+// Blast Shooter's conveyor trays have two sub-meshes (belt, walls). Exporting only sub-mesh 0 dropped the
+// walls; exporting both without Model DefaultAttributeIndex made FBX-glTF-conv skip SplitMeshesPerMaterial
+// and emit one primitive with polygon 0's material.
+test('each Unity sub-mesh becomes its own primitive in Unity order', (t) => {
+  const converter = findConverter();
+  if (!converter) { t.skip('FBX-glTF-conv not installed'); return; }
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'unity-mesh-fbx-'));
+  const file = path.join(dir, 'Tray.fbx');
+  writeUnityMeshAssetAsFbx({ ...quad, meshName: 'Tray', indices: [0, 1, 2, 0, 2, 3, 0, 1, 3], subMeshTriangles: [1, 2] }, file);
+  const out = path.join(dir, 'out.gltf');
+  const result = spawnSync(converter, [file, '--out', out], { encoding: 'utf8', timeout: 60000 });
+  assert.equal(result.status, 0, result.stderr);
+  const gltf = JSON.parse(fs.readFileSync(out, 'utf8'));
+  const primitives = gltf.meshes[0].primitives.map(p => [p.material, gltf.accessors[p.indices].count]);
+  assert.deepEqual(primitives, [[0, 3], [1, 6]]);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('sub-mesh ranges are read from m_SubMeshes', () => {
+  const { parseUnityMeshAsset } = require('./unity-mesh-fbx-exporter.js');
+  const vertex = (p) => { const f = Buffer.alloc(12); p.forEach((v, i) => f.writeFloatLE(v, i * 4)); return f; };
+  const data = Buffer.concat([[0, 0, 0], [1, 0, 0], [0, 0, 1], [1, 0, 1]].map(vertex));
+  const channel = (offset, format, dimension) => [`    - stream: 0`, `      offset: ${offset}`, `      format: ${format}`, `      dimension: ${dimension}`];
+  const yaml = ['%YAML 1.1', '--- !u!43 &4300000', 'Mesh:', '  m_Name: Tray', '  m_MeshCompression: 0', '  m_IndexFormat: 0',
+    '  m_SubMeshes:', '  - serializedVersion: 2', '    firstByte: 0', '    indexCount: 3', '    topology: 0', '    baseVertex: 0',
+    '  - serializedVersion: 2', '    firstByte: 6', '    indexCount: 3', '    topology: 0', '    baseVertex: 0',
+    '  m_IndexBuffer: 000001000200010003000200', '  m_VertexData:', '    m_VertexCount: 4',
+    '    m_Channels:', ...channel(0, 0, 3), ...Array.from({ length: 13 }, () => channel(0, 0, 0)).flat(),
+    `    m_DataSize: ${data.length}`, `    _typelessdata: ${data.toString('hex')}`, ''].join('\n');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'unity-mesh-sub-'));
+  const file = path.join(dir, 'Tray.asset');
+  fs.writeFileSync(file, yaml);
+  const mesh = parseUnityMeshAsset(file);
+  assert.deepEqual(mesh.indices, [0, 1, 2, 1, 3, 2]);
+  assert.deepEqual(mesh.subMeshTriangles, [1, 1]);
+  fs.rmSync(dir, { recursive: true, force: true });
 });
 
 // Meshes extracted from a built player (m_MeshCompression > 0, as in ripped "HijackSource" folders)
@@ -111,5 +177,28 @@ test('m_CompressedMesh (CRLF YAML) decodes positions, UVs, normals and triangles
   mesh.positions.forEach((p, i) => p.forEach((v, a) => assert.ok(Math.abs(v - positions[i][a]) < 1e-5, `position ${i}.${a}`)));
   mesh.uvs.forEach((p, i) => p.forEach((v, a) => assert.ok(Math.abs(v - uvs[i][a]) < 1e-4, `uv ${i}.${a}`)));
   mesh.normals.forEach((n, i) => n.forEach((v, a) => assert.ok(Math.abs(v - normals[i][a]) < 5e-3, `normal ${i}.${a}`)));
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+// Blast Shooter's conveyor trays store normals as Float16 x4 ("format: 1, dimension: 52" - the dimension
+// byte carries flags above its low nibble). A Float32-only reader exported every normal as (0, 0, 1).
+test('Float16 normals (flagged dimension) are decoded from the vertex stream', () => {
+  const { parseUnityMeshAsset } = require('./unity-mesh-fbx-exporter.js');
+  const half = (v) => { const b = Buffer.alloc(2); const s = v < 0 ? 0x8000 : 0; const a = Math.abs(v);
+    if (a === 0) { b.writeUInt16LE(s); return b; }
+    const e = Math.floor(Math.log2(a)); b.writeUInt16LE(s | ((e + 15) << 10) | Math.round((a / 2 ** e - 1) * 1024)); return b; };
+  const vertex = (p, n) => { const f = Buffer.alloc(12); p.forEach((v, i) => f.writeFloatLE(v, i * 4)); return Buffer.concat([f, ...n.map(half)]); };
+  const data = Buffer.concat([vertex([0, 0, 0], [0, 1, 0, 0]), vertex([1, 0, 0], [0, 1, 0, 0]), vertex([0, 0, 1], [0, -0.5, 0, 0])]);
+  const channel = (offset, format, dimension) => [`    - stream: 0`, `      offset: ${offset}`, `      format: ${format}`, `      dimension: ${dimension}`];
+  const yaml = ['%YAML 1.1', '--- !u!43 &4300000', 'Mesh:', '  m_Name: Tray', '  m_MeshCompression: 0', '  m_IndexFormat: 0',
+    '  m_SubMeshes:', '  - firstByte: 0', '    indexCount: 3', '  m_IndexBuffer: 000001000200', '  m_VertexData:', '    m_VertexCount: 3',
+    '    m_Channels:', ...channel(0, 0, 3), ...channel(12, 1, 52), ...Array.from({ length: 12 }, () => channel(0, 0, 0)).flat(),
+    `    m_DataSize: ${data.length}`, `    _typelessdata: ${data.toString('hex')}`, ''].join('\n');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'unity-mesh-half-'));
+  const file = path.join(dir, 'Tray.asset');
+  fs.writeFileSync(file, yaml);
+  const mesh = parseUnityMeshAsset(file);
+  assert.deepEqual(mesh.positions, [[0, 0, 0], [1, 0, 0], [0, 0, 1]]);
+  assert.deepEqual(mesh.normals, [[0, 1, 0], [0, 1, 0], [0, -0.5, 0]]);
   fs.rmSync(dir, { recursive: true, force: true });
 });

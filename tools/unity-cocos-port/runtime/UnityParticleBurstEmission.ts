@@ -29,6 +29,14 @@ export function installUnityParticleBurstSpread(system: ParticleSystem): void {
 // miss later repeats when a frame spans multiple intervals. Unity catches them up.
 export function installUnityParticleBurstEmission(system: ParticleSystem): void {
     installUnityParticleBurstSpread(system);
+    installUnityParticleBurstCatchUp(system);
+}
+
+// Stock Burst.update re-arms an exhausted burst every step and fires it again whenever
+// burst.time >= time - dt. A clock whose time - dt rounds back onto an already crossed
+// burst time (the float32 simulation-step clock) replays it. Explicit per-cycle
+// emitted state fires each cycle exactly once.
+export function installUnityParticleBurstCatchUp(system: ParticleSystem): void {
     for (const burst of system.bursts) {
         const b = burst as any;
         if (b.unityBurstCatchUp) continue;

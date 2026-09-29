@@ -183,7 +183,7 @@ function indent(text, pad = '    ') {
  * @param {{name: string, type: string}[]} args.samplers
  * @returns {{text: string, diagnostics: object[], intentStyle: string|null}}
  */
-function buildSurfacePbrEffect({ docIR, passIR, yaml, ubo, samplers = [], propertyNameMap = new Map() }) {
+function buildSurfacePbrEffect({ docIR, passIR, yaml, ubo, samplers = [], propertyNameMap = new Map(), colorSpace = 'linear' }) {
   const programIR = passIR.program || {};
   const rawCode = programIR.rawHlsl || '';
   const diagnostics = [];
@@ -198,7 +198,9 @@ function buildSurfacePbrEffect({ docIR, passIR, yaml, ubo, samplers = [], proper
   };
   /** Lower HLSL to GLSL and bind Unity property names to Cocos uniforms. */
   const lowerAndBind = (code) => remapProps(lowerHlslToGlsl(code));
-  const colorSamplerNames = srgbSamplerNames(samplers);
+  // Gamma projects sample sRGB textures without hardware decoding (KriptoFX RFX4_Tornado rendered dark red
+  // through SRGBToLinear): only Linear projects decode colour samples.
+  const colorSamplerNames = colorSpace === 'gamma' ? [] : srgbSamplerNames(samplers);
   const lowerFragmentCode = (code) =>
     lowerSrgbTextureSamples(lowerAndBind(code), colorSamplerNames);
 

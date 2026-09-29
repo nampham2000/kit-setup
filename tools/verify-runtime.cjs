@@ -23,6 +23,7 @@ const { color } = require('./lib/term-color.cjs');
 const { createRuntimeProfile, closeRuntimeProfile } = require('./lib/runtime-profile.cjs');
 const { validateCheckpoints, captureRuntimeCheckpoints } = require('./lib/runtime-checkpoints.cjs');
 const { contentProbeClips } = require('./lib/runtime-content-probes.cjs');
+const { assertPreviewProjectIdentity, identityReceipt, MISMATCH_CODE } = require('./preview-project-identity.cjs');
 
 const WEBSOCKET_REEXEC_ENV = 'PLAYABLE_VERIFY_RUNTIME_WEBSOCKET_REEXEC';
 
@@ -68,6 +69,11 @@ Options:
   --file <path>        File HTML cần kiểm tra. Mặc định: bản build/common/ (bản network luôn báo lỗi thiếu SDK).
   --url <url>          Smoke-test một URL đang chạy, vd preview của editor:
                        --url http://localhost:7456/. Dùng khi KHÔNG muốn build.
+                       Tool chứng minh URL thuộc đúng project này (import map
+                       file:///<projectRoot>/assets/...); preview của project
+                       khác fail với PREVIEW_PROJECT_MISMATCH.
+  --allow-foreign-preview
+                       Chủ ý smoke-test preview của project khác; ghi vào JSON.
   --all                Kiểm tra mọi file HTML trong build/.
   --seconds <n>        Thời gian chạy để đo FPS. Default: 6.
   --min-fps <n>        FPS tối thiểu coi là đạt. Default: 20.
@@ -999,6 +1005,7 @@ function parseArgs(argv) {
     if (a === '--all') { o.all = true; continue; }
     if (a === '--json') { o.json = true; continue; }
     if (a === '--no-screenshot') { o.noScreenshot = true; continue; }
+    if (a === '--allow-foreign-preview') { o.allowForeignPreview = true; continue; }
     if (a === '--url') { o.url = argv[++i]; continue; }
     if (a.startsWith('--url=')) { o.url = a.split('=').slice(1).join('='); continue; }
     if (a === '--file') { o.file = argv[++i]; continue; }
@@ -1060,6 +1067,23 @@ function parseArgs(argv) {
   return o;
 }
 
+/** Prove a --url preview is served by this project; unknown warns, mismatch throws. */
+async function guardRuntimePreviewProject(url, options = {}) {
+  const record = await assertPreviewProjectIdentity({
+    url,
+    projectRoot: options.projectRoot || PROJECT_ROOT,
+    allowForeign: options.allowForeignPreview === true,
+    fetchImpl: options.fetchImpl,
+    probe: options.probe,
+    scanOnMismatch: options.scanOnMismatch,
+    scanPorts: options.scanPorts,
+    retries: options.retries,
+    retryDelayMs: options.retryDelayMs,
+  });
+  if (record.warning) console.error(`[verify-runtime] WARN ${record.warning}`);
+  return identityReceipt(record);
+}
+
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   if (options.help) { console.log(USAGE); return; }
@@ -1072,6 +1096,24 @@ async function main() {
     process.exit(1);
   }
 
+  let previewIdentity = null;
+  if (options.url && isUrlTarget(options.url)) {
+    try {
+      previewIdentity = await guardRuntimePreviewProject(options.url, options);
+    } catch (error) {
+      if (error.code !== MISMATCH_CODE) throw error;
+      if (options.json) {
+        console.log(JSON.stringify({
+          ok: false, tool: 'verify-runtime', code: error.code, message: error.message,
+          previewIdentity: identityReceipt(error.details), candidates: error.details && error.details.candidates,
+          summary: { files: 0 }, items: [],
+          nextActions: ['Chạy lại với --url của preview thuộc project này (xem candidates / preview-project-identity.cjs --scan).'],
+        }, null, 2));
+      } else console.error(`[verify-runtime] ERROR ${error.message}`);
+      process.exit(1);
+    }
+  }
+
   const results = [];
   for (const file of files) results.push(await runOne(file, options));
 
@@ -1081,6 +1123,8 @@ async function main() {
     console.log(JSON.stringify({
       ok: failed.length === 0,
       tool: 'verify-runtime',
+      ...(previewIdentity ? { previewIdentity } : {}),
+      ...(options.allowForeignPreview === true ? { allowForeignPreview: true } : {}),
       summary: { files: results.length, passed: results.length - failed.length, failed: failed.length },
       items: results,
       nextActions: failed.length
@@ -1133,7 +1177,7 @@ module.exports = {
   normalizeEnvironmentHosts,
   isEnvironmentError,
   runOne, runtimeVerdict, findBuiltHtml, findBrowser, ensureWebSocketRuntime,
-  parseArgs, parseGesture, resolveGestureFromEvalBefore,
+  parseArgs, parseGesture, resolveGestureFromEvalBefore, guardRuntimePreviewProject,
   isNavigationEvaluationError, evaluatePageWithNavigationRetry,
   dispatchTouchGesture, dispatchTouchGestureSequence, selectCocosPreviewDevice,
   parseViewportSize,applyViewportSize,

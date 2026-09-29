@@ -1,5 +1,6 @@
 import { ParticleSystem } from 'cc';
 import { installUnityParticleBirthTiming } from './UnityParticleBirthTiming';
+import { installUnityParticleBurstCatchUp } from './UnityParticleBurstEmission';
 
 /** Preserve native float-clock emission windows and bounded particle steps. */
 export function installUnityParticleSimulationStep(system: ParticleSystem, maximumDeltaTime: number, gravityY = -9.81): void {
@@ -8,14 +9,24 @@ export function installUnityParticleSimulationStep(system: ParticleSystem, maxim
     if (!(maximumDeltaTime > 0) || !Number.isFinite(maximumDeltaTime)) throw new Error('Invalid Unity maximumParticleDeltaTime');
     installUnityParticleBirthTiming(system,gravityY);
     runtime.unitySimulationStep = true;
+    // Non-looping bursts run on the float clock below; stock Burst.update would
+    // replay a burst whose time the next step's time - dt rounds back onto.
+    if (!system.loop && system.bursts?.length) installUnityParticleBurstCatchUp(system);
     const update = runtime.update;
     const emit = runtime._emit;
     let clock = 0, waiting = true, lastEngineTime = -1;
+    // stop() and a play() after stopEmitting() rewind through the engine reset().
+    // Restart the clock there: pooled stop()/play() and prewarm must not carry it over.
+    const reset = runtime.reset;
+    if (typeof reset === 'function') runtime.reset = function (): void {
+        reset.call(this); clock = 0; waiting = true; lastEngineTime = -1;
+    };
     runtime._emit = function (dt: number): void {
         if (this.loop || !this._isEmitting) { emit.call(this, dt); return; }
         const delay = Math.fround(this.startDelay.evaluate(0, 1));
         const end = this._time;
-        if(end<=lastEngineTime){clock=0;waiting=true;}
+        // Fallback for external rewinds; an equal time is a zero-length step, not a restart.
+        if(end<lastEngineTime){clock=0;waiting=true;}
         lastEngineTime=end;
         clock=Math.fround(clock+Math.fround(dt));
         let activeDelta=Math.fround(dt);

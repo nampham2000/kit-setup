@@ -12,8 +12,14 @@ export class UnityParticleAlignToDirectionAdapter extends Component {
     @property sourceContract = '';
     private align: UnityParticleAlignToDirection | null = null;
 
-    protected onLoad(): void {
-        if (EDITOR_NOT_IN_PREVIEW || !this.source) return;
+    // cc.ParticleSystem (executionOrder 99) creates its processor in its own onLoad, after this
+    // component's onLoad: installing there threw on a null processor and aborted the node's
+    // activation, so no particle was ever aligned. Install once the processor exists.
+    protected onLoad(): void { this.install(); }
+    protected start(): void { this.install(); }
+
+    private install(): void {
+        if (this.align || EDITOR_NOT_IN_PREVIEW || !this.source || !(this.source as any).processor) return;
         const contract = JSON.parse(this.sourceContract || '{}') as { eulerSigns?: number[] };
         this.align = new UnityParticleAlignToDirection(this.source, contract.eulerSigns || [-1, -1, 1]);
     }

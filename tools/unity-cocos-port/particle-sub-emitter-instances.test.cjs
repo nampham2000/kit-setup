@@ -20,11 +20,15 @@ class Quat {
   static rotationTo(o) { return o; }
   static multiply(o) { return o; }
 }
+class Color {
+  constructor(r = 255, g = 255, b = 255, a = 255) { this.r = r; this.g = g; this.b = b; this.a = a; }
+  static multiply(o, x, y) { o.r = x.r * y.r / 255; o.g = x.g * y.g / 255; o.b = x.b * y.b / 255; o.a = x.a * y.a / 255; return o; }
+}
 class CurveRange { constructor(constant = 0) { this.mode = 0; this.constant = constant; this.multiplier = 1; } evaluate() { return this.constant; } }
 const decorator = () => (target) => target;
 const cc = {
   _decorator: { ccclass: decorator, executeInEditMode: (t) => t, executionOrder: decorator, playOnFocus: (t) => t, property: () => () => undefined },
-  Component: class { constructor() { this.enabled = true; } }, Enum: (e) => e, Mat4: class {}, Node: class {}, ParticleSystem: class {}, Vec3, Quat, CurveRange,
+  Component: class { constructor() { this.enabled = true; } }, Enum: (e) => e, Mat4: class {}, Node: class {}, ParticleSystem: class {}, Vec3, Quat, CurveRange, Color,
 };
 
 function load(editor = false) {
@@ -175,4 +179,76 @@ test('birth rate emission is placed along the parent path within the step', () =
   assert.equal(xs.length, 10, '600/s over one frame');
   assert.ok(Math.min(...xs) > 0 && Math.min(...xs) <= 0.11 && Math.max(...xs) === 1, JSON.stringify(xs));
   for (let i = 1; i < xs.length; i++) assert.ok(Math.abs(xs[i] - xs[i - 1] - 0.1) < 1e-9, 'evenly spaced along the path');
+});
+
+test('death instances of a Local-simulation sub system stay at their own parent positions', () => {
+  // PopupWin logo (Candy Pop Sort): trailR rockets die at different points and each par_firework (Local
+  // simulation) burst stays where its rocket died; moving the shared node dragged every burst to the last one.
+  const mod = load();
+  const burst = target('Firework', { bursts: [[0, 3]] });
+  burst.simulationSpace = 1;
+  const pool = { data: [], length: 0 };
+  burst.processor = { _particles: pool };
+  burst.emit = function (n) { this.emitted.push({ n, x: this.node.position.x }); for (let i = 0; i < n; i++) pool.data[pool.length++] = { position: new Vec3(0.5 * i, 0, 0) }; };
+  burst.node.getWorldMatrix = (out) => out;
+  const saved = { transformMat4: Vec3.transformMat4, invert: cc.Mat4.invert };
+  Vec3.transformMat4 = (o, a) => o.set(a); // identity emitter frame
+  cc.Mat4.invert = (o) => o;
+  try {
+    const { follower, spawn, kill } = rig(mod, [burst], [2]);
+    const a = spawn(4), b = spawn(-7);
+    follower.lateUpdate(1 / 60);
+    kill(a);
+    follower.lateUpdate(1 / 60);
+    kill(b);
+    follower.lateUpdate(1 / 60);
+    assert.equal(burst.total(), 6);
+    assert.equal(burst.node.position.x, 0, 'the Local sub system node is not moved');
+    assert.deepEqual(pool.data.slice(0, pool.length).map((p) => p.position.x), [4, 4.5, 5, -7, -6.5, -6]);
+  } finally { Vec3.transformMat4 = saved.transformMat4; cc.Mat4.invert = saved.invert; }
+});
+
+test('instances emit the sub system Rate over Distance along their parent path (Hovl Magic circle 1 SubGlow)', () => {
+  const mod = load();
+  Vec3.distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+  const sub = target('SubGlow', { loop: true });
+  // The porter binds UnityParticleRateOverDistanceEmitter (15 per unit) on the sub system node.
+  const distanceEmitter = { rateOverDistance: 15, enabled: true };
+  sub.node.getComponent = (name) => (name === 'UnityParticleRateOverDistanceEmitter' ? distanceEmitter : null);
+  const { follower, spawn } = rig(mod, [sub]);
+  const dt = 1 / 60;
+  const parent = spawn(0);
+  follower.lateUpdate(dt);
+  // The parent moves 3 units in 60 frames: 15 * 3 = 45 particles, each placed along the path.
+  for (let frame = 1; frame <= 60; frame++) { parent.position.x = frame * 0.05; follower.lateUpdate(dt); }
+  assert.equal(distanceEmitter.enabled, false, 'the node-bound distance emitter is taken over by the instances');
+  assert.ok(Math.abs(sub.total() - 45) <= 1, `emitted ${sub.total()} over 3 units`);
+  const xs = sub.emitted.map((e) => e.x);
+  assert.ok(xs.every((x, i) => i === 0 || x >= xs[i - 1] - 1e-9), 'placed in travel order');
+  assert.ok(Math.abs(xs[1] - xs[0] - 1 / 15) < 1e-6, 'one particle per 1/15 unit');
+  // A static parent emits nothing by distance.
+  const idle = target('Idle', { loop: true });
+  idle.node.getComponent = () => ({ rateOverDistance: 15, enabled: true });
+  const still = rig(mod, [idle]);
+  still.spawn(1);
+  for (let frame = 0; frame < 30; frame++) still.follower.lateUpdate(dt);
+  assert.equal(idle.total(), 0);
+});
+
+test('Inherit Color multiplies each instance particle by its parent current color', () => {
+  const mod = load();
+  const sub = target('SubGlow', { loop: true, rate: 60 });
+  const pool = { data: [], length: 0 };
+  sub.processor = { _particles: pool };
+  sub.emit = function (n) { for (let i = 0; i < n; i++) pool.data[pool.length++] = { position: new Vec3(), startColor: new Color(255, 255, 255, 200), color: new Color(255, 255, 255, 200) }; this.emitted.push({ n, x: this.node.position.x }); };
+  const { follower, spawn } = rig(mod, [sub]);
+  follower.entries[0].inherit = 1;
+  const parent = spawn(0);
+  parent.color = new Color(200, 255, 50, 255);
+  for (let frame = 0; frame < 10; frame++) follower.lateUpdate(1 / 60);
+  assert.ok(pool.length > 0, 'instance emitted');
+  for (let i = 0; i < pool.length; i++) {
+    const c = pool.data[i].startColor;
+    assert.deepEqual([Math.round(c.r), Math.round(c.g), Math.round(c.b), Math.round(c.a)], [200, 255, 50, 200]);
+  }
 });

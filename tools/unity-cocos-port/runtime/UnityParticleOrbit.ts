@@ -22,10 +22,21 @@ export function orbitalDelta(out: Float64Array, x: number, y: number, z: number,
     out[0]=(rx-x)/dt;out[1]=(ry-y)/dt;out[2]=(rz-z)/dt;
 }
 
+// Same activity rule as particle-orbit-contract.js (active).
+function linearActive(c: any): boolean {
+    if(!c)return false;
+    if(c.minMaxState===0)return c.scalar!==0;
+    if(c.minMaxState===3)return c.scalar!==0||c.minScalar!==0;
+    return (c.minMaxState===1?[c.maxCurve]:[c.maxCurve,c.minCurve]).some((v: any)=>v?.m_Curve?.some((k: any)=>k.value!==0||k.inSlope!==0||k.outSlope!==0));
+}
+
 export function installUnityParticleOrbit(system: ParticleSystem,spec: UnityOrbitSpec): void {
     const runtime=system as any;
     if(runtime.unityOrbit)return;
-    if((spec.simulationSpace!==0&&spec.simulationSpace!==1)||spec.inWorldSpace)throw new Error('Orbital custom-space/world-velocity integration requires a measured adapter');
+    if(spec.simulationSpace!==0&&spec.simulationSpace!==1)throw new Error('Orbital custom-space integration requires a measured adapter');
+    // Velocity space only moves linear X/Y/Z (fixtures/orbit-velocity-space-native.json); the
+    // porter binds world velocity space only when those axes are zero.
+    if(spec.inWorldSpace&&['x','y','z'].some(k=>linearActive(spec.velocity[k])))throw new Error('Orbital world-space linear velocity requires a measured adapter');
     if(spec.simulationSpace===1&&spec.scalingMode!==0)throw new Error('World orbital nonhierarchical scaling requires a measured adapter');
     const curves=spec.velocity;
     if(spec.limitEnabled){
@@ -37,9 +48,11 @@ export function installUnityParticleOrbit(system: ParticleSystem,spec: UnityOrbi
         installUnityParticleLimitVelocity(system);
         if(!(system.limitVelocityOvertimeModule as any)?.unityAnimatedComposition)throw new Error('Orbital velocity limit requires the Unity limit composition runtime');
     }
-    for(const key of ['orbitalOffsetX','orbitalOffsetY','orbitalOffsetZ']) {
-        if(curves[key].minMaxState!==0||curves[key].scalar!==0)throw new Error('Orbital offsets require a measured adapter');
-    }
+    // fixtures/particle-orbit-offset-native.json: the orbit and radial push are centred on the offset
+    // (Unity local frame) for Local simulation; the world-simulation offset frame is not measured.
+    const offsetKeys=['orbitalOffsetX','orbitalOffsetY','orbitalOffsetZ'];
+    const hasOffset=offsetKeys.some(k=>linearActive(curves[k]));
+    if(hasOffset&&spec.simulationSpace!==0)throw new Error('World-simulation orbital offsets require a measured adapter');
     const delta=new Float64Array(3);
     const worldSpace=spec.simulationSpace===1;
     const world=worldSpace?new Mat4():null,inverse=worldSpace?new Mat4():null,local=worldSpace?new Vec3():null;
@@ -69,7 +82,8 @@ export function installUnityParticleOrbit(system: ParticleSystem,spec: UnityOrbi
         // fixtures/particle-orbit-speed-modifier-native.json: the speed modifier scales the orbital rotation angle
         // and the radial step, applied as an exact rotation. Solving the step over dt*speed keeps the later
         // (velocity+delta)*speed*dt integration on that rotation instead of overshooting the chord.
-        if(speed!==0)orbitalDelta(delta,position.x,position.y,-position.z,sampleNoiseCurve(curves.orbitalX,age,random),sampleNoiseCurve(curves.orbitalY,age,random),sampleNoiseCurve(curves.orbitalZ,age,random),sampleNoiseCurve(curves.radial,age,random),dt*speed);
+        const ox=hasOffset?sampleNoiseCurve(curves.orbitalOffsetX,age,random):0,oy=hasOffset?sampleNoiseCurve(curves.orbitalOffsetY,age,random):0,oz=hasOffset?sampleNoiseCurve(curves.orbitalOffsetZ,age,random):0;
+        if(speed!==0)orbitalDelta(delta,position.x-ox,position.y-oy,-position.z-oz,sampleNoiseCurve(curves.orbitalX,age,random),sampleNoiseCurve(curves.orbitalY,age,random),sampleNoiseCurve(curves.orbitalZ,age,random),sampleNoiseCurve(curves.radial,age,random),dt*speed);
         else delta.fill(0);
         let x=delta[0]+sampleNoiseCurve(curves.x,age,random),y=delta[1]+sampleNoiseCurve(curves.y,age,random),z=-(delta[2]+sampleNoiseCurve(curves.z,age,random));
         if(worldSpace){

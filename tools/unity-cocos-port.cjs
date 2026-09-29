@@ -2,6 +2,12 @@
 'use strict';
 
 const { matchUnitySubAssetName } = require('./unity-cocos-port/unity-file-id.js');
+const {
+  sceneMeshNodes,
+  meshUuidByUnitySceneNode,
+  meshUuidBySceneNodeName,
+  reportModelMeshResolution,
+} = require('./unity-cocos-port/model-mesh-resolution.js');
 
 const fs = require('fs');
 const path = require('path');
@@ -75,6 +81,7 @@ const { PortCache } = require('./unity-cocos-port/port-cache');
 const createUiSpriteAlphaPorter = require('./unity-cocos-port/ui-sprite-alpha-porter');
 const createComponentDispatcher = require('./unity-cocos-port/component-dispatcher');
 const createRuntimeComponentPorter = require('./unity-cocos-port/runtime-component-porter');
+const { unityModelMayHaveRenderers } = require('./unity-cocos-port/mirrored-culling-detect.cjs');
 const { unityModelImportBasis, unityModelMeshName, unityModelRendererName } = require('./unity-cocos-port/model-import-basis');
 const { unitySlotIndexForCocosPrimitive } = require('./unity-cocos-port/fbx-submesh-order');
 const {
@@ -101,6 +108,7 @@ const {
   copyUnityAssetToCocos: copyUnityAssetToCocosImpl,
   writePreparedUnityTexture: writePreparedUnityTextureImpl,
   handleMissingModel: handleMissingModelImpl,
+  refreshExportedUnityMesh: refreshExportedUnityMeshImpl,
 } = createAssetImportPorter({
   ensureDirectoryMetas,
   ensurePreparedAssetMeta,
@@ -177,12 +185,14 @@ const {
   parseUnityPolygonColliderPaths,
   boundsForUnityPolygonPaths,
   unityRefGuid,
+  unityRefFileId,
   resolveUnityPhysicsMaterialUuid,
   resolveUnityBuiltinMeshUuid,
   resolveBuiltinPrimitiveMeshUuid,
   importedUnityAssetPath: importedUnityAssetPathImpl,
   copyUnityAssetToCocos: copyUnityAssetToCocosImpl,
   handleMissingModel: handleMissingModelImpl,
+  refreshExportedUnityMesh: refreshExportedUnityMeshImpl,
   resolveLibraryAssetUuid,
   fbxMeshOwnerNode: (...args) => fbxMeshOwnerNode(...args),
   builtinPrimitiveOwnerNode: (...args) => builtinPrimitiveOwnerNode(...args),
@@ -201,6 +211,7 @@ const {
   importedUnityAssetPath: importedUnityAssetPathImpl,
   copyUnityAssetToCocos: copyUnityAssetToCocosImpl,
   handleMissingModel: handleMissingModelImpl,
+  refreshExportedUnityMesh: refreshExportedUnityMeshImpl,
   resolveLibraryAssetUuid,
   recordPendingMeshRepair,
   getField,
@@ -213,6 +224,7 @@ const {
 
 const { emitParticleSystem: emitParticleSystemImpl } = createParticlePorter({
   handleMissingModel: handleMissingModelImpl,
+  refreshExportedUnityMesh: refreshExportedUnityMeshImpl,
   recordPendingMeshRepair,
   resolveUnityBuiltinMeshUuid,
   resolveUnityParticleMaterial,
@@ -310,7 +322,23 @@ const componentDispatcher = createComponentDispatcher({
   emitFixedJoint,
   emitSpringJoint,
   emitCanvas,
+  emitCanvasGroup,
 });
+
+// UGUI CanvasGroup (class 225): m_Alpha multiplies the subtree like cc.UIOpacity (popup fades animate it).
+// Interactable / BlocksRaycasts / IgnoreParentGroups have no Cocos component; non-default values are reported.
+function emitCanvasGroup(nodeId, componentId, doc, gameObject, model, builder, reporter) {
+  const alpha = Math.min(1, Math.max(0, finiteNumber(getField(doc, 'm_Alpha', 1), 1)));
+  builder.addComponent(nodeId, 'cc.UIOpacity', { _opacity: Math.round(alpha * 255) }, componentId, `cmp-ui-opacity-${componentId}`);
+  const flags = [['m_Interactable', 1], ['m_BlocksRaycasts', 1], ['m_IgnoreParentGroups', 0]]
+    .filter(([key, fallback]) => Number(getField(doc, key, fallback)) !== fallback).map(([key]) => key);
+  if (flags.length) {
+    reporter.medium('CANVAS_GROUP_INPUT_FLAGS_UNMAPPED', model.file, gameObject.name,
+      `CanvasGroup ${flags.join(', ')} changes input for the subtree; Cocos UIOpacity only carries the alpha`);
+  } else {
+    reporter.low('CANVAS_GROUP_UI_OPACITY', model.file, gameObject.name, `CanvasGroup alpha ${alpha} ported as cc.UIOpacity`);
+  }
+}
 
 function printHelp() {
   console.log(`
@@ -1286,6 +1314,56 @@ const UNITY_MONOBEHAVIOUR_HEADER_FIELDS = new Set([
   'm_Enabled', 'm_EditorHideFlags', 'm_Script', 'm_Name', 'm_EditorClassIdentifier',
 ]);
 
+// Unity YAML block value under a key (struct, list, list of structs, nested lists) as plain JS.
+// Unity writes a list either deeper than its key or at the key's own indent ("m_Curve:" then
+// "- serializedVersion: 2" at the same column); a "- key: value" item opens a mapping whose other keys sit
+// two columns further in. Flow values ({fileID: ...}, [a, b]) and scalars go through parseUnityScalar.
+const UNITY_YAML_KEY = /^([A-Za-z_][A-Za-z0-9_ ]*?)\s*:(?:\s+(.*))?$/;
+function unityLineIndent(line) { return line.match(/^\s*/)[0].length; }
+function nextUnityYamlLine(lines, j) { while (j < lines.length && !lines[j].trim()) j++; return j; }
+
+function parseUnityYamlSequence(lines, i, indent) {
+  const items = [];
+  let j = nextUnityYamlLine(lines, i);
+  while (j < lines.length && unityLineIndent(lines[j]) === indent && lines[j].trim().startsWith('- ')) {
+    const content = lines[j].trim().slice(2).trim();
+    const key = !content.startsWith('{') && !content.startsWith('[') ? UNITY_YAML_KEY.exec(content) : null;
+    if (!key) { items.push(parseUnityScalar(content)); j = nextUnityYamlLine(lines, j + 1); continue; }
+    // "- key: value" opens a mapping item; its remaining keys sit at indent + 2.
+    const synthetic = [' '.repeat(indent + 2) + content, ...lines.slice(j + 1)];
+    const item = parseUnityYamlMapping(synthetic, 0, indent + 2);
+    items.push(item.value);
+    j = nextUnityYamlLine(lines, j + item.next);
+  }
+  return { value: items, next: j };
+}
+
+function parseUnityYamlMapping(lines, i, indent) {
+  const out = {};
+  let j = nextUnityYamlLine(lines, i);
+  while (j < lines.length && unityLineIndent(lines[j]) === indent && !lines[j].trim().startsWith('- ')) {
+    const key = UNITY_YAML_KEY.exec(lines[j].trim());
+    if (!key) break;
+    const raw = (key[2] || '').trim();
+    if (raw !== '') { out[key[1]] = parseUnityScalar(raw, key[1]); j = nextUnityYamlLine(lines, j + 1); continue; }
+    const child = parseUnityYamlBlockValue(lines, j + 1, indent);
+    out[key[1]] = child.value;
+    j = child.next;
+  }
+  return { value: out, next: j };
+}
+
+// Value of a key at keyIndent whose inline value is empty: the following deeper block, or a list at keyIndent.
+function parseUnityYamlBlockValue(lines, i, keyIndent) {
+  const j = nextUnityYamlLine(lines, i);
+  if (j >= lines.length) return { value: null, next: j };
+  const indent = unityLineIndent(lines[j]);
+  const isItem = lines[j].trim().startsWith('- ');
+  if (isItem && indent >= keyIndent) return parseUnityYamlSequence(lines, j, indent);
+  if (!isItem && indent > keyIndent) return parseUnityYamlMapping(lines, j, indent);
+  return { value: null, next: j };
+}
+
 function getTopLevelSerializedFields(doc, options) {
   const fields = {};
   for (let i = 0; i < doc.lines.length; i++) {
@@ -1302,28 +1380,12 @@ function getTopLevelSerializedFields(doc, options) {
       fields[key] = parseUnityScalar(raw);
       continue;
     }
-
-    const items = [];
-    const nested = {};
-    for (let j = i + 1; j < doc.lines.length; j++) {
-      const next = doc.lines[j];
-      if (!next.trim()) continue;
-      const indent = next.match(/^\s*/)[0].length;
-      const trimmed = next.trim();
-      if (indent < 2) break;
-      if (indent === 2 && !trimmed.startsWith('- ')) break;
-      if (trimmed.startsWith('- ')) {
-        items.push(parseUnityScalar(trimmed.slice(2)));
-        continue;
-      }
-      // Unity writes structs on their own indented lines: LayerMask as
-      // `serializedVersion` + `m_Bits`, Vector2/Vector3 as `x`/`y`/`z`. Collecting them
-      // keeps the field instead of dropping it for having no inline value.
-      const child = /^([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(.+)$/.exec(trimmed);
-      if (child && indent >= 4) nested[child[1]] = parseUnityScalar(child[2]);
-    }
-    if (items.length) fields[key] = items;
-    else if (Object.keys(nested).length) fields[key] = nested;
+    // Structs (LayerMask serializedVersion + m_Bits, Vector3 x/y/z), lists of references and lists of
+    // structs (AnimationCurve m_Curve keys: KriptoFX RFX4_LightCurves serialized as
+    // ["serializedVersion: 2", ...] and every effect light stayed at intensity 0) parse recursively.
+    const block = parseUnityYamlBlockValue(doc.lines, i + 1, 2);
+    const value = block.value;
+    if (Array.isArray(value) ? value.length : value && Object.keys(value).length) fields[key] = value;
   }
   return fields;
 }
@@ -2134,7 +2196,13 @@ class CocosAssetDatabase {
     }
     const classes = [];
     for (const match of source.matchAll(/@ccclass\(['"]([^'"]+)['"]\)/g)) classes.push(match[1]);
-    for (const match of source.matchAll(/export\s+class\s+([A-Za-z0-9_]+)/g)) classes.push(match[1]);
+    // Only a decorated class is a registered Cocos class. A plain exported helper that shares a Unity
+    // MonoBehaviour's name (Blast Shooter's `export class ConveyorBall` model) must not be bound as its
+    // component: the prefab would reference the file's class id and fail with "Can not find class".
+    for (const match of source.matchAll(/export\s+(?:default\s+)?(?:abstract\s+)?class\s+([A-Za-z0-9_]+)/g)) {
+      const decorators = /((?:@[\w.]+(?:\((?:[^()]|\([^()]*\))*\))?\s*)+)$/.exec(source.slice(Math.max(0, match.index - 2000), match.index));
+      if (decorators && /@ccclass\b/.test(decorators[1])) classes.push(match[1]);
+    }
     // Unity writes bools as 0/1 and vectors as bare {x,y[,z]}. Knowing which Cocos
     // fields are declared boolean / Vec2 / Vec3 lets the porter emit the right types
     // instead of a number where the inspector expects a checkbox.
@@ -2215,7 +2283,7 @@ class CocosAssetDatabase {
     return fuzzy;
   }
 
-  findModelRecordsByStem(stem) {
+  findModelRecordsByStem(stem, unityRelativePath = '') {
     // Model files are source-identity-bearing dependencies. A fuzzy prefix
     // match is unsafe here: `level_20.fbx` must never reuse and overwrite the
     // already imported `level_2.fbx`, and `level_1.fbx` must not bind
@@ -2223,8 +2291,9 @@ class CocosAssetDatabase {
     // resolver must require the exact normalized stem and let the missing-model
     // path create/import that exact file when it is absent.
     const key = normalizeKey(stem);
-    return (this.byStem.get(key) || [])
+    const records = (this.byStem.get(key) || [])
       .filter((record) => ['.fbx', '.gltf', '.glb'].includes(record.ext));
+    return unityRelativePath ? modelRecordsForUnitySource(records, unityRelativePath) : records;
   }
 
   findScriptClass(className) {
@@ -2259,8 +2328,8 @@ class CocosAssetDatabase {
     return '';
   }
 
-  resolveModelMaterialUuidsByStem(stem, materialNameHints = [], requiredExt = '') {
-    const candidates = this.findModelRecordsByStem(stem).filter((record) => !requiredExt || record.ext === requiredExt);
+  resolveModelMaterialUuidsByStem(stem, materialNameHints = [], requiredExt = '', unityRelativePath = '') {
+    const candidates = this.findModelRecordsByStem(stem, unityRelativePath).filter((record) => !requiredExt || record.ext === requiredExt);
     const hints = materialNameHints.map((hint) => String(hint || ''));
     for (const record of candidates) {
       const materials = subMetaRecords(record.uuid, record.subMetas, 'gltf-material');
@@ -2298,18 +2367,96 @@ class CocosAssetDatabase {
     return null;
   }
 
-  resolveModelMeshByStem(stem, meshNameHint = '', requiredExt = '', unityFileId = '') {
-    const candidates = this.findModelRecordsByStem(stem).filter((record) => !requiredExt || record.ext === requiredExt);
+  // Imported scene prefab of a model record: ordered [{ nodeName, meshUuid }] (see model-mesh-resolution).
+  modelSceneMeshNodes(record) {
+    for (const scene of subMetaRecords(record.uuid, record.subMetas, 'gltf-scene')) {
+      if (isPendingGeneratedSubMeta(scene.subMeta)) continue;
+      const nodes = sceneMeshNodes(readJsonIfExists(libraryJsonPathForUuid({ cocosRoot: this.root }, scene.uuid)));
+      if (nodes.length) return nodes;
+    }
+    return [];
+  }
+
+  // Resolution contract: `meshMatch` says which evidence bound the mesh:
+  //   'mesh-file-id'   Unity fileID hashes to a Cocos mesh sub-asset name
+  //   'scene-file-id'  Unity fileID hashes to a node name of the imported Cocos scene prefab
+  //                    (Cocos names unnamed FBX geometry "Scene-<n>.mesh")
+  //   'name' / 'scene-name' / 'single' / 'hint'  name evidence, or a model with one mesh
+  //   'first-fallback' no evidence, several meshes: the first mesh is bound (callers report high)
+  //   'unresolved'     a Unity fileID was given and nothing matches it among several meshes:
+  //                    meshUuid is '' (callers report high; the model itself exists, so it must
+  //                    not be treated as a missing model)
+  resolveModelMeshByStem(stem, meshNameHint = '', requiredExt = '', unityFileId = '', unityRelativePath = '') {
+    const candidates = this.findModelRecordsByStem(stem, unityRelativePath).filter((record) => !requiredExt || record.ext === requiredExt);
     for (const record of candidates) {
-      // Unity references FBX meshes by a deterministic fileID (xxHash64 of "Type:Mesh-><name><i>");
-      // match it exactly before falling back to the GameObject-name heuristic.
-      const meshRecord = (unityFileId && firstImportedSubMetaRecordByUnityFileId(record.uuid, record.subMetas, 'gltf-mesh', 'Mesh', unityFileId))
-        || firstImportedSubMetaRecord(record.uuid, record.subMetas, 'gltf-mesh', meshNameHint);
-      const mesh = meshRecord?.uuid || '';
+      const meshRecords = subMetaRecords(record.uuid, record.subMetas, 'gltf-mesh')
+        .filter(({ subMeta }) => !isPendingGeneratedSubMeta(subMeta));
+      const isMesh = (uuid) => meshRecords.some((meshRecord) => meshRecord.uuid === uuid);
+      let mesh = '';
+      let meshMatch = '';
+      let meshNodeName = '';
+      if (unityFileId && meshRecords.length) {
+        // Unity references FBX meshes by a deterministic fileID (xxHash64 of "Type:Mesh-><name><i>");
+        // match it exactly before any name heuristic.
+        const byName = firstImportedSubMetaRecordByUnityFileId(record.uuid, record.subMetas, 'gltf-mesh', 'Mesh', unityFileId);
+        if (byName) {
+          mesh = byName.uuid;
+          meshMatch = 'mesh-file-id';
+        } else {
+          const byNode = meshUuidByUnitySceneNode(this.modelSceneMeshNodes(record), unityFileId);
+          if (byNode && isMesh(byNode.meshUuid)) {
+            mesh = byNode.meshUuid;
+            meshMatch = 'scene-file-id';
+            meshNodeName = byNode.nodeName;
+          }
+        }
+      }
+      if (!mesh) {
+        const byHint = importedSubMetaRecordMatch(record.uuid, record.subMetas, 'gltf-mesh', meshNameHint);
+        const byNodeName = meshRecords.length > 1 && byHint?.match !== 'exact'
+          ? meshUuidBySceneNodeName(this.modelSceneMeshNodes(record), meshNameHint)
+          : null;
+        if (byHint?.match === 'exact') {
+          mesh = byHint.record.uuid;
+          meshMatch = 'name';
+        } else if (byNodeName && isMesh(byNodeName.meshUuid)) {
+          mesh = byNodeName.meshUuid;
+          meshMatch = 'scene-name';
+          meshNodeName = byNodeName.nodeName;
+        } else if (byHint && meshRecords.length === 1) {
+          mesh = byHint.record.uuid;
+          meshMatch = 'single';
+        } else if (byHint && unityFileId) {
+          // A Unity fileID is authoritative: a name-contains or first-mesh guess among several
+          // meshes is how every prefab of a multi-mesh FBX ended up on mesh 0.
+          meshMatch = 'unresolved';
+        } else if (byHint) {
+          mesh = byHint.record.uuid;
+          meshMatch = byHint.match === 'hint' ? 'hint' : 'first-fallback';
+        }
+      }
       const materials = subMetaRecords(record.uuid, record.subMetas, 'gltf-material');
+      if (meshMatch === 'unresolved') {
+        return {
+          meshUuid: '',
+          meshMatch,
+          meshCount: meshRecords.length,
+          unityFileId: String(unityFileId),
+          materialUuid: '',
+          materialUuids: [],
+          materialNames: [],
+          source: record.relativePath,
+          fallbackExt: record.ext,
+        };
+      }
       if (mesh) {
         return {
           meshUuid: mesh,
+          meshMatch,
+          meshNodeName,
+          meshCount: meshRecords.length,
+          primitiveCount: libraryMeshPrimitiveCount(this.root, mesh),
+          unityFileId: String(unityFileId || ''),
           materialUuid: materials[0]?.uuid || '',
           materialUuids: materials.map((material) => material.uuid),
           materialNames: materials.map((material) => (
@@ -2325,8 +2472,8 @@ class CocosAssetDatabase {
 
   // Skeleton the Cocos model prefab pairs with this mesh (its SkinnedMeshRenderer),
   // and the skeleton's joint paths, relative to the model root (skinningRoot).
-  resolveModelSkinByMesh(stem, meshUuid, requiredExt = '') {
-    const candidates = this.findModelRecordsByStem(stem).filter((record) => !requiredExt || record.ext === requiredExt);
+  resolveModelSkinByMesh(stem, meshUuid, requiredExt = '', unityRelativePath = '') {
+    const candidates = this.findModelRecordsByStem(stem, unityRelativePath).filter((record) => !requiredExt || record.ext === requiredExt);
     for (const record of candidates) {
       for (const scene of subMetaRecords(record.uuid, record.subMetas, 'gltf-scene')) {
         const objects = readJsonIfExists(libraryJsonPathForUuid({ cocosRoot: this.root }, scene.uuid));
@@ -2343,7 +2490,7 @@ class CocosAssetDatabase {
   }
 
   resolveModelPrefabByStem(stem, preferredUnityRelativePath = '') {
-    const records = this.findModelRecordsByStem(stem);
+    const records = this.findModelRecordsByStem(stem, preferredUnityRelativePath);
     const preferredSuffix = toPosix(preferredUnityRelativePath).toLowerCase();
     const candidates = records.sort((left, right) => {
         if (!preferredSuffix) return 0;
@@ -2416,10 +2563,10 @@ class CocosAssetDatabase {
     return null;
   }
 
-  resolveModelAnimationByStem(stem, animationNameHint = '') {
+  resolveModelAnimationByStem(stem, animationNameHint = '', unityRelativePath = '') {
     const normalizedHint = normalizeKey(animationNameHint);
     const shortHint = normalizeKey(String(animationNameHint || '').split('|').pop());
-    const candidates = this.findModelRecordsByStem(stem);
+    const candidates = this.findModelRecordsByStem(stem, unityRelativePath);
     for (const record of candidates) {
       const animations = subMetaRecords(record.uuid, record.subMetas, 'gltf-animation');
       const match = animations.find(({ subMeta }) => {
@@ -2439,9 +2586,10 @@ class CocosAssetDatabase {
     return null;
   }
 
-  resolveModelAnimationsByStem(stem) {
+  resolveModelAnimationsByStem(stem, unityRelativePath = '') {
     const records = this.findByStem(stem);
-    const candidates = records.filter((record) => ['.fbx', '.gltf', '.glb'].includes(record.ext));
+    const models = records.filter((record) => ['.fbx', '.gltf', '.glb'].includes(record.ext));
+    const candidates = unityRelativePath ? modelRecordsForUnitySource(models, unityRelativePath) : models;
     for (const record of candidates) {
       const animations = subMetaRecords(record.uuid, record.subMetas, 'gltf-animation')
         .sort((left, right) => (
@@ -2553,13 +2701,19 @@ function firstImportedSubMetaRecordByUnityFileId(parentUuid, subMetas, importer,
 }
 
 function firstImportedSubMetaRecord(baseUuid, subMetas, importer, nameHint = '') {
+  return importedSubMetaRecordMatch(baseUuid, subMetas, importer, nameHint)?.record || null;
+}
+
+// { record, match } where match is 'exact' (normalized name equals the hint), 'hint' (name
+// contains a hint variant) or 'first' (no name evidence: the first imported record).
+function importedSubMetaRecordMatch(baseUuid, subMetas, importer, nameHint = '') {
   const hints = subMetaLookupHints(nameHint);
   if (hints.length) {
     // An exact mesh name ("Object001") must win over a longer one containing it.
     const exact = normalizeKey(nameHint);
     for (const record of subMetaRecords(baseUuid, subMetas, importer)) {
       const name = String(record.subMeta.name || record.subMeta.displayName || '').replace(/\.(mesh|material|prefab)$/i, '');
-      if (!isPendingGeneratedSubMeta(record.subMeta) && normalizeKey(name) === exact) return record;
+      if (!isPendingGeneratedSubMeta(record.subMeta) && normalizeKey(name) === exact) return { record, match: 'exact' };
     }
     for (const hint of hints) {
       for (const record of subMetaRecords(baseUuid, subMetas, importer)) {
@@ -2567,15 +2721,22 @@ function firstImportedSubMetaRecord(baseUuid, subMetas, importer, nameHint = '')
           !isPendingGeneratedSubMeta(record.subMeta) &&
           normalizeKey(record.subMeta.name || record.subMeta.displayName || '').includes(hint)
         ) {
-          return record;
+          return { record, match: 'hint' };
         }
       }
     }
   }
   for (const record of subMetaRecords(baseUuid, subMetas, importer)) {
-    if (!isPendingGeneratedSubMeta(record.subMeta)) return record;
+    if (!isPendingGeneratedSubMeta(record.subMeta)) return { record, match: 'first' };
   }
   return null;
+}
+
+// Submesh (primitive) count of an imported Cocos mesh sub-asset, or null when the library JSON is absent.
+function libraryMeshPrimitiveCount(cocosRoot, meshUuid) {
+  const data = readJsonIfExists(libraryJsonPathForUuid({ cocosRoot }, meshUuid));
+  const primitives = (Array.isArray(data) ? data.find((object) => object?._struct) : data)?._struct?.primitives;
+  return Array.isArray(primitives) ? primitives.length : null;
 }
 
 function subMetaRecords(baseUuid, subMetas, importer = '') {
@@ -3106,7 +3267,11 @@ function ensureImageAssetMeta(assetFile, config = {}) {
   const borderRight = Number.isFinite(Number(spriteBorder.right)) ? Number(spriteBorder.right) : 0;
   const pixelsToUnit = Number.isFinite(Number(config.pixelsToUnit)) ? Number(config.pixelsToUnit) : 100;
   const requestedImageType = String(config.imageType || '').toLowerCase();
-  const wantsTextureType = isParticleTexture || requestedImageType === 'texture';
+  // A sprite-frame image also carries the texture sub-asset particles and materials sample, so a texture
+  // request never downgrades it: a UI sprite sharing a particle texture lost its SpriteFrame on every re-port
+  // (Blast Shooter's glow1.png / star.png: "The asset <uuid>@f9941 is missing").
+  const keepsSpriteFrame = existing.userData?.type === 'sprite-frame' && requestedImageType !== 'texture-only';
+  const wantsTextureType = (isParticleTexture || requestedImageType === 'texture') && !keepsSpriteFrame;
   const wantsSpriteFrameType = requestedImageType === 'sprite-frame' || !wantsTextureType;
   const meta = {
     ver: existing.ver || '1.0.27',
@@ -3690,18 +3855,30 @@ const importWaitBudget = {
 // A model copied into a folder the AssetDB has never seen is only imported once the editor is asked
 // to refresh it: the editor's file watcher does not run while its window is unfocused, so polling
 // alone times out, the prefab keeps pre-import mesh ids and the next pass stops with
-// COCOS_STALE_SUBASSET_UNRESOLVED (Candy Pop Sort: every model in new folders). Refresh the folder
-// through Cocos-MCP once per folder per run; failures fall back to plain polling.
-function requestAssetFolderRefreshSync(assetFile, options, timeoutMs) {
-  // The top folder under assets/ (e.g. db://assets/unity_imported) is registered; a refresh there
-  // discovers new nested folders, while a refresh of an unregistered folder url may be ignored.
+// COCOS_STALE_SUBASSET_UNRESOLVED (Candy Pop Sort: every model in new folders). Refresh through
+// Cocos-MCP once per pending file: a folder refresh only discovers files that already exist, so a
+// model exported later in the same run (Dock_30's cannon meshes, written after the first refresh)
+// needs its own refresh. Failures fall back to plain polling.
+function registeredAssetFolderUrl(assetFile, options) {
+  // The nearest ancestor folder the AssetDB already registered (it has a .meta); a refresh there
+  // discovers new files and nested folders, while a refresh of an unregistered folder url may be
+  // ignored. The top folder under assets/ is the fallback.
+  const assetsRoot = path.join(options.cocosRoot, 'assets');
+  for (let dir = path.dirname(assetFile); dir.startsWith(assetsRoot) && dir !== assetsRoot; dir = path.dirname(dir)) {
+    if (fs.existsSync(`${dir}.meta`)) return assetDbUrlForFile(dir, options);
+  }
   const fileUrl = assetDbUrlForFile(assetFile, options);
   const top = fileUrl.slice('db://assets/'.length).split('/')[0];
-  const folderUrl = fileUrl && top && top !== path.basename(assetFile) ? `db://assets/${top}` : '';
+  return fileUrl && top && top !== path.basename(assetFile) ? `db://assets/${top}` : '';
+}
+
+function requestAssetFolderRefreshSync(assetFile, options, timeoutMs) {
+  const folderUrl = registeredAssetFolderUrl(assetFile, options);
   if (!folderUrl || options.dryRun || options.noAssetRefresh) return false;
-  options._refreshedAssetFolders = options._refreshedAssetFolders || new Set();
-  if (options._refreshedAssetFolders.has(folderUrl)) return false;
-  options._refreshedAssetFolders.add(folderUrl);
+  options._refreshedAssetFiles = options._refreshedAssetFiles || new Set();
+  const key = path.resolve(assetFile);
+  if (options._refreshedAssetFiles.has(key)) return false;
+  options._refreshedAssetFiles.add(key);
   const auditModule = path.join(__dirname, 'cocos-engine-feature-audit.cjs');
   const script = `const {createMcpClient,unwrapToolResult}=require(${JSON.stringify(auditModule)});
 (async()=>{const c=await createMcpClient(${JSON.stringify(options.cocosRoot)},{timeoutMs:${Math.max(5000, timeoutMs)}});
@@ -5007,6 +5184,56 @@ function unityCanvasRenderMode(gameObject, model) {
   return null;
 }
 
+// CanvasScaler (a MonoBehaviour with m_UiScaleMode / m_ReferenceResolution) in Scale With Screen Size mode:
+// the canvas lays out at its reference resolution whatever the Game view size saved in the prefab.
+function unityCanvasScalerReferenceResolution(gameObject, model) {
+  for (const componentId of gameObject?.components || []) {
+    const doc = model?.componentDocs?.get(componentId);
+    if (Number(doc?.classId || 0) !== 114 || !hasField(doc, 'm_ReferenceResolution')) continue;
+    if (Number(getField(doc, 'm_UiScaleMode', 0)) !== 1) return null;
+    const reference = getField(doc, 'm_ReferenceResolution', null);
+    const x = finiteNumber(reference?.x, 0);
+    const y = finiteNumber(reference?.y, 0);
+    return x > 0 && y > 0 ? { x, y } : null;
+  }
+  return null;
+}
+
+/**
+ * Unity anchors a RectTransform edge to its parent per axis: stretched (anchorMin 0, anchorMax 1) keeps both
+ * edges, a point anchor at 0 or 1 keeps the left/bottom or right/top edge. A Cocos Widget reproduces that
+ * when the parent is resized (screen-fit canvases, stretched panels); centre anchors need nothing. Offsets
+ * are measured on the resolved reference layout. Returns { flags, left, right, top, bottom } or null.
+ */
+function unityRectEdgeWidget(transform, resolvedTransform, parentTransform) {
+  const parentLayout = parentTransform?.isRect ? parentTransform.resolvedLayout : null;
+  if (!parentLayout?.size) return null;
+  const near = (a, b) => Math.abs(a - b) < 1e-6;
+  const axis = (min, max) => (near(min, 0) && near(max, 1) ? 'stretch' : near(min, max) && near(min, 0) ? 'low' : near(min, max) && near(min, 1) ? 'high' : '');
+  const min = transform.anchorMin || {};
+  const max = transform.anchorMax || {};
+  const horizontal = axis(finiteNumber(min.x, 0.5), finiteNumber(max.x, finiteNumber(min.x, 0.5)));
+  const vertical = axis(finiteNumber(min.y, 0.5), finiteNumber(max.y, finiteNumber(min.y, 0.5)));
+  if (!horizontal && !vertical) return null;
+  const pw = finiteNumber(parentLayout.size.x, 0);
+  const ph = finiteNumber(parentLayout.size.y, 0);
+  const pax = finiteNumber(parentLayout.anchor?.x, 0.5);
+  const pay = finiteNumber(parentLayout.anchor?.y, 0.5);
+  const w = finiteNumber(resolvedTransform.sizeDelta?.x, 0);
+  const h = finiteNumber(resolvedTransform.sizeDelta?.y, 0);
+  const ax = finiteNumber(resolvedTransform.anchor?.x, 0.5);
+  const ay = finiteNumber(resolvedTransform.anchor?.y, 0.5);
+  const x = finiteNumber(resolvedTransform.localPosition?.x, 0);
+  const y = finiteNumber(resolvedTransform.localPosition?.y, 0);
+  const round = (v) => Math.round(v * 1e4) / 1e4;
+  const widget = { flags: 0, left: 0, right: 0, top: 0, bottom: 0 };
+  if (horizontal === 'stretch' || horizontal === 'low') { widget.flags |= 8; widget.left = round((x - ax * w) + pax * pw); }
+  if (horizontal === 'stretch' || horizontal === 'high') { widget.flags |= 32; widget.right = round((1 - pax) * pw - (x + (1 - ax) * w)); }
+  if (vertical === 'stretch' || vertical === 'high') { widget.flags |= 1; widget.top = round((1 - pay) * ph - (y + (1 - ay) * h)); }
+  if (vertical === 'stretch' || vertical === 'low') { widget.flags |= 4; widget.bottom = round((y - ay * h) + pay * ph); }
+  return widget;
+}
+
 function resolveTransformLayout(transform, parentTransform, options = {}) {
   const localPosition = {
     x: finiteNumber(transform?.localPosition?.x, 0),
@@ -5265,11 +5492,11 @@ function buildNestedChildTransformOverrides(sourceModel, sourceTransform, props,
       ? 'target is the root of a linked nested prefab instance (needs a nested TargetInfo path)'
       : parentGameObject?.syntheticModelAsset
         ? 'target is mounted under a model instance (basis-rebased transform)'
-        : gameObjectHasWorldScaledParticleSystem(gameObject, sourceModel)
-          ? 'target carries a world-scaled ParticleSystem (parent-compensated scale)'
-          : sourceTransform.isRect && wantsPosition
-            ? 'RectTransform position needs the parent layout'
-            : '';
+        // Particle nodes keep their resolved transform (no parent-compensated scale since 25022f6), so
+        // an override of a ParticleSystem object merges like any other node.
+        : sourceTransform.isRect && wantsPosition
+          ? 'RectTransform position needs the parent layout'
+          : '';
   if (unsupported) {
     reporter?.medium('NESTED_CHILD_TRANSFORM_OVERRIDE_UNMAPPED', where, gameObject?.name || String(sourceTransform.fileId),
       `Outer prefab overrides a nested child Transform that was not ported: ${unsupported}`, keys.join(','));
@@ -5289,6 +5516,38 @@ function buildNestedChildTransformOverrides(sourceModel, sourceTransform, props,
   reporter?.low('NESTED_CHILD_TRANSFORM_OVERRIDE_WIRED', where, gameObject.name,
     'Outer prefab Transform override of a nested child was merged onto the source transform', keys.join(','));
   return overrides;
+}
+
+// Unity Renderer class IDs -> the Cocos component local id the porter gives the renderer it emits.
+const UNITY_RENDERER_COMPONENT_FILE_ID_PREFIX = new Map([
+  ['23', 'cmp-mesh-renderer-'],
+  ['137', 'cmp-skinned-mesh-renderer-'],
+  ['212', 'cmp-sprite-renderer-'],
+]);
+
+// A prefab instance can override a source renderer's m_Enabled (collider-only pieces disable their
+// MeshRenderer). Returns the Cocos property override { localId, propertyPath: '_enabled', value } or null.
+function nestedRendererEnabledOverride(sourceDoc, sourceFileId, props) {
+  const prefix = sourceDoc ? UNITY_RENDERER_COMPONENT_FILE_ID_PREFIX.get(String(sourceDoc.classId)) : '';
+  if (!prefix || !hasPrefabOverrideKey(props, 'm_Enabled')) return null;
+  return { localId: `${prefix}${sourceFileId}`, propertyPath: '_enabled', value: Number(props.m_Enabled) !== 0 };
+}
+
+/** Flattened nested prefabs: renderer m_Enabled overrides are written onto the built components in place. */
+function applyNestedRendererEnabledOverrides(nestedBuilder, nestedPrefab) {
+  const { model, overrideInfo, sourceGuid } = nestedPrefab || {};
+  if (!model?.componentDocs || !overrideInfo || !sourceGuid) return 0;
+  let applied = 0;
+  for (const [sourceFileId, sourceDoc] of model.componentDocs.entries()) {
+    const override = nestedRendererEnabledOverride(sourceDoc, sourceFileId, prefabOverridePropsByFileId(overrideInfo, sourceGuid, sourceFileId));
+    if (!override) continue;
+    const componentId = nestedBuilder.componentMap.get(sourceFileId);
+    const component = Number.isInteger(componentId) ? nestedBuilder.objects[componentId] : null;
+    if (!component) continue;
+    component._enabled = override.value;
+    applied += 1;
+  }
+  return applied;
 }
 
 function buildNestedPrefabPropertyOverrides(gameObject, transform, sourceModel, scriptContext = null) {
@@ -5337,7 +5596,19 @@ function buildNestedPrefabPropertyOverrides(gameObject, transform, sourceModel, 
         value: Number(props.m_IsActive) !== 0,
       });
     }
+    // Outer prefabs re-layer nested children (Blast Shooter's conveyors put their Block tray on layer 8,
+    // lit by its own light); the root's layer is written by addNestedPrefabInstance.
+    const rootGameObjectId = rootTransform?.gameObjectId;
+    if (sourceGameObject && sourceFileId !== rootGameObjectId && hasPrefabOverrideKey(props, 'm_Layer') && scriptContext?.layerResolver) {
+      overrides.push({
+        localId: `node-${sanitizeFileId(sourceGameObject.name)}-${sourceGameObject.transformId}`,
+        propertyPath: '_layer',
+        value: scriptContext.layerResolver(Number(props.m_Layer), sourceGameObject.name),
+      });
+    }
     const sourceDoc = sourceModel.componentDocs.get(sourceFileId);
+    const rendererEnabled = nestedRendererEnabledOverride(sourceDoc, sourceFileId, props);
+    if (rendererEnabled) overrides.push(rendererEnabled);
     if (!sourceDoc || Number(sourceDoc.classId) !== 114) continue;
     if (scriptContext) {
       for (const override of buildNestedScriptFieldOverrides(sourceDoc, sourceFileId, props, scriptContext)) {
@@ -5564,9 +5835,13 @@ function nestedPrefabHasExternallyReferencedObjects(nestedPrefab, outerModel) {
  */
 function syncNestedRateOverDistanceHelper(builder, particleId, particleData, reporter, nestedPrefab) {
   const rateRange = particleData?.EmissionModule?.rateOverDistance;
-  if (!rateRange || Number(rateRange.minMaxState || 0) !== 0) return;
-  const effectiveRate = Number(rateRange.scalar || 0);
-  if (!(effectiveRate > 0)) return;
+  const rateMode = Number(rateRange?.minMaxState || 0);
+  if (!rateRange || (rateMode !== 0 && rateMode !== 3)) return;
+  const effectiveMax = Number(rateRange.scalar || 0);
+  if (!(effectiveMax > 0)) return;
+  // Random Between Two Constants: rateOverDistance holds the lower bound, rateOverDistanceMax the upper.
+  const effectiveRate = rateMode === 3 ? Math.max(0, Math.min(effectiveMax, Number(rateRange.minScalar || 0))) : effectiveMax;
+  const effectiveRateMax = rateMode === 3 && effectiveMax > effectiveRate ? effectiveMax : 0;
 
   const particle = builder.objects[particleId];
   const nodeId = Number(particle?.node?.__id__);
@@ -5577,14 +5852,17 @@ function syncNestedRateOverDistanceHelper(builder, particleId, particleData, rep
     const component = builder.objects[Number(componentRef?.__id__)];
     if (!component || Number(component.particleSystem?.__id__) !== particleId) continue;
     if (typeof component.rateOverDistance !== 'number') continue;
-    if (component.rateOverDistance === effectiveRate) return;
+    const currentMax = Number(component.rateOverDistanceMax || 0);
+    if (component.rateOverDistance === effectiveRate && currentMax === effectiveRateMax) return;
     reporter.low(
       'PARTICLE_RATE_OVER_DISTANCE_OVERRIDE_SYNCED',
       nestedPrefab?.sourceAsset?.relativePath || '',
       node._name || '',
-      `Rate over Distance ${component.rateOverDistance} -> ${effectiveRate} from the prefab instance override`,
+      `Rate over Distance ${component.rateOverDistance}${currentMax ? `-${currentMax}` : ''} -> ${effectiveRate}${effectiveRateMax ? `-${effectiveRateMax}` : ''} from the prefab instance override`,
     );
     component.rateOverDistance = effectiveRate;
+    if (effectiveRateMax) component.rateOverDistanceMax = effectiveRateMax;
+    else delete component.rateOverDistanceMax;
     return;
   }
 }
@@ -5667,8 +5945,9 @@ function applyNestedParticlePrefabOverrides(builder, nestedPrefab, reporter, opt
         const meshAsset = builtin ? null : unityDb.get(unityRefGuid(meshOverride[1]));
         const meshName = meshAsset ? unityModelMeshName(meshAsset, unityRefFileId(meshOverride[1])) : '';
         const resolved = meshAsset && cocosDb?.resolveModelMeshByStem
-          ? cocosDb.resolveModelMeshByStem(meshAsset.stem, meshName || meshAsset.stem, meshAsset.ext === '.asset' ? '.fbx' : meshAsset.ext, unityRefFileId(meshOverride[1]))
+          ? cocosDb.resolveModelMeshByStem(meshAsset.stem, meshName || meshAsset.stem, meshAsset.ext === '.asset' ? '.fbx' : meshAsset.ext, unityRefFileId(meshOverride[1]), meshAsset.relativePath)
           : null;
+        reportModelMeshResolution(reporter, resolved, nestedPrefab.sourceAsset?.relativePath || '', gameObject.name);
         const meshUuid = builtin || resolved?.meshUuid || '';
         renderer._mesh = meshUuid ? cocosUuid(meshUuid, 'cc.Mesh') : resolvedMesh;
         if (meshUuid) {
@@ -5884,6 +6163,8 @@ class CocosPrefabBuilder {
     this.uiTransformByNode = new Map();
     this.nodePrefabInfoMap = new Map();
     this.nestedPrefabInstanceByNode = new Map();
+    // nodeId -> whether the nested source may hold mesh renderers (mirrored-culling pass).
+    this.nestedPrefabRendererHint = new Map();
     this.mountedChildrenByInstanceTarget = new Map();
     this.mountedComponentsByInstanceTarget = new Map();
     this.prefabInfoIds = [];
@@ -6153,6 +6434,7 @@ class CocosPrefabBuilder {
         ? [materialUuid]
         : [];
     return this.addComponent(nodeId, 'cc.MeshRenderer', {
+      _enabled: config.enabled !== false,
       _materials: materialUuids.map((uuid) => cocosUuid(uuid, 'cc.Material')),
       _visFlags: 0,
       bakeSettings: cocosRef(this.addModelBakeSettings()),
@@ -6171,6 +6453,7 @@ class CocosPrefabBuilder {
 
   addSkinnedMeshRenderer(nodeId, unityComponentId, meshUuid, materialUuids, skeletonUuid, skinningRootId, fileId, config = {}) {
     return this.addComponent(nodeId, 'cc.SkinnedMeshRenderer', {
+      _enabled: config.enabled !== false,
       // Empty slots stay null so later slots keep their sub-mesh index.
       _materials: materialUuids.map((uuid) => (uuid ? cocosUuid(uuid, 'cc.Material') : null)),
       _visFlags: 0,
@@ -6457,10 +6740,28 @@ class CocosPrefabBuilder {
     }, unityComponentId, fileId);
   }
 
+  // Unity Light m_Enabled (a disabled Light component renders nothing; an enabled cc.DirectionalLight
+  // would also become the scene main light) and m_Shadows {m_Type 0 None / 1 Hard / 2 Soft, m_Strength,
+  // m_Bias, m_NormalBias}. getField reads the nested block as an object ('m_Shadows.m_Type' never matched).
+  unityLightState(doc) {
+    const shadows = getField(doc, 'm_Shadows', null);
+    const block = shadows && typeof shadows === 'object' ? shadows : {};
+    const type = Number(block.m_Type ?? 0) || 0;
+    return {
+      enabled: Number(getField(doc, 'm_Enabled', 1) ?? 1) !== 0,
+      shadowType: type,
+      shadowStrength: Number.isFinite(Number(block.m_Strength)) ? Number(block.m_Strength) : 1,
+      shadowBias: Number.isFinite(Number(block.m_Bias)) ? Number(block.m_Bias) : 0.05,
+      shadowNormalBias: Number.isFinite(Number(block.m_NormalBias)) ? Number(block.m_NormalBias) : 0.4,
+    };
+  }
+
   addDirectionalLight(nodeId, unityComponentId, doc, fileId) {
     const intensity = Number(getField(doc, 'm_Intensity', 1) || 1);
+    const state = this.unityLightState(doc);
     const staticSettings = this.add({ __type__: 'cc.StaticLightSettings', _baked: false, _editorOnly: false, _castShadow: false });
     return this.addComponent(nodeId, 'cc.DirectionalLight', {
+      _enabled: state.enabled,
       _color: unityColorToCocos(getField(doc, 'm_Color', { r: 1, g: 1, b: 1, a: 1 })),
       _useColorTemperature: false,
       _colorTemperature: 6570,
@@ -6469,11 +6770,12 @@ class CocosPrefabBuilder {
       _illuminanceHDR: intensity * 65000,
       _illuminance: intensity * 65000,
       _illuminanceLDR: intensity * 1.6927083333333333,
-      _shadowEnabled: Number(getField(doc, 'm_Shadows.m_Type', 0) || 0) !== 0,
-      _shadowPcf: 0,
-      _shadowBias: 0.05,
-      _shadowNormalBias: 0.4,
-      _shadowSaturation: 1,
+      _shadowEnabled: state.shadowType !== 0,
+      // Unity Soft shadows filter with a wide PCF tent; SOFT_4X is the widest Cocos kernel.
+      _shadowPcf: state.shadowType === 2 ? 3 : 0,
+      _shadowBias: state.shadowBias,
+      _shadowNormalBias: state.shadowNormalBias,
+      _shadowSaturation: Math.min(1, Math.max(0, state.shadowStrength)),
       _shadowDistance: 50,
       _shadowInvisibleOcclusionRange: 200,
       _csmLevel: 4,
@@ -6494,6 +6796,7 @@ class CocosPrefabBuilder {
     const range = Number(getField(doc, 'm_Range', 10) || 10);
     const staticSettings = this.add({ __type__: 'cc.StaticLightSettings', _baked: false, _editorOnly: false, _castShadow: false });
     return this.addComponent(nodeId, 'cc.SphereLight', {
+      _enabled: this.unityLightState(doc).enabled,
       _color: unityColorToCocos(getField(doc, 'm_Color', { r: 1, g: 1, b: 1, a: 1 })),
       _useColorTemperature: false,
       _colorTemperature: 6570,
@@ -6513,7 +6816,9 @@ class CocosPrefabBuilder {
     const spotAngleDeg = Number(getField(doc, 'm_SpotAngle', 30) || 30);
     const spotAngleRad = (spotAngleDeg * Math.PI) / 180;
     const staticSettings = this.add({ __type__: 'cc.StaticLightSettings', _baked: false, _editorOnly: false, _castShadow: false });
+    const state = this.unityLightState(doc);
     return this.addComponent(nodeId, 'cc.SpotLight', {
+      _enabled: state.enabled,
       _color: unityColorToCocos(getField(doc, 'm_Color', { r: 1, g: 1, b: 1, a: 1 })),
       _useColorTemperature: false,
       _colorTemperature: 6570,
@@ -6525,7 +6830,7 @@ class CocosPrefabBuilder {
       _range: range,
       _size: 0.15,
       _spotAngle: spotAngleRad,
-      _shadowEnabled: Number(getField(doc, 'm_Shadows.m_Type', 0) || 0) !== 0,
+      _shadowEnabled: state.shadowType !== 0,
     }, unityComponentId, fileId);
   }
 
@@ -6570,6 +6875,30 @@ class CocosPrefabBuilder {
       _right: 0,
       _top: 0,
       _bottom: 0,
+      _horizontalCenter: 0,
+      _verticalCenter: 0,
+      _isAbsLeft: true,
+      _isAbsRight: true,
+      _isAbsTop: true,
+      _isAbsBottom: true,
+      _isAbsHorizontalCenter: true,
+      _isAbsVerticalCenter: true,
+      _originalWidth: 0,
+      _originalHeight: 0,
+      _alignMode: 2,
+      _lockFlags: 0,
+    }, null, fileId);
+  }
+
+  /** Widget for a RectTransform anchored to parent edges (see unityRectEdgeWidget). */
+  addEdgeWidget(nodeId, edge, fileId) {
+    return this.addComponent(nodeId, 'cc.Widget', {
+      _alignFlags: edge.flags,
+      _target: null,
+      _left: edge.left,
+      _right: edge.right,
+      _top: edge.top,
+      _bottom: edge.bottom,
       _horizontalCenter: 0,
       _verticalCenter: 0,
       _isAbsLeft: true,
@@ -6910,6 +7239,7 @@ function buildCocosPrefabBuilder(model, outputFile, options, reporter, unityDb, 
   runtimeComponentPorter.attachParticleRateOverDistanceEmitters(model, builder, reporter);
   runtimeComponentPorter.attachParticleHierarchyTransformSync(builder, reporter);
   runtimeComponentPorter.attachParticleRendererVisibility(builder, reporter);
+  runtimeComponentPorter.attachMirroredCulling(builder, reporter, options);
   require('./unity-cocos-port/particle-sorting-binding').attachSortingRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-orbit-binding').attachOrbitRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-noise-binding').attachNoiseRuntime(builder, reporter, options);
@@ -6917,6 +7247,7 @@ function buildCocosPrefabBuilder(model, outputFile, options, reporter, unityDb, 
   require('./unity-cocos-port/particle-initial-state-binding.cjs').attachInitialStateRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-custom-data-binding').attachCustomDataRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-align-to-direction-binding').attachAlignToDirectionRuntime(builder, reporter, options);
+  require('./unity-cocos-port/particle-inherit-velocity-binding').attachInheritVelocityRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-birth-state-binding').attachBirthStateRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-simulation-step-binding').attachSimulationStepRuntime(builder, reporter, options);
   require('./unity-cocos-port/particle-burst-spread-binding').attachBurstSpreadRuntime(builder, reporter, options);
@@ -6976,7 +7307,7 @@ function syncImportedMaterialLibraryCache(materialData, meta, options) {
   return syncImportedMaterialLibraryCacheImpl(materialData, meta, options);
 }
 
-function recordPendingMeshRepair(options, prefabFile, componentFileId, modelStem, meshNameHint, source) {
+function recordPendingMeshRepair(options, prefabFile, componentFileId, modelStem, meshNameHint, source, unityFileId = '') {
   if (!options || !prefabFile || !componentFileId || !modelStem) return;
   if (!options._pendingMeshRepairs) options._pendingMeshRepairs = new Map();
   const key = path.resolve(prefabFile);
@@ -6986,6 +7317,7 @@ function recordPendingMeshRepair(options, prefabFile, componentFileId, modelStem
     modelStem,
     meshNameHint: meshNameHint || '',
     source: source || '',
+    unityFileId: unityFileId ? String(unityFileId) : '',
   });
   options._pendingMeshRepairs.set(key, entries);
 }
@@ -7024,7 +7356,7 @@ function repairPendingMeshRefs(prefabFile, cocosDb, reporter, options) {
 
     if (!meshOwner || meshOwner._mesh) continue;
 
-    const resolved = cocosDb.resolveModelMeshByStem(entry.modelStem, entry.meshNameHint);
+    const resolved = cocosDb.resolveModelMeshByStem(entry.modelStem, entry.meshNameHint, '', entry.unityFileId || '', entry.source);
     if (!resolved?.meshUuid) continue;
 
     meshOwner._mesh = cocosUuid(resolved.meshUuid, 'cc.Mesh');
@@ -7334,6 +7666,7 @@ function portPrefab(options, reporter) {
   runtimeComponentPorter.ensureParticleSubEmitterFollowerScript(options, reporter);
   runtimeComponentPorter.ensureParticleHierarchyTransformSyncScript(options, reporter);
   runtimeComponentPorter.ensureParticleRendererVisibilityScript(options, reporter);
+  runtimeComponentPorter.ensureMirroredCullingScript(options, reporter);
   runtimeComponentPorter.ensureParticleRateOverDistanceEmitterScript(options, reporter);
   runtimeComponentPorter.ensureSpriteRendererColorAdapterScript(options, reporter);
   runtimeComponentPorter.ensureSpriteRendererColorAssets(options, reporter);
@@ -7686,6 +8019,14 @@ function emitNodeRecursive(transform, parentNodeId, model, builder, layerResolve
     };
     reporter.low('SCREEN_SPACE_CANVAS_ROOT_NORMALIZED', model.file, gameObject.name,
       'Screen-space Canvas root transform is runtime-driven in Unity; emitted as identity for the Cocos host Canvas');
+    // Its size is runtime-driven too: the prefab keeps whatever Game view it was last saved in (Blast Shooter's
+    // Canvas - Gameplay: 1081x605, so top-anchored HUD sat mid-screen). Lay out at the CanvasScaler reference.
+    const reference = unityCanvasScalerReferenceResolution(gameObject, model);
+    if (reference && transform.isRect) {
+      resolvedTransform = { ...resolvedTransform, sizeDelta: { ...reference } };
+      reporter.low('SCREEN_SPACE_CANVAS_ROOT_REFERENCE_SIZE', model.file, gameObject.name,
+        `Canvas root laid out at the CanvasScaler reference resolution ${reference.x}x${reference.y} instead of the saved ${transform.sizeDelta?.x}x${transform.sizeDelta?.y}`);
+    }
   }
   if (emissionContext?.rebaseNestedModelMountedChild) {
     resolvedTransform = rebaseNestedModelMountedChildTransform(resolvedTransform, emissionContext.modelBasisScale ?? 1);
@@ -7762,6 +8103,7 @@ function emitNodeRecursive(transform, parentNodeId, model, builder, layerResolve
       );
     }
     applyNestedScriptFieldOverrides(nestedBuilder, gameObject.nestedPrefab, { builder, reporter, unityDb, cocosDb });
+    applyNestedRendererEnabledOverrides(nestedBuilder, gameObject.nestedPrefab);
     const flattened = builder.clonePrefabTree(nestedBuilder.objects, parentNodeId);
     if (flattened?.rootId != null) {
       rekeyFlattenedPrefabClone(builder, flattened, `node-${sanitizeFileId(gameObject.name)}-${transform.fileId}`, String(transform.fileId));
@@ -7836,7 +8178,7 @@ function emitNodeRecursive(transform, parentNodeId, model, builder, layerResolve
   }
 
   if (gameObject.nestedPrefab?.prefabUuid && gameObject.nestedPrefab?.rootLocalId) {
-    const nestedOverrides = buildNestedPrefabPropertyOverrides(gameObject, resolvedTransform, gameObject.nestedPrefab.model, { builder, reporter, unityDb, cocosDb });
+    const nestedOverrides = buildNestedPrefabPropertyOverrides(gameObject, resolvedTransform, gameObject.nestedPrefab.model, { builder, reporter, unityDb, cocosDb, layerResolver });
     const nodeId = builder.addNestedPrefabInstance(
       gameObject.name,
       parentNodeId,
@@ -7847,6 +8189,7 @@ function emitNodeRecursive(transform, parentNodeId, model, builder, layerResolve
       gameObject.nestedPrefab.rootLocalId,
       nestedOverrides,
     );
+    builder.nestedPrefabRendererHint.set(nodeId, unityModelMayHaveRenderers(gameObject.nestedPrefab.model));
     builder.nodeMapByGameObject.set(gameObject.fileId, nodeId);
     builder.nodeMapByTransform.set(transform.fileId, nodeId);
     // The outer file addresses the linked instance's root by derived id (e.g. m_RemovedGameObjects of a variant).
@@ -8050,6 +8393,11 @@ function emitNodeRecursive(transform, parentNodeId, model, builder, layerResolve
       && Math.abs(finiteNumber(sizeDelta.x, 0)) < 1e-6
       && Math.abs(finiteNumber(sizeDelta.y, 0)) < 1e-6;
     if (isFullStretch) builder.addFullStretchWidget(nodeId, `cmp-widget-${transform.fileId}`);
+    else if (!parentTransform || !gameObjectHasParticleSystem(model.gameObjects.get(parentTransform.gameObjectId), model)) {
+      // A particle parent gets no cc.UITransform, so a Widget would have no rect to align against.
+      const edge = unityRectEdgeWidget(transform, resolvedTransform, parentTransform);
+      if (edge) builder.addEdgeWidget(nodeId, edge, `cmp-widget-${transform.fileId}`);
+    }
   }
 
   for (const childId of transform.children) {
@@ -8140,6 +8488,18 @@ function copyUnityAssetToCocos(unityAsset, options, reporter, kind, severity = '
 
 function importedUnityAssetPath(unityAsset, options) {
   return importedUnityAssetPathImpl(unityAsset, options);
+}
+
+// Unity models are copied (or, for Mesh .asset, exported to .fbx) to assets/unity_imported/<Unity path>.
+// Given the Unity source, only that mirror is the model; a same-basename model imported from another
+// Unity folder is a different asset (Blast Shooter's Ver2/Pot.fbx square pot bound Model/Pot.fbx's round
+// pot and was never copied). Models placed outside unity_imported by hand stay eligible.
+function modelRecordsForUnitySource(records, unityRelativePath) {
+  const withoutExt = (value) => value.replace(/\.[^./]+$/, '').toLowerCase();
+  const mirror = withoutExt(`assets/unity_imported/${toPosix(unityRelativePath)}`);
+  const exact = records.filter((record) => withoutExt(record.relativePath) === mirror);
+  if (exact.length) return exact;
+  return records.filter((record) => !record.relativePath.toLowerCase().startsWith('assets/unity_imported/'));
 }
 
 function ensureAssetMeta(assetFile, kind, config = {}) {
@@ -9144,6 +9504,8 @@ if (require.main === module) {
 module.exports = {
   collectUnityModelExternalMaterialRemaps,
   parseUnityYaml,
+  parseUnityScalar,
+  getIndentedBlock,
   getField,
   getNestedList,
   unityRefGuid,
@@ -9171,6 +9533,12 @@ module.exports = {
   emitMeshRenderer,
   emitCanvas,
   resolveTransformLayout,
+  unityRectEdgeWidget,
+  ensureImageAssetMeta,
+  recordPendingMeshRepair,
+  repairPendingMeshRefs,
+  emitCanvasGroup,
+  unityCanvasScalerReferenceResolution,
   resolveNestedPrefabEffectiveTransform,
   unityCanvasRenderMode,
   convertNodePosition,
@@ -9178,6 +9546,7 @@ module.exports = {
   correctNestedModelForwardAxis,
   mergedModelRootTransform,
   transformOverrideFlags,
+  buildNestedChildTransformOverrides,
   buildNestedPrefabPropertyOverrides,
   rebaseNestedModelMountedChildTransform,
   fbxMeshOwnerNode,
@@ -9202,5 +9571,7 @@ module.exports = {
   inheritedPreflightStillValid,
   parseUnityYamlText,
   applyNestedParticlePrefabOverrides,
+  nestedRendererEnabledOverride,
+  applyNestedRendererEnabledOverrides,
   main,
 };

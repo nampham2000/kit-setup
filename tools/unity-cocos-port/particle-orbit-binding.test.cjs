@@ -17,7 +17,8 @@ test('semantic eligibility accepts supported sources and rejects disabled or uns
   assert.equal(canBindOrbit({...spec(),simulationSpace:1,scalingMode:1}),false);
   assert.equal(canBindOrbit({...spec(),enabled:false}),false);
   assert.equal(canBindOrbit({...spec(),noiseEnabled:true}),false);
-  assert.equal(canBindOrbit({...spec(),inWorldSpace:true}),false);
+  assert.equal(canBindOrbit({...spec(),inWorldSpace:true}),true,'velocity space moves only linear axes (orbit-velocity-space-native.json)');
+  assert.equal(canBindOrbit({...spec(),inWorldSpace:true,velocity:{...spec().velocity,x:constant(0.4)}}),false);
 });
 test('generic prefab porter binds native Orbit without any AOE controller or tool',()=>{
   const source=spec(),result=run(source);
@@ -30,7 +31,7 @@ test('generic prefab porter binds native Orbit without any AOE controller or too
   assert.match(cli,/attachOrbitRuntime\(builder, reporter, options\)/);
 });
 for(const [name,mutate,limit] of [
- ['world space',s=>s.inWorldSpace=true,false],['custom simulation',s=>s.simulationSpace=2,false],['noise composition',s=>s.noiseEnabled=true,false],['offset',s=>s.velocity.orbitalOffsetX.scalar=1,false],['weighted curve',s=>s.velocity.orbitalY.maxCurve={m_Curve:[{weightedMode:1}]},false],['limit with a speed modifier',s=>{s.limitEnabled=true;s.velocity.speedModifier=constant(2);},true],
+ ['world-space linear velocity',s=>{s.inWorldSpace=true;s.velocity.x=constant(0.4);},false],['custom simulation',s=>s.simulationSpace=2,false],['noise composition',s=>s.noiseEnabled=true,false],['world-simulation offset',s=>{s.simulationSpace=1;s.scalingMode=0;s.velocity.orbitalOffsetX.scalar=1;},false],['weighted curve',s=>s.velocity.orbitalY.maxCurve={m_Curve:[{weightedMode:1}]},false],['limit with a speed modifier',s=>{s.limitEnabled=true;s.velocity.speedModifier=constant(2);},true],
 ])test(`${name} cannot silently pass as native Orbit`,()=>{
   const source=spec();mutate(source);const result=run(source,limit);
   assert.equal(result.objects.length,3);assert.equal(result.issues[0].code,'PARTICLE_ORBIT_ADAPTER_REQUIRED');
@@ -57,4 +58,10 @@ test('staging is idempotent and leaves metadata to AssetDB',()=>{
   }finally{
     assert.equal(path.dirname(fs.realpathSync(root)),fs.realpathSync(base));fs.rmSync(root,{recursive:true});
   }
+});
+
+test('a Local-simulation orbital offset binds (native offset fixture)',()=>{
+  const source=spec();source.velocity.orbitalOffsetX.scalar=0.3;source.velocity.orbitalOffsetY.scalar=0.3;source.velocity.orbitalOffsetZ.scalar=0.3;
+  const result=run(source,false);
+  assert.deepEqual(result.issues,[]);assert.equal(result.objects.length,4);
 });

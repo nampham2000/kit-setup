@@ -26,7 +26,7 @@ function attachSimulationStepRuntime(builder,reporter,options) {
     reporter.high('PARTICLE_TIMESTEP_SOURCE_REQUIRED',options.src||'','',
       'Read Maximum Particle Timestep from source ProjectSettings/TimeManager.asset; a guessed timestep cannot verify short emission windows.');return;
   }
-  if(!options.dryRun)for(const name of ['UnityParticleSimulationStep','UnityParticleSimulationStepAdapter','UnityParticleBirthTiming','UnityRandomForceKernel','UnityParticleRandomForce']) {
+  if(!options.dryRun)for(const name of ['UnityParticleSimulationStep','UnityParticleSimulationStepAdapter','UnityParticleBirthTiming','UnityParticleBurstEmission','UnityRandomForceKernel','UnityParticleRandomForce']) {
     const target=path.join(options.cocosRoot,'assets/script',name+'.ts');
     writeGeneratedAssetText(target,fs.readFileSync(path.join(__dirname,'runtime',name+'.ts'),'utf8'),{cocosRoot:options.cocosRoot});
   }

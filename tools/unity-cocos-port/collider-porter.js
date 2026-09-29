@@ -2,6 +2,7 @@
 
 const { UNITY_3D_COLLIDER_DEPTH } = require('./constants');
 const { finiteNumber } = require('./core-utils');
+const { reportModelMeshResolution } = require('./model-mesh-resolution');
 
 module.exports = function createColliderPorter(deps) {
   const {
@@ -9,10 +10,12 @@ module.exports = function createColliderPorter(deps) {
     parseUnityPolygonColliderPaths,
     boundsForUnityPolygonPaths,
     unityRefGuid,
+    unityRefFileId = (ref) => String(ref?.fileID ?? ''),
     resolveUnityPhysicsMaterialUuid,
     resolveUnityBuiltinMeshUuid,
     resolveBuiltinPrimitiveMeshUuid,
     handleMissingModel,
+    refreshExportedUnityMesh = () => false,
     resolveLibraryAssetUuid,
     fbxMeshOwnerNode = ({ nodeId }) => nodeId,
   } = deps;
@@ -45,9 +48,12 @@ module.exports = function createColliderPorter(deps) {
     const meshAsset = unityDb.get(unityRefGuid(meshRef));
     if (!meshAsset) return '';
 
+    refreshExportedUnityMesh(meshAsset, reporter, options);
     const resolved = cocosDb?.resolveModelMeshByStem
-      ? cocosDb.resolveModelMeshByStem(meshAsset.stem, gameObject.name, meshAsset.ext === '.asset' ? '.fbx' : meshAsset.ext)
+      ? cocosDb.resolveModelMeshByStem(meshAsset.stem, gameObject.name, meshAsset.ext === '.asset' ? '.fbx' : meshAsset.ext, unityRefFileId(meshRef), meshAsset.relativePath)
       : null;
+    // The model exists but none of its meshes is the referenced one: not a missing model.
+    if (reportModelMeshResolution(reporter, resolved, model.file, gameObject.name) && !resolved.meshUuid) return '';
     if (resolved?.meshUuid) return resolved.meshUuid;
 
     // A Unity Mesh .asset is serialized YAML that no Cocos importer reads, so it is exported

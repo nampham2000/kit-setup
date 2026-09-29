@@ -32,3 +32,17 @@ test('only errors naming a declared injected host (plus the preview origin) are 
   // a look-alike subdomain of the declared host is not the declared host
   assert.equal(isEnvironmentError(['x', `http://evil.${AV}/p`], hosts, PREVIEW), false);
 });
+
+test('--url preview identity: mismatch throws PREVIEW_PROJECT_MISMATCH unless --allow-foreign-preview', async () => {
+  const { parseArgs, guardRuntimePreviewProject } = require('./verify-runtime.cjs');
+  assert.equal(parseArgs(['--url', PREVIEW, '--allow-foreign-preview']).allowForeignPreview, true);
+  const probe = async () => ({ status: 'mismatch', origin: 'http://localhost:7506', url: PREVIEW,
+    expectedProjectRoot: 'D:/games/screw', servedProjectRoot: 'C:/cc_worktrees/harvest-full-port',
+    signal: 'import-map-project-root', strength: 'strong', message: 'served by harvest' });
+  await assert.rejects(guardRuntimePreviewProject(PREVIEW, { probe, scanOnMismatch: false }),
+    error => error.code === 'PREVIEW_PROJECT_MISMATCH');
+  const allowed = await guardRuntimePreviewProject(PREVIEW, { probe, allowForeignPreview: true });
+  assert.equal(allowed.overridden, true);
+  const match = await guardRuntimePreviewProject(PREVIEW, { probe: async () => ({ ...(await probe()), status: 'match' }) });
+  assert.equal(match.status, 'match');
+});

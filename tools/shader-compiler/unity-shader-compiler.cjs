@@ -108,6 +108,54 @@ function findShadersInDir(dir) {
   return results;
 }
 
+// Shader names Unity ships in its built-in resources: a UsePass into them always resolves.
+const BUILTIN_SHADER_PREFIXES = ['Legacy Shaders/', 'Hidden/', 'Standard', 'Mobile/', 'Particles/', 'Unlit/', 'Skybox/', 'UI/',
+  'Sprites/', 'Nature/', 'FX/', 'GUI/', 'Autodesk Interactive', 'VR/', 'AR/', 'Universal Render Pipeline/', 'HDRP/', 'Shader Graphs/'];
+const projectShaderNames = new Map();
+
+/** Unity project that owns a shader: --unity-project, else the parent of the nearest `Assets` ancestor. */
+function owningUnityProject(srcPath, options) {
+  if (options.unityProject) return path.resolve(options.unityProject);
+  for (let dir = path.dirname(path.resolve(srcPath)); dir !== path.dirname(dir); dir = path.dirname(dir)) {
+    if (path.basename(dir) === 'Assets' && fs.existsSync(path.join(path.dirname(dir), 'ProjectSettings'))) return path.dirname(dir);
+  }
+  return '';
+}
+
+function shaderNamesOf(project) {
+  if (projectShaderNames.has(project)) return projectShaderNames.get(project);
+  const names = new Set();
+  for (const root of ['Assets', 'Packages'].map(d => path.join(project, d))) {
+    if (!fs.existsSync(root)) continue;
+    for (const file of findShadersInDir(root)) {
+      if (!/\.shader$/i.test(file)) continue;
+      const m = /\bShader\s+"([^"]+)"/.exec(fs.readFileSync(file, 'utf8').slice(0, 4096));
+      if (m) names.add(m[1]);
+    }
+  }
+  projectShaderNames.set(project, names);
+  return names;
+}
+
+/**
+ * UsePass targets ("Shader/PASS") whose shader does not exist in the source project. Unity skips a
+ * SubShader it cannot build, so the emitter falls through to the next SubShader with a program
+ * (KriptoFX RFX4 `SubShader { UsePass "LegacyPreview/URP/OPAQUE" }` in a Built-in project without
+ * the LegacyPreview shim). Without a known project every target counts as resolvable.
+ */
+function unresolvedUsePasses(docIR, srcPath, options) {
+  const targets = [];
+  for (const s of docIR.subShaders) for (const p of s.passes) if (p.usePass) targets.push(p.usePass);
+  if (!targets.length) return [];
+  const project = owningUnityProject(srcPath, options);
+  if (!project) return [];
+  const names = shaderNamesOf(project);
+  return targets.filter(target => {
+    const shader = target.slice(0, target.lastIndexOf('/'));
+    return !!shader && !names.has(shader) && !BUILTIN_SHADER_PREFIXES.some(prefix => shader.startsWith(prefix));
+  });
+}
+
 /**
  * Transpiles a single Unity shader file to Cocos Creator .effect
  */
@@ -131,6 +179,13 @@ function resolveColorSpace(options) {
 }
 
 function transpileShaderFile(srcPath, outPath, options = {}) {
+  // Callers without --color-space (the prefab/material porter) still get the source project's Player
+  // Color Space: the porter transpiled KriptoFX RFX4_Tornado (a Gamma project) with its Linear-only
+  // `#ifndef UNITY_COLORSPACE_GAMMA` pow() branches active.
+  if (!options.colorSpace) {
+    const project = owningUnityProject(srcPath, options);
+    if (project) options = { ...options, colorSpace: resolveColorSpace({ unityProject: project }).colorSpace };
+  }
   const source = fs.readFileSync(srcPath, 'utf8');
   const srcDir = path.dirname(srcPath);
 
@@ -148,6 +203,7 @@ function transpileShaderFile(srcPath, outPath, options = {}) {
       analyzeHlslProgram(pass.program);
     }
   }
+  docIR.unresolvedUsePasses = unresolvedUsePasses(docIR, srcPath, options);
 
   // 4. Emit Cocos .effect
   // `--mode auto` picks the backend (spec section 28). A shader that hands a

@@ -6,6 +6,14 @@ const { toPosix, sanitizeFileId } = require('./core-utils');
 const { unityModelImportBasis, unityModelMeshName } = require('./model-import-basis');
 const { cocosSlotsForUnitySlots } = require('./fbx-submesh-order');
 const { requestModelMeshBasis } = require('./model-mesh-basis-binding');
+const { rebaseSkinnedSkeleton } = require('./fbx-skeleton-basis');
+const { reportModelMeshResolution } = require('./model-mesh-resolution');
+
+// Unity Renderer.m_Enabled (MeshRenderer, SkinnedMeshRenderer): a disabled renderer draws nothing
+// (collider-only pieces keep their MeshFilter), so the Cocos component starts disabled too.
+function unityRendererEnabled(getField, doc) {
+  return Number(getField(doc, 'm_Enabled', 1) ?? 1) !== 0;
+}
 
 module.exports = function createRendererPorter(deps) {
   const {
@@ -13,6 +21,7 @@ module.exports = function createRendererPorter(deps) {
     resolveUnityMaterialUuid,
     resolveUnityBuiltinMeshUuid,
     handleMissingModel,
+    refreshExportedUnityMesh = () => false,
     recordPendingMeshRepair,
     getField,
     getNestedList,
@@ -126,7 +135,8 @@ module.exports = function createRendererPorter(deps) {
     const componentId = `synthetic-model-${modelAsset.guid || modelAsset.uuid || gameObject.fileId}`;
     const componentFileId = `cmp-model-${sanitizeFileId(gameObject.name)}`;
     const requiredExt = modelAsset.ext === '.asset' ? '.fbx' : modelAsset.ext;
-    const resolved = cocosDb.resolveModelMeshByStem(modelAsset.stem, gameObject.syntheticModelName || gameObject.name, requiredExt);
+    const resolved = cocosDb.resolveModelMeshByStem(modelAsset.stem, gameObject.syntheticModelName || gameObject.name, requiredExt, '', modelAsset.relativePath);
+    reportModelMeshResolution(reporter, resolved, modelAsset.relativePath, gameObject.name);
     if (resolved?.meshUuid) {
       const overrideMaterialUuids = resolveSyntheticMaterialOverrides(
         gameObject, resolved, options, unityDb, cocosDb, reporter,
@@ -230,6 +240,8 @@ module.exports = function createRendererPorter(deps) {
     let meshUuid = '';
     let materialUuids = [];
     let meshPendingImport = false;
+    let meshReported = false;
+    let resolvedPrimitiveCount = null;
     const componentFileId = `cmp-mesh-renderer-${componentId}`;
     const materialHints = materialAssets.map((materialAsset) => materialAsset?.stem || '');
 
@@ -250,11 +262,14 @@ module.exports = function createRendererPorter(deps) {
     const unityMeshName = meshAsset && !builtinMeshUuid ? unityModelMeshName(meshAsset, deps.unityRefFileId(meshRef)) : '';
     if (meshAsset && !meshUuid) {
       const requiredExt = meshAsset.ext === '.asset' ? '.fbx' : meshAsset.ext;
-      const resolved = cocosDb.resolveModelMeshByStem(meshAsset.stem, unityMeshName || gameObject.name, requiredExt, deps.unityRefFileId(meshRef));
+      refreshExportedUnityMesh(meshAsset, reporter, options);
+      const resolved = cocosDb.resolveModelMeshByStem(meshAsset.stem, unityMeshName || gameObject.name, requiredExt, deps.unityRefFileId(meshRef), meshAsset.relativePath);
+      meshReported = reportModelMeshResolution(reporter, resolved, model.file, gameObject.name) && !resolved.meshUuid;
       if (resolved) {
+        resolvedPrimitiveCount = resolved.primitiveCount ?? null;
         meshUuid = resolved.meshUuid;
         if (hasExplicitMaterialSlots) {
-          const resolvedMaterials = cocosDb.resolveModelMaterialUuidsByStem(meshAsset.stem, materialHints, requiredExt);
+          const resolvedMaterials = cocosDb.resolveModelMaterialUuidsByStem(meshAsset.stem, materialHints, requiredExt, meshAsset.relativePath);
           materialUuids = resolvedMaterials?.materialUuids || resolved.materialUuids || (resolved.materialUuid ? [resolved.materialUuid] : []);
         }
         if (resolved.fallbackExt !== meshAsset.ext && ['.fbx', '.gltf', '.glb'].includes(resolved.fallbackExt)) {
@@ -296,9 +311,20 @@ module.exports = function createRendererPorter(deps) {
     }
 
     if (!meshUuid && meshPendingImport && meshAsset) {
-      recordPendingMeshRepair(options, options.out, componentFileId, meshAsset.stem, gameObject.name, meshAsset.relativePath);
+      // Keep the Unity mesh name and fileID: the repair runs after import and must pick the same sub-mesh
+      // (Blast Shooter's Center tile repaired by its GameObject name onto Base_All.fbx's first mesh).
+      recordPendingMeshRepair(options, options.out, componentFileId, meshAsset.stem, unityMeshName || gameObject.name, meshAsset.relativePath,
+        deps.unityRefFileId(meshRef));
     }
-    if (!meshUuid && !meshPendingImport) reporter.high('MESH_UNRESOLVED', model.file, gameObject.name, 'MeshRenderer has no resolved Cocos mesh');
+    if (!meshUuid && !meshPendingImport && !meshReported) reporter.high('MESH_UNRESOLVED', model.file, gameObject.name, 'MeshRenderer has no resolved Cocos mesh');
+    // Geometry cross-check: Unity draws a submesh only when a material slot covers it, while a Cocos
+    // primitive without a material renders with the magenta missing-material. A mismatch means either the
+    // wrong mesh sub-asset was bound or the renderer needs an explicit decision.
+    if (meshUuid && hasExplicitMaterialSlots && Number.isInteger(resolvedPrimitiveCount) && resolvedPrimitiveCount > materialRefs.length) {
+      reporter.high('MESH_PRIMITIVES_EXCEED_MATERIAL_SLOTS', model.file, gameObject.name,
+        `Bound Cocos mesh has ${resolvedPrimitiveCount} primitives but the Unity renderer has ${materialRefs.length} material slot(s); the extra primitives render magenta in Cocos`,
+        meshUuid);
+    }
     const fbxOwner = meshUuid && !builtinMeshUuid && meshAsset
       ? meshRendererOwner({
         builder,
@@ -321,6 +347,7 @@ module.exports = function createRendererPorter(deps) {
     const rendererId = builder.addMeshRenderer(ownerNodeId, componentId, meshUuid, materialUuids, componentFileId, {
       castShadows: Number(getField(doc, 'm_CastShadows', 1) || 0) !== 0,
       receiveShadows: Number(getField(doc, 'm_ReceiveShadows', 1) || 0) !== 0,
+      enabled: unityRendererEnabled(getField, doc),
     });
     if (meshAsset && !builtinMeshUuid && (meshUuid || meshPendingImport) && (fbxOwner ? fbxOwner.requestBasis : fbxBasisRoute(meshAsset).request)) {
       requestModelMeshBasis(builder, reporter, options, nodeId, rendererId, meshAsset, gameObject.name);
@@ -347,8 +374,9 @@ module.exports = function createRendererPorter(deps) {
   // Unity SkinnedMeshRenderer on an unpacked model instance. The Cocos model prefab
   // pairs the imported mesh with a skeleton whose joint paths are relative to the
   // model root; that root is the ancestor from which every joint path resolves.
-  // Unity's X reflection of the FBX and the scene's Z reflection compose to a Y
-  // rotation, the same for bind pose and animated bones, so skinning stays coherent.
+  // The bind poses stay in FBX space while the scene conversion puts every bone in
+  // R*W*R^-1 (R = Ry(180)), which splits the mesh at each joint; attachRealtimeSkinning
+  // rebases the skeleton into FBX space (fbx-skeleton-basis.js).
   function emitSkinnedMeshRenderer(gameObject, nodeId, componentId, doc, model, builder, reporter, options, unityDb, cocosDb) {
     const meshRef = getField(doc, 'm_Mesh');
     const meshAsset = unityDb.get(unityRefGuid(meshRef));
@@ -358,7 +386,8 @@ module.exports = function createRendererPorter(deps) {
       return;
     }
     const meshName = unityModelMeshName(meshAsset, deps.unityRefFileId(meshRef)) || gameObject.name;
-    let resolved = cocosDb.resolveModelMeshByStem(meshAsset.stem, meshName, meshAsset.ext);
+    let resolved = cocosDb.resolveModelMeshByStem(meshAsset.stem, meshName, meshAsset.ext, deps.unityRefFileId(meshRef), meshAsset.relativePath);
+    if (reportModelMeshResolution(reporter, resolved, model.file, gameObject.name) && !resolved.meshUuid) return;
     if (!resolved) {
       const missing = handleMissingModel(meshAsset, reporter, options, { autoCopy: true, meshNameHint: meshName });
       resolved = missing.resolved || null;
@@ -368,7 +397,7 @@ module.exports = function createRendererPorter(deps) {
         return;
       }
     }
-    const skin = cocosDb.resolveModelSkinByMesh(meshAsset.stem, resolved.meshUuid, resolved.fallbackExt || meshAsset.ext);
+    const skin = cocosDb.resolveModelSkinByMesh(meshAsset.stem, resolved.meshUuid, resolved.fallbackExt || meshAsset.ext, meshAsset.relativePath);
     if (!skin?.skeletonUuid || !skin.joints.length) {
       reporter.high('SKINNED_MESH_SKELETON_UNRESOLVED', meshAsset.relativePath, gameObject.name,
         'The imported Cocos model has no skeleton for this mesh; refresh AssetDB and rerun the porter.');
@@ -397,9 +426,23 @@ module.exports = function createRendererPorter(deps) {
       reporter.medium('SKINNED_MESH_MATERIAL_SLOT_EMPTY', meshAsset.relativePath, gameObject.name,
         'A SkinnedMeshRenderer material slot resolved to no Unity or model material; the slot renders with the default material.');
     }
+    // Nodes of the model's own hierarchy (every joint path prefix and the renderer's chain up to the
+    // root) switch to the FBX frame in attachRealtimeSkinning; other children are attachments.
+    if (!builder.fbxSkeletonNodes) builder.fbxSkeletonNodes = new Map();
+    const fbxNodes = builder.fbxSkeletonNodes.get(skinningRoot) || new Set();
+    for (const joint of skin.joints) {
+      const segments = String(joint).split('/').filter(Boolean);
+      for (let i = 1; i <= segments.length; i++) {
+        const id = nodeAtPath(builder, skinningRoot, segments.slice(0, i).join('/'));
+        if (Number.isInteger(id)) fbxNodes.add(id);
+      }
+    }
+    for (let id = nodeId; Number.isInteger(id) && id !== skinningRoot; id = parentNodeId(builder, id)) fbxNodes.add(id);
+    builder.fbxSkeletonNodes.set(skinningRoot, fbxNodes);
     builder.addSkinnedMeshRenderer(nodeId, componentId, resolved.meshUuid, materialUuids, skin.skeletonUuid, skinningRoot, componentFileId, {
       castShadows: Number(getField(doc, 'm_CastShadows', 1) || 0) !== 0,
       receiveShadows: Number(getField(doc, 'm_ReceiveShadows', 1) || 0) !== 0,
+      enabled: unityRendererEnabled(getField, doc),
     });
     // Bone basis and bind pose are carried over structurally; skinning parity needs a visual check.
     reporter.medium('SKINNED_MESH_BOUND', meshAsset.relativePath, gameObject.name,
@@ -431,6 +474,15 @@ module.exports = function createRendererPorter(deps) {
           null, `cmp-skeletal-animation-${rootId}`);
       }
       reporter.low('SKINNED_MESH_REALTIME_SKINNING', '', root._name || '', `${renderers} skinned renderer(s) use real-time skinning under ${root._name || 'root'}.`);
+      const fbxNodes = builder.fbxSkeletonNodes?.get(rootId);
+      if (fbxNodes?.size && !builder.fbxSkeletonRebased?.has(rootId)) {
+        const rebased = rebaseSkinnedSkeleton(builder.objects, rootId, fbxNodes);
+        if (!builder.fbxSkeletonRebased) builder.fbxSkeletonRebased = new Set();
+        builder.fbxSkeletonRebased.add(rootId);
+        reporter.medium('SKINNED_SKELETON_FBX_FRAME', '', root._name || '',
+          `Skeleton under ${root._name || 'root'} rebased to the FBX frame (${rebased.joints} model nodes, ${rebased.attachments} attachments, root * Ry(180)). `
+          + 'Unity-authored bone curves (.anim, humanoid bakes) on this rig must use the FBX-frame conversion (fbx-skeleton-basis fbxBoneLocal).');
+      }
     }
   }
 

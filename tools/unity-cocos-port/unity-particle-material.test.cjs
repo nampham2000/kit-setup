@@ -90,3 +90,22 @@ test('unity-particle model reproduces every Unity oracle sample (linear blending
   }
   assert.ok(worst.error <= 2, `worst ${worst.error}/255 on ${worst.material}: ${JSON.stringify(worst)}`);
 });
+
+test('UI particle shaders (Coffee UI/Additive, UI/Unlit/Transparent) reproduce the Unity oracle within 2/255', () => {
+  const ui = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures/unity-particle-oracle-ui-shaders.json'), 'utf8'));
+  let worst = { error: 0 };
+  for (const material of ui.oracle.materials) {
+    const entry = ui.materials[material.name];
+    const semantics = resolveUnityParticleSemantics({ ...entry, keywords: new Set(entry.keywords) });
+    assert.equal(semantics.supported, true);
+    const data = unityParticleMaterialData({ semantics, colors: entry.colors, textureUuid: '', linear: ui.oracle.colorSpace === 'Linear', effectUuid: 'fixture' });
+    for (const sample of material.samples.filter((s) => s.tex === 'white')) {
+      const src = evaluateUnityParticleFragment(data._props[0], { vertexColor: sample.vc, texel: [1, 1, 1, 1], normal: [0, 0, -1] });
+      const out = blendUnityParticle(semantics.technique, src, sample.bg.map(srgbToLinear)).map((c) => Math.round(linearToSrgb(Math.min(Math.max(c, 0), 1)) * 255));
+      const error = Math.max(...out.map((c, i) => Math.abs(c - sample.out[i])));
+      if (error > worst.error) worst = { error, material: material.name, sample, out };
+    }
+  }
+  assert.ok(worst.error <= 2, `worst ${worst.error}/255 on ${worst.material}: ${JSON.stringify(worst)}`);
+  assert.equal(resolveUnityParticleSemantics({ shaderGuid: 'x', shaderName: 'UI/Additive', floats: {} }).technique, 'additive-one');
+});

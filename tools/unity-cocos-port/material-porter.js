@@ -57,6 +57,13 @@ const BUILTIN_PARTICLE_TRAIL_EFFECT_UUID = '17debcc3-0a6b-4b8a-b00b-dc58b885581e
 const INVISIBLE_SHADOW_RECEIVER_EFFECT_TEMPLATE = path.join(__dirname, 'invisible-shadow-receiver.effect');
 const INVISIBLE_SHADOW_RECEIVER_EFFECT_PATH = path.join('assets', 'effects', 'InvisibleShadowReceiver.effect');
 const TCP2_HYBRID_SHADER_2_EFFECT_TEMPLATE = path.join(__dirname, 'tcp2-hybrid-shader-2.effect');
+// TCP2 Hybrid 2 feature keyword -> texture properties it samples (TCP2 Hybrid 2 Include.cginc).
+const TCP2_FEATURE_TEXTURE_KEYS = [
+  ['TCP2_MATCAP', ['_MatCapTex']],
+  ['TCP2_MATCAP_MASK', ['_MatCapMask']],
+  ['TCP2_RAMPTEXT', ['_Ramp']],
+  ['TCP2_SHADOW_TEXTURE', ['_ShadowBaseMap']],
+];
 const TCP2_HYBRID_SHADER_2_EFFECT_PATH = path.join('assets', 'effects', 'TCP2HybridShader2.effect');
 const TCP2_HYBRID_PARTICLE_EFFECT_TEMPLATE = path.join(__dirname, 'tcp2-hybrid-particle.effect');
 const TCP2_HYBRID_PARTICLE_EFFECT_PATH = path.join('assets', 'effects', 'TCP2HybridParticle.effect');
@@ -127,16 +134,50 @@ module.exports = function createMaterialPorter(deps) {
     return Number.isFinite(minIndent) ? minIndent : -1;
   }
 
+  // Unity 5.x materials (m_SavedProperties serializedVersion 2, e.g. KriptoFX REP v1 DemoResources) list
+  // every property as "- first: {name: X}" + "second: <value | block>" instead of "- X: <value>".
+  // Returns { name, value, lines, consumed } for a legacy entry starting at block[i], else null.
+  function legacySerializedEntry(block, i, entryIndent) {
+    // Unity 5.x: `- first: {name} second: ...` list items, or (5.0-5.5, e.g. KriptoFX RFX4 portal
+    // materials) repeated `data:` keys holding `first: name:` and `second:`.
+    if (!/^(?:-\s*first|data)\s*:\s*$/.test(String(block[i] || '').trim())) return null;
+    const lines = [];
+    for (let j = i + 1; j < block.length; j += 1) {
+      const line = String(block[j] || '');
+      const indent = line.match(/^\s*/)?.[0]?.length || 0;
+      if (line.trim() && indent <= entryIndent) break;
+      lines.push(line);
+    }
+    const name = (lines.map((line) => /^\s*name\s*:\s*(.+?)\s*$/.exec(line)).find(Boolean) || [])[1];
+    const secondIndex = lines.findIndex((line) => /^\s*second\s*:/.test(line));
+    if (!name || secondIndex < 0) return null;
+    const secondIndent = lines[secondIndex].match(/^\s*/)[0].length;
+    const inline = /^\s*second\s*:\s*(.*)$/.exec(lines[secondIndex])[1].trim();
+    const nested = [];
+    for (const line of lines.slice(secondIndex + 1)) {
+      const indent = line.match(/^\s*/)?.[0]?.length || 0;
+      if (line.trim() && indent <= secondIndent) break;
+      nested.push(line);
+    }
+    return { name: name.trim(), value: inline, lines: nested, consumed: lines.length };
+  }
+
   function parseUnitySerializedScalarMap(doc, key) {
     const block = deps.getIndentedBlock(doc, key);
     const entryIndent = blockEntryIndent(block);
     const result = {};
     if (entryIndent < 0) return result;
 
-    for (const rawLine of block) {
-      const line = String(rawLine || '');
+    for (let i = 0; i < block.length; i += 1) {
+      const line = String(block[i] || '');
       const indent = line.match(/^\s*/)?.[0]?.length || 0;
       if (indent !== entryIndent) continue;
+      const legacy = legacySerializedEntry(block, i, entryIndent);
+      if (legacy) {
+        result[legacy.name] = parseUnityScalar(legacy.value);
+        i += legacy.consumed;
+        continue;
+      }
       const trimmed = line.trim();
       const match = /^-\s*([^:]+)\s*:\s*(.*)$/.exec(trimmed) || /^([^:]+)\s*:\s*(.*)$/.exec(trimmed);
       if (!match) continue;
@@ -157,6 +198,17 @@ module.exports = function createMaterialPorter(deps) {
       const indent = line.match(/^\s*/)?.[0]?.length || 0;
       if (indent !== entryIndent) continue;
 
+      const legacy = legacySerializedEntry(block, i, entryIndent);
+      if (legacy) {
+        const legacyDoc = { lines: legacy.lines };
+        result[legacy.name] = {
+          m_Texture: getField(legacyDoc, 'm_Texture', null),
+          m_Scale: getField(legacyDoc, 'm_Scale', { x: 1, y: 1 }),
+          m_Offset: getField(legacyDoc, 'm_Offset', { x: 0, y: 0 }),
+        };
+        i += legacy.consumed;
+        continue;
+      }
       const trimmed = line.trim();
       const match = /^-\s*([^:]+)\s*:\s*(.*)$/.exec(trimmed) || /^([^:]+)\s*:\s*(.*)$/.exec(trimmed);
       if (!match) continue;
@@ -557,6 +609,54 @@ module.exports = function createMaterialPorter(deps) {
     }
   }
 
+  /**
+   * Material props of an auto-transpiled custom effect: every Unity material property the effect declares
+   * under its converted name (toCocosPropertyName: _TintColor -> tintColor, _MainTex -> mainTexture +
+   * mainTexture_ST). The builtin-standard fallback (mainColor, roughness, tilingOffset) left these effects
+   * on their defaults: KriptoFX RFX4_Tornado rendered with no tint, texture or twist parameters.
+   * Colours: a Gamma project uploads stored values, a Linear one GammaToLinear of them (Color properties);
+   * values above 1 ([HDR]) keep a Vec4 so bytes do not clamp them.
+   */
+  function customShaderMaterialProps(effectStem, colors, floats, texEnvs, unityDb, options, reporter) {
+    const effectFile = path.join(options.cocosRoot, 'assets', 'effects', `${effectStem}.effect`);
+    if (!fs.existsSync(effectFile)) return null;
+    const header = /CCEffect\s*%\{([\s\S]*?)\}%/.exec(fs.readFileSync(effectFile, 'utf8'))?.[1] || '';
+    const declared = new Map();
+    for (const m of header.matchAll(/^\s+([A-Za-z_]\w*)\s*:\s*\{\s*value:[^\n]*$/gm)) {
+      declared.set(m[1], { color: /type:\s*color/.test(m[0]), texture: /value:\s*(white|black|grey|gray|normal|default)\b/.test(m[0]) });
+    }
+    if (!declared.size) return null;
+    const { toCocosPropertyName } = require('../shader-compiler/shaderlab-parser.cjs');
+    const linear = unityProjectIsLinear(options.unityRoot);
+    const toLinear = (c) => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+    const props = {};
+    for (const [unityName, value] of Object.entries(colors || {})) {
+      const name = toCocosPropertyName(unityName);
+      const entry = declared.get(name);
+      if (!entry || !value || typeof value !== 'object') continue;
+      const r = Number(value.r ?? value.x ?? 0), g = Number(value.g ?? value.y ?? 0), b = Number(value.b ?? value.z ?? 0), a = Number(value.a ?? value.w ?? 1);
+      if (!entry.color) { props[name] = { __type__: 'cc.Vec4', x: r, y: g, z: b, w: a }; continue; }
+      const rgb = linear ? [r, g, b].map(toLinear) : [r, g, b];
+      props[name] = rgb.some(c => c > 1) || a > 1
+        ? { __type__: 'cc.Vec4', x: rgb[0], y: rgb[1], z: rgb[2], w: a }
+        : { __type__: 'cc.Color', r: Math.round(rgb[0] * 255), g: Math.round(rgb[1] * 255), b: Math.round(rgb[2] * 255), a: Math.round(Math.max(0, a) * 255) };
+    }
+    for (const [unityName, value] of Object.entries(floats || {})) {
+      const name = toCocosPropertyName(unityName);
+      if (declared.has(name) && Number.isFinite(Number(value))) props[name] = Number(value);
+    }
+    for (const unityName of Object.keys(texEnvs || {})) {
+      const name = toCocosPropertyName(unityName);
+      if (!declared.has(name)) continue;
+      const uuid = resolveUnityMaterialTextureUuid(texEnvs, [unityName], unityDb, options, reporter);
+      if (uuid) props[name] = cocosUuid(uuid, 'cc.Texture2D');
+      const env = texEnvs[unityName] || {};
+      const scale = env.m_Scale || { x: 1, y: 1 }, offset = env.m_Offset || { x: 0, y: 0 };
+      if (declared.has(`${name}_ST`)) props[`${name}_ST`] = { __type__: 'cc.Vec4', x: Number(scale.x ?? 1), y: Number(scale.y ?? 1), z: Number(offset.x ?? 0), w: Number(offset.y ?? 0) };
+    }
+    return props;
+  }
+
   // Writes assets/effects/unity-particle.effect and returns its uuid once Cocos AssetDB has imported it; the porter
   // never authors the effect .meta. Until then callers keep the previous builtin-particle conversion.
   function importedUnityParticleEffectUuid(options, reporter) {
@@ -829,6 +929,19 @@ module.exports = function createMaterialPorter(deps) {
     const normalTextureUuid = resolveUnityMaterialTextureUuid(texEnvs, UNITY_MATERIAL_NORMAL_TEXTURE_KEYS, unityDb, options, reporter);
     const occlusionTextureUuid = resolveUnityMaterialTextureUuid(texEnvs, UNITY_MATERIAL_OCCLUSION_TEXTURE_KEYS, unityDb, options, reporter);
     const emissiveTextureUuid = resolveUnityMaterialTextureUuid(texEnvs, UNITY_MATERIAL_EMISSIVE_TEXTURE_KEYS, unityDb, options, reporter);
+    if (tcp2HybridShader2) {
+      // Textures of active TCP2 features the kit effect does not bind (matcap, ramp texture, shadow
+      // texture) are still imported, so a project-level TCP2 effect can bind them; keyword-gated, so a
+      // dormant saved slot is never copied.
+      for (const [keyword, keys] of TCP2_FEATURE_TEXTURE_KEYS) {
+        if (!materialKeywords.has(keyword)) continue;
+        const uuid = resolveUnityMaterialTextureUuid(texEnvs, keys, unityDb, options, reporter);
+        if (uuid) {
+          reporter.low('TCP2_FEATURE_TEXTURE_IMPORTED', materialAsset.relativePath, keys[0],
+            `${keyword} texture imported for project-level effects (the kit TCP2 effect does not sample it)`);
+        }
+      }
+    }
 
     const defines = {};
     if (alphaClip) defines.USE_ALPHA_TEST = true;
@@ -962,7 +1075,8 @@ module.exports = function createMaterialPorter(deps) {
           ? tcp2Props
           : urpUnlitEffectUuid
             ? urpUnlitProps
-            : props],
+            : (customShaderEffectUuid && customShaderMaterialProps(shaderAsset.stem || path.basename(shaderAsset.path, path.extname(shaderAsset.path)),
+              colors, floats, texEnvs, unityDb, options, reporter)) || props],
     };
 
     if (options.dryRun) return fs.existsSync(convertedDest) ? convertedDest : '';
@@ -1421,6 +1535,7 @@ module.exports = function createMaterialPorter(deps) {
   return {
     parseUnitySerializedScalarMap,
     parseUnityTextureEnvMap,
+    customShaderMaterialProps,
     readUnityMaterialDoc,
     firstDefinedMaterialValue,
     clamp01,

@@ -259,6 +259,18 @@ for(const frames of [4,7]) test(`${frames}-frame sprite FTUE preserves timing, c
   assert.equal(track._channel._curve._values[1].__uuid__,'frame1-uuid');
   assert.equal(reporter.entries.length,0);
 });
+test('legacy clips wrap by their own WrapMode, not the Mecanim m_LoopTime',()=>{
+  const clip=(legacy,wrap,loop)=>{
+    const file=path.join(temp,`wrap-${legacy}-${wrap}-${loop}.anim`);
+    fs.writeFileSync(file,`AnimationClip:\n  m_Name: Shake\n  m_Legacy: ${legacy}\n  m_SampleRate: 60\n  m_WrapMode: ${wrap}\n  m_AnimationClipSettings:\n    m_StopTime: 0.083333336\n    m_LoopTime: ${loop}\n`);
+    return animation.parseUnityAnimationClip(file,reports()).wrapMode;
+  };
+  assert.equal(clip(1,0,1),1); // Hovl Shake.anim: plays once per click
+  assert.equal(clip(1,2,0),2);
+  assert.equal(clip(1,4,1),22);
+  assert.equal(clip(0,0,1),2); // Mecanim clip: Loop Time
+  assert.equal(clip(0,0,0),1);
+});
 test('unresolved animation frames report high and never emit a partial track',()=>{
   const {clip,reporter}=spriteClip(4,true);
   assert.equal(clip._tracks.length,0);
@@ -767,4 +779,22 @@ Prefab:
   const overrides=objects[instances[0].instance.__id__].propertyOverrides.map(ref=>objects[ref.__id__]);
   assert.ok(node,'the instance node is emitted');
   assert.equal(overrides.find(o=>o.propertyPath[0]==='_lpos').value.x,-2.98,'legacy m_Modification overrides are merged');
+});
+
+test('Nested child Transform override on a local-scaled ParticleSystem object merges (no stale helper)', () => {
+  const { buildNestedChildTransformOverrides } = require('../unity-cocos-port.cjs');
+  // BlastShooter Conveyor_+: the outer prefab rescales a nested object carrying a ParticleSystem
+  // (scalingMode 1); the porter threw "gameObjectHasWorldScaledParticleSystem is not defined".
+  const transform = { fileId: '40', gameObjectId: '10', parentId: '20', localPosition: { x: 0, y: 0, z: 0 }, localRotation: { x: 0, y: 0, z: 0, w: 1 }, localScale: { x: 1, y: 1, z: 1 } };
+  const sourceModel = {
+    gameObjects: new Map([['10', { name: 'Smoke', components: ['50'] }], ['30', { name: 'Root' }]]),
+    transforms: new Map([['40', transform], ['20', { fileId: '20', gameObjectId: '30' }]]),
+    componentDocs: new Map([['50', { classId: 198 }]]),
+  };
+  const reporter = reports();
+  const overrides = buildNestedChildTransformOverrides(sourceModel, transform, { 'm_LocalScale.x': '2' }, reporter, 'Conveyor_+.prefab');
+  assert.equal(reporter.entries.filter(e => e.level !== 'low').length, 0);
+  const scale = overrides.find(o => o.propertyPath === '_lscale');
+  assert.ok(scale, 'scale override emitted');
+  assert.equal(scale.value.x, 2);
 });

@@ -73,3 +73,19 @@ CCProgram fs %{
     && error.diagnostics.some((d) => d.code === 'EFX2406' && /array constructor/.test(d.message)));
   assert.equal(fs.readFileSync(file, 'utf8'), 'previous validated shader');
 });
+
+test('rename retries transient Windows locks (Editor holds library/ files) and rethrows real errors', () => {
+  const { renameWithRetry } = require('./generated-asset-writer.cjs');
+  const waits = [];
+  let calls = 0;
+  const locked = code => () => { calls++; if (calls < 3) { const e = new Error(code); e.code = code; throw e; } return 'done'; };
+  assert.equal(renameWithRetry('a', 'b', { rename: locked('EPERM'), wait: ms => waits.push(ms) }), 'done');
+  assert.equal(calls, 3);
+  assert.deepEqual(waits, [50, 100]);
+  calls = 0;
+  assert.throws(() => renameWithRetry('a', 'b', { rename: () => { calls++; const e = new Error('nope'); e.code = 'ENOENT'; throw e; }, wait: () => {} }), /nope/);
+  assert.equal(calls, 1, 'non-transient errors are not retried');
+  calls = 0;
+  assert.throws(() => renameWithRetry('a', 'b', { attempts: 4, rename: () => { calls++; const e = new Error('held'); e.code = 'EBUSY'; throw e; }, wait: () => {} }), /held/);
+  assert.equal(calls, 4, 'a persistent lock still fails after the bounded attempts');
+});

@@ -9,3 +9,9 @@ test('source Buff 6 and Buff 1 curves reproduce native matched-birth trajectorie
 
 test('native fixtures retain their capture producer hashes',()=>{const crypto=require('node:crypto');for(const [name,hash] of Object.entries(fixture.sourceProbes))assert.equal(crypto.createHash('sha256').update(fs.readFileSync(path.join(__dirname,'fixtures',name),'utf8').replace(/\r\n/g,'\n')).digest('hex'),hash);});
 test('negative radial crossing the emitter origin matches Unity without invented clamping',()=>{for(const row of fixture.negativeRadial){let pos=[.01,.02,.03];const n=Math.ceil(row.dt/.03),dt=row.dt/n,out=new Float64Array(3);for(let i=0;i<n;i++){orbit.orbitalDelta(out,...pos,...row.omega,row.radial,dt);pos=pos.map((x,j)=>x+dt*out[j]);}assert.ok(Math.hypot(...pos.map((x,j)=>x-row.position[j]))<.000001);}});
+test('native orbital offsets: orbit and radial push are centred on the offset (Local simulation)',()=>{const crypto=require('node:crypto');const native=read('fixtures/particle-orbit-offset-native.json');
+  for(const [name,hash] of Object.entries(native.sourceProbes))assert.equal(crypto.createHash('sha256').update(fs.readFileSync(path.join(__dirname,'fixtures',name),'utf8').replace(/\r\n/g,'\n')).digest('hex'),hash);
+  assert.ok(native.rows.length>=12);
+  for(const row of native.rows){let pos=[1,2,3];const n=Math.ceil(row.dt/.03),dt=row.dt/n,out=new Float64Array(3);
+    for(let i=0;i<n;i++){orbit.orbitalDelta(out,pos[0]-row.offset[0],pos[1]-row.offset[1],pos[2]-row.offset[2],...row.omega,row.radial,dt);pos=pos.map((x,j)=>x+dt*(out[j]+[.4,.5,.6][j]));}
+    assert.ok(Math.hypot(...pos.map((x,j)=>x-row.position[j]))<.00001,JSON.stringify({row,pos}));}});

@@ -99,3 +99,40 @@ test('default policy preserves a two-triangle backdrop and repairs destructive l
   assert.equal(hasPlayableFbxImportSettings(legacy), false);
   assert.equal(hasPlayableFbxImportSettings(next), true);
 });
+
+test('models with morph targets keep their source buffers (3.8.8 optimize/compress break morph views)', async () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const { MORPH_FBX_IMPORT_SETTINGS, modelHasMorphTargets } = require('../dist/model-import-policy.js');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'morph-policy-'));
+  const morphJson = path.join(dir, 'beard.json');
+  const plainJson = path.join(dir, 'body.json');
+  const mesh = (morph) => [{ __type__: 'cc.Mesh', _struct: { vertexBundles: [], primitives: [], morph } }];
+  fs.writeFileSync(morphJson, JSON.stringify(mesh({ subMeshMorphs: [{ attributes: ['a_position'], targets: [] }] })));
+  fs.writeFileSync(plainJson, JSON.stringify(mesh(null)));
+  const info = (files) => ({ subAssets: Object.fromEntries(files.map((file, i) => [String(i), { type: 'cc.Mesh', library: { '.json': file } }])) });
+  assert.equal(modelHasMorphTargets(info([plainJson])), false);
+  assert.equal(modelHasMorphTargets(info([plainJson, morphJson])), true);
+  assert.equal(modelHasMorphTargets({ subAssets: { 0: { type: 'cc.Mesh', library: { '.json': path.join(dir, 'missing.json') } } } }), false);
+
+  const metas = new Map([['chal', { ver: '2.3.14', importer: 'fbx', uuid: 'chal', subMetas: {}, userData: { meshCompress: { enable: true, compress: true } } }]]);
+  global.Editor = { Message: { async request(_pkg, message, ...args) {
+    if (message === 'query-asset-info') return { uuid: 'chal', url: 'db://assets/Chal_Rig2.fbx', isDirectory: false, ...info([morphJson]) };
+    if (message === 'query-asset-meta') return structuredClone(metas.get(args[0]));
+    if (message === 'save-asset-meta') { metas.set(args[0], JSON.parse(args[1])); return { uuid: args[0] }; }
+    throw new Error(message);
+  } } };
+  try {
+    const policy = new ModelImportPolicy();
+    assert.equal((await policy.enforceAsset('chal')).status, 'updated');
+    assert.deepEqual(metas.get('chal').userData.meshCompress, { ...MORPH_FBX_IMPORT_SETTINGS.meshCompress });
+    assert.deepEqual(metas.get('chal').userData.meshOptimize, { ...MORPH_FBX_IMPORT_SETTINGS.meshOptimize });
+    assert.equal(metas.get('chal').userData.meshSimplify.enable, false);
+    assert.equal((await policy.enforceAsset('chal')).status, 'unchanged');
+    assert.equal(hasPlayableFbxImportSettings(metas.get('chal')), false);
+  } finally {
+    delete global.Editor;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

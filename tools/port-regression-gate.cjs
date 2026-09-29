@@ -24,6 +24,7 @@ const { spawnSync } = require('node:child_process');
 const { createMcpClient, unwrapToolResult } = require('./cocos-engine-feature-audit.cjs');
 const { PORTABLE_HASH_CONTRACT, hashPortableFile } = require('./lib/portable-content-hash.cjs');
 const { auditParticleCatalog } = require('./particle-catalog-policy.cjs');
+const { assertPreviewProjectIdentity, identityReceipt, MISMATCH_CODE } = require('./preview-project-identity.cjs');
 
 const REGISTRY_SCHEMA_VERSION = 1;
 const REGISTRY_KIND = 'cc-playable-port-regression-registry';
@@ -115,6 +116,9 @@ Options:
   --preview-url <url>   Loopback preview origin for this machine (or CC_PLAYABLE_PREVIEW_URL);
                         replaces only each matrix URL origin, keeping path and query.
   --no-refresh          Intentionally skip Cocos AssetDB/preview refresh.
+  --allow-foreign-preview
+                        run only: continue even when a preview origin is served by another
+                        project (PREVIEW_PROJECT_MISMATCH); recorded in the receipt.
   --suite-timeout-ms <ms>
                         run only: wall-clock timeout per suite run, integer ${MIN_SUITE_TIMEOUT_MS}-${MAX_SUITE_TIMEOUT_MS}.
                         Overrides suites[].timeoutMs; default ${RUN_TIMEOUT_MS}. Not part of the receipt digest.
@@ -130,6 +134,11 @@ seconds + postActionSeconds + gestureDelaysMs + gestureGapMs x (gestures-1) + ${
 overhead) exceeds the effective timeout emits the warning REGRESSION_SUITE_TIMEOUT_RISK.
 check never opens a browser: it only proves that an existing PASS still
 matches the current registry, matrices, and watched target bytes.
+
+After the refresh step, run proves every preview origin it will test is served by
+this project (/scripting/x/import-map.json lists file:///<projectRoot>/assets/...).
+Another editor's preview on that port fails fast with PREVIEW_PROJECT_MISMATCH before
+any suite runs; an unverifiable (older) editor only warns.
 
 Opt-in case tags: a case tagged "ui-layout" (a control group whose sibling was
 removed/deferred, or any re-centred/re-flowed UI group) must have a semantic eval
@@ -182,6 +191,7 @@ function parseArgs(argv) {
     if (argument === '--json') { options.json = true; continue; }
     if (argument === '--force') { options.force = true; continue; }
     if (argument === '--no-refresh') { options.refresh = false; continue; }
+    if (argument === '--allow-foreign-preview') { options.allowForeignPreview = true; continue; }
     const equal = /^--([a-z-]+)=(.*)$/.exec(argument);
     const name = equal ? equal[1] : argument.startsWith('--') ? argument.slice(2) : null;
     if (!['project', 'config', 'receipt', 'output', 'risk', 'suite', 'preview-url', 'suite-timeout-ms'].includes(name)) {
@@ -995,6 +1005,7 @@ function executeMatrix(projectRoot, suite, runNumber, options = {}) {
     '--output', output,
     '--json',
     ...(urlOverride ? ['--url', urlOverride] : []),
+    ...(options.allowForeignPreview === true ? ['--allow-foreign-preview'] : []),
   ], {
     cwd: projectRoot,
     encoding: 'utf8',
@@ -1029,6 +1040,57 @@ function executeMatrix(projectRoot, suite, runNumber, options = {}) {
     cases: payload && Array.isArray(payload.cases) ? payload.cases.map(entry => ({ name: entry.name, ok: entry.ok })) : [],
     output: ok ? undefined : redactOutput(`${child.stdout || ''}\n${child.stderr || ''}\n${child.error || ''}`, projectRoot),
   };
+}
+
+function suitePreviewUrl(projectRoot, suite, previewUrl) {
+  const override = previewUrlFor(projectRoot, suite, previewUrl);
+  if (override) return override;
+  resolveContained(projectRoot, suite.matrix, `${suite.id}.matrix`);
+  const matrix = JSON.parse(fs.readFileSync(path.resolve(projectRoot, suite.matrix), 'utf8').replace(/^\uFEFF/, ''));
+  return String(matrix.url || '');
+}
+
+/**
+ * Prove each unique preview origin the suites will hit is served by projectRoot. Several
+ * Cocos editors on one machine share the 7456+ port range, so after an editor restart the
+ * origin can belong to another project and every case would fail with misleading errors.
+ */
+async function verifySuitePreviewIdentity(projectRoot, suites, options = {}, dependencies = {}) {
+  const check = dependencies.checkPreviewIdentity || assertPreviewProjectIdentity;
+  const origins = new Map();
+  for (const suite of suites) {
+    const url = suitePreviewUrl(projectRoot, suite, options.previewUrl);
+    let origin;
+    try { origin = new URL(url).origin; } catch (_) { continue; }
+    if (!origins.has(origin)) origins.set(origin, { url, suites: [] });
+    origins.get(origin).suites.push(suite.id);
+  }
+  const records = [];
+  for (const [origin, entry] of origins) {
+    try {
+      const record = await check({
+        url: entry.url,
+        projectRoot,
+        allowForeign: options.allowForeignPreview === true,
+        ...(dependencies.identityOptions || {}),
+      });
+      if (record.warning && typeof dependencies.onWarning === 'function') {
+        dependencies.onWarning({ code: record.overridden ? MISMATCH_CODE : 'PREVIEW_PROJECT_UNKNOWN', origin, message: record.warning });
+      }
+      records.push({ ...identityReceipt(record), suites: entry.suites });
+    } catch (error) {
+      if (error.code !== MISMATCH_CODE) throw error;
+      throw regressionError(MISMATCH_CODE, redactOutput(error.message, projectRoot) || error.message, {
+        origin,
+        suites: entry.suites,
+        expectedProjectRoot: error.details && error.details.expectedProjectRoot,
+        servedProjectRoot: error.details && error.details.servedProjectRoot,
+        servedProjectName: error.details && error.details.servedProjectName,
+        candidates: error.details && error.details.candidates,
+      });
+    }
+  }
+  return records;
 }
 
 function suiteTimeoutMessage(suite, timeoutMs) {
@@ -1138,6 +1200,11 @@ async function runRegressionGate(options = {}, dependencies = {}) {
   const executionSuites = selectedSuiteIds.length
     ? registry.suites.filter(suite => selectedSuiteSet.has(suite.id))
     : registry.suites;
+  // An injected matrix runner never opens the real preview; its caller owns identity.
+  const injectedRunner = !dependencies.checkPreviewIdentity && (dependencies.runMatrix || dependencies.matrixOptions);
+  const previewIdentity = injectedRunner
+    ? [{ skipped: true, reason: 'injected matrix runner' }]
+    : await verifySuitePreviewIdentity(projectRoot, executionSuites, options, dependencies);
   for (const suite of executionSuites) {
     const timeout = effectiveSuiteTimeout(suite, suiteTimeoutOverride);
     const estimatedMs = suite.matrixEvidence.estimatedMs;
@@ -1160,6 +1227,7 @@ async function runRegressionGate(options = {}, dependencies = {}) {
       const result = (dependencies.runMatrix || executeMatrix)(projectRoot, suite, runNumber, {
         output: options.output || DEFAULT_OUTPUT,
         previewUrl: options.previewUrl,
+        ...(options.allowForeignPreview === true ? { allowForeignPreview: true } : {}),
         ...(dependencies.matrixOptions || {}),
         timeoutMs: timeout.timeoutMs,
       });
@@ -1196,6 +1264,8 @@ async function runRegressionGate(options = {}, dependencies = {}) {
     generatedAt: new Date().toISOString(),
     ok,
     refresh,
+    previewIdentity,
+    ...(options.allowForeignPreview === true ? { allowForeignPreview: true } : {}),
     portable,
     snapshot: after,
     requiredRisks: registry.requiredRisks,
@@ -1218,6 +1288,8 @@ async function runRegressionGate(options = {}, dependencies = {}) {
     snapshotDigest: after.digest,
     portable,
     refresh,
+    previewIdentity,
+    ...(options.allowForeignPreview === true ? { allowForeignPreview: true } : {}),
     requiredRisks: registry.requiredRisks,
     suites: mergedResults,
     warnings,
@@ -1290,6 +1362,7 @@ module.exports = {
   loadRegistry,
   refreshCocosPreview,
   executeMatrix,
+  verifySuitePreviewIdentity,
   readReceipt,
   checkRegressionReceipt,
   runRegressionGate,

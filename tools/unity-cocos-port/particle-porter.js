@@ -3,6 +3,7 @@ const { particleRendererContract } = require('./particle-renderer-contract');
 const { unityMaterialRenderQueue } = require('./particle-sorting-binding');
 const { unityModelMeshName } = require('./model-import-basis');
 const { requestModelMeshBasis } = require('./model-mesh-basis-binding');
+const { reportModelMeshResolution } = require('./model-mesh-resolution');
 
 const {
   applyParticleRendererMesh,
@@ -19,6 +20,7 @@ const COCOS_PARTICLE_ADD_MATERIAL_UUID = 'ea7478b0-408d-4052-b703-f0d2355e095f';
 module.exports = function createParticlePorter(deps = {}) {
   const {
     handleMissingModel,
+    refreshExportedUnityMesh = () => false,
     recordPendingMeshRepair,
     resolveUnityBuiltinMeshUuid,
     resolveUnityParticleMaterial,
@@ -76,10 +78,14 @@ module.exports = function createParticlePorter(deps = {}) {
     // A multi-mesh FBX is addressed by mesh file ID, not by the file stem.
     const meshNameHint = unityModelMeshName(meshAsset, unityRefFileId ? unityRefFileId(meshRef) : meshRef.fileID)
       || meshAsset.stem || gameObject?.name || '';
+    refreshExportedUnityMesh(meshAsset, reporter, options);
     const resolved = cocosDb?.resolveModelMeshByStem
       ? cocosDb.resolveModelMeshByStem(meshAsset.stem, meshNameHint, meshAsset.ext === '.asset' ? '.fbx' : meshAsset.ext,
-        unityRefFileId ? unityRefFileId(meshRef) : String(meshRef?.fileID ?? ''))
+        unityRefFileId ? unityRefFileId(meshRef) : String(meshRef?.fileID ?? ''), meshAsset.relativePath)
       : null;
+    if (reportModelMeshResolution(reporter, resolved, meshAsset.relativePath, gameObject?.name || '') && !resolved.meshUuid) {
+      return { meshUuid: '', pendingImport: false, meshAsset: null };
+    }
     if (resolved?.meshUuid) {
       return { meshUuid: resolved.meshUuid, pendingImport: false, meshAsset, source: resolved.source };
     }
@@ -99,6 +105,7 @@ module.exports = function createParticlePorter(deps = {}) {
         meshAsset.stem,
         meshNameHint,
         meshAsset.relativePath,
+        unityRefFileId ? unityRefFileId(meshRef) : String(meshRef?.fileID ?? ''),
       );
     }
 

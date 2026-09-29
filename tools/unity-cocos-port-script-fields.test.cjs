@@ -207,3 +207,60 @@ test('Unity-resolved renderer materials from the object map replace embedded FBX
   assert.equal(result.slotAssets.get(0), grey);
   assert.equal(result.slotAssets.get(1), color);
 });
+
+// KriptoFX REP v4 RFX4_LightCurves (Unity 5 YAML): an AnimationCurve struct whose m_Curve list sits at the
+// key's own indent. The flat parser turned it into ["serializedVersion: 2", ...], so every ported effect
+// light kept intensity curve(0) = 0.
+test('struct fields with nested lists of structs parse recursively (AnimationCurve, Gradient, lists of refs)', () => {
+  const doc = {
+    lines: [
+      'MonoBehaviour:',
+      '  m_Enabled: 1',
+      '  LightCurve:',
+      '    serializedVersion: 2',
+      '    m_Curve:',
+      '    - serializedVersion: 2',
+      '      time: 0',
+      '      value: 0',
+      '      inSlope: -0.045686502',
+      '      outSlope: -0.045686502',
+      '      tangentMode: 0',
+      '    - serializedVersion: 2',
+      '      time: 1',
+      '      value: 0',
+      '      inSlope: -1.0416667',
+      '      outSlope: -1.0416667',
+      '      tangentMode: 34',
+      '    m_PreInfinity: 2',
+      '    m_PostInfinity: 2',
+      '  GraphTimeMultiplier: 3',
+      '  Prefabs:',
+      '  - {fileID: 100, guid: 0a1b2c3d4e5f60718293a4b5c6d7e8f9, type: 3}',
+      '  - {fileID: 0}',
+      '  Offset:',
+      '    x: 1',
+      '    y: 2',
+      '    z: 3',
+      '  Points:',
+      '  - position: {x: 0, y: 1, z: 0}',
+      '    weights:',
+      '    - 0.5',
+      '    - 0.25',
+      '  - position: {x: 2, y: 3, z: 4}',
+      '    weights: []',
+      '  Empty: []',
+      '  IsLoop: 0',
+    ],
+  };
+  const fields = getTopLevelSerializedFields(doc, {});
+  assert.deepEqual(fields.LightCurve.m_Curve.map(k => [k.time, k.value, k.tangentMode]), [[0, 0, 0], [1, 0, 34]]);
+  assert.equal(fields.LightCurve.m_Curve[0].inSlope, -0.045686502);
+  assert.equal(fields.LightCurve.m_PostInfinity, 2);
+  assert.equal(fields.GraphTimeMultiplier, 3);
+  assert.equal(fields.Prefabs.length, 2);
+  assert.equal(fields.Prefabs[0].guid, '0a1b2c3d4e5f60718293a4b5c6d7e8f9');
+  assert.deepEqual(fields.Offset, { x: 1, y: 2, z: 3 });
+  assert.deepEqual(fields.Points[0].weights, [0.5, 0.25]);
+  assert.deepEqual(fields.Points[1].position, { x: 2, y: 3, z: 4 });
+  assert.equal(fields.IsLoop, 0);
+});

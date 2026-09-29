@@ -1051,3 +1051,110 @@ test('changing suite timeoutMs makes the receipt stale; registries without it ke
     error => error.code === 'REGRESSION_RECEIPT_STALE');
   assert.notEqual(declared.snapshotDigest, plain.snapshotDigest);
 });
+
+// ---- preview project identity guard ----
+
+function stubPreviewFetch(servedRoot, calls = []) {
+  return async url => {
+    calls.push(String(url));
+    if (String(url).endsWith('/scripting/x/import-map.json')) {
+      if (!servedRoot) return new Response('500 - Web Server Error', { status: 500 });
+      const key = `file:///${servedRoot.replace(/\\/g, '/').replace(/^\//, '')}/assets/script/Game.ts`;
+      return new Response(JSON.stringify({ imports: { [key]: './chunks/aa/a.js' } }), { status: 200 });
+    }
+    return new Response('404 - Not Found', { status: 404 });
+  };
+}
+
+function identityFixture(t) {
+  const root = fixture(t);
+  const matrix = 'tools/qa/input.json';
+  writeMatrix(root, matrix, [{ name: 'tap', gesture: '0.5,0.5,0.5,0.5,100,1', eval: '({ok:true})', requireEvalOk: true }]);
+  writeRegistry(root, registry([{
+    id: 'input', risks: ['input-response'], matrix, watchFiles: ['assets/script/Game.ts'],
+  }], ['input-response']));
+  return fs.realpathSync.native(root);
+}
+
+function identityDeps(servedRoot, extra = {}) {
+  const { assertPreviewProjectIdentity } = require('./preview-project-identity.cjs');
+  const order = [];
+  const checkedUrls = [];
+  const deps = {
+    assertPortable() { return { ok: true, files: 3 }; },
+    async refreshPreview() { order.push('refresh'); return { ok: true, tool: 'fake-refresh' }; },
+    checkPreviewIdentity(options) {
+      order.push('identity');
+      checkedUrls.push(options.url);
+      return assertPreviewProjectIdentity({ ...options, fetchImpl: stubPreviewFetch(servedRoot), scanOnMismatch: false, retries: 0 });
+    },
+    runMatrix(_root, _suite, runNumber, options) {
+      order.push('matrix');
+      deps.matrixCalls.push(options);
+      return { run: runNumber, ok: true, cases: [{ name: 'tap', ok: true }] };
+    },
+    matrixCalls: [],
+    order,
+    checkedUrls,
+    ...extra,
+  };
+  return deps;
+}
+
+test('identity mismatch after refresh fails fast with PREVIEW_PROJECT_MISMATCH and writes no receipt', async t => {
+  const root = identityFixture(t);
+  const deps = identityDeps('C:/cc_worktrees/harvest-full-port');
+  await assert.rejects(runRegressionGate({ project: root, previewUrl: 'http://localhost:7457' }, deps), error => {
+    assert.equal(error.code, 'PREVIEW_PROJECT_MISMATCH');
+    assert.match(error.message, /harvest-full-port/);
+    assert.equal(error.details.origin, 'http://localhost:7457');
+    assert.deepEqual(error.details.suites, ['input']);
+    return true;
+  });
+  assert.deepEqual(deps.order, ['refresh', 'identity']);
+  assert.deepEqual(deps.checkedUrls, ['http://localhost:7457/']);
+  assert.equal(fs.existsSync(path.join(root, DEFAULT_RECEIPT)), false);
+});
+
+test('identity match is recorded in the receipt before suites run', async t => {
+  const root = identityFixture(t);
+  const deps = identityDeps(root);
+  const result = await runRegressionGate({ project: root }, deps);
+  assert.equal(result.ok, true);
+  assert.deepEqual(deps.order, ['refresh', 'identity', 'matrix']);
+  assert.equal(result.previewIdentity[0].status, 'match');
+  assert.equal(result.previewIdentity[0].origin, 'http://127.0.0.1:7456');
+  const receipt = JSON.parse(fs.readFileSync(path.join(root, DEFAULT_RECEIPT), 'utf8'));
+  assert.equal(receipt.previewIdentity[0].status, 'match');
+  assert.equal(receipt.allowForeignPreview, undefined);
+});
+
+test('identity unknown warns and continues', async t => {
+  const root = identityFixture(t);
+  const warnings = [];
+  const deps = identityDeps(null, { onWarning(warning) { warnings.push(warning); } });
+  const result = await runRegressionGate({ project: root }, deps);
+  assert.equal(result.ok, true);
+  assert.equal(result.previewIdentity[0].status, 'unknown');
+  assert.equal(warnings[0].code, 'PREVIEW_PROJECT_UNKNOWN');
+});
+
+test('--allow-foreign-preview records the override and forwards it to verify.visual', async t => {
+  assert.equal(parseArgs(['run', '--allow-foreign-preview']).allowForeignPreview, true);
+  const root = identityFixture(t);
+  const deps = identityDeps('C:/cc_worktrees/harvest-full-port');
+  const result = await runRegressionGate({ project: root, allowForeignPreview: true }, deps);
+  assert.equal(result.ok, true);
+  assert.equal(result.allowForeignPreview, true);
+  assert.equal(result.previewIdentity[0].status, 'mismatch');
+  assert.equal(result.previewIdentity[0].overridden, true);
+  assert.equal(deps.matrixCalls[0].allowForeignPreview, true);
+  const receipt = JSON.parse(fs.readFileSync(path.join(root, DEFAULT_RECEIPT), 'utf8'));
+  assert.equal(receipt.allowForeignPreview, true);
+  let args = null;
+  executeMatrix(root, { id: 'input', matrix: 'tools/qa/input.json' }, 1, {
+    allowForeignPreview: true,
+    spawnSync: (_exe, spawnArgs) => { args = spawnArgs; return { status: 0, stdout: '{"ok":true}' }; },
+  });
+  assert.ok(args.includes('--allow-foreign-preview'));
+});

@@ -9,6 +9,7 @@ const { particleLimitVelocityContract } = require('./particle-limit-velocity-bin
 const { particleCollisionContract } = require('./particle-collision-binding');
 const { particleCustomDataContract } = require('./particle-custom-data-binding');
 const { particleAlignToDirectionContract } = require('./particle-align-to-direction-binding');
+const { particleInheritVelocityContract } = require('./particle-inherit-velocity-binding');
 
 const { particleShapeRotation, particleShapeEdgeRotation } = require('./particle-shape-rotation');
 
@@ -270,7 +271,31 @@ function unflattenObject(obj) {
   return result;
 }
 
+/**
+ * Unity 5.x/2017.1 ParticleSystem YAML stores a burst as `minCount`/`maxCount` (C# short) with no
+ * `countCurve`; loading the asset upgrades it to countCurve Constant (min == max) or TwoConstants
+ * (minScalar = minCount, scalar = maxCount) with probability 1. Without the upgrade every legacy
+ * burst converted to count 0 (KriptoFX RFX4 Effect1_Collision: 7000-10000 particles never emitted).
+ */
+function upgradeLegacyBursts(system) {
+  const bursts = system?.EmissionModule?.m_Bursts;
+  if (!Array.isArray(bursts)) return system;
+  for (const burst of bursts) {
+    if (!burst || typeof burst !== 'object' || burst.countCurve || (burst.minCount == null && burst.maxCount == null)) continue;
+    const short = (value) => (Math.trunc(Number(value) || 0) << 16) >> 16;
+    const max = short(burst.maxCount ?? burst.minCount);
+    const min = short(burst.minCount ?? burst.maxCount);
+    burst.countCurve = min === max ? { minMaxState: 0, scalar: max, minScalar: max } : { minMaxState: 3, scalar: max, minScalar: min };
+    if (burst.probability == null) burst.probability = 1;
+  }
+  return system;
+}
+
 function parseUnityParticleDoc(doc) {
+  return upgradeLegacyBursts(parseUnityParticleDocRaw(doc));
+}
+
+function parseUnityParticleDocRaw(doc) {
   if (!doc) return {};
   let lines = null;
   if (Array.isArray(doc.lines)) {
@@ -1427,6 +1452,7 @@ function applyUnityParticleDataToCocos(builder, particleId, data = {}, rendererD
   Object.defineProperty(particle, 'unityCollisionContract', { value: particleCollisionContract(data), configurable: true });
   Object.defineProperty(particle, 'unityCustomDataContract', { value: particleCustomDataContract(data, rendererData || {}), configurable: true });
   Object.defineProperty(particle, 'unityAlignToDirectionContract', { value: particleAlignToDirectionContract(data, rendererData || {}), configurable: true });
+  Object.defineProperty(particle, 'unityInheritVelocityContract', { value: particleInheritVelocityContract(data), configurable: true });
 
   return { applied };
 }

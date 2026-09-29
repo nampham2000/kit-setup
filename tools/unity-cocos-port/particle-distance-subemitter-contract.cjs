@@ -3,6 +3,9 @@ function distanceSubEmitterContract(entry,target){
   const e=target?.EmissionModule;
   if(Number(entry.type)!==0||!e?.enabled||!(Number(e.rateOverDistance?.scalar)>0))return null;
   const unsupported=[];
+  // Inherit Color only (SubEmitterProperties 1): the per-instance follower (unityInstances) emits the
+  // distance rate per parent particle and multiplies each birth by the parent's current color.
+  if(Number(entry.properties||0)===1)return null;
   if(Number(e.rateOverDistance.minMaxState)!==0)unsupported.push('random/curve distance rate');
   if(Number(e.rateOverTime?.minMaxState)!==0||Number(e.rateOverTime?.scalar)!==0)unsupported.push('combined time emission');
   if(Number(e.m_BurstCount||0)!==0||(e.m_Bursts||[]).length)unsupported.push('combined burst emission');
