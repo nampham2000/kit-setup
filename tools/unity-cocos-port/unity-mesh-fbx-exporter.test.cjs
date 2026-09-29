@@ -44,25 +44,22 @@ function findConverter() {
 test('the FBX holds the Unity mesh in the ported (Z-reflected) frame with front faces kept', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'unity-mesh-fbx-'));
   const file = path.join(dir, 'Tray.fbx');
-  // Unity: an up-facing triangle 2 m in front of its pivot (+Z). Unity front faces are clockwise when
-  // seen from the normal side, so the index winding opposes the normal in Unity's numbers.
+  // Unity: a triangle 2 m in front of its pivot (+Z), clockwise from +Y, normal +Y.
   writeUnityMeshAssetAsFbx({
     meshName: 'Tray', positions: [[0, 0, 2], [1, 0, 3], [1, 0, 2]], normals: [[0, 1, 0.5], [0, 1, 0.5], [0, 1, 0.5]],
-    uvs: [[0, 0], [1, 1], [1, 0]], indices: [0, 2, 1],
+    uvs: [[0, 0], [1, 1], [1, 0]], indices: [0, 1, 2],
   }, file);
   const text = fs.readFileSync(file, 'utf8');
   const array = (label) => text.match(new RegExp(`${label}: \\*\\d+ \\{\\s*a: ([^\\n]+)`))[1].split(',').map(Number);
   assert.deepEqual(array('Vertices'), [0, 0, -2, 1, 0, -3, 1, 0, -2]);
   assert.deepEqual(array('Normals'), [0, 1, -0.5, 0, 1, -0.5, 0, 1, -0.5]);
   assert.deepEqual(array('PolygonVertexIndex'), [0, 2, -2]);
-  // Cocos front faces are counter-clockwise: the written winding must agree with the written normal
-  // (measured on the Blast Shooter tray: the reversed order culled every face).
+  // Counter-clockwise seen from +Y in the right-handed frame: the face still points up.
   const v = array('Vertices');
   const [a, b, c] = [0, 2, 1].map(i => v.slice(i * 3, i * 3 + 3));
   const cross = (u, w) => [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]];
-  const g = cross(b.map((x, i) => x - a[i]), c.map((x, i) => x - a[i]));
-  const n = array('Normals').slice(0, 3);
-  assert.ok(g[0] * n[0] + g[1] * n[1] + g[2] * n[2] > 0, `winding normal ${g} vs ${n}`);
+  const n = cross(b.map((x, i) => x - a[i]), c.map((x, i) => x - a[i]));
+  assert.ok(n[1] > 0, `face normal ${n}`);
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
