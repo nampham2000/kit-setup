@@ -13,10 +13,10 @@ const { spawnSync } = require('node:child_process');
 const isTiff = bytes => bytes.length >= 4 && ((bytes[0] === 0x49 && bytes[1] === 0x49 && bytes[2] === 0x2a && bytes[3] === 0x00)
   || (bytes[0] === 0x4d && bytes[1] === 0x4d && bytes[2] === 0x00 && bytes[3] === 0x2a));
 
-// alphaUsage 0 (None): opaque; 2 (FromGrayScale): the same luma weights as the PNG path.
+// alphaUsage 0 (None): opaque; 2 (FromGrayScale): the RGB average, as the PNG path.
 function applyAlpha(rgba, mode) {
   for (let i = 0; i < rgba.length; i += 4) {
-    rgba[i + 3] = mode === 0 ? 255 : Math.round(rgba[i] * 0.299 + rgba[i + 1] * 0.587 + rgba[i + 2] * 0.114);
+    rgba[i + 3] = mode === 0 ? 255 : Math.round((rgba[i] + rgba[i + 1] + rgba[i + 2]) / 3);
   }
   return rgba;
 }
