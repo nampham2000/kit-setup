@@ -74,7 +74,7 @@ Bản gắn tay được ưu tiên; `AutoBoot` thấy đã có sẵn thì tự �
 | **Double-click** | **Bay tới object dưới con trỏ** |
 | **`F`** | **Focus camera vào object đang chọn** |
 | **`U`** | **Bật/tắt vẽ UI trong viewport** |
-| **`G`** | **Theo dõi Hierarchy: chọn node ở đó thì camera bay tới** |
+| **`G`** | **Bật/tắt theo dõi Hierarchy (mặc định bật): chọn node ở đó thì camera bay tới** |
 | **`I`** | **Bật/tắt log debug (kết quả mỗi cú click)** |
 | **`Esc`** | **Bỏ chọn** |
 | **Kéo tay cầm màu** | **Di chuyển / xoay / scale object đang chọn** |
@@ -212,9 +212,12 @@ Selection từ Hierarchy vẫn **đồng bộ được bằng polling** (đọc 
 cách bay tới node:
 
 - **Double-click ngay trong viewport** vào object — chắc chắn chạy.
-- **Phím `G`** (hoặc property `Focus On Editor Select`) bật chế độ *theo dõi*: hễ chọn node khác
-  ở Hierarchy thì camera lướt tới nó, trong vòng khoảng 0,15 giây. Là một click chứ không phải
-  double-click, nên mặc định tắt — mỗi click ở Hierarchy đều làm camera di chuyển.
+- **Theo dõi Hierarchy (phím `G`, property `Focus On Editor Select`) — mặc định BẬT:** hễ chọn
+  node khác ở Hierarchy thì camera lướt tới nó, trong vòng khoảng 0,15 giây. Bấm `G` để tắt nếu
+  bạn không muốn camera di chuyển mỗi khi click ở Hierarchy. Hai chi tiết đã xử lý: lần đọc
+  selection đầu tiên khi mở scene view chỉ đồng bộ chứ không bay (khỏi giật camera lúc Play),
+  và sau khi chính bạn chọn trong viewport thì bỏ qua polling trong 400 ms (editor có thể còn
+  báo node cũ, nhận nó về sẽ làm camera bay nhầm).
 - Click vào viewport rồi bấm `F`. Bấm `F` ngay sau khi click ở Hierarchy nhiều khả năng không
   tới được preview vì bàn phím đang thuộc panel Hierarchy (chưa kiểm chứng).
 

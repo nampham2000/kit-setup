@@ -37,6 +37,9 @@ const DOUBLE_CLICK_MS = 400;
 /** How often the editor Hierarchy selection is read, in seconds. */
 const SELECTION_POLL_SECONDS = 0.15;
 
+/** After we change the editor selection, how long its answer is not to be trusted. */
+const OWN_SELECT_GRACE_MS = 400;
+
 /** How quickly the camera glides to a focus target. Higher is snappier. */
 const FOCUS_SPEED = 12;
 
@@ -137,8 +140,8 @@ export class SceneViewDebug extends Component {
         + 'instead of using the built-in panels. Only possible in the in-editor Preview.' })
     public syncEditorSelection = true;
 
-    @property({ tooltip: 'Fly the scene camera to a node as soon as it is selected in the editor Hierarchy. Off by default, since every click there would move the camera. Press G to toggle it live. The editor sends this process no selection events, so a double-click in the Hierarchy cannot be detected; this follows the selection instead.' })
-    public focusOnEditorSelect = false;
+    @property({ tooltip: 'Fly the scene camera to a node as soon as it is selected in the editor Hierarchy. On by default; press G to toggle it live. The editor sends this process no selection events, so a double-click in the Hierarchy cannot be detected; this follows the selection instead.' })
+    public focusOnEditorSelect = true;
 
 
     @property({ tooltip: 'Show the built-in hierarchy tree and inspector overlay. Off by '
@@ -174,6 +177,8 @@ export class SceneViewDebug extends Component {
     private _lastClickNode: Node = null;
     private _lastClickTime = 0;
     private _selectionTimer = 0;
+    private _selectionSynced = false;
+    private _ownSelectAt = 0;
     private _focusGoal: Vec3 = null;
     private _focusSpan = 0;
     private _pressValid = false;
@@ -282,13 +287,25 @@ export class SceneViewDebug extends Component {
         // Drive the editor's own Hierarchy and Inspector. Reverse sync compares
         // uuids, so echoing our own selection back is a no-op, not a loop.
         if (!this._bridge.available) return;
+        this._ownSelectAt = Date.now();
         if (this._selected) this._bridge.select(this._selected.uuid);
         else this._bridge.clear();
     }
 
     /** Follow a selection made in the editor's Hierarchy panel. */
     private _pullEditorSelection () {
+        // Just after we changed the editor's selection ourselves, what it reports may
+        // still be the previous node. Adopting that would flip the selection back and,
+        // with following on, send the camera to the wrong place.
+        if (Date.now() - this._ownSelectAt < OWN_SELECT_GRACE_MS) return;
+
         const uuid = this._bridge.currentSelection();
+        // The first read only brings us in line with whatever was already selected
+        // when the view opened. Flying there on start-up would make the camera jump
+        // before the user has done anything.
+        const firstRead = !this._selectionSynced;
+        this._selectionSynced = true;
+
         if (!uuid || uuid === this._selected?.uuid) return;
 
         const node = findByUuid(director.getScene(), uuid);
@@ -296,13 +313,14 @@ export class SceneViewDebug extends Component {
             this._selected = node;
             this._hierarchy.setSelected(node);
             this._inspector.show(node);
-            if (this.focusOnEditorSelect) this.focusSelection();
+            if (this.focusOnEditorSelect && !firstRead) this.focusSelection();
         }
     }
 
     public open () {
         if (this._active) return;
         this._active = true;
+        this._selectionSynced = false;
 
         this._splitGameCameras();
         this._ensureSceneCamera();
