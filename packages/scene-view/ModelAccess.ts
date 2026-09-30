@@ -1,4 +1,4 @@
-import { ModelRenderer, geometry, renderer } from 'cc';
+import { Layers, ModelRenderer, Node, UIRenderer, UITransform, geometry, renderer } from 'cc';
 
 type Model = renderer.scene.Model;
 
@@ -56,4 +56,70 @@ export function hasReadableTriangles (model: Model): boolean {
         // Treated as unreadable.
     }
     return false;
+}
+
+const _accum = geometry.AABB.create();
+const _part = geometry.AABB.create();
+
+/** Editor scaffolding: present at runtime in the Preview panel, never content. */
+const EDITOR_LAYER_MASK = Layers.Enum.GIZMOS
+    | Layers.Enum.EDITOR
+    | Layers.Enum.SCENE_GIZMO
+    | Layers.Enum.PROFILER;
+
+/**
+ * Combined world bounds of a node and everything under it: model renderers and
+ * UI elements alike. Null when there is nothing to measure.
+ *
+ * Framing needs this rather than the node's own renderer. Most of what one wants
+ * to fly to is a container - "Background", "Canvas", a character rig - which has
+ * no renderer of its own, and measuring only that would frame a point at its
+ * pivot. Inactive nodes and editor scaffolding are skipped.
+ */
+export function subtreeBounds (root: Node, out: geometry.AABB): geometry.AABB | null {
+    let found = false;
+
+    const include = (box: geometry.AABB) => {
+        if (!found) {
+            geometry.AABB.copy(_accum, box);
+            found = true;
+        } else {
+            geometry.AABB.merge(_accum, _accum, box);
+        }
+    };
+
+    const visit = (node: Node) => {
+        if (!node.activeInHierarchy || (node.layer & EDITOR_LAYER_MASK) !== 0) return;
+
+        const modelRenderer = node.getComponent(ModelRenderer);
+        const modelBox = modelRenderer ? worldBoundsOf(modelRenderer) : null;
+        if (modelBox) {
+            include(modelBox);
+        } else if (UIRenderer && node.getComponent(UIRenderer)) {
+            // Only drawn UI counts. A layout node's rect spans its whole container.
+            const transform = node.getComponent(UITransform);
+            if (transform) {
+                transform.getComputeAABB(_part);
+                include(_part);
+            }
+        }
+
+        const children = node.children;
+        for (let i = 0; i < children.length; i++) visit(children[i]);
+    };
+
+    visit(root);
+
+    // A UI container with nothing drawn under it still has a rect worth framing.
+    if (!found && UITransform) {
+        const own = root.getComponent(UITransform);
+        if (own) {
+            own.getComputeAABB(_part);
+            include(_part);
+        }
+    }
+
+    if (!found) return null;
+    geometry.AABB.copy(out, _accum);
+    return out;
 }

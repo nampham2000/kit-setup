@@ -1,7 +1,7 @@
 import {
     CCObject, Camera, Color, Component, EventKeyboard, EventMouse, Input, KeyCode, Layers,
     screen,
-    ModelRenderer, Node, Rect, UIRenderer, UITransform, Vec3, _decorator, director, game, input,
+    ModelRenderer, Node, Rect, UIRenderer, UITransform, Vec3, _decorator, director, game, geometry, input,
 } from 'cc';
 import { DEBUG, EDITOR_NOT_IN_PREVIEW } from 'cc/env';
 import { DebugOverlay, ensureStyles } from './DebugOverlay';
@@ -14,8 +14,8 @@ import { HierarchyPanel } from './HierarchyPanel';
 import { InputProbe } from './InputProbe';
 import { InspectorPanel } from './InspectorPanel';
 import { GeometryRenderer, drawBounds, drawFrustum, drawGrid, drawSelection, drawUIBounds, drawWorldAxes } from './SceneGizmos';
-import { worldBoundsOf } from './ModelAccess';
-import { isInsideViewport, pickRenderer, pickUI, viewportMinX } from './ScenePicker';
+import { subtreeBounds } from './ModelAccess';
+import { cameraPixelSize, isInsideViewport, pickRenderer, pickUI, viewportMinX } from './ScenePicker';
 import { VisibilityController } from './VisibilityController';
 
 const { ccclass, property, menu } = _decorator;
@@ -30,6 +30,18 @@ const DEFAULT_SPLIT = 0.5;
 
 /** A press that travels farther than this (device px) is a drag, not a click. */
 const CLICK_SLOP = 4;
+
+/** Two clicks on the same node within this window are a double-click. */
+const DOUBLE_CLICK_MS = 400;
+
+/** Hierarchy clicks reach us through the editor, so allow for its latency. */
+const EDITOR_DOUBLE_CLICK_MS = 500;
+
+/** How quickly the camera glides to a focus target. Higher is snappier. */
+const FOCUS_SPEED = 12;
+
+const _focusBox = geometry.AABB.create();
+const _focusStep = new Vec3();
 
 /**
  * What the scene view is allowed to see.
@@ -130,6 +142,10 @@ export class SceneViewDebug extends Component {
         + 'instead of using the built-in panels. Only possible in the in-editor Preview.' })
     public syncEditorSelection = true;
 
+    @property({ tooltip: 'Fly the scene camera to a node as soon as it is selected in the editor Hierarchy. Off by default, since every click there would move the camera. Double-clicking a node already frames it, in the viewport and in the Hierarchy.' })
+    public focusOnEditorSelect = false;
+
+
     @property({ tooltip: 'Show the built-in hierarchy tree and inspector overlay. Off by '
         + 'default: in the editor Preview the real editor panels do this better. Turn on '
         + 'for browser preview or a debug build, where no editor exists.' })
@@ -160,6 +176,12 @@ export class SceneViewDebug extends Component {
     private _active = false;
     private _hint: HTMLElement = null;
     private _warnedNoGizmos = false;
+    private _lastClickNode: Node = null;
+    private _lastClickTime = 0;
+    private _hierarchyClickUuid = '';
+    private _hierarchyClickTime = 0;
+    private _focusGoal: Vec3 = null;
+    private _focusSpan = 0;
     private _pressValid = false;
     private _pressX = 0;
     private _pressY = 0;
@@ -202,6 +224,7 @@ export class SceneViewDebug extends Component {
         if (!this._active) return;
 
         this._freeCamera.update(dt);
+        this._stepFocus(dt);
 
         this._rescanTimer -= dt;
         if (this._rescanTimer <= 0) {
@@ -273,6 +296,7 @@ export class SceneViewDebug extends Component {
             this._selected = node;
             this._hierarchy.setSelected(node);
             this._inspector.show(node);
+            if (this.focusOnEditorSelect) this.focusSelection();
         }
     }
 
@@ -312,6 +336,9 @@ export class SceneViewDebug extends Component {
             this._logInputDiagnostics();
             this._probe.install([]);
         }
+        if (this.syncEditorSelection && this._bridge.available) {
+            this._bridge.listenSelections((uuid, raw) => this._onEditorSelect(uuid, raw));
+        }
         this._showHint();
     }
 
@@ -325,6 +352,8 @@ export class SceneViewDebug extends Component {
 
 
         this._probe.uninstall();
+        this._bridge.stopListening();
+        this._focusGoal = null;
         this._handles.endDrag();
         this._grabbedAxis = null;
         this._freeCamera?.detach();
@@ -367,23 +396,93 @@ export class SceneViewDebug extends Component {
     public focusSelection () {
         if (!this._selected || !this._selected.isValid || !this._sceneCamera) return;
 
-        const selectedRenderer = this._selected.getComponent(ModelRenderer);
-        const bounds = selectedRenderer ? worldBoundsOf(selectedRenderer) : null;
-        const target = this._selected.getWorldPosition(new Vec3());
-        const radius = bounds
-            ? Math.max(bounds.halfExtents.x, bounds.halfExtents.y, bounds.halfExtents.z)
-            : 1;
+        const camera = this._sceneCamera;
+        const bounds = subtreeBounds(this._selected, _focusBox);
 
-        const fovRadians = this._sceneCamera.fov * Math.PI / 180;
-        const distance = Math.max(radius / Math.tan(fovRadians / 2) * 1.6, radius + 1);
+        // Frame the centre of what the node contains, not its pivot. A node's origin
+        // is often a corner or the floor, nowhere near the middle of its content.
+        const target = bounds
+            ? Vec3.copy(new Vec3(), bounds.center)
+            : this._selected.getWorldPosition(new Vec3());
+        // Bounding-sphere radius, so a flat element as wide as a canvas still counts.
+        const radius = bounds ? Math.max(bounds.halfExtents.length(), 0.5) : 1;
+
+        // Fit against the narrower of the two field-of-view angles, or a tall object
+        // in a wide viewport - or the reverse - would spill out of frame.
+        const size = cameraPixelSize(camera);
+        const aspect = (size.width * camera.rect.width) / Math.max(size.height * camera.rect.height, 1);
+        const tanHalfVertical = Math.tan((camera.fov * Math.PI / 180) / 2);
+        const halfAngle = Math.atan(Math.min(tanHalfVertical, tanHalfVertical * aspect));
+        const distance = Math.max(radius / Math.sin(halfAngle) * 1.15, camera.near * 4);
+
+        // A canvas-sized target can sit farther away than the far plane allows.
+        if (distance * 2 > camera.far) camera.far = distance * 2;
+
+        // Keep the viewing direction and slide back along it: that centres the
+        // target without turning the camera, which is how Unity's frame behaves.
+        const goal = new Vec3();
+        Vec3.scaleAndAdd(goal, target, camera.node.forward, -distance);
+        this._focusGoal = goal;
+        this._focusSpan = Vec3.distance(camera.node.position, goal);
+    }
+
+    /** Glide towards the focus goal instead of cutting to it, as Unity does. */
+    private _stepFocus (dt: number) {
+        const goal = this._focusGoal;
+        if (!goal || !this._sceneCamera) return;
 
         const node = this._sceneCamera.node;
-        const back = new Vec3();
-        Vec3.negate(back, node.forward);
-        node.setPosition(Vec3.scaleAndAdd(back, target, back, distance));
-        node.lookAt(target);
-        // lookAt bypasses the controller, so its cached angles must be refreshed.
-        this._freeCamera.syncFromNode();
+        // Frame-rate independent exponential approach.
+        Vec3.lerp(_focusStep, node.position, goal, 1 - Math.exp(-dt * FOCUS_SPEED));
+
+        if (Vec3.distance(_focusStep, goal) < 0.01 + this._focusSpan * 0.002) {
+            node.setPosition(goal);
+            this._focusGoal = null;
+        } else {
+            node.setPosition(_focusStep);
+        }
+    }
+
+    /** Show or hide the game UI in the scene viewport, live. See showUI for the catch. */
+    public toggleUI () {
+        this.showUI = !this.showUI;
+        if (this._sceneCamera) this._sceneCamera.visibility = this._observerVisibility();
+        try {
+            this._rescan();
+        } catch (error) {
+            this._warnOnce('rescan', `[SceneView] scene scan failed: ${error}`);
+        }
+        console.log(`[SceneView] UI rendering ${this.showUI ? 'ON' : 'OFF'}`);
+        this._updateHint();
+    }
+
+    /**
+     * A node was clicked in the editor's own Hierarchy panel. Two clicks on one
+     * node within the window are a double-click.
+     *
+     * Adopts the selection directly rather than through select(): that would send
+     * it back to the editor, which broadcasts it again and would look like a
+     * fresh click.
+     */
+    private _onEditorSelect (uuid: string, raw: unknown[]) {
+        if (this.debugInput) console.log('[SceneView] editor selection broadcast:', raw);
+
+        const now = Date.now();
+        const isDouble = uuid === this._hierarchyClickUuid
+            && now - this._hierarchyClickTime <= EDITOR_DOUBLE_CLICK_MS;
+        this._hierarchyClickUuid = uuid;
+        this._hierarchyClickTime = now;
+        if (!isDouble) return;
+
+        this._hierarchyClickUuid = '';
+        const node = findByUuid(director.getScene(), uuid);
+        if (!node) return;
+        if (node !== this._selected) {
+            this._selected = node;
+            this._hierarchy.setSelected(node);
+            this._inspector.show(node);
+        }
+        this.focusSelection();
     }
 
     /**
@@ -645,7 +744,23 @@ export class SceneViewDebug extends Component {
         // Ignore drags - only a clean click changes the selection.
         if (Math.abs(x - this._pressX) > CLICK_SLOP || Math.abs(y - this._pressY) > CLICK_SLOP) return;
 
-        this.select(this._pickAt(x, y));
+        const picked = this._pickAt(x, y);
+        this.select(picked);
+
+        // Two clicks that resolve to the same node are a double-click: fly to it.
+        // Comparing the resolved node, not the raw position, lets the cursor drift
+        // between clicks without losing the gesture.
+        const now = Date.now();
+        const isDouble = picked !== null
+            && picked === this._lastClickNode
+            && now - this._lastClickTime <= DOUBLE_CLICK_MS;
+        if (isDouble) {
+            this.focusSelection();
+            this._lastClickNode = null;
+        } else {
+            this._lastClickNode = picked;
+            this._lastClickTime = now;
+        }
     }
 
     /**
@@ -690,6 +805,9 @@ export class SceneViewDebug extends Component {
             break;
         case KeyCode.KEY_F:
             if (this._active) this.focusSelection();
+            break;
+        case KeyCode.KEY_U:
+            if (this._active) this.toggleUI();
             break;
         case KeyCode.ESCAPE:
             if (this._active) this.select(null);
@@ -783,7 +901,7 @@ export class SceneViewDebug extends Component {
         const tool = this.enableTransformGizmo
             ? `tool ${this._handles.mode.toUpperCase()} (1 move / 2 rotate / 3 scale / 4 none) | `
             : '';
-        this._hint.textContent = `SCENE VIEW - ${tool}LMB select | F focus | Esc deselect`
+        this._hint.textContent = `SCENE VIEW - ${tool}LMB select | double-click or F focus | U ui ${this.showUI ? 'ON' : 'off'} | Esc deselect`
             + ' | RMB look | WASD move | Q/E down/up | MMB pan | wheel dolly | Shift fast | F1 close';
     }
 

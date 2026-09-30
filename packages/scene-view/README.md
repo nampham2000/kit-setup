@@ -71,7 +71,9 @@ Bản gắn tay được ưu tiên; `AutoBoot` thấy đã có sẵn thì tự �
 | Phím | Tác dụng |
 |---|---|
 | **Chuột trái** | **Chọn object dưới con trỏ** |
+| **Double-click** | **Bay tới object dưới con trỏ** |
 | **`F`** | **Focus camera vào object đang chọn** |
+| **`U`** | **Bật/tắt vẽ UI trong viewport** |
 | **`Esc`** | **Bỏ chọn** |
 | **Kéo tay cầm màu** | **Di chuyển / xoay / scale object đang chọn** |
 | **`1` `2` `3` `4`** | **Đổi công cụ: move / rotate / scale / không gizmo** |
@@ -170,6 +172,43 @@ Hai trường hợp suy biến đã chặn:
 Tay cầm dài theo khoảng cách tới camera nên nhìn luôn cùng cỡ trên màn hình.
 Đổi công cụ giữa lúc đang kéo sẽ kết thúc thao tác kéo, tránh diễn giải lại cùng
 một cú kéo bằng công thức khác.
+
+## Bay tới object (double-click, phím F)
+
+Double-click vào một object trong scene viewport thì camera **lướt tới** nó, giữ nguyên
+hướng nhìn, giống lệnh Frame của Unity. Phím `F` làm đúng việc đó với object đang chọn.
+
+- **Khung hình theo nội dung, không theo pivot.** Bounds được gộp từ *cả nhánh* node
+  (model renderer và UI đang vẽ), nên bay tới một node cha như `Background` hay `Canvas`
+  thì khung đúng cả cụm chứ không chỉ một điểm. Trước đây chỉ đo renderer của chính node,
+  node cha rơi về bán kính 1 ở pivot, còn node UI thì camera dừng *bên trong* một phần
+  tử rộng hàng trăm đơn vị.
+- Khoảng cách tính theo **góc nhìn hẹp hơn** trong hai chiều, nên vật cao trong viewport
+  rộng (hoặc ngược lại) không tràn ra khỏi khung. Đích lớn hơn far plane thì far plane
+  được nâng lên.
+- Hai cú click phải cùng trúng **một node** trong 400 ms; con trỏ lệch nhẹ giữa hai lần
+  click không làm mất cử chỉ.
+
+### Double-click trong panel Hierarchy của editor
+
+Làm theo kiểu **best-effort**, đã viết nhưng **chưa kiểm chứng trên editor thật**. Lý do:
+chọn cùng một node hai lần thì selection không đổi nên polling không thấy gì, vì vậy code
+nghe broadcast `selection:select` của editor và đo khoảng cách giữa hai lần chọn cùng một
+node (500 ms). Việc editor có phát lại broadcast khi bấm vào node *đang được chọn* hay
+không thì không có tài liệu, và hình dạng payload cũng vậy.
+
+Nếu double-click ở Hierarchy không bay: bật `Debug Input` — mỗi broadcast nhận được sẽ
+in ra Console (`editor selection broadcast`). Không thấy dòng nào khi bấm lần hai nghĩa
+là editor không phát lại, và lúc đó dùng một trong hai cách dự phòng: double-click trong
+viewport, hoặc bật property `Focus On Editor Select` (bay ngay khi chọn node khác ở
+Hierarchy; mặc định tắt vì mỗi cú click đều làm camera di chuyển).
+
+## Bật/tắt UI ngay lúc chạy (phím `U`)
+
+`Show UI` là property, mà khi dùng `AutoBoot` node gắn component bị ẩn nên không có chỗ
+nào để chỉnh nó trong Inspector. Phím `U` bật/tắt việc vẽ UI trong viewport tức thì, và
+thanh gợi ý ở đáy hiện trạng thái (`U ui ON / off`). Xem mục "Hiển thị UI trong viewport"
+để biết vì sao mặc định tắt.
 
 ## Chọn UI
 

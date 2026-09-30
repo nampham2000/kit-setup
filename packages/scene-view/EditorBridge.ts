@@ -26,6 +26,7 @@ export class EditorBridge {
     private _clearFn: (() => void) | null = null;
     private _getFn: (() => string[]) | null = null;
     private _route = 'none';
+    private _listener: ((...args: any[]) => void) | null = null;
 
     public get available (): boolean { return this._selectFn !== null; }
 
@@ -58,6 +59,55 @@ export class EditorBridge {
             this._getFn = () => selection.getSelected('node') ?? [];
         }
     }
+
+    /**
+     * Hear the editor's own selection broadcasts, so a double-click in the real
+     * Hierarchy panel can be told apart from a single one.
+     *
+     * Polling cannot do it: the selection is the same node both times, so nothing
+     * changes between the clicks. Whether the editor re-broadcasts a click on an
+     * already-selected node is not documented, so callers should treat a double
+     * click here as best-effort and keep a fallback.
+     *
+     * The payload shape is also undocumented, so every string that looks like a
+     * uuid is considered and the last one wins.
+     */
+    public listenSelections (callback: (uuid: string, raw: unknown[]) => void): boolean {
+        const message = editor()?.Message as Any | undefined;
+        if (!message || typeof message.addBroadcastListener !== 'function') return false;
+
+        this.stopListening();
+        const handler = (...args: any[]) => {
+            const flat: unknown[] = [];
+            for (const arg of args) {
+                if (Array.isArray(arg)) flat.push(...arg);
+                else flat.push(arg);
+            }
+            const ids = flat.filter((v): v is string => typeof v === 'string' && v.length >= 10);
+            if (ids.length) callback(ids[ids.length - 1], args);
+        };
+
+        try {
+            message.addBroadcastListener('selection:select', handler);
+            this._listener = handler;
+            return true;
+        } catch (e) {
+            console.warn('[SceneView] could not listen to editor selection:', e);
+            return false;
+        }
+    }
+
+    public stopListening () {
+        if (!this._listener) return;
+        try {
+            (editor()?.Message as Any | undefined)?.removeBroadcastListener?.('selection:select', this._listener);
+        } catch {
+            // Nothing useful to do if the editor is already gone.
+        }
+        this._listener = null;
+    }
+
+    public get listening (): boolean { return this._listener !== null; }
 
     public select (uuid: string) {
         if (!this._selectFn) return;
