@@ -94,6 +94,9 @@ const CSS = `
 
 .sv-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; color: #dde2ea; }
 .sv-row.sv-has-children .sv-name { color: #f6f8fb; font-weight: 600; }
+/* Prefab nodes are green, as in the editor. After the rule above so it wins, and before
+   the dimmed rule so a hidden prefab node still greys out. */
+.sv-row.sv-prefab .sv-name { color: #5fd35f; }
 .sv-row.sv-inactive .sv-name, .sv-row.sv-inactive .sv-chip { opacity: .45; }
 .sv-row.sv-dimmed .sv-name { color: #8b93a3; text-decoration: line-through; }
 .sv-tag { margin: 0 .35em; color: #a3abba; font-size: .85em; }

@@ -188,7 +188,7 @@ export class HierarchyPanel {
         const expanded = this._expanded.has(node);
 
         const row = document.createElement('div');
-        row.className = 'sv-row' + (hasChildren ? ' sv-has-children' : '');
+        row.className = 'sv-row' + (hasChildren ? ' sv-has-children' : '') + (isPrefabNode(node) ? ' sv-prefab' : '');
         row.addEventListener('click', () => this._callbacks.onSelect(node));
         row.addEventListener('dblclick', () => this._callbacks.onFocus(node));
 
@@ -295,6 +295,21 @@ function titleButton (label: string, title: string, action: () => void): HTMLEle
     btn.title = title;
     btn.addEventListener('click', action);
     return btn;
+}
+
+/**
+ * Whether a node belongs to a prefab, which the editor shows in green.
+ *
+ * Decided by the node having a prefab root, not by that root carrying a
+ * PrefabInstance. An instance exists only for a prefab placed in a scene by the
+ * editor; one spawned with instantiate() at runtime has a root and no instance,
+ * and a level built that way is exactly the kind of thing worth seeing marked.
+ */
+function isPrefabNode (node: Node): boolean {
+    // `_prefab` is the serialised field. The public `prefab` getter is marked
+    // @engineInternal and absent from the typings, so it is not relied on.
+    const info = (node as unknown as { _prefab?: { root?: Node } | null })._prefab;
+    return !!(info && info.root);
 }
 
 /** What a node is, from what it carries. Order matters: a UI node has a transform and more. */

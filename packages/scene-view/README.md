@@ -490,6 +490,10 @@ dòng mang cấp của nó bằng ba cách chứ không chỉ thụt lề:
   chip để xem tên loại.
 - Node có con in **đậm**, node lá mờ hơn; node đang tắt (hoặc nằm dưới node tắt) **mờ đi**.
   Dòng chẵn lẻ có nền hơi khác nhau. Nút `o` / `S` mờ cho tới khi rê chuột vào dòng.
+- **Prefab in chữ xanh lá** như Hierarchy của Cocos editor. Luật là "node có prefab root"
+  (`node._prefab.root`), không đòi `PrefabInstance`: instance chỉ có với prefab đặt vào scene
+  bằng editor, còn prefab sinh lúc chạy bằng `instantiate()` (như `Level_14`) có root mà không
+  có instance. Node tắt (mờ) vẫn giữ quy tắc mờ, chỉ màu đổi.
 - Click một dòng để chọn; nút `o` ẩn/hiện, nút `S` solo.
 - **Double-click một dòng để camera scene view bay tới node đó.** Làm được là vì trên web DOM
   nhận chuột thật; ở editor thì không có kênh nào để nghe double-click ở Hierarchy.
