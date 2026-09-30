@@ -93,8 +93,14 @@ Chuột trái chỉ ăn trong nửa phải (scene viewport); kéo rê thì khôn
 - Trục world ở gốc toạ độ — **mặc định tắt** (`Show World Axes`), vì nó đè lên
   vật thể nào nằm ở gốc
 - Wireframe AABB của mọi `MeshRenderer` đang bật
-- Frustum của camera game — thấy đúng vùng người chơi nhìn thấy
+- Frustum của camera **đang được chọn** — thấy đúng vùng người chơi nhìn thấy.
+  Chỉ hiện khi chọn camera, giống Unity. Vẽ frustum của mọi camera cùng lúc thì chúng
+  phủ kín cảnh, và camera UI (trực giao) đóng góp một cái hộp to bằng cả canvas —
+  che kín tầm nhìn nên rất khó ngắm. (Chúng chỉ là đường vẽ, không tham gia picking —
+  không chắn được tia click, chỉ che mắt.) Muốn thấy hết thì bật `Show All Frustums`.
 - Object đang chọn: AABB cam + trục local của nó
+- UI đang chọn: khung cam quanh phần tử + dấu thập ở pivot, y như object 3D. Trước đây
+  node UI không có mesh nên chỉ nhận một dấu thập bé xíu ở gốc, đọc thành "chưa chọn gì".
 
 Bật/tắt từng loại qua property trên component.
 

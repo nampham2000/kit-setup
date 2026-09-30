@@ -81,8 +81,14 @@ export class SceneViewDebug extends Component {
     @property({ tooltip: 'Draw a wireframe AABB around every MeshRenderer.' })
     public showBounds = true;
 
-    @property({ tooltip: 'Draw the game camera frustum.' })
+    @property({ tooltip: 'Draw the frustum of the selected camera, so you can see what '
+        + 'the player would see. Only while a camera is selected, like Unity.' })
     public showFrustum = true;
+
+    @property({ tooltip: 'Draw every game camera frustum all the time. Off by default: '
+        + 'they are huge, and the UI camera adds a box the size of the design resolution, '
+        + 'so together they bury the scene and make things hard to aim at.' })
+    public showAllFrustums = false;
 
     @property({ tooltip: 'Draw the ground grid.' })
     public showGrid = true;
@@ -216,11 +222,7 @@ export class SceneViewDebug extends Component {
         if (this.showWorldAxes) drawWorldAxes(this._gizmos);
         if (this.showBounds) drawBounds(this._gizmos, this._renderers, BOUNDS_COLOR);
         if (this.enableUIPicking) drawUIBounds(this._gizmos, this._uiElements, UI_BOUNDS_COLOR);
-        if (this.showFrustum) {
-            for (const camera of this._savedRects.keys()) {
-                if (camera.isValid && camera.enabledInHierarchy) drawFrustum(this._gizmos, camera, FRUSTUM_COLOR);
-            }
-        }
+        this._drawFrustums();
         if (this._selected) {
             drawSelection(this._gizmos, this._selected);
             if (this.enableTransformGizmo) this._handles.draw(this._gizmos);
@@ -457,6 +459,30 @@ export class SceneViewDebug extends Component {
                 + 'Enable Project Settings -> Feature Cropping -> Geometry Renderer.');
         }
         return !!this._gizmos;
+    }
+
+    /**
+     * Frustums are contextual. A camera only shows its frustum while it is the
+     * selection, which is how Unity treats them: drawn for every camera at once
+     * they bury the scene, and an orthographic UI camera contributes a box the
+     * size of the whole canvas.
+     */
+    private _drawFrustums () {
+        if (!this._gizmos) return;
+
+        if (this.showAllFrustums) {
+            for (const camera of this._savedRects.keys()) {
+                if (camera.isValid && camera.enabledInHierarchy) drawFrustum(this._gizmos, camera, FRUSTUM_COLOR);
+            }
+            return;
+        }
+
+        if (!this.showFrustum || !this._selected || !this._selected.isValid) return;
+        const camera = this._selected.getComponent(Camera);
+        // Never the observer camera itself: it is hidden, but be explicit.
+        if (camera && camera !== this._sceneCamera && camera.enabledInHierarchy) {
+            drawFrustum(this._gizmos, camera, FRUSTUM_COLOR);
+        }
     }
 
     /** Log a given problem once, not every rescan - this runs twice a second. */

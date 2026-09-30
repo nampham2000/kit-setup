@@ -73,9 +73,26 @@ export function drawSelection (gr: GeometryRenderer, node: Node) {
     // Selection is node-based so that lights, cameras and empty nodes picked from
     // the hierarchy get a gizmo too, not just things with a mesh.
     const renderer = node.getComponent(MeshRenderer);
-    const bounds = renderer?.model?.worldBounds;
+    const meshBounds = renderer?.model?.worldBounds;
 
     node.getWorldPosition(_o);
+
+    // A UI node has no mesh, only a UITransform, and used to fall through to the
+    // bare cross below - a speck at the node origin that read as "nothing was
+    // selected". Its box is the highlight, exactly as a mesh's is.
+    const uiTransform = meshBounds ? null : node.getComponent(UITransform);
+    if (uiTransform) {
+        uiTransform.getComputeAABB(_selectionUiBox);
+        gr.addBoundingBox(_selectionUiBox, SELECTION_COLOR, true, false);
+
+        // Mark the pivot too. It is what the move handles act on, and on a large
+        // element it is not obvious where it sits.
+        const half = Math.min(_selectionUiBox.halfExtents.x, _selectionUiBox.halfExtents.y);
+        gr.addCross(_o, Math.max(half * 0.15, 0.2), SELECTION_COLOR, false);
+        return;
+    }
+
+    const bounds = meshBounds;
     if (bounds) gr.addBoundingBox(bounds, SELECTION_COLOR, true, false);
     else gr.addCross(_o, 0.4, SELECTION_COLOR, false);
 
@@ -94,6 +111,7 @@ function axis (gr: GeometryRenderer, origin: Vec3, dir: Readonly<Vec3>, length: 
 }
 
 const _uiBox = geometry.AABB.create();
+const _selectionUiBox = geometry.AABB.create();
 
 /**
  * Outline for UI elements.
