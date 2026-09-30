@@ -448,7 +448,7 @@ export class SceneViewDebug extends Component {
     public toggleDebug () {
         this.debugInput = !this.debugInput;
         console.log(`[SceneView] debug logging ${this.debugInput ? 'ON' : 'OFF'} - ${this._bridge.describe()}`
-            + `, listening to Hierarchy: ${this._bridge.listening}`);
+            + `, listening to Hierarchy: ${this._bridge.listening}. ${this._bridge.inspect()}`);
         this._updateHint();
     }
 
@@ -927,7 +927,7 @@ export class SceneViewDebug extends Component {
         const tool = this.enableTransformGizmo
             ? `tool ${this._handles.mode.toUpperCase()} (1 move / 2 rotate / 3 scale / 4 none) | `
             : '';
-        this._hint.textContent = `SCENE VIEW - ${tool}LMB select | double-click or F focus | U ui ${this.showUI ? 'ON' : 'off'} | I debug ${this.debugInput ? `ON (hierarchy events: ${this._hierarchyEvents})` : 'off'} | Esc deselect`
+        this._hint.textContent = `SCENE VIEW - ${tool}LMB select | double-click or F focus | U ui ${this.showUI ? 'ON' : 'off'} | I debug ${this.debugInput ? `ON (hierarchy events: ${this._hierarchyEvents}, listener ${this._bridge.listening ? 'yes' : 'NO'}) | ${this._bridge.inspect().slice(0, 120)}` : 'off'} | Esc deselect`
             + ' | RMB look | WASD move | Q/E down/up | MMB pan | wheel dolly | Shift fast | F1 close';
     }
 

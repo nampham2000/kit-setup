@@ -109,6 +109,32 @@ export class EditorBridge {
 
     public get listening (): boolean { return this._listener !== null; }
 
+    /**
+     * What the editor actually exposes to this script, for working out why a
+     * listener never fires: an API that is not there and one that is there but
+     * silent look identical from outside, and lead to opposite conclusions.
+     *
+     * Methods are collected from the object and its prototype, since a class
+     * instance keeps them on the prototype where Object.keys would miss them.
+     */
+    public inspect (): string {
+        const host = editor();
+        if (!host) return 'no Editor global';
+
+        const message = host.Message as Any | undefined;
+        if (!message) return 'Editor.Message is missing';
+
+        const names = new Set<string>(Object.getOwnPropertyNames(message));
+        const proto = Object.getPrototypeOf(message);
+        if (proto && proto !== Object.prototype) {
+            for (const name of Object.getOwnPropertyNames(proto)) names.add(name);
+        }
+
+        const functions = [...names].filter((name) => name !== 'constructor' && typeof message[name] === 'function');
+        return 'Editor.Message: ' + (functions.length ? functions.join(',') : '(no functions)');
+    }
+
+
     public select (uuid: string) {
         if (!this._selectFn) return;
         try {
