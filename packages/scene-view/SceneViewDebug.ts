@@ -8,6 +8,7 @@ import { CanvasWatcher } from './CanvasWatcher';
 import { DebugOverlay, ensureStyles } from './DebugOverlay';
 import { EditorBridge } from './EditorBridge';
 import { HelpPanel, HelpToggle } from './HelpPanel';
+import { bumpFontSize } from './UiScale';
 import { Axis, GizmoMode, TransformGizmo } from './TransformGizmo';
 import { ToolPalette } from './ToolPalette';
 import { ViewSplitter } from './ViewSplitter';
@@ -931,6 +932,12 @@ export class SceneViewDebug extends Component {
         case KeyCode.KEY_U:
             if (this._active) this.toggleUI();
             break;
+        case KeyCode.BRACKET_LEFT:
+            if (this._active) this.changeFontSize(-1);
+            break;
+        case KeyCode.BRACKET_RIGHT:
+            if (this._active) this.changeFontSize(1);
+            break;
         case KeyCode.KEY_H:
             if (this._active) this.toggleHelp();
             break;
@@ -1063,6 +1070,14 @@ export class SceneViewDebug extends Component {
         this._updateHint();
     }
 
+    /** Make the DOM panels' text smaller or larger, and remember it. */
+    public changeFontSize (delta: number) {
+        bumpFontSize(delta);
+        // The docks are sized from the text size, and the help button from its own size.
+        this._syncWidgets();
+        this._updateHint();
+    }
+
     public toggleHelp () {
         this._help.toggle();
     }
@@ -1077,6 +1092,7 @@ export class SceneViewDebug extends Component {
 
         this._help.toggles = this._helpToggles();
         this._help.status = () => this._statusLine();
+        this._help.onFontSize = (delta) => this.changeFontSize(delta);
         // Clicking DOM takes keyboard focus off the canvas, and keys only reach the
         // engine from the canvas, so hand it back.
         this._help.onInteract = () => (game.canvas as HTMLCanvasElement)?.focus?.();

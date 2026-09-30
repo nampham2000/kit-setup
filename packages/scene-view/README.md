@@ -426,6 +426,23 @@ phím tắt theo nhóm: Tools, Select and focus, Camera, Panel.
 | `H` | Mở/đóng panel trợ giúp |
 | `P` | Bật/tắt panel Hierarchy và Inspector (chỉ browser) |
 
+## Cỡ chữ của các panel
+
+Chữ trong panel từng là **monospace 11px**: nhỏ, và monospace là lựa chọn tệ cho tên node kiểu
+`Object_Type_1100`. Chữ phụ lại dùng màu xám tối (`#6b7280`) trên nền gần đen nên tương phản thấp.
+
+- **Mặc định giờ là 13px**, font hệ thống không-monospace (system-ui / Segoe UI / Roboto) cho tên
+  và nhãn. Monospace chỉ giữ cho **con số** trong Inspector và **phím** (nơi cần thẳng hàng).
+  Chữ phụ sáng hơn (`#a3abba`), tên node sáng hơn, dòng cao hơn.
+- **Chỉnh được lúc chạy, từ 10 đến 22px, và được nhớ** (`localStorage`, nên lần sau mở vẫn giữ):
+  phím **`[`** nhỏ đi, phím **`]`** to lên, hoặc nút **A- / A+** ở mục "Text size" trong panel `!`
+  (bấm được trong browser). Không có một con số hợp mọi màn hình: cỡ vừa mắt trên màn hình lớn
+  thì chật trên laptop, và ngược lại.
+- **Cả bộ CSS đổi sang đơn vị `em`** theo một biến `--sv-fs`, nên một con số phóng to *toàn bộ*
+  dòng cây, caret, chip, công tắc và nút, chứ không chỉ chữ. Bề rộng tối thiểu/tối đa của panel
+  cũng tính theo em (16 và 32), nên chữ to hơn thì panel rộng hơn, không bị cắt tên.
+- Nút `!` tự tính vị trí theo kích thước thật của nó vì nó cũng to lên theo cỡ chữ.
+
 ## Panel Hierarchy + Inspector trên bản preview web
 
 Bật **mặc định trong browser** (`Show Panels`), **nằm hai bên canvas** như editor: Hierarchy ở bên trái, Inspector ở bên phải.

@@ -1,6 +1,7 @@
 import { Camera, game } from 'cc';
 import { ensureStyles } from './DebugOverlay';
 import { cameraPixelSize } from './ScenePicker';
+import { fontSize } from './UiScale';
 
 /** What the round button shows. One constant so the symbol is trivial to change. */
 const ICON = '!';
@@ -73,10 +74,13 @@ export class HelpPanel {
     public status: () => string = () => '';
     /** Called after the panel was clicked, so the owner can give the canvas keyboard focus back. */
     public onInteract: () => void = null;
+    /** Called with -1 or +1 when the text size buttons are pressed. */
+    public onFontSize: (delta: number) => void = null;
 
     private _button: HTMLElement = null;
     private _panel: HTMLElement = null;
     private _statusEl: HTMLElement = null;
+    private _sizeEl: HTMLElement = null;
     private _rows: { toggle: HelpToggle; switchEl: HTMLElement }[] = [];
     private _open = false;
     private _inside = false;
@@ -141,6 +145,9 @@ export class HelpPanel {
             this._rows.push({ toggle, switchEl });
         }
 
+        this._panel.appendChild(heading('Text size'));
+        this._panel.appendChild(this._sizeRow(clickable));
+
         for (const section of SHORTCUTS) {
             this._panel.appendChild(heading(section.title));
             for (const shortcut of section.rows) {
@@ -164,6 +171,7 @@ export class HelpPanel {
         this._button = null;
         this._panel = null;
         this._statusEl = null;
+        this._sizeEl = null;
         this._rows = [];
         this._open = false;
         this._inside = false;
@@ -181,6 +189,7 @@ export class HelpPanel {
     public refresh () {
         if (!this._panel) return;
         if (this._statusEl) this._statusEl.textContent = this.status();
+        if (this._sizeEl) this._sizeEl.textContent = `${fontSize()}px`;
         for (const { toggle, switchEl } of this._rows) {
             switchEl.classList.toggle('sv-on', toggle.get());
         }
@@ -204,13 +213,43 @@ export class HelpPanel {
         if (size.width <= 0 || size.height <= 0) return;
 
         const left = rect.left + size.width * this._fraction * (rect.width / size.width) + 8;
-        const top = rect.bottom - 34;
+        // Measured, not assumed: the button grows with the text size.
+        const top = rect.bottom - (this._button.offsetHeight || 26) - 8;
 
         this._button.style.left = `${left}px`;
         this._button.style.top = `${top}px`;
         this._panel.style.left = `${left}px`;
         // Anchored by its bottom edge so it grows upwards from the button.
         this._panel.style.bottom = `${window.innerHeight - top + 6}px`;
+    }
+
+    /** The A- and A+ buttons: make every panel smaller or larger. The keys [ and ] do the same. */
+    private _sizeRow (clickable: boolean): HTMLElement {
+        const row = document.createElement('div');
+        row.className = 'sv-help-row';
+
+        const button = (label: string, title: string, delta: number) => {
+            const el = document.createElement('button');
+            el.className = 'sv-size-btn' + (clickable ? '' : ' sv-static');
+            el.textContent = label;
+            el.title = title;
+            if (clickable) {
+                el.addEventListener('click', () => {
+                    this.onFontSize?.(delta);
+                    this.onInteract?.();
+                });
+            }
+            return el;
+        };
+
+        row.appendChild(button('A-', 'Smaller text ( [ )', -1));
+        this._sizeEl = document.createElement('span');
+        this._sizeEl.className = 'sv-size-value';
+        this._sizeEl.textContent = `${fontSize()}px`;
+        row.appendChild(this._sizeEl);
+        row.appendChild(button('A+', 'Larger text ( ] )', 1));
+        row.appendChild(keycap('[ ]'));
+        return row;
     }
 
     private _apply () {
