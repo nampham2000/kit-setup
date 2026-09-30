@@ -1,4 +1,5 @@
-import { Camera, Color, MeshRenderer, Node, UIRenderer, UITransform, Vec3, geometry } from 'cc';
+import { Camera, Color, ModelRenderer, Node, UIRenderer, UITransform, Vec3, geometry } from 'cc';
+import { worldBoundsOf } from './ModelAccess';
 
 /**
  * Gizmo drawing helpers. Every function issues draw calls into a per-camera
@@ -47,11 +48,11 @@ export function drawWorldAxes (gr: GeometryRenderer, length = 2) {
 }
 
 /** Wireframe world-space AABB for every renderer that currently has one. */
-export function drawBounds (gr: GeometryRenderer, renderers: readonly MeshRenderer[], color: Color) {
+export function drawBounds (gr: GeometryRenderer, renderers: readonly ModelRenderer[], color: Color) {
     for (let i = 0; i < renderers.length; i++) {
         const r = renderers[i];
         if (!r || !r.isValid || !r.enabledInHierarchy) continue;
-        const bounds = r.model?.worldBounds;
+        const bounds = worldBoundsOf(r);
         if (!bounds) continue;
         gr.addBoundingBox(bounds, color, true, false);
     }
@@ -72,8 +73,8 @@ const _e = new Vec3();
 export function drawSelection (gr: GeometryRenderer, node: Node) {
     // Selection is node-based so that lights, cameras and empty nodes picked from
     // the hierarchy get a gizmo too, not just things with a mesh.
-    const renderer = node.getComponent(MeshRenderer);
-    const meshBounds = renderer?.model?.worldBounds;
+    const renderer = node.getComponent(ModelRenderer);
+    const meshBounds = renderer ? worldBoundsOf(renderer) : null;
 
     node.getWorldPosition(_o);
 

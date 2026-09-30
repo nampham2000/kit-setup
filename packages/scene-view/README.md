@@ -212,6 +212,25 @@ tắt `Enable UI Picking`.
 `UITransform.hitTest()` là đường còn lại, nhưng nó phân giải qua camera UI nên chỉ
 trả lời cho nửa game, không dùng được cho viewport quan sát.
 
+## Chọn được những loại renderer nào
+
+Mọi thứ vẽ ra một model: `MeshRenderer`, `SkinnedMeshRenderer` và **`SpriteRenderer` 3D**.
+
+Từng chỉ thu thập `MeshRenderer`, và đó là lỗi: `SpriteRenderer` kế thừa `ModelRenderer`,
+**ngang hàng với `MeshRenderer` chứ không phải con của nó**, nên
+`getComponentsInChildren(MeshRenderer)` không bao giờ trả về nó. Cảnh dùng sprite làm nền
+(như `BG` và `Top` trong SmashFest, cả hai scene có 0 `MeshRenderer`) thì nền vừa không
+chọn được vừa không có khung viền — bấm vào là "không có gì".
+
+Lớp cha `ModelRenderer` không công khai `model` (chỉ có `_models` protected), mỗi lớp con
+tự định nghĩa getter riêng, nên `ModelAccess.ts` đọc qua một hàm chung.
+
+Bẫy thứ hai trên cùng đường đó: khi mesh không đọc được dữ liệu đỉnh, `rayModel` trả **0**
+chứ không ném lỗi, mà 0 cũng là "trượt". Nếu không phân biệt thì một renderer chỉ đơn giản
+là không test chính xác được sẽ bị loại ngay sau khi hộp bao của nó đã trúng tia.
+`hasReadableTriangles` kiểm tra trước, và nếu không có tam giác nào đọc được thì tin vào
+hộp bao.
+
 ## Picking hoạt động thế nào
 
 Hai pha, không cần collider và không cần module Physics:

@@ -1,7 +1,7 @@
 import {
     CCObject, Camera, Color, Component, EventKeyboard, EventMouse, Input, KeyCode, Layers,
     screen,
-    MeshRenderer, Node, Rect, UIRenderer, UITransform, Vec3, _decorator, director, game, input,
+    ModelRenderer, Node, Rect, UIRenderer, UITransform, Vec3, _decorator, director, game, input,
 } from 'cc';
 import { DEBUG, EDITOR_NOT_IN_PREVIEW } from 'cc/env';
 import { DebugOverlay, ensureStyles } from './DebugOverlay';
@@ -14,6 +14,7 @@ import { HierarchyPanel } from './HierarchyPanel';
 import { InputProbe } from './InputProbe';
 import { InspectorPanel } from './InspectorPanel';
 import { GeometryRenderer, drawBounds, drawFrustum, drawGrid, drawSelection, drawUIBounds, drawWorldAxes } from './SceneGizmos';
+import { worldBoundsOf } from './ModelAccess';
 import { isInsideViewport, pickRenderer, pickUI, viewportMinX } from './ScenePicker';
 import { VisibilityController } from './VisibilityController';
 
@@ -78,7 +79,7 @@ export class SceneViewDebug extends Component {
     @property({ tooltip: 'Start with the scene view open.' })
     public startEnabled = true;
 
-    @property({ tooltip: 'Draw a wireframe AABB around every MeshRenderer.' })
+    @property({ tooltip: 'Draw a wireframe AABB around every mesh and 3D sprite.' })
     public showBounds = true;
 
     @property({ tooltip: 'Draw the frustum of the selected camera, so you can see what '
@@ -144,7 +145,7 @@ export class SceneViewDebug extends Component {
     private _visibility = new VisibilityController();
     private _hierarchy: HierarchyPanel = null;
     private _savedRects = new Map<Camera, Rect>();
-    private _renderers: MeshRenderer[] = [];
+    private _renderers: ModelRenderer[] = [];
     private _uiElements: UIRenderer[] = [];
     private _selected: Node = null;
     private _rescanTimer = 0;
@@ -353,7 +354,8 @@ export class SceneViewDebug extends Component {
     public focusSelection () {
         if (!this._selected || !this._selected.isValid || !this._sceneCamera) return;
 
-        const bounds = this._selected.getComponent(MeshRenderer)?.model?.worldBounds;
+        const selectedRenderer = this._selected.getComponent(ModelRenderer);
+        const bounds = selectedRenderer ? worldBoundsOf(selectedRenderer) : null;
         const target = this._selected.getWorldPosition(new Vec3());
         const radius = bounds
             ? Math.max(bounds.halfExtents.x, bounds.halfExtents.y, bounds.halfExtents.z)
@@ -500,7 +502,7 @@ export class SceneViewDebug extends Component {
     }
 
     private _rescan () {
-        const all = director.getScene().getComponentsInChildren(MeshRenderer);
+        const all = director.getScene().getComponentsInChildren(ModelRenderer);
         const own = this._sceneCamera ? this._sceneCamera.node : null;
         // Same mask the camera renders with, so bounds and picking can never target
         // something the viewport does not even draw (editor gizmos, UI, profiler).

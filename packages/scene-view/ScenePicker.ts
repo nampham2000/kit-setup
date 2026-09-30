@@ -1,4 +1,5 @@
-import { Camera, MeshRenderer, UIRenderer, UITransform, geometry, screen } from 'cc';
+import { Camera, ModelRenderer, UIRenderer, UITransform, geometry, screen } from 'cc';
+import { hasReadableTriangles, modelOf, worldBoundsOf } from './ModelAccess';
 
 const _ray = geometry.Ray.create();
 const _uiBounds = geometry.AABB.create();
@@ -15,12 +16,12 @@ export interface UIPickResult {
 }
 
 export interface PickResult {
-    renderer: MeshRenderer;
+    renderer: ModelRenderer;
     distance: number;
 }
 
 /**
- * Ray-picks a MeshRenderer under the cursor. No colliders and no physics module
+ * Ray-picks a model renderer (mesh or 3D sprite) under the cursor. No colliders and no physics module
  * required — it walks the renderers the scene view already tracks.
  *
  * Two phases: a cheap ray/AABB sweep to reject most candidates, then an exact
@@ -31,7 +32,7 @@ export function pickRenderer (
     camera: Camera,
     screenX: number,
     screenY: number,
-    renderers: readonly MeshRenderer[],
+    renderers: readonly ModelRenderer[],
 ): PickResult | null {
     camera.screenPointToRay(screenX, screenY, _ray);
 
@@ -40,9 +41,9 @@ export function pickRenderer (
         const renderer = renderers[i];
         if (!renderer || !renderer.isValid || !renderer.enabledInHierarchy) continue;
 
-        const model = renderer.model;
-        const bounds = model?.worldBounds;
-        if (!bounds) continue;
+        const model = modelOf(renderer);
+        const bounds = worldBoundsOf(renderer);
+        if (!model || !bounds) continue;
 
         const broad = geometry.intersect.rayAABB(_ray, bounds);
         if (!broad) continue;
@@ -50,12 +51,17 @@ export function pickRenderer (
         if (best && broad > best.distance) continue;
 
         let distance = broad;
-        try {
-            const exact = geometry.intersect.rayModel(_ray, model, RAY_MODEL_OPTIONS);
-            if (!exact) continue; // Bounds were hit but no triangle was.
-            distance = exact;
-        } catch {
-            // Mesh data not readable (allowDataAccess off) — keep the bounds hit.
+        // Only trust a miss from the exact test when it could have hit. No readable
+        // triangles makes rayModel answer 0, the same as a genuine miss, so a
+        // renderer that simply cannot be tested would be thrown away.
+        if (hasReadableTriangles(model)) {
+            try {
+                const exact = geometry.intersect.rayModel(_ray, model, RAY_MODEL_OPTIONS);
+                if (!exact) continue; // Bounds were hit but no triangle was.
+                distance = exact;
+            } catch {
+                // Keep the bounds hit.
+            }
         }
 
         if (!best || distance < best.distance) best = { renderer, distance };

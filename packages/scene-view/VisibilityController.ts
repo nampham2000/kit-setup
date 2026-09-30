@@ -1,4 +1,4 @@
-import { MeshRenderer, Node } from 'cc';
+import { ModelRenderer, Node } from 'cc';
 
 /**
  * Hide / solo for the scene view.
@@ -15,7 +15,7 @@ import { MeshRenderer, Node } from 'cc';
  */
 export class VisibilityController {
     private _hidden = new Set<Node>();
-    private _saved = new Map<MeshRenderer, boolean>();
+    private _saved = new Map<ModelRenderer, boolean>();
     private _solo: Node = null;
 
     public get soloTarget (): Node | null { return this._solo; }
@@ -61,21 +61,21 @@ export class VisibilityController {
 
     private _disableSubtree (node: Node) {
         if (!node || !node.isValid) return;
-        const renderers = node.getComponentsInChildren(MeshRenderer);
+        const renderers = node.getComponentsInChildren(ModelRenderer);
         for (let i = 0; i < renderers.length; i++) this._disable(renderers[i]);
     }
 
     private _disableExcept (root: Node, keep: Node) {
         if (!root || !root.isValid || root === keep) return;
 
-        const own = root.getComponent(MeshRenderer);
+        const own = root.getComponent(ModelRenderer);
         if (own) this._disable(own);
 
         const children = root.children;
         for (let i = 0; i < children.length; i++) this._disableExcept(children[i], keep);
     }
 
-    private _disable (renderer: MeshRenderer) {
+    private _disable (renderer: ModelRenderer) {
         if (!renderer || !renderer.isValid) return;
         if (!this._saved.has(renderer)) this._saved.set(renderer, renderer.enabled);
         renderer.enabled = false;
@@ -83,7 +83,7 @@ export class VisibilityController {
 
     private _restoreSubtree (node: Node) {
         if (!node || !node.isValid) return;
-        const renderers = node.getComponentsInChildren(MeshRenderer);
+        const renderers = node.getComponentsInChildren(ModelRenderer);
         for (let i = 0; i < renderers.length; i++) {
             const renderer = renderers[i];
             if (!this._saved.has(renderer)) continue;
