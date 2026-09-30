@@ -428,8 +428,11 @@ phím tắt theo nhóm: Tools, Select and focus, Camera, Panel.
 
 ## Panel Hierarchy + Inspector trên bản preview web
 
-Bật **mặc định trong browser** (`Show Panels`), ở cạnh phải cửa sổ, hai thẻ **đặt song song** (Hierarchy
-bên trái, Inspector bên phải) chứ không xếp chồng. Trong Preview của
+Bật **mặc định trong browser** (`Show Panels`), **neo hai mép cửa sổ** như editor: Hierarchy ở mép trái,
+Inspector ở mép phải. Bề rộng mỗi panel được **đo từ vùng trống hai bên canvas** (từ 210 đến
+340 px, chừa 16 px), nên chúng nằm trong hai dải đen bên cạnh game thay vì đè lên game. Cửa
+sổ hẹp tới mức không còn dải trống thì panel buộc phải chồng lên canvas ở bề rộng tối thiểu;
+phím `P` ẩn chúng. Trong Preview của
 editor chúng **tự ẩn**: editor có Hierarchy/Inspector thật, và panel DOM ở đó cũng không bấm
 được. Phím `P` bật/tắt ngay lúc chạy.
 

@@ -725,6 +725,8 @@ export class SceneViewDebug extends Component {
         this._splitter.sync(this._sceneCamera, this._split);
         this._palette.sync(this._sceneCamera, this._split);
         this._help.sync(this._sceneCamera, this._split);
+        // Keeps each panel inside the free margin beside the canvas as it moves.
+        this._overlay.layout();
     }
 
     private _rescan () {

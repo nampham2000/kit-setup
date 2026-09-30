@@ -24,7 +24,7 @@ export class InspectorPanel {
     private _node: Node = null;
 
     public mount (overlay: DebugOverlay) {
-        const { body } = overlay.card('inspector', 'sv-inspector');
+        const { body } = overlay.card('inspector', 'sv-inspector', 'right');
         this._body = body;
 
         this._header = text(body, 'sv-text');

@@ -1,11 +1,13 @@
+import { game } from 'cc';
+
 const STYLE_ID = 'scene-view-overlay-style';
 
 const CSS = `
 .sv-root {
-    position: fixed; top: 8px; right: 8px; bottom: 8px; z-index: 9999;
-    /* Hierarchy and Inspector side by side, as in the editor, not stacked. */
-    width: 560px; max-width: calc(100vw - 16px);
-    display: flex; flex-direction: row; align-items: stretch; gap: 6px;
+    position: fixed; top: 8px; bottom: 8px; z-index: 9999;
+    /* One column per window edge. The width is set from the free margin beside the
+       canvas, so a dock stays out of the game. */
+    width: 280px; display: flex; flex-direction: column;
     font: 11px/1.5 ui-monospace, Menlo, Consolas, monospace; color: #cfd3dc;
     /* The container spans the viewport height, so it must stay transparent to the
        mouse; otherwise the gaps between cards become dead zones that swallow
@@ -29,8 +31,10 @@ const CSS = `
 }
 .sv-title-btn:hover { background: rgba(255, 255, 255, .12); color: #fff; }
 .sv-body { overflow: auto; padding: 2px 0; flex: 1 1 auto; min-height: 0; }
-.sv-tree { flex: 1.25 1 0; min-width: 0; }
-.sv-inspector { flex: 1 1 0; min-width: 0; align-self: flex-start; max-height: 100%; }
+.sv-left { left: 8px; }
+.sv-right { right: 8px; }
+.sv-tree { flex: 1 1 0; min-height: 0; }
+.sv-inspector { flex: 0 1 auto; max-height: 100%; }
 
 /* One row of the tree. The level is carried by the coloured guide lines and the
    caret rather than by indentation alone, which read as one flat colour. */
@@ -171,42 +175,98 @@ export function ensureStyles () {
     document.head.appendChild(style);
 }
 
+/** Which window edge a card is docked to. */
+export type Dock = 'left' | 'right';
+
+/** Narrowest and widest a docked panel is allowed to get, in CSS pixels. */
+const MIN_PANEL = 210;
+const MAX_PANEL = 340;
+
+/** Gap kept between a panel and the canvas it sits beside. */
+const MARGIN = 16;
+
+/**
+ * Width for a panel given the free space beside the canvas.
+ *
+ * A panel sized from the window would sit on top of the game whenever the window
+ * is narrower than the canvas plus two panels. Sizing it from the margin that is
+ * actually free keeps it in the dark bars beside the canvas. Below the minimum it
+ * has to overlap, and the P key hides it.
+ */
+function fit (free: number): number {
+    return Math.round(Math.max(MIN_PANEL, Math.min(MAX_PANEL, free - MARGIN)));
+}
+
+/**
+ * DOM host for the Hierarchy (docked left) and the Inspector (docked right), like
+ * the editor lays them out. Each dock is its own fixed column at a window edge, so
+ * the canvas between them is left alone.
+ */
 export class DebugOverlay {
     public onFocusIn: () => void = null;
 
-    private _root: HTMLElement = null;
+    private _roots: Partial<Record<Dock, HTMLElement>> = {};
     private _cursorInside = false;
 
-    public get root (): HTMLElement { return this._root; }
     public get cursorInside (): boolean { return this._cursorInside; }
 
     public get available (): boolean {
         return typeof document !== 'undefined';
     }
 
-    public mount (): HTMLElement {
-        if (!this.available || this._root) return this._root;
+    public mount () {
+        if (!this.available || this._roots.left) return;
 
         ensureStyles();
 
-        this._root = document.createElement('div');
-        this._root.className = 'sv-root';
-        // focusin bubbles and is unaffected by pointer-events, so it can live on the
-        // root; hover has to be tracked per card (see `card`).
-        this._root.addEventListener('focusin', this._focusIn);
-        document.body.appendChild(this._root);
-        return this._root;
+        for (const dock of ['left', 'right'] as Dock[]) {
+            const root = document.createElement('div');
+            root.className = `sv-root sv-${dock}`;
+            // focusin bubbles and is unaffected by pointer-events, so it can live on the
+            // root; hover has to be tracked per card (see `card`).
+            root.addEventListener('focusin', this._focusIn);
+            document.body.appendChild(root);
+            this._roots[dock] = root;
+        }
+
+        window.addEventListener('resize', this._onResize);
+        this.layout();
     }
 
     public unmount () {
-        if (!this._root) return;
-        this._root.removeEventListener('focusin', this._focusIn);
-        this._root.remove();
-        this._root = null;
+        window.removeEventListener('resize', this._onResize);
+        for (const dock of ['left', 'right'] as Dock[]) {
+            const root = this._roots[dock];
+            if (!root) continue;
+            root.removeEventListener('focusin', this._focusIn);
+            root.remove();
+        }
+        this._roots = {};
         this._cursorInside = false;
     }
 
-    public card (title: string, className: string): { card: HTMLElement; body: HTMLElement } {
+    /**
+     * Fit each dock into the margin beside the canvas. Call after anything that moves
+     * the canvas; the window resize case is handled here.
+     */
+    public layout () {
+        const left = this._roots.left;
+        const right = this._roots.right;
+        if (!left || !right) return;
+
+        const canvas = game.canvas as HTMLCanvasElement;
+        const rect = canvas?.getBoundingClientRect?.();
+        if (!rect) return;
+
+        left.style.width = `${fit(rect.left)}px`;
+        right.style.width = `${fit(window.innerWidth - rect.right)}px`;
+    }
+
+    public card (
+        title: string,
+        className: string,
+        dock: Dock = 'right',
+    ): { card: HTMLElement; body: HTMLElement } {
         const card = document.createElement('div');
         card.className = `sv-card ${className}`;
         card.addEventListener('mouseenter', this._enter);
@@ -221,10 +281,11 @@ export class DebugOverlay {
 
         card.appendChild(heading);
         card.appendChild(body);
-        this._root.appendChild(card);
+        this._roots[dock].appendChild(card);
         return { card, body };
     }
 
+    private _onResize = () => { this.layout(); };
     private _enter = () => { this._cursorInside = true; };
     private _leave = () => { this._cursorInside = false; };
     private _focusIn = () => { this.onFocusIn?.(); };

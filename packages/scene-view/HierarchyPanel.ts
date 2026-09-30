@@ -59,7 +59,7 @@ export class HierarchyPanel {
     ) {}
 
     public mount (overlay: DebugOverlay) {
-        const { card, body } = overlay.card('hierarchy', 'sv-tree');
+        const { card, body } = overlay.card('hierarchy', 'sv-tree', 'left');
         this._body = body;
         this._addTitleActions(card);
     }
