@@ -428,20 +428,33 @@ phím tắt theo nhóm: Tools, Select and focus, Camera, Panel.
 
 ## Panel Hierarchy + Inspector trên bản preview web
 
-Bật **mặc định trong browser** (`Show Panels`), ở cạnh phải cửa sổ, hai thẻ. Trong Preview của
+Bật **mặc định trong browser** (`Show Panels`), ở cạnh phải cửa sổ, hai thẻ **đặt song song** (Hierarchy
+bên trái, Inspector bên phải) chứ không xếp chồng. Trong Preview của
 editor chúng **tự ẩn**: editor có Hierarchy/Inspector thật, và panel DOM ở đó cũng không bấm
 được. Phím `P` bật/tắt ngay lúc chạy.
 
-**Hierarchy** — cây node của scene.
+**Hierarchy** — cây node của scene. Đọc một cây dài chủ yếu là phân biệt được các cấp, nên mỗi
+dòng mang cấp của nó bằng ba cách chứ không chỉ thụt lề:
+
+- **Đường dẫn cấp:** mỗi tổ tiên là một đường dọc riêng, tô màu theo cấp (xanh dương, xanh lá,
+  vàng, cam, tím, ngọc — lặp lại sau 6 cấp). Các dòng sát nhau nên các đường nối liền thành
+  vạch dọc liên tục.
+- **Caret ▸/▾** tô đúng màu cấp của dòng. Bấm để mở/thu gọn nhánh. Một node có hàng trăm con
+  (như `Level_14` có 123) không còn chiếm hết danh sách: mặc định chỉ mở cấp trên cùng.
+  Nút `+` / `-` ở tiêu đề mở hết / thu về cấp trên cùng. Chọn một node sâu từ viewport thì các
+  nhánh cha của nó **tự mở** và dòng được cuộn vào tầm nhìn.
+- **Chip phân loại** ở đầu tên: vàng = Camera, cam tròn = Light, xanh da trời = UI,
+  xanh lá = Model (mesh/sprite), xám đặc = nhóm có con, xám viền = node rỗng. Rê chuột lên
+  chip để xem tên loại.
+- Node có con in **đậm**, node lá mờ hơn; node đang tắt (hoặc nằm dưới node tắt) **mờ đi**.
+  Dòng chẵn lẻ có nền hơi khác nhau. Nút `o` / `S` mờ cho tới khi rê chuột vào dòng.
 - Click một dòng để chọn; nút `o` ẩn/hiện, nút `S` solo.
-- **Double-click một dòng để camera scene view bay tới node đó.** Làm được là vì trên web DOM nhận
-  chuột thật; ở editor thì không có kênh nào để nghe double-click ở Hierarchy.
-- Chọn một node trong viewport thì dòng của nó **tự cuộn vào tầm nhìn** (một lần mỗi lần chọn;
-  làm mỗi lần làm mới sẽ kéo danh sách ngược lại lúc bạn đang cuộn).
+- **Double-click một dòng để camera scene view bay tới node đó.** Làm được là vì trên web DOM
+  nhận chuột thật; ở editor thì không có kênh nào để nghe double-click ở Hierarchy.
 - Cây **có cả node UI**. Trước đây nó dùng mask loại luôn layer `UI_2D`/`UI_3D`, nên UI biến mất
   khỏi cây; giờ chỉ loại layer của editor (`GIZMOS`, `EDITOR`, `SCENE_GIZMO`, `PROFILER`).
-- Cây chỉ dựng lại khi cấu trúc thật sự đổi; dựng mỗi frame sẽ reset scroll và huỷ mất chính
-  dòng con trỏ đang bấm.
+- Cây chỉ dựng lại khi cấu trúc thật sự đổi (gồm cả trạng thái mở/đóng); dựng mỗi frame sẽ reset
+  scroll và huỷ mất chính dòng con trỏ đang bấm. Vị trí cuộn được giữ lại qua mỗi lần dựng.
 
 **Inspector** — sửa trực tiếp position / rotation / scale / active của node đang chọn. Giá trị
 được đẩy vào ô mỗi frame để vật thể đang animate hiện đúng, **trừ ô đang gõ**. Commit khi

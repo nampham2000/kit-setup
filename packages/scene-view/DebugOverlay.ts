@@ -3,7 +3,9 @@ const STYLE_ID = 'scene-view-overlay-style';
 const CSS = `
 .sv-root {
     position: fixed; top: 8px; right: 8px; bottom: 8px; z-index: 9999;
-    width: 292px; display: flex; flex-direction: column; gap: 6px;
+    /* Hierarchy and Inspector side by side, as in the editor, not stacked. */
+    width: 560px; max-width: calc(100vw - 16px);
+    display: flex; flex-direction: row; align-items: stretch; gap: 6px;
     font: 11px/1.5 ui-monospace, Menlo, Consolas, monospace; color: #cfd3dc;
     /* The container spans the viewport height, so it must stay transparent to the
        mouse; otherwise the gaps between cards become dead zones that swallow
@@ -11,33 +13,81 @@ const CSS = `
     pointer-events: none;
 }
 .sv-card {
-    background: rgba(20, 22, 26, .88); border: 1px solid rgba(255, 255, 255, .1);
+    background: rgba(20, 22, 26, .9); border: 1px solid rgba(255, 255, 255, .1);
     border-radius: 5px; overflow: hidden; display: flex; flex-direction: column;
     pointer-events: auto;
 }
 .sv-title {
-    padding: 4px 8px; background: rgba(255, 255, 255, .05); color: #8b93a3;
-    letter-spacing: .08em; text-transform: uppercase; font-size: 10px; flex: none;
+    display: flex; align-items: center; padding: 4px 8px; flex: none;
+    background: rgba(255, 255, 255, .05); color: #8b93a3;
+    letter-spacing: .08em; text-transform: uppercase; font-size: 10px;
 }
-.sv-body { overflow: auto; padding: 4px 0; }
-.sv-tree { flex: 0 1 auto; max-height: 45%; }
-.sv-inspector { flex: 0 0 auto; max-height: 52%; }
+.sv-title-actions { margin-left: auto; display: flex; gap: 2px; }
+.sv-title-btn {
+    width: 20px; height: 16px; padding: 0; border: 1px solid rgba(255, 255, 255, .12);
+    border-radius: 3px; background: none; color: #a9b0bd; font: inherit; cursor: pointer;
+}
+.sv-title-btn:hover { background: rgba(255, 255, 255, .12); color: #fff; }
+.sv-body { overflow: auto; padding: 2px 0; flex: 1 1 auto; min-height: 0; }
+.sv-tree { flex: 1.25 1 0; min-width: 0; }
+.sv-inspector { flex: 1 1 0; min-width: 0; align-self: flex-start; max-height: 100%; }
 
+/* One row of the tree. The level is carried by the coloured guide lines and the
+   caret rather than by indentation alone, which read as one flat colour. */
 .sv-row {
-    display: flex; align-items: center; gap: 4px; padding: 1px 6px 1px 0;
+    display: flex; align-items: center; padding: 0 6px 0 4px; min-height: 19px;
     cursor: pointer; white-space: nowrap;
 }
-.sv-row:hover { background: rgba(255, 255, 255, .06); }
-.sv-row.sv-selected { background: rgba(255, 152, 48, .22); }
-.sv-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; }
+.sv-row:nth-child(even) { background: rgba(255, 255, 255, .03); }
+.sv-row:hover { background: rgba(255, 255, 255, .08); }
+.sv-row.sv-selected { background: rgba(255, 152, 48, .28); }
+
+/* Each ancestor level is a fixed-width cell with a left border. Rows touch, so the
+   borders join into continuous vertical guide lines. */
+.sv-guide { flex: none; align-self: stretch; width: 12px; border-left: 1px solid; }
+.sv-d0 { color: #5aa9ff; border-color: rgba(90, 169, 255, .5); }
+.sv-d1 { color: #7be07b; border-color: rgba(123, 224, 123, .45); }
+.sv-d2 { color: #ffd166; border-color: rgba(255, 209, 102, .45); }
+.sv-d3 { color: #ff8f6b; border-color: rgba(255, 143, 107, .45); }
+.sv-d4 { color: #c792ea; border-color: rgba(199, 146, 234, .45); }
+.sv-d5 { color: #4fd1c5; border-color: rgba(79, 209, 197, .45); }
+
+.sv-caret {
+    flex: none; width: 14px; height: 14px; display: flex; align-items: center;
+    justify-content: center; cursor: pointer;
+}
+.sv-caret::before {
+    content: ''; border-style: solid; border-width: 4px 0 4px 6px;
+    border-color: transparent transparent transparent currentColor;
+}
+.sv-caret.sv-open::before {
+    border-width: 6px 4px 0 4px; border-color: currentColor transparent transparent transparent;
+}
+.sv-caret.sv-leaf { cursor: default; }
+.sv-caret.sv-leaf::before { display: none; }
+
+/* What the node is, at a glance. */
+.sv-chip { flex: none; width: 7px; height: 7px; margin: 0 6px 0 2px; border-radius: 2px; }
+.sv-k-camera { background: #ffd166; }
+.sv-k-light { background: #ffb36b; border-radius: 50%; }
+.sv-k-ui { background: #56c2ff; }
+.sv-k-mesh { background: #9be38a; }
+.sv-k-group { background: #8b93a3; }
+.sv-k-empty { background: transparent; box-shadow: inset 0 0 0 1px #6b7280; }
+
+.sv-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; color: #b8bfcc; }
+.sv-row.sv-has-children .sv-name { color: #eef1f6; font-weight: 600; }
+.sv-row.sv-inactive .sv-name, .sv-row.sv-inactive .sv-chip { opacity: .4; }
 .sv-row.sv-dimmed .sv-name { color: #6b7280; text-decoration: line-through; }
-.sv-tag { color: #6b7280; font-size: 10px; }
+.sv-tag { margin: 0 4px; color: #6b7280; font-size: 10px; }
 
 .sv-btn {
-    flex: none; width: 17px; height: 15px; line-height: 15px; text-align: center;
-    border: 1px solid transparent; border-radius: 3px; color: #7b8393;
-    background: none; font: inherit; cursor: pointer; padding: 0;
+    flex: none; width: 17px; height: 15px; margin-left: 2px; line-height: 15px;
+    text-align: center; border: 1px solid transparent; border-radius: 3px;
+    color: #7b8393; background: none; font: inherit; cursor: pointer; padding: 0;
+    opacity: .3;
 }
+.sv-row:hover .sv-btn, .sv-btn.sv-on { opacity: 1; }
 .sv-btn:hover { background: rgba(255, 255, 255, .12); color: #e6e9ef; }
 .sv-btn.sv-on { color: #ff9830; border-color: rgba(255, 152, 48, .5); }
 
