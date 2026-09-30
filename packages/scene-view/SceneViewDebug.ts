@@ -1,5 +1,5 @@
 import {
-    CCObject, Camera, Color, Component, EventKeyboard, EventMouse, Input, KeyCode, Layers,
+    CCObject, Camera, Color, Component, Director, EventKeyboard, EventMouse, Game, Input, KeyCode, Layers,
     screen,
     ModelRenderer, Node, Rect, UIRenderer, UITransform, Vec3, _decorator, director, game, geometry, input,
 } from 'cc';
@@ -177,6 +177,8 @@ export class SceneViewDebug extends Component {
     private _lastClickNode: Node = null;
     private _lastClickTime = 0;
     private _selectionTimer = 0;
+    private _pausedLoop = 0;
+    private _lastFrameMs = 0;
     private _selectionSynced = false;
     private _ownSelectAt = 0;
     private _focusGoal: Vec3 = null;
@@ -220,6 +222,17 @@ export class SceneViewDebug extends Component {
     }
 
     protected update (dt: number) {
+        this._frame(dt);
+    }
+
+    /**
+     * One frame of the scene view.
+     *
+     * Normally the engine calls this through update(). It does not while the game
+     * is paused, so _onBeforeDraw and the paused loop below call it instead. Exactly
+     * one of the three drives any given frame.
+     */
+    private _frame (dt: number) {
         if (!this._active) return;
 
         this._freeCamera.update(dt);
@@ -336,6 +349,12 @@ export class SceneViewDebug extends Component {
         input.on(Input.EventType.MOUSE_UP, this._onMouseUp, this);
         input.on(Input.EventType.MOUSE_MOVE, this._onMouseMove, this);
 
+        // Keep the viewport alive while the game is paused. See the pause section.
+        director.on(Director.EVENT_BEFORE_DRAW, this._onBeforeDraw, this);
+        game.on(Game.EVENT_PAUSE, this._onGamePause, this);
+        game.on(Game.EVENT_RESUME, this._onGameResume, this);
+        if (game.isPaused()) this._startPausedLoop();
+
         // Scanning the scene runs after the listeners are live, and never before.
         // It used to come first, so one throw in here left the view rendering with
         // no input at all - which looks like picking is broken, not like a crash.
@@ -364,6 +383,10 @@ export class SceneViewDebug extends Component {
         input.off(Input.EventType.MOUSE_DOWN, this._onMouseDown, this);
         input.off(Input.EventType.MOUSE_UP, this._onMouseUp, this);
         input.off(Input.EventType.MOUSE_MOVE, this._onMouseMove, this);
+        director.off(Director.EVENT_BEFORE_DRAW, this._onBeforeDraw, this);
+        game.off(Game.EVENT_PAUSE, this._onGamePause, this);
+        game.off(Game.EVENT_RESUME, this._onGameResume, this);
+        this._stopPausedLoop();
 
 
         this._probe.uninstall();
@@ -457,8 +480,73 @@ export class SceneViewDebug extends Component {
         }
     }
 
+    // --- pause --------------------------------------------------------------
+
     /**
-     * Turn click and Hierarchy-broadcast logging on or off, live.
+     * There are two kinds of pause, and they need different handling.
+     *
+     * director.pause() skips component updates but keeps rendering, so update()
+     * goes quiet while frames continue: _onBeforeDraw covers that.
+     *
+     * game.pause() is what the Preview Pause button calls. It stops the main loop
+     * outright - no update, no render, no frame at all - so the viewport would
+     * freeze along with the game. The paused loop below renders on its own instead:
+     * it runs the scene view and redraws the scene, and leaves game logic alone.
+     * That is why it calls Root.frameMove directly rather than director.tick, which
+     * would also run every component's update and un-pause the game's behaviour.
+     */
+    private _frameDelta (): number {
+        const now = performance.now();
+        // Clamped so a long stall, or the first frame after a resume, is not a leap.
+        const dt = Math.min(Math.max((now - this._lastFrameMs) / 1000, 0), 0.1);
+        this._lastFrameMs = now;
+        return dt;
+    }
+
+    private _onBeforeDraw () {
+        // While the director is running, update() already drove this frame.
+        if (this._active && director.isPaused()) this._frame(this._frameDelta());
+    }
+
+    private _onGamePause () {
+        if (this._active) this._startPausedLoop();
+    }
+
+    private _onGameResume () {
+        this._stopPausedLoop();
+    }
+
+    private _startPausedLoop () {
+        if (this._pausedLoop || typeof requestAnimationFrame === 'undefined') return;
+
+        this._lastFrameMs = performance.now();
+        if (this.debugInput) console.log('[SceneView] game paused - scene view keeps rendering');
+
+        const step = () => {
+            if (!this._active || !game.isPaused()) {
+                this._pausedLoop = 0;
+                return;
+            }
+            try {
+                const dt = this._frameDelta();
+                this._frame(dt);
+                director.root?.frameMove(dt);
+            } catch (error) {
+                this._warnOnce('paused-loop', `[SceneView] paused render failed: ${error}`);
+            }
+            this._pausedLoop = requestAnimationFrame(step);
+        };
+        this._pausedLoop = requestAnimationFrame(step);
+    }
+
+    private _stopPausedLoop () {
+        if (!this._pausedLoop) return;
+        cancelAnimationFrame(this._pausedLoop);
+        this._pausedLoop = 0;
+    }
+
+    /**
+     * Turn click logging on or off, live.
      *
      * debugInput is a property, and under AutoBoot the node that holds it is
      * hidden, so without a key there would be no way to ask for diagnostics.

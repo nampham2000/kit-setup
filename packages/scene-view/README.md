@@ -221,6 +221,54 @@ cách bay tới node:
 - Click vào viewport rồi bấm `F`. Bấm `F` ngay sau khi click ở Hierarchy nhiều khả năng không
   tới được preview vì bàn phím đang thuộc panel Hierarchy (chưa kiểm chứng).
 
+## Khi game đang Pause, và khi chưa Play
+
+### Pause
+
+Cocos có **hai tầng pause** khác nhau, và scene view phải xử lý cả hai:
+
+| | `director.pause()` | `game.pause()` |
+|---|---|---|
+| Vòng lặp chính | vẫn chạy | **dừng hẳn** (`_pacer.stop()`) |
+| Render | vẫn render mỗi frame | **không còn frame nào** |
+| `update` của component | không chạy | không chạy |
+
+Nút Pause của Preview gọi **`game.pause()`** (đọc từ mã thanh công cụ preview:
+`!game.isPaused() ? game.pause() : game.resume()`). Nghĩa là khi bấm Pause thì engine ngừng
+vẽ hẳn, và viewport quan sát **đóng băng cùng game** — khác Unity, nơi Pause chỉ dừng thời
+gian game còn Scene view vẫn sống.
+
+Cách xử lý: khi nhận `Game.EVENT_PAUSE`, scene view tự chạy một vòng `requestAnimationFrame`
+riêng. Mỗi vòng nó chạy phần việc của scene view (camera, gizmo, chọn, theo dõi) rồi gọi
+`Root.frameMove` để vẽ lại cảnh. Dùng `frameMove` trực tiếp chứ **không** dùng
+`director.tick`, vì `tick` còn chạy `update` của mọi component — tức là game sẽ chạy tiếp
+ngay trong lúc đang "pause". Vòng này dừng khi `Game.EVENT_RESUME`.
+
+Mỗi frame chỉ có **đúng một** bên chạy scene view: `update()` khi game chạy bình thường,
+`Director.EVENT_BEFORE_DRAW` khi chỉ director bị pause, vòng riêng khi cả game bị pause.
+
+Nút Step không bị ảnh hưởng vì mình không hề pause director.
+
+**Chưa kiểm chứng trên editor thật:** (1) sự kiện chuột/phím có còn tới khi game đang pause
+hay không — tài liệu engine nói Web vẫn dispatch ngay, nhưng Preview-in-editor nhận input
+theo đường riêng; (2) nút Pause trên thanh trên cùng của editor có đúng là cái gọi
+`game.pause()` ở trên hay không. Nếu bạn Pause mà viewport vẫn đứng, hãy cho mình biết camera
+có còn xoay được không (chuột phải) — việc đó tách được "không có frame" khỏi "không có input".
+
+### Chưa Play
+
+**Panel Scene của Cocos Creator chính là Scene view lúc edit của Unity**: camera bay tự do,
+gizmo, chọn, move/rotate/scale, Hierarchy, Inspector. Scene view trong bộ này chỉ tồn tại vì
+Cocos *không có* gì tương đương khi game đang chạy; nên nó **cố ý không chạy lúc chưa Play**.
+
+Chạy nó trong panel Scene bằng `@executeInEditMode` sẽ chia đôi viewport của chính panel đó,
+nhét camera thứ hai vào giữa hệ gizmo, camera và selection của editor — dựng lại panel Scene
+ngay bên trong panel Scene, bản tệ hơn. Và ở đó các camera game cũng không render vào panel
+nên phần chia đôi màn hình không có nghĩa.
+
+Nếu điều bạn muốn là một tính năng **cụ thể** của bộ này lúc edit (chọn UI, vẽ UI, bay tới
+node…), hãy nói tính năng nào, vì mỗi cái có cách khác nhau và nhiều cái panel Scene đã có.
+
 ## Bật/tắt UI ngay lúc chạy (phím `U`)
 
 `Show UI` là property, mà khi dùng `AutoBoot` node gắn component bị ẩn nên không có chỗ
