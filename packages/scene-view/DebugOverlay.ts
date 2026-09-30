@@ -232,12 +232,10 @@ export class DebugOverlay {
             this._roots[dock] = root;
         }
 
-        window.addEventListener('resize', this._onResize);
         this.layout();
     }
 
     public unmount () {
-        window.removeEventListener('resize', this._onResize);
         for (const dock of ['left', 'right'] as Dock[]) {
             const root = this._roots[dock];
             if (!root) continue;
@@ -306,7 +304,6 @@ export class DebugOverlay {
         return { card, body };
     }
 
-    private _onResize = () => { this.layout(); };
     private _enter = () => { this._cursorInside = true; };
     private _leave = () => { this._cursorInside = false; };
     private _focusIn = () => { this.onFocusIn?.(); };

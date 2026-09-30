@@ -437,8 +437,14 @@ Vị trí và kích thước được **đo từ chính canvas**, nên khớp v�
 - **Sát mép canvas, bề rộng lấp đầy dải trống** (từ 210 đến 420 px, chừa 8 px mỗi bên). Neo
   vào mép cửa sổ và chặn bề rộng tối đa thì còn thừa một khoảng hở giữa panel và game mỗi
   khi dải trống rộng hơn mức chặn.
-- Đo lại khi đổi kích thước cửa sổ và theo chu kỳ khi canvas dịch chuyển (ví dụ đổi
-  Design Resolution).
+- **Bám theo canvas khi đổi thiết bị.** Chọn thiết bị trong Design Resolution thì trang gọi
+  `setWindowSize` (engine đặt `screen.windowSize = kích thước thiết bị × devicePixelRatio`) rồi
+  bắn `resize` **ngay**, lúc canvas chưa kịp đổi — handler đo lúc đó thấy canvas cũ. Nút Rotate
+  thì bắn `orientationchange` chứ không phải `resize`. Nên `CanvasWatcher.ts` dùng
+  `ResizeObserver` gắn vào canvas và phần tử chứa nó (báo đúng lúc kích thước đổi, ai đổi cũng
+  được), cộng `resize` và `orientationchange`, và **đo lại 3 lần** sau đó (60, 250, 700 ms) vì
+  engine áp kích thước mới trong vài frame. Hai panel, nút `!` và các nút trong viewport đều
+  đi theo cùng bộ theo dõi này.
 
 **Thứ tự xếp lớp (z-index) với trang preview.** Panel nằm ở `z-index: 50`, panel trợ giúp `51`.
 Danh sách Design Resolution của trang preview là một `div` định vị tuyệt đối ở `z-index: 99`

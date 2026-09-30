@@ -4,6 +4,7 @@ import {
     ModelRenderer, Node, Rect, UIRenderer, UITransform, Vec3, _decorator, director, game, geometry, input,
 } from 'cc';
 import { DEBUG, EDITOR_NOT_IN_PREVIEW } from 'cc/env';
+import { CanvasWatcher } from './CanvasWatcher';
 import { DebugOverlay, ensureStyles } from './DebugOverlay';
 import { EditorBridge } from './EditorBridge';
 import { HelpPanel, HelpToggle } from './HelpPanel';
@@ -172,6 +173,7 @@ export class SceneViewDebug extends Component {
     private _rescanTimer = 0;
     private _active = false;
     private _help = new HelpPanel();
+    private _watcher = new CanvasWatcher();
     private _panelsOn = false;
     private _warnedNoGizmos = false;
     private _lastClickNode: Node = null;
@@ -375,6 +377,9 @@ export class SceneViewDebug extends Component {
             this._probe.install([]);
         }
         this._mountHelp();
+        // Everything placed from the canvas rect follows it when a device is chosen,
+        // rotated or the window changes.
+        this._watcher.start(() => this._syncWidgets());
     }
 
     public close () {
@@ -412,6 +417,7 @@ export class SceneViewDebug extends Component {
         }
         this._savedRects.clear();
         this._renderers.length = 0;
+        this._watcher.stop();
         this._help.unmount();
     }
 
