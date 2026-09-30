@@ -4,7 +4,10 @@ const STYLE_ID = 'scene-view-overlay-style';
 
 const CSS = `
 .sv-root {
-    position: fixed; top: 8px; bottom: 8px; z-index: 9999;
+    /* Above the canvas but deliberately below 99: the Cocos preview page draws its
+       Design Resolution list as an absolutely positioned div at z-index 99, and a
+       panel at 9999 covered that list whenever it dropped down. */
+    position: fixed; top: 8px; bottom: 8px; z-index: 50;
     /* One column per window edge. The width is set from the free margin beside the
        canvas, so a dock stays out of the game. */
     width: 280px; display: flex; flex-direction: column;
@@ -107,7 +110,7 @@ const CSS = `
 
 
 .sv-help-btn {
-    position: fixed; z-index: 10001; width: 26px; height: 26px; border-radius: 13px;
+    position: fixed; z-index: 51; width: 26px; height: 26px; border-radius: 13px;
     background: rgba(20, 22, 26, .88); border: 1px solid rgba(255, 255, 255, .22);
     color: #cfd3dc; font: 700 14px/24px ui-monospace, Menlo, Consolas, monospace;
     text-align: center; cursor: pointer; user-select: none;
@@ -115,7 +118,7 @@ const CSS = `
 .sv-help-btn:hover, .sv-help-btn.sv-on { background: #3b6fd4; border-color: #3b6fd4; color: #fff; }
 
 .sv-help {
-    position: fixed; z-index: 10001; display: none; width: 300px; max-height: 72vh;
+    position: fixed; z-index: 51; display: none; width: 300px; max-height: 72vh;
     overflow: auto; padding: 8px 10px; border-radius: 6px;
     background: rgba(20, 22, 26, .95); border: 1px solid rgba(255, 255, 255, .14);
     font: 11px/1.6 ui-monospace, Menlo, Consolas, monospace; color: #cfd3dc;

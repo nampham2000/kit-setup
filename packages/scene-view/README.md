@@ -440,6 +440,13 @@ Vị trí và kích thước được **đo từ chính canvas**, nên khớp v�
 - Đo lại khi đổi kích thước cửa sổ và theo chu kỳ khi canvas dịch chuyển (ví dụ đổi
   Design Resolution).
 
+**Thứ tự xếp lớp (z-index) với trang preview.** Panel nằm ở `z-index: 50`, panel trợ giúp `51`.
+Danh sách Design Resolution của trang preview là một `div` định vị tuyệt đối ở `z-index: 99`
+(`.view-select-container .options`), nên panel phải nhỏ hơn 99 thì danh sách sổ xuống mới nằm
+trên panel. Từng đặt 9999 nên danh sách bị che. Nhỏ hơn thì cũng phải lớn hơn canvas, vốn không
+có z-index. Hai con số này đọc từ `builtin/preview/static/resources/index.css`; trang preview
+của phiên bản Creator khác có thể dùng số khác.
+
 Cửa sổ hẹp tới mức không còn dải trống thì panel buộc phải chồng lên canvas ở bề rộng tối
 thiểu, và được giữ trong màn hình; phím `P` ẩn chúng. Trong Preview của
 editor chúng **tự ẩn**: editor có Hierarchy/Inspector thật, và panel DOM ở đó cũng không bấm
