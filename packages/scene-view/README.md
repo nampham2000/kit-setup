@@ -74,7 +74,8 @@ Bản gắn tay được ưu tiên; `AutoBoot` thấy đã có sẵn thì tự �
 | **Double-click** | **Bay tới object dưới con trỏ** |
 | **`F`** | **Focus camera vào object đang chọn** |
 | **`U`** | **Bật/tắt vẽ UI trong viewport** |
-| **`I`** | **Bật/tắt log debug (click, broadcast Hierarchy)** |
+| **`G`** | **Theo dõi Hierarchy: chọn node ở đó thì camera bay tới** |
+| **`I`** | **Bật/tắt log debug (kết quả mỗi cú click)** |
 | **`Esc`** | **Bỏ chọn** |
 | **Kéo tay cầm màu** | **Di chuyển / xoay / scale object đang chọn** |
 | **`1` `2` `3` `4`** | **Đổi công cụ: move / rotate / scale / không gizmo** |
@@ -194,19 +195,28 @@ hướng nhìn, giống lệnh Frame của Unity. Phím `F` làm đúng việc �
 - Hai cú click phải cùng trúng **một node** trong 400 ms; con trỏ lệch nhẹ giữa hai lần
   click không làm mất cử chỉ.
 
-### Double-click trong panel Hierarchy của editor
+### Bay tới node chọn ở panel Hierarchy của editor: không double-click được
 
-Làm theo kiểu **best-effort**, đã viết nhưng **chưa kiểm chứng trên editor thật**. Lý do:
-chọn cùng một node hai lần thì selection không đổi nên polling không thấy gì, vì vậy code
-nghe broadcast `selection:select` của editor và đo khoảng cách giữa hai lần chọn cùng một
-node (500 ms). Việc editor có phát lại broadcast khi bấm vào node *đang được chọn* hay
-không thì không có tài liệu, và hình dạng payload cũng vậy.
+**Double-click ở panel Hierarchy không làm được, và đây là kết quả đo chứ không phải suy
+đoán.** Mình nghe broadcast `selection:select` của editor, listener gắn thành công
+(`listener yes`), rồi click vào nhiều node khác nhau ở Hierarchy: **không có một broadcast
+nào tới**, kể cả với cú click thường đổi chọn. Nên vấn đề không phải "editor không phát lại
+khi bấm node đang chọn" — process preview không nhận được sự kiện chọn nào từ editor cả.
 
-Nếu double-click ở Hierarchy không bay: bật `Debug Input` — mỗi broadcast nhận được sẽ
-in ra Console (`editor selection broadcast`). Không thấy dòng nào khi bấm lần hai nghĩa
-là editor không phát lại, và lúc đó dùng một trong hai cách dự phòng: double-click trong
-viewport, hoặc bật property `Focus On Editor Select` (bay ngay khi chọn node khác ở
-Hierarchy; mặc định tắt vì mỗi cú click đều làm camera di chuyển).
+Hệ quả: chọn cùng một node hai lần thì selection không đổi, polling không thấy gì, và không
+còn kênh nào khác để nghe. Code của Hierarchy và package `scene` là file `.ccc` biên dịch sẵn
+nên không đọc được cách chúng xử lý. Đã thử tìm API nội bộ (`cce.Camera`, `Camera.focus`,
+`focusCamera`) trong toàn bộ asar: không có gì. Phần code nghe broadcast đã được gỡ.
+
+Selection từ Hierarchy vẫn **đồng bộ được bằng polling** (đọc `Editor.Selection`), nên có ba
+cách bay tới node:
+
+- **Double-click ngay trong viewport** vào object — chắc chắn chạy.
+- **Phím `G`** (hoặc property `Focus On Editor Select`) bật chế độ *theo dõi*: hễ chọn node khác
+  ở Hierarchy thì camera lướt tới nó, trong vòng khoảng 0,15 giây. Là một click chứ không phải
+  double-click, nên mặc định tắt — mỗi click ở Hierarchy đều làm camera di chuyển.
+- Click vào viewport rồi bấm `F`. Bấm `F` ngay sau khi click ở Hierarchy nhiều khả năng không
+  tới được preview vì bàn phím đang thuộc panel Hierarchy (chưa kiểm chứng).
 
 ## Bật/tắt UI ngay lúc chạy (phím `U`)
 

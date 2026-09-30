@@ -34,8 +34,8 @@ const CLICK_SLOP = 4;
 /** Two clicks on the same node within this window are a double-click. */
 const DOUBLE_CLICK_MS = 400;
 
-/** Hierarchy clicks reach us through the editor, so allow for its latency. */
-const EDITOR_DOUBLE_CLICK_MS = 500;
+/** How often the editor Hierarchy selection is read, in seconds. */
+const SELECTION_POLL_SECONDS = 0.15;
 
 /** How quickly the camera glides to a focus target. Higher is snappier. */
 const FOCUS_SPEED = 12;
@@ -137,7 +137,7 @@ export class SceneViewDebug extends Component {
         + 'instead of using the built-in panels. Only possible in the in-editor Preview.' })
     public syncEditorSelection = true;
 
-    @property({ tooltip: 'Fly the scene camera to a node as soon as it is selected in the editor Hierarchy. Off by default, since every click there would move the camera. Double-clicking a node already frames it, in the viewport and in the Hierarchy.' })
+    @property({ tooltip: 'Fly the scene camera to a node as soon as it is selected in the editor Hierarchy. Off by default, since every click there would move the camera. Press G to toggle it live. The editor sends this process no selection events, so a double-click in the Hierarchy cannot be detected; this follows the selection instead.' })
     public focusOnEditorSelect = false;
 
 
@@ -173,9 +173,7 @@ export class SceneViewDebug extends Component {
     private _warnedNoGizmos = false;
     private _lastClickNode: Node = null;
     private _lastClickTime = 0;
-    private _hierarchyClickUuid = '';
-    private _hierarchyClickTime = 0;
-    private _hierarchyEvents = 0;
+    private _selectionTimer = 0;
     private _focusGoal: Vec3 = null;
     private _focusSpan = 0;
     private _pressValid = false;
@@ -221,6 +219,13 @@ export class SceneViewDebug extends Component {
 
         this._freeCamera.update(dt);
         this._stepFocus(dt);
+        // Selections made in the editor Hierarchy arrive by polling. That runs more
+        // often than the scene rescan so following a selection feels immediate.
+        this._selectionTimer -= dt;
+        if (this._selectionTimer <= 0 && this._bridge.available) {
+            this._selectionTimer = SELECTION_POLL_SECONDS;
+            this._pullEditorSelection();
+        }
 
         this._rescanTimer -= dt;
         if (this._rescanTimer <= 0) {
@@ -233,7 +238,6 @@ export class SceneViewDebug extends Component {
             if (this.showPanels) {
                 this._hierarchy.refresh(director.getScene().children, EXCLUDED_LAYERS, this._sceneCamera?.node);
             }
-            if (this._bridge.available) this._pullEditorSelection();
             this._syncWidgets();
         }
 
@@ -332,9 +336,6 @@ export class SceneViewDebug extends Component {
             this._logInputDiagnostics();
             this._probe.install([]);
         }
-        if (this.syncEditorSelection && this._bridge.available) {
-            this._bridge.listenSelections((uuid, raw) => this._onEditorSelect(uuid, raw));
-        }
         this._showHint();
     }
 
@@ -348,7 +349,6 @@ export class SceneViewDebug extends Component {
 
 
         this._probe.uninstall();
-        this._bridge.stopListening();
         this._focusGoal = null;
         this._handles.endDrag();
         this._grabbedAxis = null;
@@ -447,8 +447,23 @@ export class SceneViewDebug extends Component {
      */
     public toggleDebug () {
         this.debugInput = !this.debugInput;
-        console.log(`[SceneView] debug logging ${this.debugInput ? 'ON' : 'OFF'} - ${this._bridge.describe()}`
-            + `, listening to Hierarchy: ${this._bridge.listening}. ${this._bridge.inspect()}`);
+        console.log(`[SceneView] debug logging ${this.debugInput ? 'ON' : 'OFF'} - ${this._bridge.describe()}`);
+        this._updateHint();
+    }
+
+    /**
+     * Fly to whatever is selected in the editor's Hierarchy as soon as it changes.
+     *
+     * This is the only way to frame a Hierarchy selection, because the editor sends
+     * this process no selection events at all - a listener on selection:select
+     * registered fine and then saw nothing, even for clicks on different nodes - so
+     * a double-click there cannot be told apart. Following the selection is a
+     * single click rather than a double, which is why it is a mode you switch on.
+     * It is a key because, under AutoBoot, no property can be set from the Inspector.
+     */
+    public toggleFollow () {
+        this.focusOnEditorSelect = !this.focusOnEditorSelect;
+        console.log(`[SceneView] following Hierarchy selection ${this.focusOnEditorSelect ? 'ON' : 'OFF'}`);
         this._updateHint();
     }
 
@@ -465,36 +480,6 @@ export class SceneViewDebug extends Component {
         this._updateHint();
     }
 
-    /**
-     * A node was clicked in the editor's own Hierarchy panel. Two clicks on one
-     * node within the window are a double-click.
-     *
-     * Adopts the selection directly rather than through select(): that would send
-     * it back to the editor, which broadcasts it again and would look like a
-     * fresh click.
-     */
-    private _onEditorSelect (uuid: string, raw: unknown[]) {
-        this._hierarchyEvents++;
-        if (this.debugInput) console.log('[SceneView] editor selection broadcast:', raw);
-        if (this.debugInput) this._updateHint();
-
-        const now = Date.now();
-        const isDouble = uuid === this._hierarchyClickUuid
-            && now - this._hierarchyClickTime <= EDITOR_DOUBLE_CLICK_MS;
-        this._hierarchyClickUuid = uuid;
-        this._hierarchyClickTime = now;
-        if (!isDouble) return;
-
-        this._hierarchyClickUuid = '';
-        const node = findByUuid(director.getScene(), uuid);
-        if (!node) return;
-        if (node !== this._selected) {
-            this._selected = node;
-            this._hierarchy.setSelected(node);
-            this._inspector.show(node);
-        }
-        this.focusSelection();
-    }
 
     /**
      * Move the divider. Every consumer of the split has to be updated together:
@@ -832,6 +817,9 @@ export class SceneViewDebug extends Component {
         case KeyCode.KEY_U:
             if (this._active) this.toggleUI();
             break;
+        case KeyCode.KEY_G:
+            if (this._active) this.toggleFollow();
+            break;
         case KeyCode.KEY_I:
             if (this._active) this.toggleDebug();
             break;
@@ -927,7 +915,7 @@ export class SceneViewDebug extends Component {
         const tool = this.enableTransformGizmo
             ? `tool ${this._handles.mode.toUpperCase()} (1 move / 2 rotate / 3 scale / 4 none) | `
             : '';
-        this._hint.textContent = `SCENE VIEW - ${tool}LMB select | double-click or F focus | U ui ${this.showUI ? 'ON' : 'off'} | I debug ${this.debugInput ? `ON (hierarchy events: ${this._hierarchyEvents}, listener ${this._bridge.listening ? 'yes' : 'NO'}) | ${this._bridge.inspect().slice(0, 120)}` : 'off'} | Esc deselect`
+        this._hint.textContent = `SCENE VIEW - ${tool}LMB select | double-click or F focus | U ui ${this.showUI ? 'ON' : 'off'} | G follow Hierarchy ${this.focusOnEditorSelect ? 'ON' : 'off'} | I debug ${this.debugInput ? 'ON' : 'off'} | Esc deselect`
             + ' | RMB look | WASD move | Q/E down/up | MMB pan | wheel dolly | Shift fast | F1 close';
     }
 
