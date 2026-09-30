@@ -98,6 +98,14 @@ export class SceneViewDebug extends Component {
         + 'top of whatever is at the origin and gets in the way.' })
     public showWorldAxes = false;
 
+    @property({ tooltip: 'Render the game UI in the scene viewport. OFF by default, because it is'
+        + ' not free: the engine hit-tests UI against EVERY camera that can see its layer and'
+        + ' ignores depth, so a click in the scene viewport can be taken as a click on the game'
+        + ' UI and fire its buttons. UI is also drawn without depth testing, so a canvas sized'
+        + ' in design-resolution units can paint over the whole scene. Try it, and turn it off'
+        + ' if the game starts reacting to scene-view clicks. While off, UI is shown as outlines.' })
+    public showUI = false;
+
     @property({ tooltip: 'Also pick UI elements. They are screen-space, so the viewport draws their outline rather than the UI itself - that is the only way to aim at them.' })
     public enableUIPicking = true;
 
@@ -222,7 +230,12 @@ export class SceneViewDebug extends Component {
         if (this.showGrid) drawGrid(this._gizmos);
         if (this.showWorldAxes) drawWorldAxes(this._gizmos);
         if (this.showBounds) drawBounds(this._gizmos, this._renderers, BOUNDS_COLOR);
-        if (this.enableUIPicking) drawUIBounds(this._gizmos, this._uiElements, UI_BOUNDS_COLOR);
+        // Outlines stand in for UI the observer cannot draw. With the UI actually
+        // rendered they would only be clutter on top of it; the selection highlight
+        // still shows which element is picked.
+        if (this.enableUIPicking && !this.showUI) {
+            drawUIBounds(this._gizmos, this._uiElements, UI_BOUNDS_COLOR);
+        }
         this._drawFrustums();
         if (this._selected) {
             drawSelection(this._gizmos, this._selected);
@@ -431,7 +444,7 @@ export class SceneViewDebug extends Component {
         camera.priority = 1 << 20;
         camera.clearFlags = Camera.ClearFlag.SOLID_COLOR;
         camera.clearColor = SCENE_BG;
-        camera.visibility = SCENE_VISIBILITY;
+        camera.visibility = this._observerVisibility();
         camera.near = 0.05;
         camera.far = 2000;
 
@@ -487,6 +500,18 @@ export class SceneViewDebug extends Component {
         }
     }
 
+    /**
+     * What the observer camera renders and what picking may consider.
+     *
+     * UI layers are opt-in (see showUI). Keeping camera and picker on the same mask
+     * means a mesh on a UI layer is pickable exactly when it is visible.
+     */
+    private _observerVisibility (): number {
+        return this.showUI
+            ? SCENE_VISIBILITY | Layers.Enum.UI_2D | Layers.Enum.UI_3D
+            : SCENE_VISIBILITY;
+    }
+
     /** Log a given problem once, not every rescan - this runs twice a second. */
     private _warned = new Set<string>();
     private _warnOnce (key: string, message: string) {
@@ -506,9 +531,9 @@ export class SceneViewDebug extends Component {
         const own = this._sceneCamera ? this._sceneCamera.node : null;
         // Same mask the camera renders with, so bounds and picking can never target
         // something the viewport does not even draw (editor gizmos, UI, profiler).
-        this._renderers = all.filter((r) => r.node !== own && (r.node.layer & SCENE_VISIBILITY) !== 0);
+        this._renderers = all.filter((r) => r.node !== own && (r.node.layer & this._observerVisibility()) !== 0);
 
-        // UI is deliberately outside SCENE_VISIBILITY, so it is gathered on its own
+        // UI is gathered on its own: it is picked through UITransform, not a model.
         // rather than filtered by the same mask.
         this._uiElements = [];
         if (!this.enableUIPicking) return;

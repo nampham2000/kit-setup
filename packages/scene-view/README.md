@@ -202,6 +202,27 @@ khỏi danh sách UI. Preview chạy chung scene graph với editor nên các no
 `internal/editor/grid-2d` có mặt lúc runtime, và nếu không lọc thì hộp bao khổng lồ
 của chúng sẽ lọt vào tia ray.
 
+### Hiển thị UI trong viewport (`Show UI`, mặc định TẮT)
+
+Mặc định camera quan sát **không vẽ UI**, chỉ vẽ khung viền thay thế. Bật `Show UI` để
+vẽ UI thật. Lý do nó không bật sẵn, đọc từ engine chứ không phải suy đoán:
+
+- **Click trong scene viewport có thể bị hiểu là click vào UI của game.**
+  `UITransform.hitTest` duyệt qua *mọi* camera thấy layer của node, đổi điểm màn hình
+  sang world ở độ sâu 0, rồi **chỉ so x,y với hình chữ nhật node, bỏ qua z**, và trả
+  `true` nếu *bất kỳ* camera nào báo trúng. Camera quan sát mà thấy layer UI thì một cú
+  click trong viewport của nó có thể bấm trúng nút của game. Bật lên mà game phản ứng
+  với click ở scene view thì tắt đi.
+- **UI vẽ không có depth test**, nên canvas cỡ design resolution có thể phủ lên cả cảnh
+  thay vì nằm đúng chỗ như trong Unity.
+- Vài chỗ của engine chọn "camera đầu tiên thấy layer này" (`getFirstRenderCamera`:
+  `EditBox`, `VideoPlayer`, `WebView`, một số hàm đổi toạ độ của `UITransform`). Camera
+  quan sát được thêm sau camera game nên thường không phải camera đầu, nhưng thứ tự
+  đó không được đảm bảo.
+
+Khi `Show UI` bật, các khung viền UI chưa chọn được ẩn đi (UI thật đã hiện, viền chỉ
+thêm rối); UI đang chọn vẫn được highlight.
+
 ### Điều cần biết trước khi bật
 
 Canvas screen-space có kích thước bằng **design resolution**, ví dụ 960×640 **đơn
