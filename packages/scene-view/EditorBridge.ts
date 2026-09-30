@@ -29,6 +29,12 @@ export class EditorBridge {
 
     public get available (): boolean { return this._selectFn !== null; }
 
+    /**
+     * Whether there is an editor behind this page at all. A browser preview has
+     * none, which is what decides where the DOM Hierarchy and Inspector belong.
+     */
+    public get hasEditor (): boolean { return editor() !== null; }
+
     /** Human-readable account of what was detected, for a single startup log. */
     public describe (): string {
         if (!editor()) return 'no editor host (browser preview or build) - using built-in panels';

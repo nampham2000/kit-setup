@@ -6,6 +6,7 @@ import {
 import { DEBUG, EDITOR_NOT_IN_PREVIEW } from 'cc/env';
 import { DebugOverlay, ensureStyles } from './DebugOverlay';
 import { EditorBridge } from './EditorBridge';
+import { HelpPanel, HelpToggle } from './HelpPanel';
 import { Axis, GizmoMode, TransformGizmo } from './TransformGizmo';
 import { ToolPalette } from './ToolPalette';
 import { ViewSplitter } from './ViewSplitter';
@@ -68,12 +69,12 @@ const EXCLUDED_LAYERS = Layers.Enum.UI_2D
 const SCENE_VISIBILITY = Layers.Enum.ALL & ~EXCLUDED_LAYERS;
 
 /**
- * What UI picking may consider: the UI layers are wanted here, but the editor's
- * own scaffolding is not. The Preview panel shares its scene graph with the
+ * The editor's own scaffolding, which is never content. UI picking and the DOM
+ * Hierarchy both want the UI layers but not these. The Preview panel shares its scene graph with the
  * editor, so nodes like internal/editor/grid-2d are present at runtime, and an
  * unfiltered scan would hand their huge boxes to the ray.
  */
-const UI_PICK_EXCLUDED = Layers.Enum.GIZMOS
+const EDITOR_LAYERS = Layers.Enum.GIZMOS
     | Layers.Enum.EDITOR
     | Layers.Enum.SCENE_GIZMO
     | Layers.Enum.PROFILER;
@@ -144,10 +145,8 @@ export class SceneViewDebug extends Component {
     public focusOnEditorSelect = true;
 
 
-    @property({ tooltip: 'Show the built-in hierarchy tree and inspector overlay. Off by '
-        + 'default: in the editor Preview the real editor panels do this better. Turn on '
-        + 'for browser preview or a debug build, where no editor exists.' })
-    public showPanels = false;
+    @property({ tooltip: 'Show the built-in Hierarchy and Inspector panels. On by default, but only in a browser: inside the editor Preview the editor has its own, and these could not be clicked there anyway. Press P to toggle them live.' })
+    public showPanels = true;
 
     @property({ tooltip: 'Seconds between rescans of the scene for new renderers.' })
     public rescanInterval = 0.5;
@@ -172,7 +171,8 @@ export class SceneViewDebug extends Component {
     private _selected: Node = null;
     private _rescanTimer = 0;
     private _active = false;
-    private _hint: HTMLElement = null;
+    private _help = new HelpPanel();
+    private _panelsOn = false;
     private _warnedNoGizmos = false;
     private _lastClickNode: Node = null;
     private _lastClickTime = 0;
@@ -201,6 +201,10 @@ export class SceneViewDebug extends Component {
             onSelect: (node) => this.select(node),
             onToggleHide: (node) => this._visibility.toggleHidden(node),
             onToggleSolo: (node) => this._visibility.toggleSolo(node, director.getScene()),
+            onFocus: (node) => {
+                this.select(node);
+                this.focusSelection();
+            },
         });
         // A key held while focus moves into a field never gets its keyup.
         this._overlay.onFocusIn = () => this._freeCamera?.clearKeys();
@@ -253,15 +257,15 @@ export class SceneViewDebug extends Component {
             } catch (error) {
                 this._warnOnce('rescan', `[SceneView] scene scan failed: ${error}`);
             }
-            if (this.showPanels) {
-                this._hierarchy.refresh(director.getScene().children, EXCLUDED_LAYERS, this._sceneCamera?.node);
+            if (this._panelsOn) {
+                this._hierarchy.refresh(director.getScene().children, EDITOR_LAYERS, this._sceneCamera?.node);
             }
             this._syncWidgets();
         }
 
         // Gameplay can destroy the selected node at any moment.
         if (this._selected && !this._selected.isValid) this.select(null);
-        if (this.showPanels) this._inspector.sync();
+        if (this._panelsOn) this._inspector.sync();
 
         // Kept above the gizmo-renderer guard: hit-testing uses the handle size
         // computed here, so it must stay current even when nothing can be drawn.
@@ -296,6 +300,7 @@ export class SceneViewDebug extends Component {
         this._selected = node && node.isValid ? node : null;
         this._hierarchy.setSelected(this._selected);
         this._inspector.show(this._selected);
+        this._updateHint();
 
         // Drive the editor's own Hierarchy and Inspector. Reverse sync compares
         // uuids, so echoing our own selection back is a no-op, not a loop.
@@ -338,11 +343,7 @@ export class SceneViewDebug extends Component {
         this._splitGameCameras();
         this._ensureSceneCamera();
 
-        if (this.showPanels && this._overlay.available) {
-            this._overlay.mount();
-            this._hierarchy.mount(this._overlay);
-            this._inspector.mount(this._overlay);
-        }
+        this._applyPanels();
         // Every widget is driven by engine input now, so these listeners are what
         // makes the divider and the tool strip clickable, not just picking.
         input.on(Input.EventType.MOUSE_DOWN, this._onMouseDown, this);
@@ -373,7 +374,7 @@ export class SceneViewDebug extends Component {
             this._logInputDiagnostics();
             this._probe.install([]);
         }
-        this._showHint();
+        this._mountHelp();
     }
 
     public close () {
@@ -400,9 +401,7 @@ export class SceneViewDebug extends Component {
 
         // Put every renderer this tool switched off back the way it was.
         this._visibility.restoreAll();
-        this._inspector.unmount();
-        this._hierarchy.unmount();
-        this._overlay.unmount();
+        this._unmountPanels();
 
         // Deactivated, not destroyed: see _ensureSceneCamera. The reference is kept
         // so _splitGameCameras can still recognise and skip it on the next open.
@@ -413,7 +412,7 @@ export class SceneViewDebug extends Component {
         }
         this._savedRects.clear();
         this._renderers.length = 0;
-        this._hideHint();
+        this._help.unmount();
     }
 
     public get gizmoMode (): GizmoMode { return this._handles.mode; }
@@ -725,6 +724,7 @@ export class SceneViewDebug extends Component {
     private _syncWidgets () {
         this._splitter.sync(this._sceneCamera, this._split);
         this._palette.sync(this._sceneCamera, this._split);
+        this._help.sync(this._sceneCamera, this._split);
     }
 
     private _rescan () {
@@ -749,7 +749,7 @@ export class SceneViewDebug extends Component {
 
         try {
             this._uiElements = director.getScene().getComponentsInChildren(UIRenderer)
-                .filter((element) => (element.node.layer & UI_PICK_EXCLUDED) === 0);
+                .filter((element) => (element.node.layer & EDITOR_LAYERS) === 0);
         } catch (error) {
             this._warnOnce('ui-scan', `[SceneView] could not scan UI: ${error}`);
         }
@@ -785,7 +785,7 @@ export class SceneViewDebug extends Component {
         }
 
         if (!this.enableTransformGizmo || !this._selected) return;
-        if (this._overlay.cursorInside || !isInsideViewport(this._sceneCamera, x)) return;
+        if (this._overUI() || !isInsideViewport(this._sceneCamera, x)) return;
 
         // Grabbing a handle takes priority over selecting whatever is behind it.
         const axis = this._handles.hitTest(x, y);
@@ -811,7 +811,7 @@ export class SceneViewDebug extends Component {
         if (!this.enableTransformGizmo || !this._selected) return;
         if (this._handles.dragging) {
             this._handles.drag(x, y);
-        } else if (this._overlay.cursorInside || !isInsideViewport(this._sceneCamera, x)) {
+        } else if (this._overUI() || !isInsideViewport(this._sceneCamera, x)) {
             this._handles.clearHover();
         } else {
             this._handles.setHover(x, y);
@@ -847,7 +847,7 @@ export class SceneViewDebug extends Component {
         // Cocos registers mouseup on window, not just the canvas, so releasing a
         // click on a panel lands here too. Without this, clicking a hierarchy row
         // would also fire a pick at that screen position.
-        if (!pressed || this._overlay.cursorInside || this._splitter.dragging) return;
+        if (!pressed || this._overUI() || this._splitter.dragging) return;
         if (!this.enablePicking) return;
         if (!isInsideViewport(this._sceneCamera, x)) return;
         // Ignore drags - only a clean click changes the selection.
@@ -922,6 +922,12 @@ export class SceneViewDebug extends Component {
             break;
         case KeyCode.KEY_U:
             if (this._active) this.toggleUI();
+            break;
+        case KeyCode.KEY_H:
+            if (this._active) this.toggleHelp();
+            break;
+        case KeyCode.KEY_P:
+            if (this._active) this.togglePanels();
             break;
         case KeyCode.KEY_G:
             if (this._active) this.toggleFollow();
@@ -1006,28 +1012,119 @@ export class SceneViewDebug extends Component {
         canvas?.addEventListener?.('contextmenu', (e) => e.preventDefault());
     }
 
-    private _showHint () {
-        if (typeof document === 'undefined' || this._hint) return;
-        ensureStyles();
-        const el = document.createElement('div');
-        el.className = 'sv-hint';
-        document.body.appendChild(el);
-        this._hint = el;
+    // --- panels and help ----------------------------------------------------
+
+    /**
+     * The DOM Hierarchy and Inspector are for the browser. The editor Preview has the
+     * editor's own, which work, and the DOM ones could not be clicked there anyway
+     * because the editor delivers no DOM events to the page.
+     */
+    private _panelsWanted (): boolean {
+        return this.showPanels && this._overlay.available && !this._bridge.hasEditor;
+    }
+
+    private _applyPanels () {
+        const want = this._panelsWanted();
+        if (want === this._panelsOn) return;
+
+        if (!want) {
+            this._unmountPanels();
+            return;
+        }
+
+        this._panelsOn = true;
+        this._overlay.mount();
+        this._hierarchy.mount(this._overlay);
+        this._inspector.mount(this._overlay);
+        this._hierarchy.setSelected(this._selected);
+        this._inspector.show(this._selected);
+        this._hierarchy.refresh(director.getScene().children, EDITOR_LAYERS, this._sceneCamera?.node);
+    }
+
+    private _unmountPanels () {
+        this._panelsOn = false;
+        this._inspector.unmount();
+        this._hierarchy.unmount();
+        this._overlay.unmount();
+    }
+
+    /** Show or hide the DOM Hierarchy and Inspector, live. */
+    public togglePanels () {
+        this.showPanels = !this.showPanels;
+        this._applyPanels();
         this._updateHint();
     }
 
-    private _updateHint () {
-        if (!this._hint) return;
-        const tool = this.enableTransformGizmo
-            ? `tool ${this._handles.mode.toUpperCase()} (1 move / 2 rotate / 3 scale / 4 none) | `
-            : '';
-        this._hint.textContent = `SCENE VIEW - ${tool}LMB select | double-click or F focus | U ui ${this.showUI ? 'ON' : 'off'} | G follow Hierarchy ${this.focusOnEditorSelect ? 'ON' : 'off'} | I debug ${this.debugInput ? 'ON' : 'off'} | Esc deselect`
-            + ' | RMB look | WASD move | Q/E down/up | MMB pan | wheel dolly | Shift fast | F1 close';
+    public toggleHelp () {
+        this._help.toggle();
     }
 
-    private _hideHint () {
-        this._hint?.remove();
-        this._hint = null;
+    /** True while the pointer is over any DOM overlay: it must not reach the scene underneath. */
+    private _overUI (): boolean {
+        return this._overlay.cursorInside || this._help.cursorInside;
+    }
+
+    private _mountHelp () {
+        if (!this._overlay.available) return;
+
+        this._help.toggles = this._helpToggles();
+        this._help.status = () => this._statusLine();
+        // Clicking DOM takes keyboard focus off the canvas, and keys only reach the
+        // engine from the canvas, so hand it back.
+        this._help.onInteract = () => (game.canvas as HTMLCanvasElement)?.focus?.();
+        this._help.mount(!this._bridge.hasEditor);
+        this._help.sync(this._sceneCamera, this._split);
+    }
+
+    private _helpToggles (): HelpToggle[] {
+        const toggles: HelpToggle[] = [
+            {
+                label: 'Game UI',
+                key: 'U',
+                get: () => this.showUI,
+                set: (on) => { if (on !== this.showUI) this.toggleUI(); },
+            },
+            {
+                label: 'Follow Hierarchy selection',
+                key: 'G',
+                get: () => this.focusOnEditorSelect,
+                set: (on) => { this.focusOnEditorSelect = on; },
+            },
+        ];
+
+        // Only meaningful where the DOM panels are used at all.
+        if (!this._bridge.hasEditor) {
+            toggles.push({
+                label: 'Hierarchy and Inspector',
+                key: 'P',
+                get: () => this.showPanels,
+                set: (on) => { if (on !== this.showPanels) this.togglePanels(); },
+            });
+        }
+
+        toggles.push(
+            { label: 'Grid', key: '', get: () => this.showGrid, set: (on) => { this.showGrid = on; } },
+            { label: 'Bounding boxes', key: '', get: () => this.showBounds, set: (on) => { this.showBounds = on; } },
+            { label: 'Selected camera frustum', key: '', get: () => this.showFrustum, set: (on) => { this.showFrustum = on; } },
+            { label: 'World axes', key: '', get: () => this.showWorldAxes, set: (on) => { this.showWorldAxes = on; } },
+            {
+                label: 'Debug logging',
+                key: 'I',
+                get: () => this.debugInput,
+                set: (on) => { if (on !== this.debugInput) this.toggleDebug(); },
+            },
+        );
+        return toggles;
+    }
+
+    private _statusLine (): string {
+        const tool = this.enableTransformGizmo ? `Tool: ${this._handles.mode.toUpperCase()}   ` : '';
+        return `${tool}Selected: ${this._selected ? this._selected.name : 'none'}`;
+    }
+
+    /** Bring the help panel's switches and status line in step with the real state. */
+    private _updateHint () {
+        this._help.refresh();
     }
 }
 

@@ -8,6 +8,8 @@ export interface HierarchyCallbacks {
     onSelect: (node: Node) => void;
     onToggleHide: (node: Node) => void;
     onToggleSolo: (node: Node) => void;
+    /** Double-click on a row: fly the scene camera to the node. */
+    onFocus: (node: Node) => void;
 }
 
 /**
@@ -22,6 +24,7 @@ export class HierarchyPanel {
     private _rows = new Map<Node, HTMLElement>();
     private _signature = '';
     private _selected: Node = null;
+    private _scrollToSelected = false;
 
     constructor (
         private _visibility: VisibilityController,
@@ -41,6 +44,7 @@ export class HierarchyPanel {
     public setSelected (node: Node) {
         if (this._selected === node) return;
         this._selected = node;
+        this._scrollToSelected = true;
         this._applySelection();
     }
 
@@ -82,6 +86,7 @@ export class HierarchyPanel {
         row.className = 'sv-row';
         row.style.paddingLeft = `${4 + depth * INDENT_PX}px`;
         row.addEventListener('click', () => this._callbacks.onSelect(node));
+        row.addEventListener('dblclick', () => this._callbacks.onFocus(node));
 
         const name = document.createElement('span');
         name.className = 'sv-name';
@@ -108,6 +113,8 @@ export class HierarchyPanel {
         btn.textContent = label;
         btn.title = title;
         btn.dataset.role = role;
+        // A double-click on a button is two button clicks, not a request to fly there.
+        btn.addEventListener('dblclick', (e) => e.stopPropagation());
         btn.addEventListener('click', (e) => {
             // Without this the row's own click handler would also select the node.
             e.stopPropagation();
@@ -134,7 +141,16 @@ export class HierarchyPanel {
 
     private _applySelection () {
         for (const [node, row] of this._rows) {
-            row.classList.toggle('sv-selected', node === this._selected);
+            const selected = node === this._selected;
+            row.classList.toggle('sv-selected', selected);
+
+            // Bring a newly chosen row into view - a pick in the viewport can land on a
+            // node far down a long tree. Only once per change: doing it on every refresh
+            // would drag the list back while the user is scrolling it.
+            if (selected && this._scrollToSelected) {
+                row.scrollIntoView?.({ block: 'nearest' });
+                this._scrollToSelected = false;
+            }
         }
     }
 }

@@ -273,8 +273,8 @@ node…), hãy nói tính năng nào, vì mỗi cái có cách khác nhau và nh
 
 `Show UI` là property, mà khi dùng `AutoBoot` node gắn component bị ẩn nên không có chỗ
 nào để chỉnh nó trong Inspector (đúng với mọi property khác). Phím `U` bật/tắt việc vẽ UI trong viewport tức thì, và
-thanh gợi ý ở đáy hiện trạng thái (`U ui ON / off`). Xem mục "Hiển thị UI trong viewport"
-để biết vì sao mặc định tắt.
+công tắc `Game UI` trong panel `!` phản ánh trạng thái đó. Xem mục "Hiển thị UI trong
+viewport" để biết rủi ro của nó.
 
 ## Chọn UI
 
@@ -380,14 +380,14 @@ view highlight theo (poll mỗi `Rescan Interval` giây).
 Làm được là nhờ Preview trong editor chạy ngay trong **scene process** của editor —
 cùng ngữ cảnh sở hữu scene graph, cũng chính là lý do gizmo editor lọt vào runtime.
 Ngoài ngữ cảnh đó (preview trên browser, bản build thật) thì không có editor, mọi
-lệnh thành no-op, và bạn bật `Show Panels` để dùng overlay DOM thay thế.
+lệnh thành no-op, và overlay DOM (`Show Panels`, bật mặc định trong browser) thay thế.
 
 Property liên quan:
 
 | Property | Mặc định | Ý nghĩa |
 |---|---|---|
 | `Sync Editor Selection` | bật | Đẩy selection sang editor |
-| `Show Panels` | **tắt** | Overlay Hierarchy/Inspector tự vẽ, dùng khi không có editor |
+| `Show Panels` | **bật, chỉ trong browser** | Overlay Hierarchy/Inspector tự vẽ; tự ẩn trong Preview của editor |
 
 ### Nếu nó không chạy
 
@@ -401,20 +401,55 @@ bản build, nên `EditorBridge` **dò khả năng lúc chạy** rồi log đún
 Nếu dòng đó báo `no editor host` hoặc route khác với mong đợi, đưa nguyên dòng log
 đó thì sẽ biết chính xác phải nối vào API nào.
 
-## Panel Hierarchy + Inspector
-Overlay DOM ở cạnh phải, hai thẻ:
+## Panel trợ giúp (nút `!`) và phím tắt
 
-**Hierarchy** — cây node của scene. Click chọn, nút `o` ẩn/hiện, nút `S` solo.
-Cây chỉ dựng lại khi cấu trúc thật sự đổi; dựng mỗi frame sẽ reset scroll và huỷ
-mất chính cái dòng con trỏ đang bấm.
+Một nút tròn **`!`** ở góc dưới-trái của scene viewport mở ra **một panel duy nhất** gồm cả
+hai thứ từng nằm rải rác: danh sách phím tắt và các công tắc bật/tắt tính năng. Nó thay cho
+thanh chữ dài chạy dọc đáy cửa sổ, vốn đè lên cả hai viewport. Nút đi theo mép viewport khi
+bạn kéo thanh chia.
 
-**Inspector** (chỉ khi bật `Show Panels`) — sửa trực tiếp position / rotation / scale / active của node đang
-chọn. Giá trị được đẩy vào ô mỗi frame để vật thể đang animate hiện đúng, **trừ ô
-đang gõ**. Commit khi `change` (blur hoặc Enter), không phải mỗi lần gõ, nên `-`
-hay `1.` dở dang không bị parse thành số. Ô không parse được thì giữ giá trị cũ,
-không thành `NaN`.
+Panel gồm: dòng trạng thái (công cụ đang dùng, node đang chọn), các **công tắc**
+(Game UI, Follow Hierarchy selection, Hierarchy and Inspector, Grid, Bounding boxes,
+Selected camera frustum, World axes, Debug logging — mỗi cái có phím nếu có), rồi danh sách
+phím tắt theo nhóm: Tools, Select and focus, Camera, Panel.
 
-Tắt cả hai bằng property `Show Panels`.
+- **Trong browser:** bấm nút `!` để mở, bấm vào từng hàng công tắc để bật/tắt. Sau mỗi cú bấm,
+  focus bàn phím được trả lại cho canvas (phím chỉ tới engine từ canvas, còn bấm vào DOM thì
+  focus rời khỏi nó).
+- **Trong Preview của editor:** editor không gửi sự kiện DOM vào trang, nên **không bấm được**.
+  Panel hiện một dòng lưu ý nói rõ điều đó, các công tắc chỉ để xem; dùng phím **`H`** để mở
+  panel và phím riêng của từng công tắc để đổi. Không có thao tác nào *chỉ* làm được bằng chuột.
+- Biểu tượng là một hằng số (`ICON` trong `HelpPanel.ts`) nên đổi dấu rất dễ.
+
+| Phím | Tác dụng |
+|---|---|
+| `H` | Mở/đóng panel trợ giúp |
+| `P` | Bật/tắt panel Hierarchy và Inspector (chỉ browser) |
+
+## Panel Hierarchy + Inspector trên bản preview web
+
+Bật **mặc định trong browser** (`Show Panels`), ở cạnh phải cửa sổ, hai thẻ. Trong Preview của
+editor chúng **tự ẩn**: editor có Hierarchy/Inspector thật, và panel DOM ở đó cũng không bấm
+được. Phím `P` bật/tắt ngay lúc chạy.
+
+**Hierarchy** — cây node của scene.
+- Click một dòng để chọn; nút `o` ẩn/hiện, nút `S` solo.
+- **Double-click một dòng để camera scene view bay tới node đó.** Làm được là vì trên web DOM nhận
+  chuột thật; ở editor thì không có kênh nào để nghe double-click ở Hierarchy.
+- Chọn một node trong viewport thì dòng của nó **tự cuộn vào tầm nhìn** (một lần mỗi lần chọn;
+  làm mỗi lần làm mới sẽ kéo danh sách ngược lại lúc bạn đang cuộn).
+- Cây **có cả node UI**. Trước đây nó dùng mask loại luôn layer `UI_2D`/`UI_3D`, nên UI biến mất
+  khỏi cây; giờ chỉ loại layer của editor (`GIZMOS`, `EDITOR`, `SCENE_GIZMO`, `PROFILER`).
+- Cây chỉ dựng lại khi cấu trúc thật sự đổi; dựng mỗi frame sẽ reset scroll và huỷ mất chính
+  dòng con trỏ đang bấm.
+
+**Inspector** — sửa trực tiếp position / rotation / scale / active của node đang chọn. Giá trị
+được đẩy vào ô mỗi frame để vật thể đang animate hiện đúng, **trừ ô đang gõ**. Commit khi
+`change` (blur hoặc Enter), không phải mỗi lần gõ, nên `-` hay `1.` dở dang không bị parse
+thành số. Ô không parse được thì giữ giá trị cũ, không thành `NaN`.
+
+Chưa kiểm chứng trên trang preview thật: toàn bộ phần DOM này chỉ mới được typecheck, chưa
+từng được chạy trong browser.
 
 ## Ẩn / Solo ảnh hưởng cả game view
 
@@ -561,11 +596,11 @@ bảng công cụ, mà đó đúng là điều mong muốn.
 
 ### Thứ còn lại dùng DOM
 
-- **Thanh gợi ý phím** ở đáy — là chữ, mà geometry renderer không vẽ được chữ.
-  Thiếu nó không sao, chỉ mất phần trợ giúp.
-- **Panel Hierarchy/Inspector** (`Show Panels`, mặc định tắt) — cần ô nhập text
-  thật. **Chỉ chạy trên browser.** Trong editor đã có Hierarchy/Inspector thật qua
-  `EditorBridge`.
+- **Panel trợ giúp `!`** — là chữ, mà geometry renderer không vẽ được chữ. Bấm được trong
+  browser; trong editor dùng phím `H`.
+- **Panel Hierarchy/Inspector** (`Show Panels`, bật mặc định trong browser) — cần ô nhập
+  text thật. **Chỉ chạy trên browser**, tự ẩn trong editor nơi đã có Hierarchy/Inspector thật
+  qua `EditorBridge`.
 
 ## Vòng đời camera quan sát: tạo một lần, không huỷ đi tạo lại
 

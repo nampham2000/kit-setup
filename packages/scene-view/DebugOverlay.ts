@@ -2,7 +2,7 @@ const STYLE_ID = 'scene-view-overlay-style';
 
 const CSS = `
 .sv-root {
-    position: fixed; top: 8px; right: 8px; bottom: 34px; z-index: 9999;
+    position: fixed; top: 8px; right: 8px; bottom: 8px; z-index: 9999;
     width: 292px; display: flex; flex-direction: column; gap: 6px;
     font: 11px/1.5 ui-monospace, Menlo, Consolas, monospace; color: #cfd3dc;
     /* The container spans the viewport height, so it must stay transparent to the
@@ -53,11 +53,51 @@ const CSS = `
 .sv-empty { padding: 6px 8px; color: #6b7280; }
 
 
-.sv-hint {
-    position: fixed; right: 8px; bottom: 8px; z-index: 9999; pointer-events: none;
-    font: 11px/1.6 ui-monospace, Menlo, Consolas, monospace; color: #cfd3dc;
-    background: rgba(20, 22, 26, .78); padding: 4px 10px; border-radius: 4px;
+.sv-help-btn {
+    position: fixed; z-index: 10001; width: 26px; height: 26px; border-radius: 13px;
+    background: rgba(20, 22, 26, .88); border: 1px solid rgba(255, 255, 255, .22);
+    color: #cfd3dc; font: 700 14px/24px ui-monospace, Menlo, Consolas, monospace;
+    text-align: center; cursor: pointer; user-select: none;
 }
+.sv-help-btn:hover, .sv-help-btn.sv-on { background: #3b6fd4; border-color: #3b6fd4; color: #fff; }
+
+.sv-help {
+    position: fixed; z-index: 10001; display: none; width: 300px; max-height: 72vh;
+    overflow: auto; padding: 8px 10px; border-radius: 6px;
+    background: rgba(20, 22, 26, .95); border: 1px solid rgba(255, 255, 255, .14);
+    font: 11px/1.6 ui-monospace, Menlo, Consolas, monospace; color: #cfd3dc;
+}
+.sv-help.sv-open { display: block; }
+.sv-help-title {
+    margin: 9px 0 3px; color: #8b93a3; font-size: 10px; letter-spacing: .08em;
+    text-transform: uppercase;
+}
+.sv-help-status { color: #ff9830; padding-bottom: 2px; }
+.sv-help-note {
+    margin-bottom: 6px; padding: 4px 6px; border-radius: 3px; color: #e2c14a;
+    background: rgba(226, 193, 74, .1);
+}
+.sv-help-row { display: flex; align-items: center; gap: 8px; padding: 1px 0; }
+.sv-help-text { flex: 1 1 auto; }
+.sv-keycap {
+    flex: none; min-width: 22px; padding: 0 5px; text-align: center; color: #e6e9ef;
+    border: 1px solid rgba(255, 255, 255, .22); border-radius: 3px;
+    background: rgba(255, 255, 255, .06);
+}
+.sv-toggle-row { cursor: pointer; }
+.sv-toggle-row:hover { background: rgba(255, 255, 255, .05); }
+.sv-toggle-row.sv-static { cursor: default; }
+.sv-toggle-row.sv-static:hover { background: none; }
+.sv-switch {
+    flex: none; position: relative; width: 26px; height: 14px; border-radius: 7px;
+    background: rgba(255, 255, 255, .16);
+}
+.sv-switch::after {
+    content: ''; position: absolute; top: 2px; left: 2px; width: 10px; height: 10px;
+    border-radius: 5px; background: #cfd3dc; transition: left .1s;
+}
+.sv-switch.sv-on { background: #3b6fd4; }
+.sv-switch.sv-on::after { left: 14px; background: #fff; }
 `;
 
 /**
