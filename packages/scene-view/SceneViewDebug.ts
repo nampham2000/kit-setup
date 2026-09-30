@@ -1,7 +1,7 @@
 import {
     CCObject, Camera, Color, Component, EventKeyboard, EventMouse, Input, KeyCode, Layers,
     screen,
-    MeshRenderer, Node, Rect, Vec3, _decorator, director, game, input,
+    MeshRenderer, Node, Rect, UIRenderer, UITransform, Vec3, _decorator, director, game, input,
 } from 'cc';
 import { DEBUG, EDITOR_NOT_IN_PREVIEW } from 'cc/env';
 import { DebugOverlay, ensureStyles } from './DebugOverlay';
@@ -13,14 +13,15 @@ import { FreeCamera } from './FreeCamera';
 import { HierarchyPanel } from './HierarchyPanel';
 import { InputProbe } from './InputProbe';
 import { InspectorPanel } from './InspectorPanel';
-import { GeometryRenderer, drawBounds, drawFrustum, drawGrid, drawSelection, drawWorldAxes } from './SceneGizmos';
-import { isInsideViewport, pickRenderer, viewportMinX } from './ScenePicker';
+import { GeometryRenderer, drawBounds, drawFrustum, drawGrid, drawSelection, drawUIBounds, drawWorldAxes } from './SceneGizmos';
+import { isInsideViewport, pickRenderer, pickUI, viewportMinX } from './ScenePicker';
 import { VisibilityController } from './VisibilityController';
 
 const { ccclass, property, menu } = _decorator;
 
 const BOUNDS_COLOR = new Color(120, 220, 160, 100);
 const FRUSTUM_COLOR = new Color(255, 200, 80, 220);
+const UI_BOUNDS_COLOR = new Color(90, 190, 255, 120);
 const SCENE_BG = new Color(38, 40, 46, 255);
 
 /** Starting fraction of the screen width where the scene viewport begins. */
@@ -79,6 +80,9 @@ export class SceneViewDebug extends Component {
         + 'top of whatever is at the origin and gets in the way.' })
     public showWorldAxes = false;
 
+    @property({ tooltip: 'Also pick UI elements. They are screen-space, so the viewport draws their outline rather than the UI itself - that is the only way to aim at them.' })
+    public enableUIPicking = true;
+
     @property({ tooltip: 'Click objects in the scene viewport to select them.' })
     public enablePicking = true;
 
@@ -124,6 +128,7 @@ export class SceneViewDebug extends Component {
     private _hierarchy: HierarchyPanel = null;
     private _savedRects = new Map<Camera, Rect>();
     private _renderers: MeshRenderer[] = [];
+    private _uiElements: UIRenderer[] = [];
     private _selected: Node = null;
     private _rescanTimer = 0;
     private _active = false;
@@ -195,6 +200,7 @@ export class SceneViewDebug extends Component {
         if (this.showGrid) drawGrid(this._gizmos);
         if (this.showWorldAxes) drawWorldAxes(this._gizmos);
         if (this.showBounds) drawBounds(this._gizmos, this._renderers, BOUNDS_COLOR);
+        if (this.enableUIPicking) drawUIBounds(this._gizmos, this._uiElements, UI_BOUNDS_COLOR);
         if (this.showFrustum) {
             for (const camera of this._savedRects.keys()) {
                 if (camera.isValid && camera.enabledInHierarchy) drawFrustum(this._gizmos, camera, FRUSTUM_COLOR);
@@ -446,6 +452,12 @@ export class SceneViewDebug extends Component {
         // Same mask the camera renders with, so bounds and picking can never target
         // something the viewport does not even draw (editor gizmos, UI, profiler).
         this._renderers = all.filter((r) => r.node !== own && (r.node.layer & SCENE_VISIBILITY) !== 0);
+
+        // UI is deliberately outside SCENE_VISIBILITY, so it is gathered on its own
+        // rather than filtered by the same mask.
+        this._uiElements = this.enableUIPicking
+            ? director.getScene().getComponentsInChildren(UIRenderer)
+            : [];
     }
 
     /**
@@ -539,8 +551,25 @@ export class SceneViewDebug extends Component {
         // Ignore drags - only a clean click changes the selection.
         if (Math.abs(x - this._pressX) > CLICK_SLOP || Math.abs(y - this._pressY) > CLICK_SLOP) return;
 
+        this.select(this._pickAt(x, y));
+    }
+
+    /**
+     * Resolve a click to a node, meshes and UI together.
+     *
+     * UI wins ties rather than being sorted by distance with the meshes. A
+     * screen-space element sits wherever its canvas happens to be in the world,
+     * which says nothing about what the eye sees in front: the UI you can see is
+     * always the thing drawn last.
+     */
+    private _pickAt (x: number, y: number): Node | null {
+        const ui = this.enableUIPicking
+            ? pickUI(this._sceneCamera, x, y, this._uiElements)
+            : null;
+        if (ui) return ui.element.node;
+
         const hit = pickRenderer(this._sceneCamera, x, y, this._renderers);
-        this.select(hit ? hit.renderer.node : null);
+        return hit ? hit.renderer.node : null;
     }
 
     private _onKeyDown (e: EventKeyboard) {

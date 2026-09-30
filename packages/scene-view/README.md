@@ -165,6 +165,37 @@ Tay cầm dài theo khoảng cách tới camera nên nhìn luôn cùng cỡ trê
 Đổi công cụ giữa lúc đang kéo sẽ kết thúc thao tác kéo, tránh diễn giải lại cùng
 một cú kéo bằng công thức khác.
 
+## Chọn UI
+
+Click vào UI trong scene viewport cũng chọn được, giống như vật thể 3D.
+Property `Enable UI Picking`, mặc định bật.
+
+UI là screen-space nhưng **vẫn tồn tại trong world**: `UITransform.getComputeAABB()`
+trả về hộp bao world-space thật, nên cùng một tia ray tìm được cả mesh lẫn UI —
+không cần cơ chế riêng.
+
+Camera quan sát **không render layer UI** (UI screen-space nhìn từ góc bất kỳ là vô
+nghĩa), nên viewport vẽ **khung viền xanh** cho từng phần tử UI. Đó là thứ duy nhất
+để bạn ngắm mà bấm.
+
+Chỉ node có `UIRenderer` (Sprite, Label…) được tính. Node layout rỗng và node Canvas
+gốc có hộp bao trải hết design resolution, tính vào thì chúng nuốt mọi cú click nhắm
+vào thứ nằm bên trong.
+
+Khi nhiều phần tử chồng nhau, **node có sibling index lớn hơn thắng** chứ không xét
+khoảng cách. UI phẳng và nằm ở vị trí canvas đặt trong world, nên khoảng cách không
+nói lên cái nào mắt đang thấy ở trên — thứ tự vẽ mới nói.
+
+### Điều cần biết trước khi bật
+
+Canvas screen-space có kích thước bằng **design resolution**, ví dụ 960×640 **đơn
+vị world**. Cạnh một capsule 1 đơn vị thì khung UI sẽ **to khủng khiếp** và có thể
+lấp cả khung nhìn. Unity cũng đúng như vậy với Screen Space Canvas. Thấy vướng thì
+tắt `Enable UI Picking`.
+
+`UITransform.hitTest()` là đường còn lại, nhưng nó phân giải qua camera UI nên chỉ
+trả lời cho nửa game, không dùng được cho viewport quan sát.
+
 ## Picking hoạt động thế nào
 
 Hai pha, không cần collider và không cần module Physics:

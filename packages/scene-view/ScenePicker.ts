@@ -1,12 +1,18 @@
-import { Camera, MeshRenderer, geometry, screen } from 'cc';
+import { Camera, MeshRenderer, UIRenderer, UITransform, geometry, screen } from 'cc';
 
 const _ray = geometry.Ray.create();
+const _uiBounds = geometry.AABB.create();
 
 /** rayModel needs both fields; they are not optional in IRaySubMeshOptions. */
 const RAY_MODEL_OPTIONS = {
     mode: geometry.ERaycastMode.CLOSEST,
     distance: Infinity,
 };
+
+export interface UIPickResult {
+    element: UIRenderer;
+    distance: number;
+}
 
 export interface PickResult {
     renderer: MeshRenderer;
@@ -86,4 +92,45 @@ export function cameraPixelSize (camera: Camera): { width: number; height: numbe
     const width = internal?.width > 0 ? internal.width : screen.windowSize.width;
     const height = internal?.height > 0 ? internal.height : screen.windowSize.height;
     return { width, height };
+}
+
+/**
+ * Ray-picks a UI element under the cursor.
+ *
+ * UI is screen-space but still lives in the world: `UITransform.getComputeAABB`
+ * gives a real world-space box, so the same ray that finds meshes finds UI too.
+ * Only `UIRenderer` nodes are considered — Sprites, Labels and the like. Bare
+ * layout nodes and the Canvas root have boxes that span the whole design
+ * resolution and would swallow every click aimed at what is inside them.
+ *
+ * `UITransform.hitTest` is the other route, but it resolves through the UI
+ * camera, so it only answers for the game viewport, never the observer one.
+ */
+export function pickUI (
+    camera: Camera,
+    screenX: number,
+    screenY: number,
+    elements: readonly UIRenderer[],
+): UIPickResult | null {
+    camera.screenPointToRay(screenX, screenY, _ray);
+
+    let best: UIPickResult = null;
+    for (let i = 0; i < elements.length; i++) {
+        const element = elements[i];
+        if (!element || !element.isValid || !element.enabledInHierarchy) continue;
+
+        const transform = element.node.getComponent(UITransform);
+        if (!transform) continue;
+
+        transform.getComputeAABB(_uiBounds);
+        const distance = geometry.intersect.rayAABB(_ray, _uiBounds);
+        if (!distance) continue;
+
+        // Flat UI stacks in draw order, so depth alone cannot say which one the
+        // eye sees on top. Among boxes the ray crosses, the later sibling wins.
+        if (!best || element.node.getSiblingIndex() >= best.element.node.getSiblingIndex()) {
+            best = { element, distance };
+        }
+    }
+    return best;
 }

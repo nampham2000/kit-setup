@@ -1,4 +1,4 @@
-import { Camera, Color, MeshRenderer, Node, Vec3, geometry } from 'cc';
+import { Camera, Color, MeshRenderer, Node, UIRenderer, UITransform, Vec3, geometry } from 'cc';
 
 /**
  * Gizmo drawing helpers. Every function issues draw calls into a per-camera
@@ -91,4 +91,26 @@ export function drawSelection (gr: GeometryRenderer, node: Node) {
 function axis (gr: GeometryRenderer, origin: Vec3, dir: Readonly<Vec3>, length: number, color: Color) {
     Vec3.scaleAndAdd(_e, origin, dir, length);
     gr.addLine(origin, _e, color, false);
+}
+
+const _uiBox = geometry.AABB.create();
+
+/**
+ * Outline for UI elements.
+ *
+ * The observer camera does not render the UI layers — screen-space UI drawn from
+ * an arbitrary viewpoint is meaningless — so without an outline there would be
+ * nothing on screen to aim a click at.
+ */
+export function drawUIBounds (gr: GeometryRenderer, elements: readonly UIRenderer[], color: Color) {
+    for (let i = 0; i < elements.length; i++) {
+        const element = elements[i];
+        if (!element || !element.isValid || !element.enabledInHierarchy) continue;
+
+        const transform = element.node.getComponent(UITransform);
+        if (!transform) continue;
+
+        transform.getComputeAABB(_uiBox);
+        gr.addBoundingBox(_uiBox, color, true, false);
+    }
 }
