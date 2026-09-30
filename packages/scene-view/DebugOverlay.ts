@@ -31,8 +31,7 @@ const CSS = `
 }
 .sv-title-btn:hover { background: rgba(255, 255, 255, .12); color: #fff; }
 .sv-body { overflow: auto; padding: 2px 0; flex: 1 1 auto; min-height: 0; }
-.sv-left { left: 8px; }
-.sv-right { right: 8px; }
+/* Each dock's top, bottom, left and width are set from the canvas rect in layout(). */
 .sv-tree { flex: 1 1 0; min-height: 0; }
 .sv-inspector { flex: 0 1 auto; max-height: 100%; }
 
@@ -180,10 +179,11 @@ export type Dock = 'left' | 'right';
 
 /** Narrowest and widest a docked panel is allowed to get, in CSS pixels. */
 const MIN_PANEL = 210;
-const MAX_PANEL = 340;
+const MAX_PANEL = 420;
 
-/** Gap kept between a panel and the canvas it sits beside. */
-const MARGIN = 16;
+/** Gap kept to the window edge, and to the canvas a panel sits beside. */
+const EDGE = 8;
+const GAP = 8;
 
 /**
  * Width for a panel given the free space beside the canvas.
@@ -194,7 +194,7 @@ const MARGIN = 16;
  * has to overlap, and the P key hides it.
  */
 function fit (free: number): number {
-    return Math.round(Math.max(MIN_PANEL, Math.min(MAX_PANEL, free - MARGIN)));
+    return Math.round(Math.max(MIN_PANEL, Math.min(MAX_PANEL, free - EDGE - GAP)));
 }
 
 /**
@@ -258,8 +258,26 @@ export class DebugOverlay {
         const rect = canvas?.getBoundingClientRect?.();
         if (!rect) return;
 
-        left.style.width = `${fit(rect.left)}px`;
-        right.style.width = `${fit(window.innerWidth - rect.right)}px`;
+        // Both docks take the canvas' own vertical extent. Anchored to the window they
+        // started at the top edge and covered the preview page's toolbar, which sits
+        // above the canvas.
+        const top = Math.max(0, rect.top);
+        const bottom = Math.max(0, window.innerHeight - rect.bottom);
+        left.style.top = `${top}px`;
+        left.style.bottom = `${bottom}px`;
+        right.style.top = `${top}px`;
+        right.style.bottom = `${bottom}px`;
+
+        // Each dock sits against the canvas edge, not the window edge. With a cap on the
+        // width, a dock pinned to the window left a gap whenever the margin was wider
+        // than the cap, which showed as dead space beside the game.
+        const leftWidth = fit(rect.left);
+        const rightWidth = fit(window.innerWidth - rect.right);
+        left.style.width = `${leftWidth}px`;
+        right.style.width = `${rightWidth}px`;
+        left.style.left = `${Math.max(EDGE, rect.left - GAP - leftWidth)}px`;
+        // Clamped so a window with no margin cannot push the dock off the screen.
+        right.style.left = `${Math.min(rect.right + GAP, window.innerWidth - EDGE - rightWidth)}px`;
     }
 
     public card (
