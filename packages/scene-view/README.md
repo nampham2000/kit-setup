@@ -74,6 +74,7 @@ Bản gắn tay được ưu tiên; `AutoBoot` thấy đã có sẵn thì tự �
 | **Double-click** | **Bay tới object dưới con trỏ** |
 | **`F`** | **Focus camera vào object đang chọn** |
 | **`U`** | **Bật/tắt vẽ UI trong viewport** |
+| **`I`** | **Bật/tắt log debug (click, broadcast Hierarchy)** |
 | **`Esc`** | **Bỏ chọn** |
 | **Kéo tay cầm màu** | **Di chuyển / xoay / scale object đang chọn** |
 | **`1` `2` `3` `4`** | **Đổi công cụ: move / rotate / scale / không gizmo** |
@@ -186,6 +187,10 @@ hướng nhìn, giống lệnh Frame của Unity. Phím `F` làm đúng việc �
 - Khoảng cách tính theo **góc nhìn hẹp hơn** trong hai chiều, nên vật cao trong viewport
   rộng (hoặc ngược lại) không tràn ra khỏi khung. Đích lớn hơn far plane thì far plane
   được nâng lên.
+- Cú click thứ hai thường rơi đúng vào giữa object đã chọn, nơi các tay cầm move bắt đầu
+  (chúng vẽ từ pivot). Từng coi đó là bắt tay cầm và nuốt mất cú click nên double-click gần
+  như không bao giờ chạy. Giờ chỉ **kéo thật** mới tính là kéo; bấm trúng tay cầm mà không
+  di chuyển vẫn là một cú click, và không làm mất selection nếu tia không trúng object.
 - Hai cú click phải cùng trúng **một node** trong 400 ms; con trỏ lệch nhẹ giữa hai lần
   click không làm mất cử chỉ.
 
@@ -206,7 +211,7 @@ Hierarchy; mặc định tắt vì mỗi cú click đều làm camera di chuyể
 ## Bật/tắt UI ngay lúc chạy (phím `U`)
 
 `Show UI` là property, mà khi dùng `AutoBoot` node gắn component bị ẩn nên không có chỗ
-nào để chỉnh nó trong Inspector. Phím `U` bật/tắt việc vẽ UI trong viewport tức thì, và
+nào để chỉnh nó trong Inspector (đúng với mọi property khác). Phím `U` bật/tắt việc vẽ UI trong viewport tức thì, và
 thanh gợi ý ở đáy hiện trạng thái (`U ui ON / off`). Xem mục "Hiển thị UI trong viewport"
 để biết vì sao mặc định tắt.
 
@@ -241,16 +246,17 @@ khỏi danh sách UI. Preview chạy chung scene graph với editor nên các no
 `internal/editor/grid-2d` có mặt lúc runtime, và nếu không lọc thì hộp bao khổng lồ
 của chúng sẽ lọt vào tia ray.
 
-### Hiển thị UI trong viewport (`Show UI`, mặc định TẮT)
+### Hiển thị UI trong viewport (`Show UI`, mặc định BẬT)
 
-Mặc định camera quan sát **không vẽ UI**, chỉ vẽ khung viền thay thế. Bật `Show UI` để
-vẽ UI thật. Lý do nó không bật sẵn, đọc từ engine chứ không phải suy đoán:
+Camera quan sát vẽ UI thật. Tắt `Show UI` (hoặc bấm `U`) thì quay về khung viền thay thế.
+Từng để mặc định tắt vì rủi ro dưới đây, đọc từ engine chứ không phải suy đoán; đã đổi
+sang bật sau khi dùng thử thực tế mà không thấy game phản ứng với click ở scene view:
 
 - **Click trong scene viewport có thể bị hiểu là click vào UI của game.**
   `UITransform.hitTest` duyệt qua *mọi* camera thấy layer của node, đổi điểm màn hình
   sang world ở độ sâu 0, rồi **chỉ so x,y với hình chữ nhật node, bỏ qua z**, và trả
   `true` nếu *bất kỳ* camera nào báo trúng. Camera quan sát mà thấy layer UI thì một cú
-  click trong viewport của nó có thể bấm trúng nút của game. Bật lên mà game phản ứng
+  click trong viewport của nó có thể bấm trúng nút của game. Nếu game phản ứng
   với click ở scene view thì tắt đi.
 - **UI vẽ không có depth test**, nên canvas cỡ design resolution có thể phủ lên cả cảnh
   thay vì nằm đúng chỗ như trong Unity.

@@ -110,13 +110,8 @@ export class SceneViewDebug extends Component {
         + 'top of whatever is at the origin and gets in the way.' })
     public showWorldAxes = false;
 
-    @property({ tooltip: 'Render the game UI in the scene viewport. OFF by default, because it is'
-        + ' not free: the engine hit-tests UI against EVERY camera that can see its layer and'
-        + ' ignores depth, so a click in the scene viewport can be taken as a click on the game'
-        + ' UI and fire its buttons. UI is also drawn without depth testing, so a canvas sized'
-        + ' in design-resolution units can paint over the whole scene. Try it, and turn it off'
-        + ' if the game starts reacting to scene-view clicks. While off, UI is shown as outlines.' })
-    public showUI = false;
+    @property({ tooltip: 'Render the game UI in the scene viewport. On by default; press U to toggle it live. The catch: the engine hit-tests UI against EVERY camera that can see its layer and ignores depth, so a click in the scene viewport could be taken as a click on the game UI and fire its buttons. UI is also drawn without depth testing, so a design-resolution canvas can paint over the whole scene. If the game starts reacting to scene-view clicks, turn this off.' })
+    public showUI = true;
 
     @property({ tooltip: 'Also pick UI elements. They are screen-space, so the viewport draws their outline rather than the UI itself - that is the only way to aim at them.' })
     public enableUIPicking = true;
@@ -180,6 +175,7 @@ export class SceneViewDebug extends Component {
     private _lastClickTime = 0;
     private _hierarchyClickUuid = '';
     private _hierarchyClickTime = 0;
+    private _hierarchyEvents = 0;
     private _focusGoal: Vec3 = null;
     private _focusSpan = 0;
     private _pressValid = false;
@@ -443,6 +439,19 @@ export class SceneViewDebug extends Component {
         }
     }
 
+    /**
+     * Turn click and Hierarchy-broadcast logging on or off, live.
+     *
+     * debugInput is a property, and under AutoBoot the node that holds it is
+     * hidden, so without a key there would be no way to ask for diagnostics.
+     */
+    public toggleDebug () {
+        this.debugInput = !this.debugInput;
+        console.log(`[SceneView] debug logging ${this.debugInput ? 'ON' : 'OFF'} - ${this._bridge.describe()}`
+            + `, listening to Hierarchy: ${this._bridge.listening}`);
+        this._updateHint();
+    }
+
     /** Show or hide the game UI in the scene viewport, live. See showUI for the catch. */
     public toggleUI () {
         this.showUI = !this.showUI;
@@ -465,7 +474,9 @@ export class SceneViewDebug extends Component {
      * fresh click.
      */
     private _onEditorSelect (uuid: string, raw: unknown[]) {
+        this._hierarchyEvents++;
         if (this.debugInput) console.log('[SceneView] editor selection broadcast:', raw);
+        if (this.debugInput) this._updateHint();
 
         const now = Date.now();
         const isDouble = uuid === this._hierarchyClickUuid
@@ -729,22 +740,34 @@ export class SceneViewDebug extends Component {
         const dragged = this._grabbedAxis !== null;
         this._handles.endDrag();
         this._grabbedAxis = null;
-        // A release that ended a handle drag must not re-pick under the cursor.
-        if (dragged) return;
+
+        const x = e.getLocationX();
+        const y = e.getLocationY();
+        const moved = Math.abs(x - this._pressX) > CLICK_SLOP || Math.abs(y - this._pressY) > CLICK_SLOP;
+
+        // A release that ended a real handle drag must not re-pick under the cursor.
+        //
+        // A press on a handle that never moved is another matter. The handles are
+        // drawn from the object's pivot, so the second click of a double-click on the
+        // middle of an already-selected object lands on them. Treating that as a
+        // drag swallowed the click, and double-click could never register.
+        if (dragged && moved) return;
 
         // Cocos registers mouseup on window, not just the canvas, so releasing a
         // click on a panel lands here too. Without this, clicking a hierarchy row
         // would also fire a pick at that screen position.
         if (!pressed || this._overlay.cursorInside || this._splitter.dragging) return;
         if (!this.enablePicking) return;
-
-        const x = e.getLocationX();
-        const y = e.getLocationY();
         if (!isInsideViewport(this._sceneCamera, x)) return;
         // Ignore drags - only a clean click changes the selection.
-        if (Math.abs(x - this._pressX) > CLICK_SLOP || Math.abs(y - this._pressY) > CLICK_SLOP) return;
+        if (moved) return;
 
         const picked = this._pickAt(x, y);
+
+        // A click that only landed on a handle keeps the selection unless the ray
+        // also hit the selected object, so touching a handle tip over empty space
+        // does not deselect it.
+        if (dragged && picked !== this._selected) return;
         this.select(picked);
 
         // Two clicks that resolve to the same node are a double-click: fly to it.
@@ -808,6 +831,9 @@ export class SceneViewDebug extends Component {
             break;
         case KeyCode.KEY_U:
             if (this._active) this.toggleUI();
+            break;
+        case KeyCode.KEY_I:
+            if (this._active) this.toggleDebug();
             break;
         case KeyCode.ESCAPE:
             if (this._active) this.select(null);
@@ -901,7 +927,7 @@ export class SceneViewDebug extends Component {
         const tool = this.enableTransformGizmo
             ? `tool ${this._handles.mode.toUpperCase()} (1 move / 2 rotate / 3 scale / 4 none) | `
             : '';
-        this._hint.textContent = `SCENE VIEW - ${tool}LMB select | double-click or F focus | U ui ${this.showUI ? 'ON' : 'off'} | Esc deselect`
+        this._hint.textContent = `SCENE VIEW - ${tool}LMB select | double-click or F focus | U ui ${this.showUI ? 'ON' : 'off'} | I debug ${this.debugInput ? `ON (hierarchy events: ${this._hierarchyEvents})` : 'off'} | Esc deselect`
             + ' | RMB look | WASD move | Q/E down/up | MMB pan | wheel dolly | Shift fast | F1 close';
     }
 
