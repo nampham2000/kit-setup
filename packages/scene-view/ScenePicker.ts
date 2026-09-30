@@ -106,6 +106,12 @@ export function cameraPixelSize (camera: Camera): { width: number; height: numbe
  * `UITransform.hitTest` is the other route, but it resolves through the UI
  * camera, so it only answers for the game viewport, never the observer one.
  */
+/** Face area of a box. UI is flat, so its two large extents are what count. */
+function boxArea (box: geometry.AABB): number {
+    const e = [box.halfExtents.x, box.halfExtents.y, box.halfExtents.z].sort((a, b) => b - a);
+    return e[0] * e[1];
+}
+
 export function pickUI (
     camera: Camera,
     screenX: number,
@@ -114,7 +120,7 @@ export function pickUI (
 ): UIPickResult | null {
     camera.screenPointToRay(screenX, screenY, _ray);
 
-    let best: UIPickResult = null;
+    let best: (UIPickResult & { area: number }) | null = null;
     for (let i = 0; i < elements.length; i++) {
         const element = elements[i];
         if (!element || !element.isValid || !element.enabledInHierarchy) continue;
@@ -127,10 +133,15 @@ export function pickUI (
         if (!distance) continue;
 
         // Flat UI stacks in draw order, so depth alone cannot say which one the
-        // eye sees on top. Among boxes the ray crosses, the later sibling wins.
-        if (!best || element.node.getSiblingIndex() >= best.element.node.getSiblingIndex()) {
-            best = { element, distance };
+        // eye sees on top, and sibling index is meaningless across unrelated
+        // branches. The most specific element is the smallest one under the
+        // cursor: a button sits on a panel that sits on a background.
+        const area = boxArea(_uiBounds);
+        if (!best || area < best.area
+            || (area === best.area
+                && element.node.getSiblingIndex() >= best.element.node.getSiblingIndex())) {
+            best = { element, distance, area };
         }
     }
-    return best;
+    return best ? { element: best.element, distance: best.distance } : null;
 }

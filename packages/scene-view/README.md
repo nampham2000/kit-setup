@@ -182,9 +182,19 @@ Chỉ node có `UIRenderer` (Sprite, Label…) được tính. Node layout rỗn
 gốc có hộp bao trải hết design resolution, tính vào thì chúng nuốt mọi cú click nhắm
 vào thứ nằm bên trong.
 
-Khi nhiều phần tử chồng nhau, **node có sibling index lớn hơn thắng** chứ không xét
-khoảng cách. UI phẳng và nằm ở vị trí canvas đặt trong world, nên khoảng cách không
-nói lên cái nào mắt đang thấy ở trên — thứ tự vẽ mới nói.
+**Mesh được ưu tiên, UI chỉ là phương án dự phòng.** Một cú trúng mesh là chính xác
+tới từng tam giác; còn canvas screen-space to cỡ design resolution tính bằng đơn vị
+world, nên một sprite nền full-screen sẽ trả lời mọi cú click trong viewport nếu UI
+được xét trước. UI chỉ nhận click ở chỗ không có mesh nào dưới con trỏ.
+
+Khi nhiều phần tử UI chồng nhau thì **phần tử nhỏ nhất dưới con trỏ thắng** — nút nằm
+trên panel nằm trên nền. Không dùng sibling index vì nó vô nghĩa giữa các nhánh không
+liên quan, và cũng không dùng khoảng cách vì canvas phẳng nằm ở đâu là do nó đặt.
+
+Node thuộc layer của editor (`GIZMOS`, `EDITOR`, `SCENE_GIZMO`, `PROFILER`) bị loại
+khỏi danh sách UI. Preview chạy chung scene graph với editor nên các node như
+`internal/editor/grid-2d` có mặt lúc runtime, và nếu không lọc thì hộp bao khổng lồ
+của chúng sẽ lọt vào tia ray.
 
 ### Điều cần biết trước khi bật
 

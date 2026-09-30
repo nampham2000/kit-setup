@@ -52,6 +52,17 @@ const EXCLUDED_LAYERS = Layers.Enum.UI_2D
 const SCENE_VISIBILITY = Layers.Enum.ALL & ~EXCLUDED_LAYERS;
 
 /**
+ * What UI picking may consider: the UI layers are wanted here, but the editor's
+ * own scaffolding is not. The Preview panel shares its scene graph with the
+ * editor, so nodes like internal/editor/grid-2d are present at runtime, and an
+ * unfiltered scan would hand their huge boxes to the ray.
+ */
+const UI_PICK_EXCLUDED = Layers.Enum.GIZMOS
+    | Layers.Enum.EDITOR
+    | Layers.Enum.SCENE_GIZMO
+    | Layers.Enum.PROFILER;
+
+/**
  * A Unity-style Scene view running inside the game itself.
  *
  * Splits the screen: the real game renders on the left with its own cameras
@@ -180,7 +191,11 @@ export class SceneViewDebug extends Component {
         this._rescanTimer -= dt;
         if (this._rescanTimer <= 0) {
             this._rescanTimer = this.rescanInterval;
-            this._rescan();
+            try {
+                this._rescan();
+            } catch (error) {
+                this._warnOnce('rescan', `[SceneView] scene scan failed: ${error}`);
+            }
             if (this.showPanels) {
                 this._hierarchy.refresh(director.getScene().children, EXCLUDED_LAYERS, this._sceneCamera?.node);
             }
@@ -251,7 +266,6 @@ export class SceneViewDebug extends Component {
 
         this._splitGameCameras();
         this._ensureSceneCamera();
-        this._rescan();
 
         if (this.showPanels && this._overlay.available) {
             this._overlay.mount();
@@ -263,6 +277,11 @@ export class SceneViewDebug extends Component {
         input.on(Input.EventType.MOUSE_DOWN, this._onMouseDown, this);
         input.on(Input.EventType.MOUSE_UP, this._onMouseUp, this);
         input.on(Input.EventType.MOUSE_MOVE, this._onMouseMove, this);
+
+        // Scanning the scene runs after the listeners are live, and never before.
+        // It used to come first, so one throw in here left the view rendering with
+        // no input at all - which looks like picking is broken, not like a crash.
+        this._rescan();
 
         if (this.showSplitter) {
             this._splitter.onChange = (fraction) => this._applySplit(fraction);
@@ -440,6 +459,14 @@ export class SceneViewDebug extends Component {
         return !!this._gizmos;
     }
 
+    /** Log a given problem once, not every rescan - this runs twice a second. */
+    private _warned = new Set<string>();
+    private _warnOnce (key: string, message: string) {
+        if (this._warned.has(key)) return;
+        this._warned.add(key);
+        console.warn(message);
+    }
+
     /** Re-anchor the widgets to the camera. Cheap, so it also tracks canvas resizes. */
     private _syncWidgets () {
         this._splitter.sync(this._sceneCamera, this._split);
@@ -455,9 +482,23 @@ export class SceneViewDebug extends Component {
 
         // UI is deliberately outside SCENE_VISIBILITY, so it is gathered on its own
         // rather than filtered by the same mask.
-        this._uiElements = this.enableUIPicking
-            ? director.getScene().getComponentsInChildren(UIRenderer)
-            : [];
+        this._uiElements = [];
+        if (!this.enableUIPicking) return;
+
+        // UIRenderer is undefined when the UI engine module is cropped out, and
+        // getComponentsInChildren dereferences the constructor without checking,
+        // so asking for it would throw rather than return nothing.
+        if (!UIRenderer) {
+            this._warnOnce('ui-module', '[SceneView] UI module not in this build - UI picking off.');
+            return;
+        }
+
+        try {
+            this._uiElements = director.getScene().getComponentsInChildren(UIRenderer)
+                .filter((element) => (element.node.layer & UI_PICK_EXCLUDED) === 0);
+        } catch (error) {
+            this._warnOnce('ui-scan', `[SceneView] could not scan UI: ${error}`);
+        }
     }
 
     /**
@@ -555,23 +596,40 @@ export class SceneViewDebug extends Component {
     }
 
     /**
-     * Resolve a click to a node, meshes and UI together.
+     * Resolve a click to a node, meshes first and UI as the fallback.
      *
-     * UI wins ties rather than being sorted by distance with the meshes. A
-     * screen-space element sits wherever its canvas happens to be in the world,
-     * which says nothing about what the eye sees in front: the UI you can see is
-     * always the thing drawn last.
+     * A mesh hit is exact, down to the triangle. A screen-space canvas is sized
+     * in design-resolution units, so its boxes are enormous next to a 1-unit
+     * mesh and a full-screen background sprite would otherwise answer every
+     * click in the viewport. Meshes are therefore preferred, and UI takes over
+     * where no mesh is under the cursor.
      */
     private _pickAt (x: number, y: number): Node | null {
-        const ui = this.enableUIPicking
-            ? pickUI(this._sceneCamera, x, y, this._uiElements)
-            : null;
-        if (ui) return ui.element.node;
+        const report = (kind: string, node: Node | null) => {
+            if (this.debugInput) {
+                console.log('[SceneView] click ' + Math.round(x) + ',' + Math.round(y)
+                    + ' -> ' + kind + ': ' + (node ? node.name : 'nothing')
+                    + '  (' + this._renderers.length + ' meshes, ' + this._uiElements.length + ' ui)');
+            }
+            return node;
+        };
 
-        const hit = pickRenderer(this._sceneCamera, x, y, this._renderers);
-        return hit ? hit.renderer.node : null;
+        // An exception out of a mouse callback is swallowed by the engine, and to
+        // the user it is indistinguishable from "picking does nothing".
+        try {
+            const hit = pickRenderer(this._sceneCamera, x, y, this._renderers);
+            if (hit) return report('mesh', hit.renderer.node);
+
+            if (this.enableUIPicking) {
+                const ui = pickUI(this._sceneCamera, x, y, this._uiElements);
+                if (ui) return report('ui', ui.element.node);
+            }
+            return report('none', null);
+        } catch (error) {
+            console.error('[SceneView] pick failed:', error);
+            return null;
+        }
     }
-
     private _onKeyDown (e: EventKeyboard) {
         switch (e.keyCode) {
         case KeyCode.F1:
@@ -622,6 +680,12 @@ export class SceneViewDebug extends Component {
             rendererEnabled: internal?.enabled,
             gizmos: !!this._gizmos,
             rect: this._sceneCamera ? `${this._sceneCamera.rect.x},${this._sceneCamera.rect.width}` : 'none',
+        });
+
+        console.log('[SceneView] scene contents:', {
+            meshRenderers: this._renderers.length,
+            uiElements: this._uiElements.length,
+            uiPicking: this.enableUIPicking,
         });
 
         console.log('[SceneView] input spaces:', {
