@@ -579,10 +579,10 @@ Rê chuột vào bất kỳ nút, công tắc, ô số, hàng nào của tool th
   `SceneViewDebug._updateEngineTip` đổi tọa độ chuột từ pixel camera sang pixel CSS qua rect của canvas (lật trục y vì engine đếm
   từ dưới lên) rồi gọi `tooltip.showAt`.
 - **Chỉ hiện khi chuột nằm trên chữ**, không phải bất cứ chỗ nào trên hàng: cố ý rê vào mới thấy, lướt ngang qua khoảng trống,
-  công tắc hay ô nhập thì không. \`overText\` đo từng đoạn chữ thật của phần tử (không phải hộp của nó, nên hàng gồm công tắc + nhãn +
+  công tắc hay ô nhập thì không. `overText` đo từng đoạn chữ thật của phần tử (không phải hộp của nó, nên hàng gồm công tắc + nhãn +
   phím tắt chỉ trả lời "có" trên nhãn và phím tắt), chừa 3 px quanh mỗi chữ. Phần tử **không có chữ** (ô màu loại node, mũi tên) thì
   tính cả hộp của nó. Vì chuột đi trong cùng một phần tử cũng có thể vào hay ra khỏi chữ mà không có sự kiện mouseover nào, tool nghe
-  cả \`mousemove\`. Chuột đi ngang qua canvas không làm mất tooltip của phần vẽ bằng engine (thanh chia, bảng công cụ).
+  cả `mousemove`. Chuột đi ngang qua canvas không làm mất tooltip của phần vẽ bằng engine (thanh chia, bảng công cụ).
 - **Hiện sau ~0,4 giây** khi chuột đứng yên, nhưng **hiện ngay** khi chuyển từ cái này sang cái khác đã có giải thích, nên lướt qua
   cả một panel không phải chờ ở từng hàng. Mất đi khi bấm chuột, cuộn, bấm phím, mất focus cửa sổ, hoặc chuột rời đi.
 - **Mọi `title` cũ tự được nâng cấp:** tooltip lấy chữ của `title` rồi xóa thuộc tính đó (để tooltip chậm, không có kiểu của trình
