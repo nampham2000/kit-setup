@@ -1,7 +1,8 @@
 import { Component, Node, Vec3 } from 'cc';
 import { ColliderInspector } from './ColliderInspector';
 import { DebugOverlay } from './DebugOverlay';
-import { capturePose, Command, poseChanged, PoseCommand, ValueCommand } from './History';
+import { Command, ValueCommand } from './History';
+import { bindLiveNumbers } from './LiveFields';
 
 type Vector = 'position' | 'rotation' | 'scale';
 
@@ -113,41 +114,50 @@ export class InspectorPanel {
         label.textContent = kind;
         field.appendChild(label);
 
+        const inputs: HTMLInputElement[] = [];
         for (const axis of ['x', 'y', 'z']) {
             const input = document.createElement('input');
             input.className = 'sv-num';
             input.type = 'text';
             input.spellcheck = false;
-            input.addEventListener('change', () => this._commit(kind));
             field.appendChild(input);
+            inputs.push(input);
             this._fields.set(`${kind}.${axis}`, input);
         }
+
+        // Applied as it is typed, and one undo step when the user leaves the field.
+        bindLiveNumbers(inputs, {
+            read: () => this._read(kind),
+            write: (values) => this._apply(kind, values),
+            commit: (before, after) => {
+                const node = this._node;
+                if (!node || !node.isValid) return;
+                this.onEdit?.(new ValueCommand<number[]>(
+                    `Edit ${kind} of ${node.name}`, () => node.isValid,
+                    (value) => { this._writeTo(node, kind, value); }, before, after,
+                ));
+            },
+        });
 
         parent.appendChild(field);
     }
 
-    private _commit (kind: Vector) {
+    private _read (kind: Vector): number[] {
         const node = this._node;
-        if (!node || !node.isValid) return;
+        if (!node || !node.isValid) return [0, 0, 0];
+        const v = kind === 'position' ? node.position : kind === 'rotation' ? node.eulerAngles : node.scale;
+        return [v.x, v.y, v.z];
+    }
 
-        const current = kind === 'position' ? node.position
-            : kind === 'rotation' ? node.eulerAngles
-                : node.scale;
+    private _apply (kind: Vector, values: number[]) {
+        const node = this._node;
+        if (node && node.isValid) this._writeTo(node, kind, values);
+    }
 
-        // A field left unparseable keeps its current value rather than becoming NaN.
-        const x = parse(this._fields.get(`${kind}.x`).value, current.x);
-        const y = parse(this._fields.get(`${kind}.y`).value, current.y);
-        const z = parse(this._fields.get(`${kind}.z`).value, current.z);
-
-        const before = capturePose(node);
-        if (kind === 'position') node.setPosition(x, y, z);
-        else if (kind === 'rotation') node.setRotationFromEuler(x, y, z);
-        else node.setScale(x, y, z);
-
-        const after = capturePose(node);
-        if (poseChanged(before, after)) {
-            this.onEdit?.(new PoseCommand(`Edit ${kind} of ${node.name}`, node, before, after));
-        }
+    private _writeTo (node: Node, kind: Vector, values: number[]) {
+        if (kind === 'position') node.setPosition(values[0], values[1], values[2]);
+        else if (kind === 'rotation') node.setRotationFromEuler(values[0], values[1], values[2]);
+        else node.setScale(values[0], values[1], values[2]);
     }
 
     private _checkbox (parent: HTMLElement, label: string): HTMLInputElement {
@@ -195,11 +205,6 @@ function pathOf (node: Node): string {
     // Stop before the scene root so the path stays readable.
     for (let n = node.parent; n && n.parent; n = n.parent) parts.unshift(n.name);
     return parts.length ? `${parts.join(' / ')} /` : '(root)';
-}
-
-function parse (raw: string, fallback: number): number {
-    const value = parseFloat(raw);
-    return isFinite(value) ? value : fallback;
 }
 
 /** Up to three decimals with the trailing zeros dropped: 500, not 500.000, so a field stays short. */

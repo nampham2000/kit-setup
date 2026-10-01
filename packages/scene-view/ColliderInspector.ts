@@ -1,6 +1,7 @@
 import { BoxCollider, CapsuleCollider, Collider, Node, SphereCollider, Vec3 } from 'cc';
 import { kindOf, physicsAvailable } from './ColliderEdit';
 import { Command, ValueCommand } from './History';
+import { bindLiveNumbers } from './LiveFields';
 
 interface Row {
     refresh (): void;
@@ -132,13 +133,14 @@ export class ColliderInspector {
                 if (document.activeElement !== input) input.value = fixed(values[i]);
             });
         };
-        inputs.forEach((input) => input.addEventListener('change', () => {
-            if (!collider.isValid) return;
-            const before = get(collider);
-            const next = inputs.map((el, i) => Math.max(min, parse(el.value, before[i])));
-            this._commit(node, collider, label, before, next, set);
-            refresh();
-        }));
+        bindLiveNumbers(inputs, {
+            read: () => (collider.isValid ? get(collider) : []),
+            write: (values) => { if (collider.isValid) set(collider, values); },
+            commit: (before, after) => this.onEdit?.(new ValueCommand<number[]>(
+                `Edit ${label} of ${node.name}`, () => collider.isValid, (value) => set(collider, value), before, after,
+            )),
+            min,
+        });
         this._rows.push({ refresh });
         refresh();
     }
@@ -151,12 +153,13 @@ export class ColliderInspector {
         const refresh = () => {
             if (collider.isValid && document.activeElement !== input) input.value = fixed(get(collider));
         };
-        input.addEventListener('change', () => {
-            if (!collider.isValid) return;
-            const before = [get(collider)];
-            const next = [Math.max(min, parse(input.value, before[0]))];
-            this._commit(node, collider, label, before, next, (c, v) => set(c, v[0]));
-            refresh();
+        bindLiveNumbers([input], {
+            read: () => (collider.isValid ? [get(collider)] : []),
+            write: (values) => { if (collider.isValid) set(collider, values[0]); },
+            commit: (before, after) => this.onEdit?.(new ValueCommand<number[]>(
+                `Edit ${label} of ${node.name}`, () => collider.isValid, (value) => set(collider, value[0]), before, after,
+            )),
+            min,
         });
         this._rows.push({ refresh });
         refresh();
@@ -219,18 +222,6 @@ export class ColliderInspector {
         refresh();
     }
 
-    /** Apply `next`, and record it only if it differs from `before`. */
-    private _commit (
-        node: Node, collider: Collider, label: string, before: number[], next: number[],
-        set: (c: Collider, v: number[]) => void,
-    ) {
-        if (before.every((value, i) => Math.abs(value - next[i]) < 1e-9)) return;
-        set(collider, next);
-        this.onEdit?.(new ValueCommand<number[]>(
-            `Edit ${label} of ${node.name}`, () => collider.isValid, (value) => set(collider, value),
-            before, next,
-        ));
-    }
 }
 
 function labelled (parent: HTMLElement, label: string): HTMLElement {
@@ -256,11 +247,6 @@ function fieldRow (parent: HTMLElement, label: string, count: number): HTMLInput
         inputs.push(input);
     }
     return inputs;
-}
-
-function parse (raw: string, fallback: number): number {
-    const value = parseFloat(raw);
-    return isFinite(value) ? value : fallback;
 }
 
 function fixed (n: number): string {

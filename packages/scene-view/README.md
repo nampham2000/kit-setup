@@ -478,6 +478,19 @@ Cocos 3.8 không cho cờ Ctrl/Shift trong sự kiện phím, nên tool tự the
 Hoàn tác được: **kéo gizmo** (move/rotate/scale, một lần kéo = một bước), **sửa vị trí/xoay/scale/active
 trong Inspector**, **tạo / nhân đôi / xóa node**, **sửa collider**.
 
+### Ô số trong Inspector áp dụng ngay khi gõ
+
+Gõ tới đâu thì scene đổi tới đó, **không cần bấm ra ngoài hay Enter**: vị trí/xoay/scale của node và mọi ô số của
+collider (center, size, radius, height). `LiveFields.ts` (`bindLiveNumbers`) bắt sự kiện `input` của từng ô.
+
+- **Cả lần gõ chỉ là một bước undo**, ghi lúc rời ô (sự kiện `change`), từ giá trị trước phím đầu tiên tới giá trị
+  sau phím cuối. Không thì gõ "150" thành ba bước hoàn tác. Gõ rồi gõ lại về đúng giá trị cũ thì không ghi gì.
+- **Giá trị gõ dở không làm scene nhảy lung tung**: ô rỗng, chỉ có `-` hoặc `.` không phải số, nên giá trị đó
+  giữ nguyên trong scene cho tới khi chuỗi thành số (`-4.` đã là số).
+- Giới hạn dưới vẫn áp dụng lúc đang gõ: size/radius tối thiểu 0,001 (gõ `0` thì scene nhận 0,001 chứ không
+  tạo shape suy biến), height tối thiểu 0.
+- Công tắc (trigger, enabled, active) và danh sách hướng capsule vốn áp dụng ngay khi chọn, không đổi.
+
 ### Tạo, nhân đôi, xóa node (browser)
 
 Hàng nút ở đầu Hierarchy: **New ▾**, **Duplicate**, **Delete**.
