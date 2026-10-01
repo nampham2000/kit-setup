@@ -87,8 +87,16 @@ export function viewportMinX (camera: Camera): number {
     return usable * camera.rect.x;
 }
 
+/** Right edge of a camera's viewport, in the same space as `viewportMinX`. */
+export function viewportMaxX (camera: Camera): number {
+    if (!camera) return 0;
+    const width = (camera.camera as any)?.width;
+    const usable = width > 0 ? width : screen.windowSize.width;
+    return usable * (camera.rect.x + camera.rect.width);
+}
+
 export function isInsideViewport (camera: Camera, screenX: number): boolean {
-    return screenX >= viewportMinX(camera);
+    return screenX >= viewportMinX(camera) && screenX <= viewportMaxX(camera);
 }
 
 

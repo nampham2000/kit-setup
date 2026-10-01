@@ -486,7 +486,24 @@ có z-index. Hai con số này đọc từ `builtin/preview/static/resources/ind
 của phiên bản Creator khác có thể dùng số khác.
 
 Cửa sổ hẹp tới mức không còn dải trống thì panel buộc phải chồng lên canvas ở bề rộng tối
-thiểu, và được giữ trong màn hình; phím `P` ẩn chúng. Trong Preview của
+thiểu, và được giữ trong màn hình; phím `P` ẩn chúng.
+
+**Phần canvas bị panel che không còn dùng để vẽ.** Trước đây game và scene view chia đôi **cả**
+canvas, nên khi panel đè lên canvas (cửa sổ Full Screen không có dải trống) thì mép trái của
+game nằm dưới Hierarchy: game trông như bị đẩy sang trái, bên phải còn một mảng đen rộng. Giờ
+`DebugOverlay.insets()` đo phần canvas mà các card đang che (từ rect của chính card, nên card
+đã thu gọn hay Inspector còn ngắn đều tính đúng), `SceneViewDebug._reflow()` đặt game và scene
+view chia nhau **phần còn lại ở giữa hai panel**. Chưa kéo thanh chia thì vạch chia luôn nằm
+giữa vùng đó; kéo rồi thì giữ vị trí bạn chọn (kẹp trong vùng, mỗi bên tối thiểu 10%). Picker và
+free-look cũng bị chặn ở mép phải của scene view, nên bấm vào vùng của Inspector không chọn
+nhầm vật phía sau.
+
+**Thu gọn / mở từng panel.** Bấm vào thanh tiêu đề (có mũi tên ▾/▸) của Hierarchy hoặc
+Inspector để thu nó về đúng thanh tiêu đề (rộng khoảng 11 em), và phần canvas đó được trả lại
+cho game / scene view; bấm lần nữa để mở. Nút `+` / `-` trong tiêu đề Hierarchy không làm
+thu gọn. Trạng thái được nhớ trong `localStorage` (khóa `scene-view-collapsed`).
+
+**Cỡ chữ mặc định 15 px** (trước là 13), chỉnh bằng `[` `]` hoặc A-/A+ trong panel "!". Trong Preview của
 editor chúng **tự ẩn**: editor có Hierarchy/Inspector thật, và panel DOM ở đó cũng không bấm
 được. Phím `P` bật/tắt ngay lúc chạy.
 

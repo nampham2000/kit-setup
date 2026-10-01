@@ -33,11 +33,17 @@ const CSS = `
     pointer-events: auto;
 }
 .sv-title {
-    display: flex; align-items: center; padding: .4em .7em; flex: none;
+    display: flex; align-items: center; padding: .4em .7em; flex: none; cursor: pointer; user-select: none;
     background: rgba(255, 255, 255, .06); color: #a9b1c0;
     letter-spacing: .08em; text-transform: uppercase; font-size: .8em; font-weight: 600;
 }
 .sv-title-actions { margin-left: auto; display: flex; gap: .25em; }
+/* A card folds down to its title bar, and its dock narrows with it, so the space goes
+   back to the game and scene views. */
+.sv-fold { flex: none; width: 1.2em; margin-right: .35em; text-align: center; font-size: 1.1em; line-height: 1; }
+.sv-card.sv-collapsed { flex: 0 0 auto; }
+/* !important because the Inspector shows and hides its body with an inline style. */
+.sv-card.sv-collapsed .sv-body, .sv-card.sv-collapsed .sv-title-actions { display: none !important; }
 .sv-title-btn {
     width: 1.9em; height: 1.6em; padding: 0; font: inherit; font-size: 1.15em; line-height: 1;
     border: 1px solid rgba(255, 255, 255, .18); border-radius: .3em;
@@ -213,6 +219,9 @@ export type Dock = 'left' | 'right';
 const MIN_PANEL_EM = 16;
 /** The Inspector holds three number fields per row, which need more room than a tree. */
 const MIN_INSPECTOR_EM = 22;
+/** Width of a dock whose card is folded: just its title bar. */
+const COLLAPSED_EM = 11;
+const COLLAPSE_KEY = 'scene-view-collapsed';
 const MAX_PANEL_EM = 32;
 
 /** Gap kept to the window edge, and to the canvas a panel sits beside. */
@@ -232,6 +241,23 @@ function fit (free: number, minEm = MIN_PANEL_EM): number {
     return Math.round(Math.max(em * minEm, Math.min(em * MAX_PANEL_EM, free - EDGE - GAP)));
 }
 
+function loadCollapsed (): Partial<Record<Dock, boolean>> {
+    try {
+        const parsed = JSON.parse(globalThis.localStorage?.getItem(COLLAPSE_KEY) || '{}');
+        return { left: !!parsed.left, right: !!parsed.right };
+    } catch {
+        return {};
+    }
+}
+
+function saveCollapsed (state: Partial<Record<Dock, boolean>>) {
+    try {
+        globalThis.localStorage?.setItem(COLLAPSE_KEY, JSON.stringify(state));
+    } catch {
+        // Not remembered; still applies for this session.
+    }
+}
+
 /**
  * DOM host for the Hierarchy (docked left) and the Inspector (docked right), like
  * the editor lays them out. Each dock is its own fixed column at a window edge, so
@@ -240,8 +266,12 @@ function fit (free: number, minEm = MIN_PANEL_EM): number {
 export class DebugOverlay {
     public onFocusIn: () => void = null;
 
+    /** Called after a card was folded or opened, so the owner can re-fit the views around it. */
+    public onLayoutChange: () => void = null;
+
     private _roots: Partial<Record<Dock, HTMLElement>> = {};
     private _cursorInside = false;
+    private _collapsed: Partial<Record<Dock, boolean>> = loadCollapsed();
 
     public get cursorInside (): boolean { return this._cursorInside; }
 
@@ -304,13 +334,46 @@ export class DebugOverlay {
         // Each dock sits against the canvas edge, not the window edge. With a cap on the
         // width, a dock pinned to the window left a gap whenever the margin was wider
         // than the cap, which showed as dead space beside the game.
-        const leftWidth = fit(rect.left);
-        const rightWidth = fit(window.innerWidth - rect.right, MIN_INSPECTOR_EM);
+        const leftWidth = this._collapsed.left ? this._foldedWidth() : fit(rect.left);
+        const rightWidth = this._collapsed.right
+            ? this._foldedWidth()
+            : fit(window.innerWidth - rect.right, MIN_INSPECTOR_EM);
         left.style.width = `${leftWidth}px`;
         right.style.width = `${rightWidth}px`;
         left.style.left = `${Math.max(EDGE, rect.left - GAP - leftWidth)}px`;
         // Clamped so a window with no margin cannot push the dock off the screen.
         right.style.left = `${Math.min(rect.right + GAP, window.innerWidth - EDGE - rightWidth)}px`;
+    }
+
+    private _foldedWidth (): number {
+        return Math.round(fontSize() * COLLAPSED_EM);
+    }
+
+    /**
+     * How far, in CSS pixels, each dock's cards reach into the canvas.
+     *
+     * Docks sit in the margin beside the canvas when there is one, and overlap it
+     * when there is not. The overlapped part is covered, so the game and scene views
+     * are laid out in what is left rather than drawn partly underneath.
+     */
+    public insets (): { left: number; right: number } {
+        const canvas = game.canvas as HTMLCanvasElement;
+        const rect = canvas?.getBoundingClientRect?.();
+        if (!rect || !this._roots.left || !this._roots.right) return { left: 0, right: 0 };
+
+        let left = 0;
+        let right = 0;
+        const leftCards = this._roots.left.children;
+        for (let i = 0; i < leftCards.length; i++) {
+            const r = leftCards[i].getBoundingClientRect();
+            if (r.width > 0) left = Math.max(left, r.right + GAP - rect.left);
+        }
+        const rightCards = this._roots.right.children;
+        for (let i = 0; i < rightCards.length; i++) {
+            const r = rightCards[i].getBoundingClientRect();
+            if (r.width > 0) right = Math.max(right, rect.right - (r.left - GAP));
+        }
+        return { left: Math.max(0, left), right: Math.max(0, right) };
     }
 
     public card (
@@ -325,7 +388,29 @@ export class DebugOverlay {
 
         const heading = document.createElement('div');
         heading.className = 'sv-title';
-        heading.textContent = title;
+        heading.title = 'Click to fold or open';
+
+        const fold = document.createElement('span');
+        fold.className = 'sv-fold';
+        heading.appendChild(fold);
+        heading.appendChild(document.createTextNode(title));
+
+        const apply = () => {
+            const collapsed = !!this._collapsed[dock];
+            card.classList.toggle('sv-collapsed', collapsed);
+            fold.textContent = collapsed ? '\u25B8' : '\u25BE';
+        };
+        heading.addEventListener('click', (e) => {
+            // The buttons in the title do their own thing and must not also fold the card.
+            if ((e.target as HTMLElement).closest('.sv-title-actions')) return;
+            this._collapsed[dock] = !this._collapsed[dock];
+            saveCollapsed(this._collapsed);
+            apply();
+            this.layout();
+            this.onLayoutChange?.();
+        });
+        heading.addEventListener('dblclick', (e) => e.stopPropagation());
+        apply();
 
         const body = document.createElement('div');
         body.className = 'sv-body';

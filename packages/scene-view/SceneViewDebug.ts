@@ -31,7 +31,7 @@ const SCENE_BG = new Color(38, 40, 46, 255);
 const BACKDROP_BG = new Color(22, 23, 27, 255);
 
 /**
- * Where a game camera goes when the game view is `fraction` of the window wide.
+ * Where a game camera goes when the game view spans `left` to `split` of the window width.
  *
  * Both axes shrink by the same factor, so the game keeps the window's own aspect
  * ratio and is seen whole. Narrowing only the width, as this used to, cut the game
@@ -39,18 +39,22 @@ const BACKDROP_BG = new Color(22, 23, 27, 255);
  * right part of it simply fell outside the viewport. The result is centred
  * vertically, and a camera that started with a partial rect keeps its place in it.
  */
-function gameRect (saved: Rect, fraction: number): Rect {
-    const offsetY = (1 - fraction) / 2;
+function gameRect (saved: Rect, left: number, split: number): Rect {
+    // `left` is where the game view begins, after any panel covering the canvas edge.
+    const k = Math.max(split - left, 0.01);
+    const offsetY = (1 - k) / 2;
     return new Rect(
-        saved.x * fraction,
-        offsetY + saved.y * fraction,
-        saved.width * fraction,
-        saved.height * fraction,
+        left + saved.x * k,
+        offsetY + saved.y * k,
+        saved.width * k,
+        saved.height * k,
     );
 }
 
 /** Starting fraction of the screen width where the scene viewport begins. */
 const DEFAULT_SPLIT = 0.5;
+/** The most of the width a panel docked over the canvas may take from the views. */
+const MAX_INSET = 0.4;
 
 /** A press that travels farther than this (device px) is a drag, not a click. */
 const CLICK_SLOP = 4;
@@ -185,6 +189,11 @@ export class SceneViewDebug extends Component {
     private _palette = new ToolPalette();
     private _probe = new InputProbe();
     private _split = DEFAULT_SPLIT;
+    /** True until the divider is dragged: the split then stays centred between the panels. */
+    private _splitAuto = true;
+    /** Share of the canvas width covered by the left and right panels. */
+    private _insetLeft = 0;
+    private _insetRight = 0;
     private _grabbedAxis: Axis | null = null;
     private _inspector = new InspectorPanel();
     private _visibility = new VisibilityController();
@@ -628,16 +637,53 @@ export class SceneViewDebug extends Component {
      */
     private _applySplit (fraction: number) {
         this._split = fraction;
+        this._splitAuto = false;
+        this._reflow();
+
+        // The strip is anchored to the viewport boundary, not the window.
+        this._syncWidgets();
+    }
+
+    /**
+     * Lay the game and scene views out between the two panels.
+     *
+     * A panel docked over the canvas covers part of it. Drawing the views across the
+     * whole canvas hid the game's left edge behind the Hierarchy, which made the game
+     * look pushed aside with a wide black band on the other side. The views now share
+     * only the part that is visible.
+     */
+    private _reflow () {
+        const lo = this._insetLeft;
+        const hi = 1 - this._insetRight;
+        const span = Math.max(hi - lo, 0.2);
+
+        if (this._splitAuto) this._split = lo + span * 0.5;
+        else this._split = Math.min(hi - span * 0.1, Math.max(lo + span * 0.1, this._split));
 
         for (const [camera, saved] of this._savedRects) {
             if (camera.isValid) this._applyGameRect(camera, saved);
         }
         if (this._sceneCamera && this._sceneCamera.isValid) {
-            this._sceneCamera.rect = new Rect(fraction, 0, 1 - fraction, 1);
+            this._sceneCamera.rect = new Rect(this._split, 0, Math.max(hi - this._split, 0.01), 1);
         }
+    }
 
-        // The strip is anchored to the viewport boundary, not the window.
-        this._syncWidgets();
+    /** Pick up how much of the canvas the panels cover, and re-lay the views if it changed. */
+    private _updateInsets () {
+        const canvas = game.canvas as HTMLCanvasElement;
+        const rect = canvas?.getBoundingClientRect?.();
+        let left = 0;
+        let right = 0;
+        if (this._panelsOn && rect && rect.width > 0) {
+            const px = this._overlay.insets();
+            left = Math.min(MAX_INSET, px.left / rect.width);
+            right = Math.min(MAX_INSET, px.right / rect.width);
+        }
+        if (Math.abs(left - this._insetLeft) < 0.002 && Math.abs(right - this._insetRight) < 0.002) return;
+
+        this._insetLeft = left;
+        this._insetRight = right;
+        this._reflow();
     }
 
     /** Shrink every existing camera — 3D and UI alike — into the left part, keeping the game's own shape. */
@@ -650,7 +696,7 @@ export class SceneViewDebug extends Component {
     }
 
     private _applyGameRect (camera: Camera, desired: Rect) {
-        const shrunk = gameRect(desired, this._split);
+        const shrunk = gameRect(desired, this._insetLeft, this._split);
         this._savedRects.set(camera, desired);
         this._appliedRects.set(camera, shrunk.clone());
         camera.rect = shrunk;
@@ -725,7 +771,7 @@ export class SceneViewDebug extends Component {
         const camera = this._sceneCamera;
         camera.node.active = true;
         camera.enabled = true;
-        camera.rect = new Rect(this._split, 0, 1 - this._split, 1);
+        camera.rect = new Rect(this._split, 0, Math.max(1 - this._insetRight - this._split, 0.01), 1);
         camera.priority = 1 << 20;
         camera.clearFlags = Camera.ClearFlag.SOLID_COLOR;
         camera.clearColor = SCENE_BG;
@@ -809,11 +855,13 @@ export class SceneViewDebug extends Component {
 
     /** Re-anchor the widgets to the camera. Cheap, so it also tracks canvas resizes. */
     private _syncWidgets () {
+        // Keeps each panel inside the free margin beside the canvas as it moves, and
+        // then fits the views to whatever of the canvas the panels still cover.
+        this._overlay.layout();
+        this._updateInsets();
         this._splitter.sync(this._sceneCamera, this._split);
         this._palette.sync(this._sceneCamera, this._split);
         this._help.sync(this._sceneCamera, this._split);
-        // Keeps each panel inside the free margin beside the canvas as it moves.
-        this._overlay.layout();
     }
 
     private _rescan () {
@@ -1128,12 +1176,14 @@ export class SceneViewDebug extends Component {
         }
 
         this._panelsOn = true;
+        this._overlay.onLayoutChange = () => this._syncWidgets();
         this._overlay.mount();
         this._hierarchy.mount(this._overlay);
         this._inspector.mount(this._overlay);
         this._hierarchy.setSelected(this._selected);
         this._inspector.show(this._selected);
         this._hierarchy.refresh(director.getScene().children, EDITOR_LAYERS, this._sceneCamera?.node);
+        if (this._active) this._syncWidgets();
     }
 
     private _unmountPanels () {
@@ -1141,6 +1191,7 @@ export class SceneViewDebug extends Component {
         this._inspector.unmount();
         this._hierarchy.unmount();
         this._overlay.unmount();
+        if (this._active) this._syncWidgets();
     }
 
     /** Show or hide the DOM Hierarchy and Inspector, live. */

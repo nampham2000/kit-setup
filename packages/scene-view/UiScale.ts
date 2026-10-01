@@ -10,7 +10,7 @@
 
 const STORAGE_KEY = 'scene-view-font-size';
 
-export const FONT_DEFAULT = 13;
+export const FONT_DEFAULT = 15;
 export const FONT_MIN = 10;
 export const FONT_MAX = 22;
 
