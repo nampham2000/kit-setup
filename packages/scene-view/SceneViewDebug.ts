@@ -203,9 +203,6 @@ export class SceneViewDebug extends Component {
 
     private _sceneCamera: Camera = null;
     private _backdrop: Camera = null;
-    /** Draws only the tool strip and the divider, after everything else, so no mesh can cover them. */
-    private _widgetCamera: Camera = null;
-    private _widgetGizmos: GeometryRenderer = null;
     private _freeCamera: FreeCamera = null;
     private _gizmos: GeometryRenderer = null;
     private _overlay = new DebugOverlay();
@@ -382,10 +379,8 @@ export class SceneViewDebug extends Component {
         }
 
         // Overlay widgets go last so they sit on top of the scene and the gizmos.
-        // On the overlay camera when it has a renderer, else with everything else as before.
-        const widgets = this._initWidgetGizmos() ?? this._gizmos;
-        if (this.showSplitter) this._splitter.draw(widgets);
-        if (this.enableTransformGizmo && this.showToolPalette) this._palette.draw(widgets);
+        if (this.showSplitter) this._splitter.draw(this._gizmos);
+        if (this.enableTransformGizmo && this.showToolPalette) this._palette.draw(this._gizmos);
     }
 
     public toggle () { this._active ? this.close() : this.open(); }
@@ -498,7 +493,6 @@ export class SceneViewDebug extends Component {
         this._freeCamera?.detach();
         this._freeCamera = null;
         this._gizmos = null;
-        this._widgetGizmos = null;
         this._selected = null;
 
         // Put every renderer this tool switched off back the way it was.
@@ -762,7 +756,7 @@ export class SceneViewDebug extends Component {
     private _splitGameCameras () {
         const cameras = director.getScene().getComponentsInChildren(Camera);
         for (const camera of cameras) {
-            if (camera === this._sceneCamera || camera === this._backdrop || camera === this._widgetCamera) continue;
+            if (camera === this._sceneCamera || camera === this._backdrop) continue;
             this._applyGameRect(camera, camera.rect.clone());
         }
     }
@@ -802,32 +796,7 @@ export class SceneViewDebug extends Component {
      * observer camera, so it is hidden from the Hierarchy and goes away with it.
      */
     /**
-     * A second camera for the overlay widgets, riding on the observer camera.
-     *
-     * The geometry renderer draws in the same pass as the scene, so something the scene draws
-     * later (a transparent mesh, such as a big black wall) paints over a widget however the
-     * widget's depth is set. A camera of its own, ordered after the observer and clearing
-     * nothing, draws last and cannot be covered. It copies the observer's lens and
-     * viewport every frame (see _prepareCameras) so a screen point means the same on both.
-     */
-    private _ensureWidgetCamera (parent: Node) {
-        if (!this._widgetCamera || !this._widgetCamera.isValid) {
-            const node = new Node('__SceneViewOverlay__');
-            node.layer = Layers.Enum.DEFAULT;
-            node.hideFlags |= CCObject.Flags.DontSave | CCObject.Flags.HideInHierarchy;
-            parent.addChild(node);
-            this._widgetCamera = node.addComponent(Camera);
-            this._widgetGizmos = null;
-        }
-        const overlay = this._widgetCamera;
-        overlay.enabled = true;
-        overlay.priority = (1 << 20) + 1;
-        overlay.clearFlags = Camera.ClearFlag.DONT_CLEAR;
-        overlay.visibility = 0;
-    }
-
-    /**
-     * Bring the observer camera's matrices up to date and copy its lens to the overlay camera.
+     * Bring the observer camera's matrices up to date.
      *
      * Widgets are placed with screenToWorld, which reads the camera's matrices. Those are only
      * refreshed when the frame renders, so while the camera was moving (right button held) the
@@ -839,27 +808,6 @@ export class SceneViewDebug extends Component {
         if (!camera || !camera.isValid) return;
         camera.node.updateWorldTransform();
         (camera.camera as unknown as { update?: (force: boolean) => void })?.update?.(true);
-
-        const overlay = this._widgetCamera;
-        if (!overlay || !overlay.isValid) return;
-        if (overlay.projection !== camera.projection) overlay.projection = camera.projection;
-        if (overlay.fov !== camera.fov) overlay.fov = camera.fov;
-        if (overlay.orthoHeight !== camera.orthoHeight) overlay.orthoHeight = camera.orthoHeight;
-        if (overlay.near !== camera.near) overlay.near = camera.near;
-        if (overlay.far !== camera.far) overlay.far = camera.far;
-        const a = overlay.rect;
-        const b = camera.rect;
-        if (a.x !== b.x || a.y !== b.y || a.width !== b.width || a.height !== b.height) overlay.rect = b.clone();
-    }
-
-    /** The geometry renderer of the overlay camera, or null if it cannot be had. */
-    private _initWidgetGizmos (): GeometryRenderer | null {
-        if (this._widgetGizmos) return this._widgetGizmos;
-        const internal = this._widgetCamera?.camera as any;
-        if (!internal) return null;
-        internal.initGeometryRenderer?.();
-        this._widgetGizmos = internal.geometryRenderer ?? null;
-        return this._widgetGizmos;
     }
 
     private _ensureBackdrop (parent: Node) {
@@ -913,7 +861,6 @@ export class SceneViewDebug extends Component {
         camera.far = 2000;
 
         this._ensureBackdrop(camera.node);
-        this._ensureWidgetCamera(camera.node);
 
         this._initGizmos();
 
