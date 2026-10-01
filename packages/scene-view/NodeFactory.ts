@@ -31,16 +31,58 @@ const _spawn = new Vec3();
 
 let _material: Material = null;
 
+/** A material the renderer can actually draw with: it exists, and its effect gave it passes. */
+function usable (material: Material | null | undefined): boolean {
+    return !!material && material.isValid && !!material.passes && material.passes.length > 0 && !!material.effectAsset;
+}
+
 /**
- * One lit material for every primitive made here. Built from the engine's own standard
- * effect rather than from an asset, so it needs nothing in the project.
+ * A lit material for the primitives made here, found rather than assumed.
+ *
+ * The engine's `builtin-standard` effect is not always registered: a project can crop
+ * what its build contains, and then a material built from it has no passes, which makes
+ * the first mesh using it throw when it enters the scene. So this looks for a material
+ * that is known to work, in order of preference:
+ *   1. one already on a mesh in the scene whose effect is the standard one;
+ *   2. any other standard-looking material on a mesh in the scene;
+ *   3. a fresh `builtin-standard`, if that effect turns out to exist;
+ *   4. any usable material on a mesh in the scene, whatever it is.
+ * Returns null when none works, and the caller declines to create the object.
  */
-function standardMaterial (): Material {
-    if (!_material || !_material.isValid) {
-        const material = new Material();
-        material.initialize({ effectName: 'builtin-standard' });
-        _material = material;
+function standardMaterial (): Material | null {
+    if (usable(_material)) return _material;
+    _material = null;
+
+    const found: Material[] = [];
+    const scene = director.getScene();
+    if (scene) {
+        for (const renderer of scene.getComponentsInChildren(MeshRenderer)) {
+            const material = renderer.sharedMaterial;
+            if (usable(material) && found.indexOf(material as Material) < 0) found.push(material as Material);
+        }
     }
+    const named = (material: Material, text: string) => (material.effectName || '').toLowerCase().indexOf(text) >= 0;
+
+    const exact = found.find((m) => named(m, 'builtin-standard'));
+    const similar = found.find((m) => named(m, 'standard'));
+    if (exact || similar) {
+        _material = exact || similar;
+        return _material;
+    }
+
+    try {
+        const fresh = new Material();
+        fresh.initialize({ effectName: 'builtin-standard' });
+        if (usable(fresh)) {
+            _material = fresh;
+            return fresh;
+        }
+        fresh.destroy();
+    } catch {
+        // The effect is not there; fall through to whatever the scene has.
+    }
+
+    _material = found.length ? found[0] : null;
     return _material;
 }
 
@@ -50,11 +92,17 @@ function primitiveNode (name: string, data: MeshData): Node | null {
         console.warn('[SceneView] this build has no mesh utility (utils.MeshUtils), so a 3D object cannot be created');
         return null;
     }
+    const material = standardMaterial();
+    if (!material) {
+        console.warn('[SceneView] cannot create a 3D object: no usable material. The engine\'s builtin-standard effect is not '
+            + 'in this build and no mesh in the scene has a material to borrow.');
+        return null;
+    }
     const node = new Node(name);
     node.layer = Layers.Enum.DEFAULT;
     const renderer = node.addComponent(MeshRenderer);
     renderer.mesh = utils.MeshUtils.createMesh(data);
-    renderer.material = standardMaterial();
+    renderer.material = material;
     return node;
 }
 
@@ -124,7 +172,20 @@ export function createNode (kind: NodeKind, parent: Node, camera: Camera | null)
     }
 
     if (!node) return null;
-    parentFor.addChild(node);
+    try {
+        parentFor.addChild(node);
+    } catch (error) {
+        // Entering the scene runs the components' onEnable, which can throw. Leaving the half-added
+        // node behind would repeat the error every frame, so take it out and say what happened.
+        console.error(`[SceneView] could not add the new ${node.name} to the scene:`, error);
+        try {
+            node.removeFromParent();
+            node.destroy();
+        } catch {
+            // Nothing more can be done for it.
+        }
+        return null;
+    }
 
     if (kind !== 'label' && camera && camera.isValid) {
         camera.node.getWorldPosition(_spawn);

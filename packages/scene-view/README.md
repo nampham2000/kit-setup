@@ -484,7 +484,13 @@ Hàng nút ở đầu Hierarchy: **New ▾**, **Duplicate**, **Delete**.
 - **New** mở menu: Empty node; Cube, Sphere, Capsule, Cylinder, Plane (mesh do
   `Primitives.ts` tự sinh dữ liệu, vật liệu là `builtin-standard`, không cần asset. **Không dùng `primitives` của
   engine**: project có thể tắt module "primitive" (SmashFest tắt, `primitives` khi đó là `undefined` và gây
-  `Cannot read properties of undefined (reading 'box')`). Cần `utils.MeshUtils` của engine để đổi dữ liệu thành Mesh); Directional light; Label (UI).
+  `Cannot read properties of undefined (reading 'box')`). Cần `utils.MeshUtils` của engine để đổi dữ liệu thành Mesh).
+  **Vật liệu được tìm chứ không giả định:** effect `builtin-standard` cũng có thể không được đăng ký trong build
+  (khi đó vật liệu tạo ra **không có pass nào**, và `SubModel.initialize` chết ở `passes[0].localSetLayout`, để lại
+  sub-model `passes = null` làm `getSkinPassIndex` ném `Cannot read properties of null (reading 'length')`).
+  Nên tool tìm một vật liệu dùng được: ưu tiên vật liệu `standard` đang có trên mesh trong scene, rồi mới thử
+  `builtin-standard`; không có cái nào thì từ chối tạo và báo trong Console. Hệ quả: vật 3D mới **dùng chung vật
+  liệu** với mesh mà nó mượn. Nếu việc gắn node vào scene vẫn ném lỗi, node bị hủy sạch chứ không bị bỏ lại hỏng.; Directional light; Label (UI).
 - Node mới là **con của node đang chọn** (không chọn gì thì nằm dưới scene), và được chọn ngay.
   Vật 3D đặt cách camera scene view khoảng 6 đơn vị, để hiện đúng chỗ bạn đang nhìn thay vì ở gốc
   tọa độ, có thể rất xa. **Label** phải nằm dưới một Canvas mới vẽ được, nên tool đặt nó dưới Canvas
