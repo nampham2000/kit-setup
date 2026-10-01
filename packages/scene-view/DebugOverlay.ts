@@ -6,7 +6,7 @@ const STYLE_ID = 'scene-view-overlay-style';
 const CSS = `
 /* One text size drives everything. --sv-fs is published by UiScale; every length below
    is in em, so changing it scales rows, carets, chips and switches with the letters. */
-.sv-root, .sv-help, .sv-help-btn, .sv-console, .sv-log-btn, .sv-menu {
+.sv-root, .sv-help, .sv-help-btn, .sv-console, .sv-log-btn, .sv-menu, .sv-tip {
     --sv-ui: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     /* Monospace only where alignment matters: numbers and key caps. Names and labels
        are far easier to read in a proportional face. */
@@ -180,6 +180,15 @@ const CSS = `
     background: #16181d; border: 1px solid rgba(255, 255, 255, .22);
     box-shadow: 0 .4em 1.2em rgba(0, 0, 0, .5);
 }
+/* The hover explanation. Above the menus (52) but below the preview page's own dropdown (99). */
+.sv-tip {
+    position: fixed; z-index: 60; display: none; max-width: 22em; padding: .5em .75em; box-sizing: border-box;
+    background: #0b0d11; border: 1px solid rgba(255, 255, 255, .24); border-radius: .4em;
+    box-shadow: 0 .4em 1.2em rgba(0, 0, 0, .55); pointer-events: none; line-height: 1.4;
+}
+.sv-tip-title { font-weight: 600; color: #fff; margin-bottom: .2em; }
+.sv-tip-body { color: #c3cad7; }
+
 .sv-menu-item {
     display: flex; align-items: center; gap: 1.6em; padding: .32em .9em; cursor: pointer; white-space: nowrap;
 }

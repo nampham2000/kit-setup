@@ -1,6 +1,8 @@
 import { BoxCollider, CapsuleCollider, Collider, Node, SphereCollider, Vec3 } from 'cc';
 import { kindOf, physicsAvailable } from './ColliderEdit';
 import { Command, ValueCommand } from './History';
+import { COLLIDER_HEAD_TIP, COLLIDER_TIPS } from './Tips';
+import { tip } from './Tooltip';
 import { bindLiveNumbers } from './LiveFields';
 
 interface Row {
@@ -87,6 +89,7 @@ export class ColliderInspector {
         const head = document.createElement('div');
         head.className = 'sv-section-head';
         head.textContent = collider.constructor.name;
+        tip(head, COLLIDER_HEAD_TIP);
         section.appendChild(head);
 
         this._vector(section, node, collider, 'center',
@@ -231,6 +234,7 @@ function labelled (parent: HTMLElement, label: string): HTMLElement {
     caption.className = 'sv-label';
     caption.textContent = label;
     field.appendChild(caption);
+    if (COLLIDER_TIPS[label]) tip(field, COLLIDER_TIPS[label]);
     parent.appendChild(field);
     return field;
 }

@@ -1,6 +1,8 @@
 import { Camera, game } from 'cc';
 import { ensureStyles } from './DebugOverlay';
 import { cameraPixelSize } from './ScenePicker';
+import { STATUS_TIP, TEXT_SIZE_TIP } from './Tips';
+import { tip } from './Tooltip';
 import { fontSize } from './UiScale';
 
 /** What the round button shows. One constant so the symbol is trivial to change. */
@@ -12,60 +14,64 @@ export interface HelpToggle {
     key: string;
     get: () => boolean;
     set: (on: boolean) => void;
+    /** What it does, shown on hover. A heading, a line break, then the explanation. */
+    tip?: string;
 }
 
 interface ShortcutRow {
     keys: string;
     text: string;
+    /** What it does, shown on hover. A heading, a line break, then the explanation. */
+    tip?: string;
 }
 
 const SHORTCUTS: { title: string; rows: ShortcutRow[] }[] = [
     {
         title: 'Tools',
         rows: [
-            { keys: '1', text: 'Move' },
-            { keys: '2', text: 'Rotate' },
-            { keys: '3', text: 'Scale' },
-            { keys: '4', text: 'No gizmo' },
-            { keys: '5', text: 'Collider: drag its handles' },
+            { keys: '1', text: 'Move', tip: 'Move tool (1)\nDrag an arrow to move the selected node along that axis. Red is X, green is Y, blue is Z.' },
+            { keys: '2', text: 'Rotate', tip: 'Rotate tool (2)\nDrag a ring to turn the selected node around that axis.' },
+            { keys: '3', text: 'Scale', tip: 'Scale tool (3)\nDrag a handle to stretch the selected node along that axis.' },
+            { keys: '4', text: 'No gizmo', tip: 'No gizmo (4)\nHide the handles, so a click only selects and cannot grab anything by accident.' },
+            { keys: '5', text: 'Collider: drag its handles', tip: 'Collider tool (5)\nShows handles on the selected node\'s collider. Drag one to resize the shape; the opposite side stays where it is.' },
         ],
     },
     {
         title: 'Select and focus',
         rows: [
-            { keys: 'Click', text: 'Select' },
-            { keys: '2x Click', text: 'Fly to the object' },
-            { keys: 'F', text: 'Fly to the selection' },
-            { keys: 'Esc', text: 'Deselect' },
+            { keys: 'Click', text: 'Select', tip: 'Select\nClick an object in the scene view to select it. It is highlighted in the Hierarchy and shown in the Inspector.' },
+            { keys: '2x Click', text: 'Fly to the object', tip: 'Fly to the object\nDouble-click an object and the scene camera flies to it.' },
+            { keys: 'F', text: 'Fly to the selection', tip: 'Fly to the selection\nFrame the selected node, keeping the direction you are looking in.' },
+            { keys: 'Esc', text: 'Deselect', tip: 'Deselect\nClear the selection.' },
         ],
     },
     {
         title: 'Camera',
         rows: [
-            { keys: 'RMB', text: 'Look around (hold)' },
-            { keys: 'W A S D', text: 'Move' },
-            { keys: 'Q E', text: 'Down / up' },
-            { keys: 'Shift', text: 'Move faster' },
-            { keys: 'MMB', text: 'Pan (hold)' },
-            { keys: 'Wheel', text: 'Dolly' },
+            { keys: 'RMB', text: 'Look around (hold)', tip: 'Look around\nHold the right mouse button in the scene view and move the mouse to turn the camera.' },
+            { keys: 'W A S D', text: 'Move', tip: 'Fly\nW forward, S back, A left, D right, relative to where the camera looks. The scene view needs keyboard focus: click it first.' },
+            { keys: 'Q E', text: 'Down / up', tip: 'Down / up\nMove the camera straight down (Q) or up (E).' },
+            { keys: 'Shift', text: 'Move faster', tip: 'Move faster\nHold it while flying to go several times faster.' },
+            { keys: 'MMB', text: 'Pan (hold)', tip: 'Pan\nHold the middle mouse button and drag to slide the camera sideways.' },
+            { keys: 'Wheel', text: 'Dolly', tip: 'Dolly\nScroll to move the camera forward or back.' },
         ],
     },
     {
         title: 'Edit',
         rows: [
-            { keys: 'Ctrl Z', text: 'Undo' },
-            { keys: 'Ctrl Y', text: 'Redo (also Ctrl Shift Z)' },
-            { keys: 'Ctrl C / V', text: 'Copy / paste the selected node' },
-            { keys: 'Delete', text: 'Delete the selected node' },
-            { keys: 'Right-click', text: 'Node menu, in the Hierarchy' },
+            { keys: 'Ctrl Z', text: 'Undo', tip: 'Undo\nTake back the last edit: a gizmo drag, an Inspector change, a created or deleted node.' },
+            { keys: 'Ctrl Y', text: 'Redo (also Ctrl Shift Z)', tip: 'Redo\nPut back what Undo took away.' },
+            { keys: 'Ctrl C / V', text: 'Copy / paste the selected node', tip: 'Copy and paste\nCopy the selected node, then paste a fresh copy of it under the selection.' },
+            { keys: 'Delete', text: 'Delete the selected node', tip: 'Delete\nRemove the selected node from the scene. Undo brings it back.' },
+            { keys: 'Right-click', text: 'Node menu, in the Hierarchy', tip: 'Node menu\nRight-click a row in the Hierarchy for Create, Copy, Paste, Duplicate, Delete and Copy UUID / PATH.' },
         ],
     },
     {
         title: 'Panel',
         rows: [
-            { keys: 'H', text: 'Show or hide this panel' },
-            { keys: 'L', text: 'Show or hide the console' },
-            { keys: 'F1', text: 'Close the scene view' },
+            { keys: 'H', text: 'Show or hide this panel', tip: 'Help panel\nShow or hide this panel.' },
+            { keys: 'L', text: 'Show or hide the console', tip: 'Console\nShow or hide the log drawer at the bottom.' },
+            { keys: 'F1', text: 'Close the scene view', tip: 'Close the scene view\nGo back to the plain game. Press F1 again to open it.' },
         ],
     },
 ];
@@ -132,6 +138,7 @@ export class HelpPanel {
 
         this._statusEl = document.createElement('div');
         this._statusEl.className = 'sv-help-status';
+        tip(this._statusEl, STATUS_TIP);
         this._panel.appendChild(this._statusEl);
 
         this._panel.appendChild(heading('Switches'));
@@ -139,6 +146,7 @@ export class HelpPanel {
         for (const toggle of this.toggles) {
             const row = document.createElement('div');
             row.className = 'sv-help-row sv-toggle-row' + (clickable ? '' : ' sv-static');
+            if (toggle.tip) tip(row, toggle.tip);
 
             const switchEl = document.createElement('div');
             switchEl.className = 'sv-switch';
@@ -165,6 +173,7 @@ export class HelpPanel {
             for (const shortcut of section.rows) {
                 const row = document.createElement('div');
                 row.className = 'sv-help-row';
+                if (shortcut.tip) tip(row, shortcut.tip);
                 row.appendChild(keycap(shortcut.keys));
                 row.appendChild(text(shortcut.text));
                 this._panel.appendChild(row);
@@ -259,6 +268,7 @@ export class HelpPanel {
             return el;
         };
 
+        tip(row, TEXT_SIZE_TIP);
         row.appendChild(button('A-', 'Smaller text ( [ )', -1));
         this._sizeEl = document.createElement('span');
         this._sizeEl.className = 'sv-size-value';

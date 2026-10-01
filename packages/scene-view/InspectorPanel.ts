@@ -1,6 +1,8 @@
 import { Component, Node, Vec3 } from 'cc';
 import { ColliderInspector } from './ColliderInspector';
 import { DebugOverlay } from './DebugOverlay';
+import { NODE_TIPS, TRANSFORM_TIPS } from './Tips';
+import { tip } from './Tooltip';
 import { Command, ValueCommand } from './History';
 import { bindLiveNumbers } from './LiveFields';
 
@@ -36,6 +38,8 @@ export class InspectorPanel {
 
         this._header = text(body, 'sv-text');
         this._path = text(body, 'sv-text sv-tag');
+        tip(this._header, NODE_TIPS.name);
+        tip(this._path, NODE_TIPS.path);
 
         this._active = this._checkbox(body, 'active');
         this._vector(body, 'position');
@@ -44,6 +48,8 @@ export class InspectorPanel {
 
         this._meta = text(body, 'sv-text sv-tag');
         this._components = text(body, 'sv-text sv-tag');
+        tip(this._meta, NODE_TIPS.meta);
+        tip(this._components, NODE_TIPS.components);
 
         this._colliders.onEdit = (command) => this.onEdit?.(command);
         this._colliders.mount(body);
@@ -112,6 +118,7 @@ export class InspectorPanel {
         const label = document.createElement('span');
         label.className = 'sv-label';
         label.textContent = kind;
+        tip(field, TRANSFORM_TIPS[kind]);
         field.appendChild(label);
 
         const inputs: HTMLInputElement[] = [];
@@ -167,6 +174,7 @@ export class InspectorPanel {
         const caption = document.createElement('span');
         caption.className = 'sv-label';
         caption.textContent = label;
+        if (label === 'active') tip(field, NODE_TIPS.active);
 
         const input = document.createElement('input');
         input.type = 'checkbox';

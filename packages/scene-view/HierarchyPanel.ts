@@ -1,5 +1,7 @@
 import { Camera, Light, ModelRenderer, Node, UIRenderer, UITransform } from 'cc';
 import { DebugOverlay } from './DebugOverlay';
+import { HIERARCHY_TIPS } from './Tips';
+import { tip } from './Tooltip';
 import { VisibilityController } from './VisibilityController';
 
 /** How many distinct guide colours there are. The CSS defines sv-d0 .. sv-d5. */
@@ -229,28 +231,31 @@ export class HierarchyPanel {
             });
             caret.addEventListener('dblclick', (e) => e.stopPropagation());
         }
+        if (hasChildren) tip(caret, HIERARCHY_TIPS.caret);
         row.appendChild(caret);
 
         const kind = kindOf(node);
         const chip = document.createElement('span');
         chip.className = `sv-chip sv-k-${kind}`;
-        chip.title = KIND_TITLES[kind];
+        tip(chip, `${KIND_TITLES[kind]}\n${HIERARCHY_TIPS.kind}`);
         row.appendChild(chip);
 
         const name = document.createElement('span');
         name.className = 'sv-name';
         name.textContent = node.name || '(unnamed)';
+        if (isPrefabNode(node)) tip(name, HIERARCHY_TIPS.prefab);
         row.appendChild(name);
 
         if (hasChildren) {
             const count = document.createElement('span');
             count.className = 'sv-tag';
             count.textContent = String(node.children.length);
+            tip(count, HIERARCHY_TIPS.children);
             row.appendChild(count);
         }
 
-        row.appendChild(this._button('o', 'Hide / show', () => this._callbacks.onToggleHide(node), 'hide'));
-        row.appendChild(this._button('S', 'Solo', () => this._callbacks.onToggleSolo(node), 'solo'));
+        row.appendChild(this._button('o', HIERARCHY_TIPS.hide, () => this._callbacks.onToggleHide(node), 'hide'));
+        row.appendChild(this._button('S', HIERARCHY_TIPS.solo, () => this._callbacks.onToggleSolo(node), 'solo'));
 
         this._rows.set(node, row);
         return row;

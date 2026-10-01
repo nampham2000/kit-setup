@@ -15,6 +15,8 @@ import { ConsolePanel } from './ConsolePanel';
 import { ContextMenu } from './ContextMenu';
 import { EditToolbar } from './EditToolbar';
 import { createItems, nodeMenuItems, pathOf } from './HierarchyMenu';
+import { HANDLE_TIP, SPLITTER_TIP, TOGGLE_TIPS, TOOL_TIPS } from './Tips';
+import { tooltip } from './Tooltip';
 import { createNode, NodeKind } from './NodeFactory';
 import { AddNodeCommand, RemoveNodeCommand } from './SceneEdit';
 import { capturePose, History, Pose, PoseCommand, poseChanged } from './History';
@@ -509,6 +511,7 @@ export class SceneViewDebug extends Component {
         this._watcher.stop();
         this._help.unmount();
         this._console.unmount();
+        tooltip.uninstall();
     }
 
     public get gizmoMode (): GizmoMode { return this._handles.mode; }
@@ -1017,6 +1020,40 @@ export class SceneViewDebug extends Component {
     }
 
     private _onMouseMove (e: EventMouse) {
+        this._moveCore(e);
+        if (!this._bridge.hasEditor && this._overlay.available) this._updateEngineTip(e.getLocationX(), e.getLocationY());
+    }
+
+    /**
+     * The tooltip for what the engine draws, which has no DOM element to hover: the tool strip,
+     * the divider and the collider handles. The pointer arrives in camera pixels, so it is converted
+     * to CSS pixels through the canvas rect, with y flipped because the engine counts from the bottom.
+     */
+    private _updateEngineTip (x: number, y: number) {
+        let text: string | null = null;
+        const busy = this._splitter.dragging || this._handles.dragging || this._colliderHandles.dragging || this._overUI();
+        if (!busy) {
+            if (this.showSplitter && this._splitter.hitTest(x)) {
+                text = SPLITTER_TIP;
+            } else if (this.enableTransformGizmo && this.showToolPalette) {
+                const tool = this._palette.hitTest(x, y);
+                if (tool) text = TOOL_TIPS[tool];
+            }
+            if (!text && this._handles.mode === 'collider' && this._selected && this._colliderHandles.hovering) text = HANDLE_TIP;
+        }
+
+        const canvas = game.canvas as HTMLCanvasElement;
+        const rect = canvas?.getBoundingClientRect?.();
+        const size = cameraPixelSize(this._sceneCamera);
+        if (!rect || size.width <= 0 || size.height <= 0) return;
+        tooltip.showAt(
+            rect.left + x * (rect.width / size.width),
+            rect.bottom - y * (rect.height / size.height),
+            text,
+        );
+    }
+
+    private _moveCore (e: EventMouse) {
         const x = e.getLocationX();
         const y = e.getLocationY();
 
@@ -1514,6 +1551,8 @@ export class SceneViewDebug extends Component {
             this._console.onInteract = () => (game.canvas as HTMLCanvasElement)?.focus?.();
             this._console.onToggle = () => { if (this._active) this._syncWidgets(); };
             this._console.menu = this._menu;
+            // Hover explanations need real DOM mouse events, which the editor Preview does not send.
+            tooltip.install();
             this._console.mount();
             this._syncConsole();
         }
@@ -1574,6 +1613,7 @@ export class SceneViewDebug extends Component {
                 set: (on) => { if (on !== this.debugInput) this.toggleDebug(); },
             },
         );
+        for (const toggle of toggles) toggle.tip = TOGGLE_TIPS[toggle.label];
         return toggles;
     }
 

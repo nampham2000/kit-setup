@@ -72,6 +72,9 @@ export class ColliderHandles {
 
     public get dragging (): boolean { return this._drag !== null; }
 
+    /** True while the pointer rests on a handle and no drag is under way. */
+    public get hovering (): boolean { return this._drag === null && this._hover !== null; }
+
     /** True when there is at least one handle to grab, so the caller can tell the user otherwise. */
     public get hasHandles (): boolean { return this._handles.length > 0; }
 

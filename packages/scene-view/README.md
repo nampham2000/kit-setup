@@ -566,6 +566,26 @@ Chỉ làm việc với collider **đã có trên node**, không tạo hay xóa 
     Kích thước tối thiểu 0,001 để không tạo ra collider suy biến.
 - Dùng được khi build có module physics; bản cắt physics thì không hiện gì.
 
+## Giải thích khi rê chuột (tooltip)
+
+Rê chuột vào bất kỳ nút, công tắc, ô số, hàng nào của tool thì hiện một khung giải thích (`Tooltip.ts`, chữ nằm hết trong
+`Tips.ts` để đọc và sửa lời mà không đụng code). Chữ giải thích viết bằng tiếng Anh, cùng ngôn ngữ với phần còn lại của giao diện.
+
+- **Dạng:** một dòng tiêu đề đậm, một đoạn mô tả. Có ở: các công tắc, **công cụ** và **phím tắt** trong bảng `!`, dòng trạng thái,
+  cỡ chữ; **Inspector** (tên, đường dẫn, position/rotation/scale, active, dòng world/layer/children, danh sách component, và
+  từng ô của collider: center, size, radius, height, direction, trigger, enabled); **Hierarchy** (mũi tên mở/thu, ô màu loại node,
+  tên prefab xanh, số con, nút ẩn/solo, các nút New/Duplicate/Delete/Undo/Redo); **Console** (nút đếm lỗi, bộ lọc, giờ, số lần lặp).
+- **Cả những thứ vẽ bằng engine** không có phần tử DOM để rê vào: bảng công cụ 1-5, thanh chia, và tay cầm collider. Với chúng,
+  `SceneViewDebug._updateEngineTip` đổi tọa độ chuột từ pixel camera sang pixel CSS qua rect của canvas (lật trục y vì engine đếm
+  từ dưới lên) rồi gọi `tooltip.showAt`.
+- **Hiện sau ~0,4 giây** khi chuột đứng yên, nhưng **hiện ngay** khi chuyển từ cái này sang cái khác đã có giải thích, nên lướt qua
+  cả một panel không phải chờ ở từng hàng. Mất đi khi bấm chuột, cuộn, bấm phím, mất focus cửa sổ, hoặc chuột rời đi.
+- **Mọi `title` cũ tự được nâng cấp:** tooltip lấy chữ của `title` rồi xóa thuộc tính đó (để tooltip chậm, không có kiểu của trình
+  duyệt không hiện chồng lên), nên các nút đặt `title` từ trước không cần sửa. Muốn thêm giải thích cho một phần tử mới: `tip(el, "Tiêu đề
+Mô tả")`.
+- Tự đặt vị trí: dưới phần tử, lật lên trên nếu hết chỗ, trượt vào nếu sát mép, không bao giờ ra ngoài cửa sổ.
+- Như các panel DOM khác, **chỉ ở browser** (Preview của editor không chuyển sự kiện chuột vào trang).
+
 ## Console trong trang (phím `L`)
 
 Xem log mà không cần mở F12 (mở F12 trên màn hình nhỏ nghĩa là bóp game lại). Cạnh nút `!` có
@@ -755,6 +775,8 @@ Split-screen vẫn chạy bình thường kể cả khi thiếu module này.
 | `ColliderMath.ts` | Toán kéo tay cầm, thuần, không phụ thuộc engine |
 | `ColliderInspector.ts` | Khối collider có sẵn trong Inspector |
 | `ConsoleCapture.ts` | Bắt log, lỗi, promise reject; không phụ thuộc DOM |
+| `Tooltip.ts` | Tooltip giải thích khi rê chuột, và hàm `tip()` |
+| `Tips.ts` | Toàn bộ chữ giải thích, gom một chỗ |
 | `ConsolePanel.ts` | Ngăn kéo Console, nút đếm lỗi, chọn và chép dòng |
 | `LogText.ts` | Định dạng dòng log và bộ chọn dòng (bấm / Ctrl / Shift) |
 | `Clipboard.ts` | Chép vào clipboard, có đường dự phòng |

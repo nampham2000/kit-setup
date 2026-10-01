@@ -3,6 +3,8 @@ import { consoleLog, LogEntry, LogLevel } from './ConsoleCapture';
 import { ContextMenu, MenuItem } from './ContextMenu';
 import { ensureStyles } from './DebugOverlay';
 import { clock, formatLine, formatMessage, LogSelection } from './LogText';
+import { CONSOLE_TIPS } from './Tips';
+import { tip } from './Tooltip';
 
 const OPEN_KEY = 'scene-view-console-open';
 
@@ -90,7 +92,7 @@ export class ConsolePanel {
 
         this._button = document.createElement('div');
         this._button.className = 'sv-log-btn';
-        this._button.title = 'Console (L)';
+        tip(this._button, CONSOLE_TIPS.button);
         const label = document.createElement('span');
         label.textContent = 'Console';
         this._errBadge = badge('sv-badge-err');
@@ -121,7 +123,7 @@ export class ConsolePanel {
         for (const { level, label: text } of FILTERS) {
             const btn = document.createElement('button');
             btn.className = `sv-chip-btn sv-on sv-lvbtn-${level}`;
-            btn.title = `Show or hide ${text.toLowerCase()} messages`;
+            tip(btn, CONSOLE_TIPS[level]);
             btn.appendChild(document.createTextNode(`${text} `));
             const count = document.createElement('span');
             btn.appendChild(count);
@@ -334,6 +336,7 @@ export class ConsolePanel {
 
         const time = document.createElement('span');
         time.className = 'sv-log-time';
+        tip(time, CONSOLE_TIPS.time);
         time.textContent = clock(entry.time);
 
         const message = document.createElement('span');
@@ -374,6 +377,7 @@ export class ConsolePanel {
         if (record.shown === entry.count) return;
         record.shown = entry.count;
         record.count.textContent = entry.count > 1 ? String(entry.count) : '';
+        tip(record.count, CONSOLE_TIPS.repeated(entry.count));
         record.count.style.display = entry.count > 1 ? '' : 'none';
     }
 
