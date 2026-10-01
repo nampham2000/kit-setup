@@ -185,7 +185,7 @@ export class ConsolePanel {
         const left = canvas.left + canvas.width * insetLeft;
         const right = canvas.right - canvas.width * insetRight;
         const width = Math.max(right - left, Math.min(canvas.width, 240));
-        const height = Math.max(140, Math.min(canvas.height * 0.3, 360));
+        const height = Math.max(110, Math.min(canvas.height * 0.21, 260));
 
         this._drawer.style.left = `${left}px`;
         this._drawer.style.width = `${width}px`;
