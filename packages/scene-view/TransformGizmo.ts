@@ -2,7 +2,7 @@ import { Camera, Color, Node, NodeSpace, Quat, Vec2, Vec3, geometry, screen } fr
 import { GeometryRenderer } from './SceneGizmos';
 
 export type Axis = 0 | 1 | 2;
-export type GizmoMode = 'move' | 'rotate' | 'scale' | 'view';
+export type GizmoMode = 'move' | 'rotate' | 'scale' | 'view' | 'collider';
 
 const AXIS_COLORS = [
     new Color(226, 74, 74, 255),
@@ -91,7 +91,7 @@ export class TransformGizmo {
     }
 
     public hitTest (screenX: number, screenY: number): Axis | null {
-        if (!this._ready() || this.mode === 'view') return null;
+        if (!this._ready() || this.mode === 'view' || this.mode === 'collider') return null;
         return this.mode === 'rotate'
             ? this._hitRings(screenX, screenY)
             : this._hitAxes(screenX, screenY);
@@ -120,7 +120,7 @@ export class TransformGizmo {
     }
 
     public draw (gr: GeometryRenderer) {
-        if (!this._ready() || this.mode === 'view') return;
+        if (!this._ready() || this.mode === 'view' || this.mode === 'collider') return;
         this._node.getWorldPosition(_origin);
 
         for (let axis = 0 as Axis; axis < 3; axis++) {

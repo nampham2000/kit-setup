@@ -159,6 +159,7 @@ cầm sáng vàng khi rê chuột lên. Property `Enable Transform Gizmo`.
 |---|---|---|
 | `1` | Di chuyển | 3 cần trục, đầu hình chữ thập |
 | `4` | Không gizmo | không vẽ gì, khỏi lỡ tay nắm tay cầm |
+| `5` | Collider | tay cầm ngay trên khung collider của node đang chọn, kéo để chỉnh |
 | `2` | Xoay | 3 vòng tròn quanh 3 trục |
 | `3` | Scale | 3 cần trục, đầu khối vuông đặc |
 
@@ -516,8 +517,22 @@ Chỉ làm việc với collider **đã có trên node**, không tạo hay xóa 
   **Capsule** (center, radius, height, direction X/Y/Z), cộng công tắc **trigger** và **enabled**. Sửa số thì
   khung đổi ngay, và hoàn tác được (`Ctrl+Z`). Các loại collider khác (Mesh, Cylinder, Cone, Plane...) hiện
   tên, center, trigger, enabled nhưng chưa có khung vẽ.
+- **Kéo trực tiếp trong viewport: công cụ Collider (phím `5`, nút thứ 5 trong bảng công cụ).** Chọn node, bấm
+  `5` thì các collider của nó có tay cầm (ô vuông nhỏ). Rê chuột vào thì tay cầm sáng vàng; kéo thì chỉnh
+  hình dạng, thả chuột là **một bước undo**:
+  - **Box**: sáu tay cầm, mỗi mặt một cái. Kéo mặt nào thì mặt đó dịch, **mặt đối diện đứng yên** (size đổi
+    và center dịch nửa phần chênh).
+  - **Sphere**: sáu điểm trên mặt cầu, kéo để đổi bán kính.
+  - **Capsule**: hai đầu mũ (đổi chiều cao phần thẳng, hai đầu cùng giãn nên center không đổi) và bốn điểm
+    quanh giữa (đổi bán kính).
+  - Chưa có kéo để dời **center** (dùng ô center trong Inspector), và chưa có tay cầm cho Mesh/Cylinder/Cone.
+  - Cách làm: như gizmo, toàn bộ tính trong không gian màn hình. Chiếu một đoạn tham chiếu dọc hướng tay cầm
+    ra màn hình rồi đo con trỏ theo đoạn đó, nên không cần hình học va chạm. Mỗi lần kéo tính **từ hình dạng
+    lúc bắt đầu kéo** (không cộng dồn từng sự kiện chuột), nên kéo ra rồi kéo về thì trả đúng giá trị cũ.
+    Hướng tay cầm chĩa thẳng vào camera thì không làm gì (khỏi biến cử động nhỏ thành khoảng cách khổng lồ).
+    Node bị scale thì cùng một cú kéo đổi ít hơn ở đơn vị local, đúng như physics áp scale.
+    Kích thước tối thiểu 0,001 để không tạo ra collider suy biến.
 - Dùng được khi build có module physics; bản cắt physics thì không hiện gì.
-- Chưa có: kéo tay cầm ngay trong viewport (hiện chỉ sửa bằng số).
 
 ## Console trong trang (phím `L`)
 
@@ -678,6 +693,8 @@ Split-screen vẫn chạy bình thường kể cả khi thiếu module này.
 | `EditToolbar.ts` | New / Duplicate / Delete / Undo / Redo ở đầu Hierarchy |
 | `ColliderEdit.ts` | Có physics không, collider thuộc loại nào |
 | `ColliderGizmo.ts` | Vẽ khung collider (của node đang chọn, hoặc của mọi node) |
+| `ColliderHandles.ts` | Tay cầm kéo được trên collider (công cụ phím 5) |
+| `ColliderMath.ts` | Toán kéo tay cầm, thuần, không phụ thuộc engine |
 | `ColliderInspector.ts` | Khối collider có sẵn trong Inspector |
 | `ConsoleCapture.ts` | Bắt log, lỗi, promise reject; không phụ thuộc DOM |
 | `ConsolePanel.ts` | Ngăn kéo Console và nút đếm lỗi |

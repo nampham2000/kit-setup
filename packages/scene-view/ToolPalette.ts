@@ -4,7 +4,7 @@ import { cameraPixelSize } from './ScenePicker';
 import { screenFill, screenStroke, screenThickPath } from './ScreenDraw';
 import { GizmoMode } from './TransformGizmo';
 
-const ORDER: GizmoMode[] = ['move', 'rotate', 'scale', 'view'];
+const ORDER: GizmoMode[] = ['move', 'rotate', 'scale', 'view', 'collider'];
 
 /** Geometry in camera pixels. Hit-testing and drawing read the same numbers. */
 const MARGIN = 10;
@@ -52,6 +52,12 @@ const ICONS: Record<GizmoMode, readonly number[][]> = {
         [0.62, 0.62, 0.90, 0.62, 0.90, 0.90, 0.62, 0.90, 0.62, 0.62],
     ],
     view: [[0.32, 0.90, 0.32, 0.20, 0.50, 0.38, 0.62, 0.10, 0.73, 0.15, 0.61, 0.43, 0.84, 0.45, 0.32, 0.90]],
+    // A box outline with a grab handle on two of its faces.
+    collider: [
+        [0.18, 0.18, 0.74, 0.18, 0.74, 0.74, 0.18, 0.74, 0.18, 0.18],
+        [0.74, 0.40, 0.90, 0.40, 0.90, 0.56, 0.74, 0.56, 0.74, 0.40],
+        [0.34, 0.74, 0.34, 0.90, 0.50, 0.90, 0.50, 0.74],
+    ],
 };
 
 /**
@@ -63,7 +69,7 @@ const ICONS: Record<GizmoMode, readonly number[][]> = {
  * document, and a native build has no document to draw into — routing both halves
  * through the engine is the only way this behaves the same everywhere.
  *
- * Buttons are listed in key order (1-4) rather than Unity's order, which puts the
+ * Buttons are listed in key order (1-5) rather than Unity's order, which puts the
  * hand first: a strip whose positions disagree with the numbers printed in its own
  * documentation is worse than one that does not copy Unity exactly.
  */

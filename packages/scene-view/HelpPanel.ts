@@ -27,6 +27,7 @@ const SHORTCUTS: { title: string; rows: ShortcutRow[] }[] = [
             { keys: '2', text: 'Rotate' },
             { keys: '3', text: 'Scale' },
             { keys: '4', text: 'No gizmo' },
+            { keys: '5', text: 'Collider: drag its handles' },
         ],
     },
     {

@@ -9,6 +9,7 @@ import { DebugOverlay, ensureStyles } from './DebugOverlay';
 import { EditorBridge } from './EditorBridge';
 import { Collider } from 'cc';
 import { collectColliders, drawAllColliders, drawColliders } from './ColliderGizmo';
+import { ColliderHandles } from './ColliderHandles';
 import { ConsolePanel } from './ConsolePanel';
 import { EditToolbar } from './EditToolbar';
 import { createNode, NodeKind } from './NodeFactory';
@@ -233,6 +234,9 @@ export class SceneViewDebug extends Component {
     public readonly history = new History();
     /** The selected node's transform when the current gizmo drag began. */
     private _dragPose: Pose | null = null;
+    private _colliderHandles = new ColliderHandles();
+    /** Set when a mouse press began on a collider handle, so its release is not taken for a click. */
+    private _colliderGrab = false;
     private _toolbar = new EditToolbar({
         onCreate: (kind) => this.createNode(kind),
         onDuplicate: () => this.duplicateSelected(),
@@ -343,6 +347,7 @@ export class SceneViewDebug extends Component {
         // Kept above the gizmo-renderer guard: hit-testing uses the handle size
         // computed here, so it must stay current even when nothing can be drawn.
         if (this.enableTransformGizmo) this._handles.sync(this._sceneCamera, this._selected);
+        this._colliderHandles.sync(this._sceneCamera, this._handles.mode === 'collider' ? this._selected : null);
 
         if (!this._gizmos && !this._initGizmos()) return;
         if (this.showGrid) drawGrid(this._gizmos);
@@ -360,6 +365,7 @@ export class SceneViewDebug extends Component {
         if (this._selected) {
             drawSelection(this._gizmos, this._selected);
             if (this.enableTransformGizmo) this._handles.draw(this._gizmos);
+            if (this._handles.mode === 'collider') this._colliderHandles.draw(this._gizmos);
         }
 
         // Overlay widgets go last so they sit on top of the scene and the gizmos.
@@ -471,6 +477,8 @@ export class SceneViewDebug extends Component {
         this._probe.uninstall();
         this._focusGoal = null;
         this._handles.endDrag();
+        this._colliderHandles.endDrag();
+        this._colliderGrab = false;
         this._grabbedAxis = null;
         this._freeCamera?.detach();
         this._freeCamera = null;
@@ -502,9 +510,11 @@ export class SceneViewDebug extends Component {
         if (!this._active || this._handles.mode === mode) return;
         // Switching tool mid-drag would reinterpret the drag under new maths.
         this._handles.endDrag();
+        this._commitColliderEdit();
         this._grabbedAxis = null;
         this._handles.mode = mode;
         this._handles.clearHover();
+        this._colliderHandles.clearHover();
         this._palette.setMode(mode);
         this._updateHint();
     }
@@ -980,6 +990,16 @@ export class SceneViewDebug extends Component {
         if (!this.enableTransformGizmo || !this._selected) return;
         if (this._overUI() || !isInsideViewport(this._sceneCamera, x, y)) return;
 
+        // The collider tool has handles of its own, and they too come before picking.
+        if (this._handles.mode === 'collider') {
+            const handle = this._colliderHandles.hitTest(x, y);
+            if (handle !== null) {
+                this._colliderHandles.beginDrag(handle, x, y);
+                this._colliderGrab = true;
+            }
+            return;
+        }
+
         // Grabbing a handle takes priority over selecting whatever is behind it.
         const axis = this._handles.hitTest(x, y);
         if (axis !== null) {
@@ -1003,6 +1023,12 @@ export class SceneViewDebug extends Component {
         }
 
         if (!this.enableTransformGizmo || !this._selected) return;
+        if (this._handles.mode === 'collider') {
+            if (this._colliderHandles.dragging) this._colliderHandles.drag(x, y);
+            else if (this._overUI() || !isInsideViewport(this._sceneCamera, x, y)) this._colliderHandles.clearHover();
+            else this._colliderHandles.setHover(x, y);
+            return;
+        }
         if (this._handles.dragging) {
             this._handles.drag(x, y);
         } else if (this._overUI() || !isInsideViewport(this._sceneCamera, x, y)) {
@@ -1021,6 +1047,13 @@ export class SceneViewDebug extends Component {
         const pressed = this._pressValid;
         this._pressValid = false;
         this._splitter.endDrag();
+
+        // A release that ended a collider drag is never a click, however short the drag was.
+        if (this._colliderGrab) {
+            this._colliderGrab = false;
+            this._commitColliderEdit();
+            return;
+        }
 
         const dragged = this._grabbedAxis !== null;
         this._handles.endDrag();
@@ -1120,6 +1153,12 @@ export class SceneViewDebug extends Component {
 
     private _onKeyUp (e: EventKeyboard) {
         this._trackModifier(e.keyCode, false);
+    }
+
+    /** Finish a collider-handle drag and record it as one undo step, if it changed the shape. */
+    private _commitColliderEdit () {
+        const command = this._colliderHandles.endDrag();
+        if (command) this.history.push(command);
     }
 
     /** Record a finished gizmo drag as one undo step, if it actually changed anything. */
@@ -1257,6 +1296,9 @@ export class SceneViewDebug extends Component {
             break;
         case KeyCode.DIGIT_4:
             this._setGizmoMode('view');
+            break;
+        case KeyCode.DIGIT_5:
+            this._setGizmoMode('collider');
             break;
         default:
             break;
