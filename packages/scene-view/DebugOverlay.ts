@@ -112,11 +112,11 @@ const CSS = `
 .sv-btn.sv-on { color: #ff9830; border-color: rgba(255, 152, 48, .55); }
 
 .sv-field { display: flex; align-items: center; gap: .4em; padding: .15em .7em; }
-.sv-label { flex: none; width: 4.6em; color: #a9b1c0; }
+.sv-label { flex: none; width: 3.9em; color: #a9b1c0; }
 .sv-num {
     flex: 1 1 0; min-width: 0; width: 100%; background: rgba(255, 255, 255, .07);
     border: 1px solid rgba(255, 255, 255, .16); border-radius: .3em; color: #f0f3f8;
-    font-family: var(--sv-mono); font-size: .95em; padding: .15em .4em; text-align: right;
+    font-family: var(--sv-mono); font-size: .9em; padding: .15em .25em; text-align: right;
 }
 .sv-num:focus { outline: none; border-color: #ff9830; background: rgba(255, 152, 48, .14); }
 .sv-text { padding: .2em .7em; color: #c3cad7; white-space: pre-wrap; word-break: break-all; }
@@ -211,6 +211,8 @@ export type Dock = 'left' | 'right';
  * At the default 13px these come to about 210 and 420 px.
  */
 const MIN_PANEL_EM = 16;
+/** The Inspector holds three number fields per row, which need more room than a tree. */
+const MIN_INSPECTOR_EM = 22;
 const MAX_PANEL_EM = 32;
 
 /** Gap kept to the window edge, and to the canvas a panel sits beside. */
@@ -225,9 +227,9 @@ const GAP = 8;
  * actually free keeps it in the dark bars beside the canvas. Below the minimum it
  * has to overlap, and the P key hides it.
  */
-function fit (free: number): number {
+function fit (free: number, minEm = MIN_PANEL_EM): number {
     const em = fontSize();
-    return Math.round(Math.max(em * MIN_PANEL_EM, Math.min(em * MAX_PANEL_EM, free - EDGE - GAP)));
+    return Math.round(Math.max(em * minEm, Math.min(em * MAX_PANEL_EM, free - EDGE - GAP)));
 }
 
 /**
@@ -303,7 +305,7 @@ export class DebugOverlay {
         // width, a dock pinned to the window left a gap whenever the margin was wider
         // than the cap, which showed as dead space beside the game.
         const leftWidth = fit(rect.left);
-        const rightWidth = fit(window.innerWidth - rect.right);
+        const rightWidth = fit(window.innerWidth - rect.right, MIN_INSPECTOR_EM);
         left.style.width = `${leftWidth}px`;
         right.style.width = `${rightWidth}px`;
         left.style.left = `${Math.max(EDGE, rect.left - GAP - leftWidth)}px`;
