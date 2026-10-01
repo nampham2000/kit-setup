@@ -584,8 +584,22 @@ của viewport, nên bấm vào dải dưới ngăn kéo không chọn nhầm v�
   lấy lại được những gì đã log trước đó. Bộ nhớ tối đa 1000 dòng, trang chỉ giữ 400 dòng cuối.
 - **Gộp dòng trùng** liên tiếp thành một dòng có số lần (như DevTools). `%c` bị bỏ, `%s %d %i %f %o %O`
   được thay đúng, object vòng không làm hỏng log.
-- **Lọc** theo Log / Warn / Error (kèm số lượng), **Copy** chép các dòng đang hiện vào clipboard,
-  **Clear** xóa hết. Đang ở cuối danh sách thì tự cuộn theo dòng mới; cuộn lên đọc thì không bị kéo xuống.
+- **Lọc** theo Log / Warn / Error (kèm số lượng), **Clear** xóa hết. **Copy** xem mục "Chọn và chép dòng log" ngay dưới. Đang ở cuối danh sách thì tự cuộn theo dòng mới; cuộn lên đọc thì không bị kéo xuống.
+- **Chọn và chép dòng log:**
+  - **Bấm một dòng** để chọn (tô xanh); **Ctrl/Cmd+bấm** thêm hoặc bớt từng dòng; **Shift+bấm** chọn cả đoạn từ
+    dòng bấm trước tới dòng này (đoạn theo thứ tự đang thấy, nên đúng cả khi đang lọc). Bấm lại dòng đang là dòng
+    duy nhất được chọn thì bỏ chọn.
+  - **`Ctrl+C`** chép các dòng đã chọn (kèm giờ, mức, nội dung, số lần lặp), **`Ctrl+A`** chọn tất cả, **`Esc`** bỏ chọn.
+  - Nút **Copy** ở đầu đổi theo: "Copy all" khi chưa chọn gì, "Copy (3)" khi đã chọn 3 dòng. Rê chuột lên một dòng thì
+    hiện nút **Copy** nhỏ ở cuối dòng để chép đúng dòng đó.
+  - **Chuột phải** vào dòng: Copy line, Copy message only (chỉ nội dung, không giờ/mức), Copy picked lines, Copy all shown,
+    Select all, Clear console. Chuột phải vào dòng chưa chọn thì chọn nó trước, như danh sách file.
+  - **Bôi đen chữ bằng chuột** vẫn dùng được để chép một đoạn trong dòng (CSS đặt `user-select: text !important`, vì có
+    trang tắt chọn chữ toàn cục). Khi đang có chữ được bôi, `Ctrl+C` là của trình duyệt và chép đúng đoạn đó.
+  - Đang chọn dòng hoặc bôi chữ thì log **không tự cuộn** xuống dòng mới, khỏi giật khỏi chỗ bạn đang đọc.
+  - Chép có **hai đường**: `navigator.clipboard` (chỉ có ở HTTPS hoặc localhost, và bị từ chối khi trang không có focus),
+    sau đó dự phòng bằng ô nhập ẩn + lệnh `copy` (chạy cả khi mở preview bằng địa chỉ IP trên điện thoại). Có ghi chú
+    nhỏ cạnh nút ("Copied 3 lines", hoặc "Copy failed..." nếu cả hai đều thất bại), thay vì im lặng như trước.
 - **Chỉ ở browser**, như Hierarchy/Inspector: trong Preview của editor đã có Console của editor, và
   Preview không chuyển click vào trang. Phím `L` và công tắc "Console" trong panel `!` cũng chỉ có ở browser.
 - Giới hạn: dòng log trông như xuất phát từ `ConsoleCapture.ts` chứ không phải file gọi, nếu soi bằng DevTools.
@@ -732,7 +746,9 @@ Split-screen vẫn chạy bình thường kể cả khi thiếu module này.
 | `ColliderMath.ts` | Toán kéo tay cầm, thuần, không phụ thuộc engine |
 | `ColliderInspector.ts` | Khối collider có sẵn trong Inspector |
 | `ConsoleCapture.ts` | Bắt log, lỗi, promise reject; không phụ thuộc DOM |
-| `ConsolePanel.ts` | Ngăn kéo Console và nút đếm lỗi |
+| `ConsolePanel.ts` | Ngăn kéo Console, nút đếm lỗi, chọn và chép dòng |
+| `LogText.ts` | Định dạng dòng log và bộ chọn dòng (bấm / Ctrl / Shift) |
+| `Clipboard.ts` | Chép vào clipboard, có đường dự phòng |
 | `HierarchyPanel.ts` | Cây node, nút ẩn/solo |
 | `InspectorPanel.ts` | Inspector sửa được giá trị |
 | `VisibilityController.ts` | Trạng thái ẩn/solo và khôi phục |

@@ -1,5 +1,8 @@
+import { copyText } from './Clipboard';
 import { consoleLog, LogEntry, LogLevel } from './ConsoleCapture';
+import { ContextMenu, MenuItem } from './ContextMenu';
 import { ensureStyles } from './DebugOverlay';
+import { clock, formatLine, formatMessage, LogSelection } from './LogText';
 
 const OPEN_KEY = 'scene-view-console-open';
 
@@ -9,11 +12,21 @@ const MAX_ROWS = 400;
 /** Within this many pixels of the bottom counts as "following the log". */
 const STICK_PX = 24;
 
+/** How long a "Copied" note stays up, in milliseconds. */
+const NOTE_MS = 1800;
+
 const FILTERS: { level: LogLevel; label: string }[] = [
     { level: 'log', label: 'Log' },
     { level: 'warn', label: 'Warn' },
     { level: 'error', label: 'Error' },
 ];
+
+interface Row {
+    row: HTMLElement;
+    count: HTMLElement;
+    shown: number;
+    entry: LogEntry;
+}
 
 /**
  * The page's console, inside the page: a button beside the help button that carries
@@ -24,6 +37,10 @@ const FILTERS: { level: LogLevel; label: string }[] = [
  * bottom of the views; it is closed until asked for, and the button keeps counting,
  * so an error is noticed without it being open.
  *
+ * Lines can be picked (click, Ctrl-click, Shift-click) and copied: with Ctrl+C, with the
+ * Copy button, from a button on each line, or from the right-click menu. Text can still
+ * be selected with the mouse like on any page.
+ *
  * DOM like the other panels, so clickable in a browser and not in the editor Preview.
  */
 export class ConsolePanel {
@@ -31,15 +48,21 @@ export class ConsolePanel {
     public onInteract: () => void = null;
     /** Called when the drawer opens or closes, so the owner can make the views give up or take back its space. */
     public onToggle: () => void = null;
+    /** The menu to use for a right-click on a line. Without one, the browser's own menu appears. */
+    public menu: ContextMenu = null;
 
     private _button: HTMLElement = null;
     private _errBadge: HTMLElement = null;
     private _warnBadge: HTMLElement = null;
     private _drawer: HTMLElement = null;
     private _body: HTMLElement = null;
+    private _copyButton: HTMLElement = null;
+    private _note: HTMLElement = null;
+    private _noteTimer = 0;
     private _filterButtons = new Map<LogLevel, HTMLElement>();
     private _filterCounts = new Map<LogLevel, HTMLElement>();
-    private _rows = new Map<number, { row: HTMLElement; count: HTMLElement; shown: number }>();
+    private _rows = new Map<number, Row>();
+    private _picked = new LogSelection();
     private _shown: Record<LogLevel, boolean> = { log: true, warn: true, error: true };
     private _open = false;
     private _inside = false;
@@ -82,6 +105,9 @@ export class ConsolePanel {
 
         this._drawer = document.createElement('div');
         this._drawer.className = 'sv-console';
+        // Focusable, so Ctrl+C and Ctrl+A reach it once a line has been clicked.
+        this._drawer.tabIndex = 0;
+        this._drawer.addEventListener('keydown', (e) => this._onKey(e));
         this._track(this._drawer);
 
         const head = document.createElement('div');
@@ -111,7 +137,13 @@ export class ConsolePanel {
         const spacer = document.createElement('span');
         spacer.className = 'sv-console-spacer';
         head.appendChild(spacer);
-        head.appendChild(this._action('Copy', 'Copy the shown messages to the clipboard', () => this._copy()));
+
+        this._note = document.createElement('span');
+        this._note.className = 'sv-console-note';
+        head.appendChild(this._note);
+
+        this._copyButton = this._action('Copy all', '', () => this._copyPrimary());
+        head.appendChild(this._copyButton);
         head.appendChild(this._action('Clear', 'Remove every message', () => consoleLog.clear()));
         head.appendChild(this._action('×', 'Close (L)', () => this.setOpen(false)));
         this._drawer.appendChild(head);
@@ -138,17 +170,22 @@ export class ConsolePanel {
         this._unsubscribe?.();
         this._unsubscribe = null;
         window.clearTimeout(this._flushTimer);
+        window.clearTimeout(this._noteTimer);
         this._flushTimer = 0;
+        this._noteTimer = 0;
         this._button?.remove();
         this._drawer?.remove();
         this._button = null;
         this._drawer = null;
         this._body = null;
+        this._copyButton = null;
+        this._note = null;
         this._errBadge = null;
         this._warnBadge = null;
         this._filterButtons.clear();
         this._filterCounts.clear();
         this._rows.clear();
+        this._picked.clear();
         this._inside = false;
         this._lastId = 0;
         this._reserved = 0;
@@ -234,7 +271,8 @@ export class ConsolePanel {
         }
 
         const entries = consoleLog.entries;
-        const stick = this._atBottom();
+        // Do not scroll the log away from someone who is reading or selecting in it.
+        const stick = this._atBottom() && this._picked.size === 0 && !this._hasTextSelection();
         for (const entry of entries) {
             const known = this._rows.get(entry.id);
             if (known) {
@@ -253,6 +291,7 @@ export class ConsolePanel {
         if (!this._body) return;
         this._body.textContent = '';
         this._rows.clear();
+        if (this._generation !== consoleLog.generation) this._picked.clear();
         this._generation = consoleLog.generation;
 
         const entries = consoleLog.entries;
@@ -268,6 +307,8 @@ export class ConsolePanel {
             this._body.appendChild(empty);
         }
         this._trim();
+        this._picked.retain(this._order());
+        this._paint();
         this._body.scrollTop = this._body.scrollHeight;
         this._refreshCounts();
         for (const [level, btn] of this._filterButtons) btn.classList.toggle('sv-on', this._shown[level]);
@@ -280,6 +321,7 @@ export class ConsolePanel {
 
         const row = document.createElement('div');
         row.className = `sv-log-row sv-lv-${entry.level}`;
+        row.dataset.id = String(entry.id);
 
         const time = document.createElement('span');
         time.className = 'sv-log-time';
@@ -292,17 +334,34 @@ export class ConsolePanel {
         const count = document.createElement('span');
         count.className = 'sv-log-count';
 
+        const copy = document.createElement('button');
+        copy.className = 'sv-log-copy';
+        copy.textContent = 'Copy';
+        copy.title = 'Copy this line';
+        copy.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this._copy(formatLine(entry), '1 line');
+            copy.textContent = 'Copied';
+            window.setTimeout(() => { copy.textContent = 'Copy'; }, NOTE_MS / 2);
+        });
+
         row.appendChild(time);
         row.appendChild(message);
         row.appendChild(count);
+        row.appendChild(copy);
+
+        row.addEventListener('click', (e) => this._onRowClick(entry, e));
+        row.addEventListener('contextmenu', (e) => this._onRowMenu(entry, e));
+
         this._body.appendChild(row);
 
-        const record = { row, count, shown: 0 };
+        const record: Row = { row, count, shown: 0, entry };
         this._rows.set(entry.id, record);
         this._updateCount(record, entry);
+        if (this._picked.has(entry.id)) row.classList.add('sv-picked');
     }
 
-    private _updateCount (record: { row: HTMLElement; count: HTMLElement; shown: number }, entry: LogEntry) {
+    private _updateCount (record: Row, entry: LogEntry) {
         if (record.shown === entry.count) return;
         record.shown = entry.count;
         record.count.textContent = entry.count > 1 ? String(entry.count) : '';
@@ -342,16 +401,122 @@ export class ConsolePanel {
         return body.scrollTop + body.clientHeight >= body.scrollHeight - STICK_PX;
     }
 
-    private _copy () {
-        const lines = consoleLog.entries
-            .filter((entry) => this._shown[entry.level])
-            .map((entry) => `${clock(entry.time)} [${entry.level}] ${entry.text}${entry.count > 1 ? ` (x${entry.count})` : ''}`);
-        const text = lines.join('\n');
-        try {
-            void navigator.clipboard?.writeText(text);
-        } catch {
-            // Clipboard access can be refused outside a secure context; nothing else to try.
+    // --- picking and copying lines --------------------------------------------
+
+    /** The ids of the rows on screen, top to bottom. */
+    private _order (): number[] {
+        const ids: number[] = [];
+        const children = this._body.children;
+        for (let i = 0; i < children.length; i++) {
+            // The "nothing logged" placeholder has no id and is not a line.
+            const raw = (children[i] as HTMLElement).dataset.id;
+            if (raw !== undefined) ids.push(Number(raw));
         }
+        return ids;
+    }
+
+    private _paint () {
+        for (const [id, record] of this._rows) record.row.classList.toggle('sv-picked', this._picked.has(id));
+        if (this._copyButton) {
+            const n = this._picked.size;
+            this._copyButton.textContent = n ? `Copy (${n})` : 'Copy all';
+            this._copyButton.title = n
+                ? `Copy the ${n} picked line${n === 1 ? '' : 's'} (Ctrl+C)`
+                : 'Copy every shown line. Click a line to pick it first.';
+        }
+    }
+
+    /** Text the user has dragged over in the log, as opposed to rows picked by clicking. */
+    private _hasTextSelection (): boolean {
+        const selection = typeof window !== 'undefined' && window.getSelection ? window.getSelection() : null;
+        if (!selection || selection.isCollapsed || !selection.anchorNode || !this._body) return false;
+        return this._body.contains(selection.anchorNode);
+    }
+
+    private _onRowClick (entry: LogEntry, e: MouseEvent) {
+        // The end of a drag that selected text is not a click on the row.
+        if (this._hasTextSelection()) return;
+        this._picked.click(entry.id, this._order(), e.ctrlKey || e.metaKey, e.shiftKey);
+        this._paint();
+        // Keep the keyboard here, for Ctrl+C. Not handed back to the canvas, which would take it away.
+        this._drawer.focus({ preventScroll: true });
+    }
+
+    private _onRowMenu (entry: LogEntry, e: MouseEvent) {
+        if (!this.menu) return; // No menu of ours: leave the browser's.
+        e.preventDefault();
+        e.stopPropagation();
+
+        // Like a file list: right-clicking something outside the pick picks it instead.
+        if (!this._picked.has(entry.id)) {
+            this._picked.click(entry.id, this._order(), false, false);
+            this._paint();
+        }
+        const n = this._picked.size;
+        const items: MenuItem[] = [
+            { label: 'Copy line', run: () => this._copy(formatLine(entry), '1 line') },
+            { label: 'Copy message only', run: () => this._copy(formatMessage(entry), 'message') },
+            { label: n > 1 ? `Copy ${n} picked lines` : 'Copy picked line', shortcut: 'Ctrl+C', run: () => this._copyPicked() },
+            { label: 'Copy all shown', run: () => this._copyAll() },
+            { separator: true },
+            { label: 'Select all', shortcut: 'Ctrl+A', run: () => this._selectAll() },
+            { label: 'Clear console', run: () => consoleLog.clear() },
+        ];
+        this.menu.open(e.clientX, e.clientY, items);
+    }
+
+    private _onKey (e: KeyboardEvent) {
+        const ctrl = e.ctrlKey || e.metaKey;
+        const key = e.key.toLowerCase();
+        // With text dragged over, Ctrl+C is the browser's and copies exactly that.
+        if (ctrl && key === 'c' && this._picked.size > 0 && !this._hasTextSelection()) {
+            e.preventDefault();
+            this._copyPicked();
+        } else if (ctrl && key === 'a') {
+            e.preventDefault();
+            this._selectAll();
+        } else if (key === 'escape' && this._picked.size > 0) {
+            this._picked.clear();
+            this._paint();
+        }
+    }
+
+    private _selectAll () {
+        this._picked.selectAll(this._order());
+        this._paint();
+    }
+
+    /** The picked lines if there are any, otherwise every shown line. What the Copy button does. */
+    private _copyPrimary () {
+        if (this._picked.size > 0) this._copyPicked();
+        else this._copyAll();
+    }
+
+    private _copyPicked () {
+        const wanted = new Set(this._picked.inOrder(this._order()));
+        const lines = consoleLog.entries.filter((entry) => wanted.has(entry.id)).map(formatLine);
+        this._copy(lines.join('\n'), `${lines.length} line${lines.length === 1 ? '' : 's'}`);
+    }
+
+    private _copyAll () {
+        const lines = consoleLog.entries.filter((entry) => this._shown[entry.level]).map(formatLine);
+        this._copy(lines.join('\n'), `${lines.length} line${lines.length === 1 ? '' : 's'}`);
+    }
+
+    private _copy (text: string, what: string) {
+        if (!text) {
+            this._say('Nothing to copy');
+            return;
+        }
+        this._say(copyText(text) ? `Copied ${what}` : 'Copy failed: select the text and press Ctrl+C');
+    }
+
+    /** A short note beside the buttons that fades after a moment. */
+    private _say (message: string) {
+        if (!this._note) return;
+        this._note.textContent = message;
+        window.clearTimeout(this._noteTimer);
+        this._noteTimer = window.setTimeout(() => { if (this._note) this._note.textContent = ''; }, NOTE_MS);
     }
 
     /** The pointer over either element must not reach the scene underneath. */
@@ -366,15 +531,4 @@ function badge (className: string): HTMLElement {
     el.className = `sv-badge ${className}`;
     el.style.display = 'none';
     return el;
-}
-
-function clock (ms: number): string {
-    const d = new Date(ms);
-    // No String.padStart: the projects this is dropped into may target an older library.
-    const pad = (n: number, width = 2) => {
-        let text = String(n);
-        while (text.length < width) text = `0${text}`;
-        return text;
-    };
-    return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`;
 }

@@ -218,6 +218,20 @@ const CSS = `
     border-bottom: 1px solid rgba(255, 255, 255, .04);
 }
 .sv-log-time { flex: none; color: #6f7787; }
+/* A page can switch text selection off globally; the log is meant to be selected and copied. */
+.sv-console-body, .sv-console-body * { -webkit-user-select: text !important; user-select: text !important; }
+.sv-console:focus { outline: none; }
+.sv-console-note { color: #8bd48b; font-size: .85em; margin-right: .3em; white-space: nowrap; }
+.sv-log-row { cursor: default; }
+.sv-log-row.sv-picked { background: rgba(59, 111, 212, .38); color: #fff; }
+.sv-log-copy {
+    flex: none; align-self: flex-start; margin-left: .2em; padding: 0 .55em; font: inherit; font-size: .8em;
+    color: #c3cad7; background: rgba(255, 255, 255, .1); border: 1px solid rgba(255, 255, 255, .22);
+    border-radius: .3em; cursor: pointer; opacity: 0;
+    -webkit-user-select: none !important; user-select: none !important;
+}
+.sv-log-row:hover .sv-log-copy, .sv-log-row.sv-picked .sv-log-copy { opacity: 1; }
+.sv-log-copy:hover { background: rgba(59, 111, 212, .6); color: #fff; }
 .sv-log-msg { flex: 1; min-width: 0; }
 .sv-log-count {
     flex: none; align-self: flex-start; padding: 0 .5em; border-radius: .8em;

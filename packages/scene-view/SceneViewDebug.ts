@@ -10,6 +10,7 @@ import { EditorBridge } from './EditorBridge';
 import { Collider } from 'cc';
 import { collectColliders, drawAllColliders, drawColliders } from './ColliderGizmo';
 import { ColliderHandles } from './ColliderHandles';
+import { copyText } from './Clipboard';
 import { ConsolePanel } from './ConsolePanel';
 import { ContextMenu } from './ContextMenu';
 import { EditToolbar } from './EditToolbar';
@@ -1250,11 +1251,8 @@ export class SceneViewDebug extends Component {
     private _copyText (what: string, text: string) {
         if (!text) return;
         console.log(`[SceneView] ${what}: ${text}`);
-        try {
-            void navigator.clipboard?.writeText(text);
-        } catch {
-            // Clipboard access can be refused outside a secure context; the printed line is still there to copy.
-        }
+        // If even the fallback fails, the line printed above is still there to copy.
+        copyText(text);
     }
 
     public duplicateSelected () {
@@ -1515,6 +1513,7 @@ export class SceneViewDebug extends Component {
         if (!this._bridge.hasEditor) {
             this._console.onInteract = () => (game.canvas as HTMLCanvasElement)?.focus?.();
             this._console.onToggle = () => { if (this._active) this._syncWidgets(); };
+            this._console.menu = this._menu;
             this._console.mount();
             this._syncConsole();
         }
