@@ -444,6 +444,8 @@ phím tắt theo nhóm: Tools, Select and focus, Camera, Panel.
 | `L` | Mở/đóng Console trong trang (chỉ browser) |
 | `Ctrl+Z` / `Ctrl+Y` | Hoàn tác / làm lại |
 | `Delete` | Xóa node đang chọn (hoàn tác được) |
+| `Ctrl+C` / `Ctrl+V` | Copy / dán node đang chọn |
+| Chuột phải trong Hierarchy | Menu node: Create, Copy, Paste, Duplicate, Delete, UUID, PATH |
 
 ## Cỡ chữ của các panel
 
@@ -477,6 +479,23 @@ Cocos 3.8 không cho cờ Ctrl/Shift trong sự kiện phím, nên tool tự the
 
 Hoàn tác được: **kéo gizmo** (move/rotate/scale, một lần kéo = một bước), **sửa vị trí/xoay/scale/active
 trong Inspector**, **tạo / nhân đôi / xóa node**, **sửa collider**.
+
+### Menu chuột phải trong Hierarchy (browser)
+
+Bấm **chuột phải** vào một hàng (hoặc vào vùng trống của danh sách) thì hiện menu kiểu Cocos editor thay cho
+menu mặc định của trình duyệt (`ContextMenu.ts`, menu tự vẽ vì menu của trình duyệt không thêm mục được):
+
+- **Create ▸** Empty node / **3D Object ▸** Cube, Sphere, Capsule, Cylinder, Plane / **Light ▸** Directional light /
+  **UI Component ▸** Label. Nút **New ▾** ở đầu Hierarchy mở đúng menu này.
+- **Copy** (`Ctrl+C`), **Paste** (`Ctrl+V`), **Duplicate**, **Delete** (`Delete`). Paste tạo một bản sao mới của node
+  đã copy, đặt dưới node đang chọn (hoặc dưới scene), nên dán được nhiều lần; hoàn tác được.
+- **Copy and Print UUID** / **Copy and Print PATH**: chép vào clipboard và in ra Console (`[SceneView] PATH: Canvas/UIScene/Label`).
+- Giống editor: bấm chuột phải **chọn node đó trước** rồi mới mở menu, nên mọi mục tác động lên đúng node. Bấm vào vùng
+  trống nghĩa là "scene": bỏ chọn, nên Create đặt node dưới scene. Mục không dùng được thì mờ (Paste khi chưa copy gì;
+  Copy/Duplicate/Delete với scene hoặc camera của chính tool).
+- Menu con xổ ngang khi rê chuột, tự lật sang trái nếu hết chỗ bên phải, trượt vào nếu sát mép dưới. Đóng khi bấm ra
+  ngoài, `Esc`, mất focus cửa sổ, hoặc sau khi chọn một mục.
+- Chưa có: Cut, Rename, Camera / 2D Object / Effects / Terrain trong Create.
 
 ### Ô số trong Inspector áp dụng ngay khi gõ
 
@@ -704,6 +723,9 @@ Split-screen vẫn chạy bình thường kể cả khi thiếu module này.
 | `NodeFactory.ts` | Dựng node mới: primitive, light, label |
 | `Primitives.ts` | Sinh dữ liệu mesh (box, sphere, capsule, cylinder, plane), không cần module của engine |
 | `EditToolbar.ts` | New / Duplicate / Delete / Undo / Redo ở đầu Hierarchy |
+| `ContextMenu.ts` | Menu chuột phải tự vẽ, có menu con |
+| `HierarchyMenu.ts` | Nội dung menu của node (Create ▸, Copy, Paste...) và đường dẫn node |
+| `LiveFields.ts` | Ô số áp dụng ngay khi gõ, một bước undo mỗi lần sửa |
 | `ColliderEdit.ts` | Có physics không, collider thuộc loại nào |
 | `ColliderGizmo.ts` | Vẽ khung collider (của node đang chọn, hoặc của mọi node) |
 | `ColliderHandles.ts` | Tay cầm kéo được trên collider (công cụ phím 5) |

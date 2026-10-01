@@ -55,7 +55,9 @@ const SHORTCUTS: { title: string; rows: ShortcutRow[] }[] = [
         rows: [
             { keys: 'Ctrl Z', text: 'Undo' },
             { keys: 'Ctrl Y', text: 'Redo (also Ctrl Shift Z)' },
+            { keys: 'Ctrl C / V', text: 'Copy / paste the selected node' },
             { keys: 'Delete', text: 'Delete the selected node' },
+            { keys: 'Right-click', text: 'Node menu, in the Hierarchy' },
         ],
     },
     {

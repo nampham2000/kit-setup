@@ -1,8 +1,8 @@
 import { ensureStyles } from './DebugOverlay';
-import { NODE_KINDS, NodeKind } from './NodeFactory';
 
 export interface EditToolbarCallbacks {
-    onCreate: (kind: NodeKind) => void;
+    /** Open the Create menu with its corner at this point, in CSS pixels. */
+    onOpenCreateMenu: (x: number, y: number) => void;
     onDuplicate: () => void;
     onDelete: () => void;
     onUndo: () => void;
@@ -10,22 +10,16 @@ export interface EditToolbarCallbacks {
 }
 
 /**
- * The row of edit buttons at the top of the Hierarchy: New (a menu of what can be
- * created), Duplicate, Delete, and Undo / Redo.
+ * The row of edit buttons at the top of the Hierarchy: New (which opens the same menu as
+ * a right-click), Duplicate, Delete, and Undo / Redo.
  *
  * Undo and Redo are here as well as on Ctrl+Z and Ctrl+Y so a click-only workflow has
  * them too, and their tooltips say what they would undo. DOM, so browser only, like the
  * panel it sits in.
  */
 export class EditToolbar {
-    /** True while the pointer is over the New menu, which lives outside the cards. */
-    public get cursorInside (): boolean { return this._inside; }
-
     private _bar: HTMLElement = null;
-    private _menu: HTMLElement = null;
-    private _newButton: HTMLElement = null;
     private _buttons = new Map<string, HTMLButtonElement>();
-    private _inside = false;
 
     constructor (private _callbacks: EditToolbarCallbacks) {}
 
@@ -37,8 +31,10 @@ export class EditToolbar {
         this._bar = document.createElement('div');
         this._bar.className = 'sv-toolbar';
 
-        this._newButton = this._button('new', 'New ▾', 'Create a node', (e) => this._toggleMenu(e));
-        this._bar.appendChild(this._newButton);
+        this._bar.appendChild(this._button('new', 'New ▾', 'Create a node (or right-click in the list)', (e) => {
+            const anchor = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            this._callbacks.onOpenCreateMenu(anchor.left, anchor.bottom + 4);
+        }));
         this._bar.appendChild(this._button('duplicate', 'Duplicate', 'Duplicate the selected node', () => this._callbacks.onDuplicate()));
         this._bar.appendChild(this._button('delete', 'Delete', 'Delete the selected node (Delete key)', () => this._callbacks.onDelete()));
 
@@ -54,12 +50,9 @@ export class EditToolbar {
     }
 
     public unmount () {
-        this._closeMenu();
         this._bar?.remove();
         this._bar = null;
-        this._newButton = null;
         this._buttons.clear();
-        this._inside = false;
     }
 
     /** Enable or disable the buttons to match what can be done right now. */
@@ -89,59 +82,5 @@ export class EditToolbar {
         btn.addEventListener('dblclick', (e) => e.stopPropagation());
         this._buttons.set(name, btn);
         return btn;
-    }
-
-    private _toggleMenu (e: MouseEvent) {
-        if (this._menu) {
-            this._closeMenu();
-            return;
-        }
-
-        const menu = document.createElement('div');
-        menu.className = 'sv-menu';
-        menu.addEventListener('mouseenter', () => { this._inside = true; });
-        menu.addEventListener('mouseleave', () => { this._inside = false; });
-
-        let group = '';
-        for (const info of NODE_KINDS) {
-            if (info.group !== group) {
-                group = info.group;
-                const title = document.createElement('div');
-                title.className = 'sv-menu-title';
-                title.textContent = group;
-                menu.appendChild(title);
-            }
-            const item = document.createElement('div');
-            item.className = 'sv-menu-item';
-            item.textContent = info.label;
-            item.addEventListener('click', (ev) => {
-                ev.stopPropagation();
-                this._closeMenu();
-                this._callbacks.onCreate(info.kind);
-            });
-            menu.appendChild(item);
-        }
-
-        document.body.appendChild(menu);
-        const anchor = (e.currentTarget as HTMLElement).getBoundingClientRect();
-        menu.style.left = `${anchor.left}px`;
-        menu.style.top = `${anchor.bottom + 4}px`;
-        this._menu = menu;
-
-        // Any click elsewhere closes it. Registered next tick so the click that opened it does not.
-        window.setTimeout(() => {
-            if (this._menu === menu) document.addEventListener('mousedown', this._outside, true);
-        }, 0);
-    }
-
-    private _outside = (e: Event) => {
-        if (this._menu && !this._menu.contains(e.target as Node)) this._closeMenu();
-    };
-
-    private _closeMenu () {
-        document.removeEventListener('mousedown', this._outside, true);
-        this._menu?.remove();
-        this._menu = null;
-        this._inside = false;
     }
 }

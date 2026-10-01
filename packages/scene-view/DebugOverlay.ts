@@ -176,16 +176,21 @@ const CSS = `
 }
 .sv-card.sv-collapsed .sv-toolbar { display: none; }
 .sv-menu {
-    position: fixed; z-index: 52; min-width: 12em; padding: .25em 0; border-radius: .4em;
+    position: fixed; z-index: 52; min-width: 13em; padding: .25em 0; border-radius: .4em;
     background: #16181d; border: 1px solid rgba(255, 255, 255, .22);
     box-shadow: 0 .4em 1.2em rgba(0, 0, 0, .5);
 }
-.sv-menu-title {
-    padding: .35em .9em .1em; color: #8b93a3; font-size: .78em; font-weight: 600;
-    letter-spacing: .08em; text-transform: uppercase;
+.sv-menu-item {
+    display: flex; align-items: center; gap: 1.6em; padding: .32em .9em; cursor: pointer; white-space: nowrap;
 }
-.sv-menu-item { padding: .3em .9em; cursor: pointer; }
-.sv-menu-item:hover { background: rgba(59, 111, 212, .55); color: #fff; }
+.sv-menu-label { flex: 1; }
+.sv-menu-shortcut { color: #8b93a3; font-size: .9em; }
+.sv-menu-arrow { color: #8b93a3; font-size: .85em; }
+.sv-menu-sep { height: 1px; margin: .25em 0; background: rgba(255, 255, 255, .12); }
+.sv-menu-item.sv-disabled { color: #6f7787; cursor: default; }
+.sv-menu-item.sv-disabled .sv-menu-shortcut { color: #4f5666; }
+.sv-menu-item:not(.sv-disabled):hover { background: rgba(59, 111, 212, .55); color: #fff; }
+.sv-menu-item:not(.sv-disabled):hover .sv-menu-shortcut, .sv-menu-item:not(.sv-disabled):hover .sv-menu-arrow { color: #dbe6ff; }
 .sv-chip-btn {
     font: inherit; font-size: .9em; padding: .1em .65em; border-radius: .3em;
     border: 1px solid rgba(255, 255, 255, .2); background: none; color: #8b93a3; cursor: pointer;

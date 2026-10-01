@@ -11,7 +11,9 @@ import { Collider } from 'cc';
 import { collectColliders, drawAllColliders, drawColliders } from './ColliderGizmo';
 import { ColliderHandles } from './ColliderHandles';
 import { ConsolePanel } from './ConsolePanel';
+import { ContextMenu } from './ContextMenu';
 import { EditToolbar } from './EditToolbar';
+import { createItems, nodeMenuItems, pathOf } from './HierarchyMenu';
 import { createNode, NodeKind } from './NodeFactory';
 import { AddNodeCommand, RemoveNodeCommand } from './SceneEdit';
 import { capturePose, History, Pose, PoseCommand, poseChanged } from './History';
@@ -237,8 +239,11 @@ export class SceneViewDebug extends Component {
     private _colliderHandles = new ColliderHandles();
     /** Set when a mouse press began on a collider handle, so its release is not taken for a click. */
     private _colliderGrab = false;
+    private _menu = new ContextMenu();
+    /** What Copy last took. Pasting makes a fresh copy of it, so it can be pasted more than once. */
+    private _clipboard: Node | null = null;
     private _toolbar = new EditToolbar({
-        onCreate: (kind) => this.createNode(kind),
+        onOpenCreateMenu: (x, y) => this._menu.open(x, y, createItems((kind) => this.createNode(kind))),
         onDuplicate: () => this.duplicateSelected(),
         onDelete: () => this.deleteSelected(),
         onUndo: () => this.undo(),
@@ -280,6 +285,7 @@ export class SceneViewDebug extends Component {
                 this.select(node);
                 this.focusSelection();
             },
+            onContextMenu: (node, x, y) => this.openNodeMenu(node, x, y),
         });
         // A key held while focus moves into a field never gets its keyup.
         this._overlay.onFocusIn = () => this._freeCamera?.clearKeys();
@@ -1198,6 +1204,59 @@ export class SceneViewDebug extends Component {
         console.log(`[SceneView] created ${node.name}`);
     }
 
+    /** Right-click in the Hierarchy: select what was clicked, then offer what can be done with it. */
+    public openNodeMenu (node: Node | null, x: number, y: number) {
+        // Like the editor, a right-click selects its target first, so every item acts on it.
+        // The empty part of the list means "the scene", which is no selection at all.
+        this.select(node);
+        const canEdit = !!node && this._canEditSelection();
+        const canPaste = !!this._clipboard && this._clipboard.isValid;
+
+        this._menu.open(x, y, nodeMenuItems({
+            create: (kind) => this.createNode(kind),
+            copy: () => this.copySelected(),
+            paste: () => this.pasteClipboard(),
+            duplicate: () => this.duplicateSelected(),
+            remove: () => this.deleteSelected(),
+            copyUuid: () => this._copyText('UUID', node ? node.uuid : ''),
+            copyPath: () => this._copyText('PATH', node ? pathOf(node) : ''),
+        }, { hasNode: !!node, canEdit, canPaste }));
+    }
+
+    public copySelected () {
+        if (!this._selected || !this._canEditSelection()) return;
+        this._clipboard = this._selected;
+        console.log(`[SceneView] copied ${this._selected.name}`);
+    }
+
+    /** Paste a fresh copy of what was copied, under the selection (or the scene), and select it. */
+    public pasteClipboard () {
+        const source = this._clipboard;
+        const scene = director.getScene();
+        if (!scene) return;
+        if (!source || !source.isValid) {
+            console.warn('[SceneView] nothing to paste: the copied node no longer exists');
+            return;
+        }
+        const parent = this._selected && this._selected.isValid ? this._selected : scene;
+        const copy = instantiate(source);
+        parent.addChild(copy);
+        this.history.push(new AddNodeCommand(`Paste ${copy.name}`, copy, parent, copy.getSiblingIndex()));
+        this.select(copy);
+        console.log(`[SceneView] pasted ${copy.name}`);
+    }
+
+    /** Put text on the clipboard and print it, as the editor's "Copy and Print" entries do. */
+    private _copyText (what: string, text: string) {
+        if (!text) return;
+        console.log(`[SceneView] ${what}: ${text}`);
+        try {
+            void navigator.clipboard?.writeText(text);
+        } catch {
+            // Clipboard access can be refused outside a secure context; the printed line is still there to copy.
+        }
+    }
+
     public duplicateSelected () {
         const source = this._selected;
         if (!source || !this._canEditSelection()) return;
@@ -1246,6 +1305,12 @@ export class SceneViewDebug extends Component {
             break;
         case KeyCode.KEY_Y:
             if (this._active && this._ctrl) this.redo();
+            break;
+        case KeyCode.KEY_C:
+            if (this._active && this._ctrl) this.copySelected();
+            break;
+        case KeyCode.KEY_V:
+            if (this._active && this._ctrl) this.pasteClipboard();
             break;
         case KeyCode.DELETE:
             if (this._active) this.deleteSelected();
@@ -1396,6 +1461,7 @@ export class SceneViewDebug extends Component {
 
     private _unmountPanels () {
         this._panelsOn = false;
+        this._menu.close();
         this._toolbar.unmount();
         this._inspector.unmount();
         this._hierarchy.unmount();
@@ -1430,7 +1496,7 @@ export class SceneViewDebug extends Component {
 
     /** True while the pointer is over any DOM overlay: it must not reach the scene underneath. */
     private _overUI (): boolean {
-        return this._overlay.cursorInside || this._help.cursorInside || this._console.cursorInside || this._toolbar.cursorInside;
+        return this._overlay.cursorInside || this._help.cursorInside || this._console.cursorInside || this._menu.cursorInside;
     }
 
     private _mountHelp () {

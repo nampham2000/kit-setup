@@ -11,6 +11,8 @@ export interface HierarchyCallbacks {
     onToggleSolo: (node: Node) => void;
     /** Double-click on a row: fly the scene camera to the node. */
     onFocus: (node: Node) => void;
+    /** Right-click: on a row, or with node null on the empty part of the list. Coordinates are CSS pixels. */
+    onContextMenu: (node: Node | null, x: number, y: number) => void;
 }
 
 type Kind = 'camera' | 'light' | 'ui' | 'mesh' | 'group' | 'empty';
@@ -64,6 +66,14 @@ export class HierarchyPanel {
     public mount (overlay: DebugOverlay) {
         const { card, body } = overlay.card('hierarchy', 'sv-tree', 'left');
         this._body = body;
+
+        // The browser's own menu has nothing to offer here, and ours takes its place: a row
+        // reports itself (see _row), and anything else in the list counts as "no node".
+        card.addEventListener('contextmenu', (e) => e.preventDefault());
+        body.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            this._callbacks.onContextMenu(null, e.clientX, e.clientY);
+        });
         this._addTitleActions(card);
     }
 
@@ -194,6 +204,12 @@ export class HierarchyPanel {
         row.className = 'sv-row' + (hasChildren ? ' sv-has-children' : '') + (isPrefabNode(node) ? ' sv-prefab' : '');
         row.addEventListener('click', () => this._callbacks.onSelect(node));
         row.addEventListener('dblclick', () => this._callbacks.onFocus(node));
+        row.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            // Not the list's own handler, which would report "no node".
+            e.stopPropagation();
+            this._callbacks.onContextMenu(node, e.clientX, e.clientY);
+        });
 
         // One guide per ancestor level, each in that level's colour.
         for (let d = 0; d < depth; d++) {
