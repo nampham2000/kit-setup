@@ -481,8 +481,10 @@ trong Inspector**, **tạo / nhân đôi / xóa node**, **sửa collider và th�
 
 Hàng nút ở đầu Hierarchy: **New ▾**, **Duplicate**, **Delete**.
 
-- **New** mở menu: Empty node; Cube, Sphere, Capsule, Cylinder, Plane (mesh dựng bằng
-  `primitives` + `builtin-standard`, không cần asset); Directional light; Label (UI).
+- **New** mở menu: Empty node; Cube, Sphere, Capsule, Cylinder, Plane (mesh do
+  `Primitives.ts` tự sinh dữ liệu, vật liệu là `builtin-standard`, không cần asset. **Không dùng `primitives` của
+  engine**: project có thể tắt module "primitive" (SmashFest tắt, `primitives` khi đó là `undefined` và gây
+  `Cannot read properties of undefined (reading 'box')`). Cần `utils.MeshUtils` của engine để đổi dữ liệu thành Mesh); Directional light; Label (UI).
 - Node mới là **con của node đang chọn** (không chọn gì thì nằm dưới scene), và được chọn ngay.
   Vật 3D đặt cách camera scene view khoảng 6 đơn vị, để hiện đúng chỗ bạn đang nhìn thay vì ở gốc
   tọa độ, có thể rất xa. **Label** phải nằm dưới một Canvas mới vẽ được, nên tool đặt nó dưới Canvas
@@ -664,6 +666,7 @@ Split-screen vẫn chạy bình thường kể cả khi thiếu module này.
 | `History.ts` | Ngăn xếp undo/redo và các lệnh cơ bản (giá trị, pose) |
 | `SceneEdit.ts` | Lệnh thêm/xóa node |
 | `NodeFactory.ts` | Dựng node mới: primitive, light, label |
+| `Primitives.ts` | Sinh dữ liệu mesh (box, sphere, capsule, cylinder, plane), không cần module của engine |
 | `EditToolbar.ts` | New / Duplicate / Delete / Undo / Redo ở đầu Hierarchy |
 | `ColliderEdit.ts` | Ảnh chụp trạng thái, ColliderRef, lệnh thêm/xóa collider |
 | `ColliderGizmo.ts` | Vẽ khung collider |

@@ -1,6 +1,7 @@
 import {
-    Camera, Canvas, DirectionalLight, director, Label, Layers, Material, MeshRenderer, Node, primitives, utils, Vec3,
+    Camera, Canvas, DirectionalLight, director, Label, Layers, Material, MeshRenderer, Node, utils, Vec3,
 } from 'cc';
+import { boxData, capsuleData, cylinderData, MeshData, planeData, sphereData } from './Primitives';
 
 export type NodeKind = 'empty' | 'cube' | 'sphere' | 'capsule' | 'cylinder' | 'plane' | 'light' | 'label';
 
@@ -43,11 +44,16 @@ function standardMaterial (): Material {
     return _material;
 }
 
-function primitiveNode (name: string, geometry: primitives.IGeometry): Node {
+function primitiveNode (name: string, data: MeshData): Node | null {
+    // The meshes are our own data, but turning data into a Mesh still takes the engine's utility.
+    if (typeof utils === 'undefined' || !utils.MeshUtils) {
+        console.warn('[SceneView] this build has no mesh utility (utils.MeshUtils), so a 3D object cannot be created');
+        return null;
+    }
     const node = new Node(name);
     node.layer = Layers.Enum.DEFAULT;
     const renderer = node.addComponent(MeshRenderer);
-    renderer.mesh = utils.MeshUtils.createMesh(geometry);
+    renderer.mesh = utils.MeshUtils.createMesh(data);
     renderer.material = standardMaterial();
     return node;
 }
@@ -81,19 +87,19 @@ export function createNode (kind: NodeKind, parent: Node, camera: Camera | null)
         node.layer = Layers.Enum.DEFAULT;
         break;
     case 'cube':
-        node = primitiveNode('Cube', primitives.box());
+        node = primitiveNode('Cube', boxData(1));
         break;
     case 'sphere':
-        node = primitiveNode('Sphere', primitives.sphere(0.5));
+        node = primitiveNode('Sphere', sphereData(0.5));
         break;
     case 'capsule':
-        node = primitiveNode('Capsule', primitives.capsule(0.5, 0.5, 1) as primitives.IGeometry);
+        node = primitiveNode('Capsule', capsuleData(0.5, 1));
         break;
     case 'cylinder':
-        node = primitiveNode('Cylinder', primitives.cylinder(0.5, 0.5, 1));
+        node = primitiveNode('Cylinder', cylinderData(0.5, 1));
         break;
     case 'plane':
-        node = primitiveNode('Plane', primitives.plane({ width: 2, length: 2, widthSegments: 1, lengthSegments: 1 }));
+        node = primitiveNode('Plane', planeData(2, 2));
         break;
     case 'light':
         node = new Node('Directional Light');
@@ -117,6 +123,7 @@ export function createNode (kind: NodeKind, parent: Node, camera: Camera | null)
         return null;
     }
 
+    if (!node) return null;
     parentFor.addChild(node);
 
     if (kind !== 'label' && camera && camera.isValid) {
