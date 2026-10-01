@@ -1,30 +1,21 @@
 import { BoxCollider, CapsuleCollider, Collider, Node, SphereCollider, Vec3 } from 'cc';
-import {
-    ColliderKind, ColliderLifecycleCommand, ColliderRef, fitToMesh, kindOf, physicsAvailable, refOf, snapshot,
-    ctorOf,
-} from './ColliderEdit';
+import { kindOf, physicsAvailable } from './ColliderEdit';
 import { Command, ValueCommand } from './History';
 
 interface Row {
     refresh (): void;
 }
 
-const ADD_KINDS: { kind: ColliderKind; label: string }[] = [
-    { kind: 'box', label: '+ Box' },
-    { kind: 'sphere', label: '+ Sphere' },
-    { kind: 'capsule', label: '+ Capsule' },
-];
-
 const AXES = ['X', 'Y', 'Z'];
 
 /**
- * The collider section of the Inspector: one block per collider on the selected node,
- * with its shape fields, a Trigger switch and a Remove button, and buttons to add more.
+ * The collider section of the Inspector: one block per collider that is already on the
+ * selected node, with its shape fields and its Trigger and Enabled switches.
  *
- * Every edit goes through a ColliderRef rather than the component itself, so the undo
- * stack still reaches the right collider after it has been removed and brought back.
- * The blocks are only rebuilt when the set of colliders changes, never while a field
- * is being typed in; the fields refresh in place, except the one with focus.
+ * It shows and edits what is there; it does not add or remove colliders. Every edit goes
+ * on the undo stack. The blocks are only rebuilt when the node or its set of colliders
+ * changes, never while a field is being typed in; the fields refresh in place, except
+ * the one with focus.
  */
 export class ColliderInspector {
     /** Called with each edit made here, so the owner can put it on the undo stack. */
@@ -34,8 +25,6 @@ export class ColliderInspector {
     private _node: Node = null;
     private _signature = '';
     private _rows: Row[] = [];
-    /** Colliders just removed. They stay on the node until the end of the frame. */
-    private _gone = new Set<Collider>();
 
     public mount (parent: HTMLElement) {
         if (typeof document === 'undefined' || this._root || !physicsAvailable()) return;
@@ -66,7 +55,7 @@ export class ColliderInspector {
             return;
         }
 
-        const colliders = this._colliders(node);
+        const colliders = node.getComponents(Collider).filter((c) => c.isValid);
         const signature = `${node.uuid}|${colliders.map((c) => c.uuid).join(',')}`;
         if (signature !== this._signature) {
             this._signature = signature;
@@ -74,10 +63,6 @@ export class ColliderInspector {
             return;
         }
         for (const row of this._rows) row.refresh();
-    }
-
-    private _colliders (node: Node): Collider[] {
-        return node.getComponents(Collider).filter((c) => c.isValid && !this._gone.has(c));
     }
 
     private _clear () {
@@ -89,146 +74,88 @@ export class ColliderInspector {
     private _build (node: Node, colliders: Collider[]) {
         this._root.textContent = '';
         this._rows = [];
-
         for (const collider of colliders) this._section(node, collider);
-        this._addRow(node);
     }
 
     private _section (node: Node, collider: Collider) {
         const kind = kindOf(collider);
-        const ref = refOf(collider);
 
         const section = document.createElement('div');
         section.className = 'sv-section';
 
         const head = document.createElement('div');
         head.className = 'sv-section-head';
-        const title = document.createElement('span');
-        title.textContent = collider.constructor.name;
-        head.appendChild(title);
-        const remove = document.createElement('button');
-        remove.className = 'sv-chip-btn sv-section-remove';
-        remove.textContent = 'Remove';
-        remove.title = 'Remove this collider';
-        remove.addEventListener('click', () => this._remove(node, collider));
-        head.appendChild(remove);
+        head.textContent = collider.constructor.name;
         section.appendChild(head);
 
-        this._vector(section, node, ref, 'center',
+        this._vector(section, node, collider, 'center',
             (c) => [c.center.x, c.center.y, c.center.z],
             (c, v) => { c.center = new Vec3(v[0], v[1], v[2]); });
 
         if (kind === 'box') {
-            this._vector(section, node, ref, 'size',
+            this._vector(section, node, collider, 'size',
                 (c) => { const s = (c as BoxCollider).size; return [s.x, s.y, s.z]; },
                 (c, v) => { (c as BoxCollider).size = new Vec3(v[0], v[1], v[2]); }, 0);
         } else if (kind === 'sphere') {
-            this._number(section, node, ref, 'radius',
+            this._number(section, node, collider, 'radius',
                 (c) => (c as SphereCollider).radius,
                 (c, v) => { (c as SphereCollider).radius = v; }, 0.001);
         } else if (kind === 'capsule') {
-            this._number(section, node, ref, 'radius',
+            this._number(section, node, collider, 'radius',
                 (c) => (c as CapsuleCollider).radius,
                 (c, v) => { (c as CapsuleCollider).radius = v; }, 0.001);
-            this._number(section, node, ref, 'height',
+            this._number(section, node, collider, 'height',
                 (c) => (c as CapsuleCollider).cylinderHeight,
                 (c, v) => { (c as CapsuleCollider).cylinderHeight = v; }, 0);
-            this._choice(section, node, ref, 'direction', AXES,
+            this._choice(section, node, collider, 'direction', AXES,
                 (c) => (c as CapsuleCollider).direction as number,
                 (c, v) => { (c as CapsuleCollider).direction = v; });
         }
 
-        this._flag(section, node, ref, 'trigger',
-            (c) => c.isTrigger,
-            (c, v) => { c.isTrigger = v; });
+        this._flag(section, node, collider, 'trigger', (c) => c.isTrigger, (c, v) => { c.isTrigger = v; });
+        this._flag(section, node, collider, 'enabled', (c) => c.enabled, (c, v) => { c.enabled = v; });
 
         this._root.appendChild(section);
-    }
-
-    private _addRow (node: Node) {
-        const row = document.createElement('div');
-        row.className = 'sv-section sv-add-row';
-        for (const { kind, label } of ADD_KINDS) {
-            const btn = document.createElement('button');
-            btn.className = 'sv-chip-btn';
-            btn.textContent = label;
-            btn.title = `Add a ${kind} collider, sized to the mesh if there is one`;
-            btn.addEventListener('click', () => this._add(node, kind));
-            row.appendChild(btn);
-        }
-        this._root.appendChild(row);
-    }
-
-    // --- structural edits ------------------------------------------------------
-
-    private _add (node: Node, kind: ColliderKind) {
-        if (!node.isValid) return;
-        const collider = node.addComponent(ctorOf(kind));
-        fitToMesh(collider, node);
-        this.onEdit?.(new ColliderLifecycleCommand(
-            `Add ${kind} collider to ${node.name}`, node, refOf(collider), snapshot(collider), true,
-        ));
-        // Rebuilt on the next sync, which sees the new component.
-    }
-
-    private _remove (node: Node, collider: Collider) {
-        if (!collider.isValid) return;
-        const ref = refOf(collider);
-        const state = snapshot(collider);
-        collider.destroy();
-        ref.comp = null;
-        this._gone.add(collider);
-        this.onEdit?.(new ColliderLifecycleCommand(
-            `Remove ${state.kind} collider from ${node.name}`, node, ref, state, false,
-        ));
-        this._signature = '\u0000';
-        this.sync();
     }
 
     // --- field rows ------------------------------------------------------------
 
     private _vector (
-        parent: HTMLElement, node: Node, ref: ColliderRef, label: string,
+        parent: HTMLElement, node: Node, collider: Collider, label: string,
         get: (c: Collider) => number[], set: (c: Collider, v: number[]) => void, min = -Infinity,
     ) {
-        const { field, inputs } = fieldRow(parent, label, 3);
+        const inputs = fieldRow(parent, label, 3);
         const refresh = () => {
-            const comp = ref.comp;
-            if (!comp || !comp.isValid) return;
-            const values = get(comp);
+            if (!collider.isValid) return;
+            const values = get(collider);
             inputs.forEach((input, i) => {
                 if (document.activeElement !== input) input.value = fixed(values[i]);
             });
         };
         inputs.forEach((input) => input.addEventListener('change', () => {
-            const comp = ref.comp;
-            if (!comp || !comp.isValid) return;
-            const before = get(comp);
+            if (!collider.isValid) return;
+            const before = get(collider);
             const next = inputs.map((el, i) => Math.max(min, parse(el.value, before[i])));
-            this._commit(node, ref, label, before, next, set);
+            this._commit(node, collider, label, before, next, set);
             refresh();
         }));
-        field.dataset.row = label;
         this._rows.push({ refresh });
         refresh();
     }
 
     private _number (
-        parent: HTMLElement, node: Node, ref: ColliderRef, label: string,
+        parent: HTMLElement, node: Node, collider: Collider, label: string,
         get: (c: Collider) => number, set: (c: Collider, v: number) => void, min: number,
     ) {
-        const { inputs } = fieldRow(parent, label, 1);
-        const input = inputs[0];
+        const input = fieldRow(parent, label, 1)[0];
         const refresh = () => {
-            const comp = ref.comp;
-            if (comp && comp.isValid && document.activeElement !== input) input.value = fixed(get(comp));
+            if (collider.isValid && document.activeElement !== input) input.value = fixed(get(collider));
         };
         input.addEventListener('change', () => {
-            const comp = ref.comp;
-            if (!comp || !comp.isValid) return;
-            const before = [get(comp)];
+            if (!collider.isValid) return;
+            const before = [get(collider)];
             const next = [Math.max(min, parse(input.value, before[0]))];
-            this._commit(node, ref, label, before, next, (c, v) => set(c, v[0]));
+            this._commit(node, collider, label, before, next, (c, v) => set(c, v[0]));
             refresh();
         });
         this._rows.push({ refresh });
@@ -236,7 +163,7 @@ export class ColliderInspector {
     }
 
     private _flag (
-        parent: HTMLElement, node: Node, ref: ColliderRef, label: string,
+        parent: HTMLElement, node: Node, collider: Collider, label: string,
         get: (c: Collider) => boolean, set: (c: Collider, v: boolean) => void,
     ) {
         const field = labelled(parent, label);
@@ -244,19 +171,15 @@ export class ColliderInspector {
         input.type = 'checkbox';
         field.appendChild(input);
         const refresh = () => {
-            const comp = ref.comp;
-            if (comp && comp.isValid && document.activeElement !== input) input.checked = get(comp);
+            if (collider.isValid && document.activeElement !== input) input.checked = get(collider);
         };
         input.addEventListener('change', () => {
-            const comp = ref.comp;
-            if (!comp || !comp.isValid) return;
-            const before = get(comp);
+            if (!collider.isValid) return;
+            const before = get(collider);
             if (before === input.checked) return;
-            set(comp, input.checked);
+            set(collider, input.checked);
             this.onEdit?.(new ValueCommand<boolean>(
-                `Set ${label} of ${node.name}`,
-                () => !!ref.comp && ref.comp.isValid,
-                (value) => set(ref.comp, value),
+                `Set ${label} of ${node.name}`, () => collider.isValid, (value) => set(collider, value),
                 before, input.checked,
             ));
         });
@@ -265,7 +188,7 @@ export class ColliderInspector {
     }
 
     private _choice (
-        parent: HTMLElement, node: Node, ref: ColliderRef, label: string, options: string[],
+        parent: HTMLElement, node: Node, collider: Collider, label: string, options: string[],
         get: (c: Collider) => number, set: (c: Collider, v: number) => void,
     ) {
         const field = labelled(parent, label);
@@ -279,20 +202,16 @@ export class ColliderInspector {
         });
         field.appendChild(select);
         const refresh = () => {
-            const comp = ref.comp;
-            if (comp && comp.isValid && document.activeElement !== select) select.value = String(get(comp));
+            if (collider.isValid && document.activeElement !== select) select.value = String(get(collider));
         };
         select.addEventListener('change', () => {
-            const comp = ref.comp;
-            if (!comp || !comp.isValid) return;
-            const before = get(comp);
+            if (!collider.isValid) return;
+            const before = get(collider);
             const next = parseInt(select.value, 10);
             if (before === next) return;
-            set(comp, next);
+            set(collider, next);
             this.onEdit?.(new ValueCommand<number>(
-                `Set ${label} of ${node.name}`,
-                () => !!ref.comp && ref.comp.isValid,
-                (value) => set(ref.comp, value),
+                `Set ${label} of ${node.name}`, () => collider.isValid, (value) => set(collider, value),
                 before, next,
             ));
         });
@@ -302,16 +221,13 @@ export class ColliderInspector {
 
     /** Apply `next`, and record it only if it differs from `before`. */
     private _commit (
-        node: Node, ref: ColliderRef, label: string, before: number[], next: number[],
+        node: Node, collider: Collider, label: string, before: number[], next: number[],
         set: (c: Collider, v: number[]) => void,
     ) {
-        const same = before.every((value, i) => Math.abs(value - next[i]) < 1e-9);
-        if (same) return;
-        set(ref.comp, next);
+        if (before.every((value, i) => Math.abs(value - next[i]) < 1e-9)) return;
+        set(collider, next);
         this.onEdit?.(new ValueCommand<number[]>(
-            `Edit ${label} of ${node.name}`,
-            () => !!ref.comp && ref.comp.isValid,
-            (value) => set(ref.comp, value),
+            `Edit ${label} of ${node.name}`, () => collider.isValid, (value) => set(collider, value),
             before, next,
         ));
     }
@@ -328,7 +244,7 @@ function labelled (parent: HTMLElement, label: string): HTMLElement {
     return field;
 }
 
-function fieldRow (parent: HTMLElement, label: string, count: number): { field: HTMLElement; inputs: HTMLInputElement[] } {
+function fieldRow (parent: HTMLElement, label: string, count: number): HTMLInputElement[] {
     const field = labelled(parent, label);
     const inputs: HTMLInputElement[] = [];
     for (let i = 0; i < count; i++) {
@@ -339,7 +255,7 @@ function fieldRow (parent: HTMLElement, label: string, count: number): { field: 
         field.appendChild(input);
         inputs.push(input);
     }
-    return { field, inputs };
+    return inputs;
 }
 
 function parse (raw: string, fallback: number): number {

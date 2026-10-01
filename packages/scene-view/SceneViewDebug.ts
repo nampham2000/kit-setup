@@ -7,7 +7,8 @@ import { DEBUG, EDITOR_NOT_IN_PREVIEW } from 'cc/env';
 import { CanvasWatcher } from './CanvasWatcher';
 import { DebugOverlay, ensureStyles } from './DebugOverlay';
 import { EditorBridge } from './EditorBridge';
-import { drawColliders } from './ColliderGizmo';
+import { Collider } from 'cc';
+import { collectColliders, drawAllColliders, drawColliders } from './ColliderGizmo';
 import { ConsolePanel } from './ConsolePanel';
 import { EditToolbar } from './EditToolbar';
 import { createNode, NodeKind } from './NodeFactory';
@@ -150,6 +151,9 @@ export class SceneViewDebug extends Component {
     @property({ tooltip: 'Draw the shape of the selected node\'s colliders as a green wireframe, so they can be matched to the mesh by eye. Edit them in the Inspector.' })
     public showColliders = true;
 
+    @property({ tooltip: 'Draw the colliders of every node in the scene, not just the selected one, in a dimmer green. Off by default: a level with many colliders fills the view with lines.' })
+    public showAllColliders = false;
+
     @property({ tooltip: 'Draw the world-origin axis cross. Off by default: it sits on '
         + 'top of whatever is at the origin and gets in the way.' })
     public showWorldAxes = false;
@@ -218,6 +222,7 @@ export class SceneViewDebug extends Component {
     /** What this tool last set on each of them, to notice when the game sets its own again. */
     private _appliedRects = new Map<Camera, Rect>();
     private _renderers: ModelRenderer[] = [];
+    private _allColliders: Collider[] = [];
     private _uiElements: UIRenderer[] = [];
     private _selected: Node = null;
     private _rescanTimer = 0;
@@ -350,6 +355,7 @@ export class SceneViewDebug extends Component {
             drawUIBounds(this._gizmos, this._uiElements, UI_BOUNDS_COLOR);
         }
         this._drawFrustums();
+        if (this.showAllColliders) drawAllColliders(this._gizmos, this._allColliders, this._selected);
         if (this.showColliders && this._selected) drawColliders(this._gizmos, this._selected);
         if (this._selected) {
             drawSelection(this._gizmos, this._selected);
@@ -919,6 +925,7 @@ export class SceneViewDebug extends Component {
         // Same mask the camera renders with, so bounds and picking can never target
         // something the viewport does not even draw (editor gizmos, UI, profiler).
         this._renderers = all.filter((r) => r.node !== own && (r.node.layer & this._observerVisibility()) !== 0);
+        this._allColliders = this.showAllColliders ? collectColliders(director.getScene()) : [];
 
         // UI is gathered on its own: it is picked through UITransform, not a model.
         // rather than filtered by the same mask.
@@ -1442,6 +1449,16 @@ export class SceneViewDebug extends Component {
             { label: 'Bounding boxes', key: '', get: () => this.showBounds, set: (on) => { this.showBounds = on; } },
             { label: 'Selected camera frustum', key: '', get: () => this.showFrustum, set: (on) => { this.showFrustum = on; } },
             { label: 'Collider shapes', key: '', get: () => this.showColliders, set: (on) => { this.showColliders = on; } },
+            {
+                label: 'All colliders',
+                key: '',
+                get: () => this.showAllColliders,
+                set: (on) => {
+                    this.showAllColliders = on;
+                    // Collected on the half-second rescan; do it now so the lines appear at once.
+                    this._allColliders = on ? collectColliders(director.getScene()) : [];
+                },
+            },
             { label: 'World axes', key: '', get: () => this.showWorldAxes, set: (on) => { this.showWorldAxes = on; } },
             {
                 label: 'Debug logging',

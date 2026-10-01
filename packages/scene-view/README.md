@@ -475,7 +475,7 @@ Cocos 3.8 không cho cờ Ctrl/Shift trong sự kiện phím, nên tool tự the
 `KEY_DOWN/KEY_UP`. Ctrl+Z cũng chạy trong Preview của editor (gizmo dùng input của engine).
 
 Hoàn tác được: **kéo gizmo** (move/rotate/scale, một lần kéo = một bước), **sửa vị trí/xoay/scale/active
-trong Inspector**, **tạo / nhân đôi / xóa node**, **sửa collider và thêm/bớt collider**.
+trong Inspector**, **tạo / nhân đôi / xóa node**, **sửa collider**.
 
 ### Tạo, nhân đôi, xóa node (browser)
 
@@ -485,12 +485,14 @@ Hàng nút ở đầu Hierarchy: **New ▾**, **Duplicate**, **Delete**.
   `Primitives.ts` tự sinh dữ liệu, vật liệu là `builtin-standard`, không cần asset. **Không dùng `primitives` của
   engine**: project có thể tắt module "primitive" (SmashFest tắt, `primitives` khi đó là `undefined` và gây
   `Cannot read properties of undefined (reading 'box')`). Cần `utils.MeshUtils` của engine để đổi dữ liệu thành Mesh).
-  **Vật liệu được tìm chứ không giả định:** effect `builtin-standard` cũng có thể không được đăng ký trong build
-  (khi đó vật liệu tạo ra **không có pass nào**, và `SubModel.initialize` chết ở `passes[0].localSetLayout`, để lại
-  sub-model `passes = null` làm `getSkinPassIndex` ném `Cannot read properties of null (reading 'length')`).
-  Nên tool tìm một vật liệu dùng được: ưu tiên vật liệu `standard` đang có trên mesh trong scene, rồi mới thử
-  `builtin-standard`; không có cái nào thì từ chối tạo và báo trong Console. Hệ quả: vật 3D mới **dùng chung vật
-  liệu** với mesh mà nó mượn. Nếu việc gắn node vào scene vẫn ném lỗi, node bị hủy sạch chứ không bị bỏ lại hỏng.; Directional light; Label (UI).
+  **Vật liệu là mặc định của Cocos** (`default-material`: bề mặt trơn, có ánh sáng, không texture, giống
+  Cube mới tạo trong editor). Nó được **tìm chứ không giả định**: effect `builtin-standard` có thể không có
+  trong build, và vật liệu thiếu effect **không có pass nào** làm `SubModel.initialize` chết ở
+  `passes[0].localSetLayout`, rồi `getSkinPassIndex` ném `Cannot read properties of null (reading 'length')`.
+  Thứ tự thử: (1) vật liệu có sẵn của engine, (2) tạo mới từ `builtin-standard`, (3) tạo mới từ effect "standard" mà
+  một mesh trong scene đang dùng (vật liệu **mới**, nên có giá trị mặc định của effect chứ không mượn texture
+  hay màu của mesh đó), (4) tương tự với effect bất kỳ. Không cái nào được thì từ chối tạo và báo trong Console.
+  Nếu việc gắn node vào scene vẫn ném lỗi, node bị hủy sạch chứ không bị bỏ lại hỏng.
 - Node mới là **con của node đang chọn** (không chọn gì thì nằm dưới scene), và được chọn ngay.
   Vật 3D đặt cách camera scene view khoảng 6 đơn vị, để hiện đúng chỗ bạn đang nhìn thay vì ở gốc
   tọa độ, có thể rất xa. **Label** phải nằm dưới một Canvas mới vẽ được, nên tool đặt nó dưới Canvas
@@ -500,22 +502,22 @@ Hàng nút ở đầu Hierarchy: **New ▾**, **Duplicate**, **Delete**.
   Không xóa/nhân đôi được scene và camera của chính tool.
 - Chưa có: Sprite, Button, Camera, kéo thả đổi cha trong Hierarchy.
 
-### Chỉnh collider (browser)
+### Hiển thị và chỉnh collider có sẵn (browser)
 
-Chọn node có collider thì **khung collider hiện màu xanh lá** trong scene view (theo xoay và scale của
-node, như physics áp dụng; vẽ không depth test để không bị chính mesh che). Property `Show Colliders`
-hoặc công tắc "Collider shapes" trong panel `!`.
+Chỉ làm việc với collider **đã có trên node**, không tạo hay xóa collider.
 
-Inspector có một khối cho mỗi collider: **Box** (center, size), **Sphere** (center, radius), **Capsule**
-(center, radius, height, direction X/Y/Z), thêm công tắc **trigger** và nút **Remove**. Cuối khối có
-**+ Box / + Sphere / + Capsule**: collider mới được **khớp theo mesh** của node (nếu có mesh đọc được),
-không thì dùng mặc định của engine. Sửa số thì khung đổi ngay.
-
-- Dùng được khi build có module physics. Bản cắt physics thì khối này không hiện.
-- Collider bị xóa rồi hoàn tác sẽ là **component mới** dựng lại từ trạng thái đã lưu. Lệnh sửa số giữ
-  `ColliderRef` (một tay cầm bền) chứ không giữ component, nên redo/undo vẫn trúng đúng collider sau khi
-  nó bị xóa và dựng lại. Đã kiểm bằng test: thêm, sửa, undo hết, redo hết.
-- Chưa có: kéo tay cầm ngay trong viewport (hiện chỉ sửa bằng số), MeshCollider.
+- **Chọn một node** thì các collider của nó hiện thành **khung xanh lá** trong scene view, theo xoay và
+  scale của node như physics áp dụng (vẽ không depth test để không bị chính mesh che).
+  Property `Show Colliders` hoặc công tắc "Collider shapes" trong panel `!`.
+- **Công tắc "All colliders"** (property `Show All Colliders`, mặc định tắt) vẽ collider của **mọi node** trong
+  scene bằng màu xanh dịu hơn, để thấy cả màn chơi; cái của node đang chọn vẫn sáng hơn. Danh sách thu
+  lại mỗi nửa giây, tối đa 500 collider; node đang tắt hoặc collider bị tắt thì không vẽ.
+- **Inspector** có một khối cho mỗi collider trên node: **Box** (center, size), **Sphere** (center, radius),
+  **Capsule** (center, radius, height, direction X/Y/Z), cộng công tắc **trigger** và **enabled**. Sửa số thì
+  khung đổi ngay, và hoàn tác được (`Ctrl+Z`). Các loại collider khác (Mesh, Cylinder, Cone, Plane...) hiện
+  tên, center, trigger, enabled nhưng chưa có khung vẽ.
+- Dùng được khi build có module physics; bản cắt physics thì không hiện gì.
+- Chưa có: kéo tay cầm ngay trong viewport (hiện chỉ sửa bằng số).
 
 ## Console trong trang (phím `L`)
 
@@ -674,9 +676,9 @@ Split-screen vẫn chạy bình thường kể cả khi thiếu module này.
 | `NodeFactory.ts` | Dựng node mới: primitive, light, label |
 | `Primitives.ts` | Sinh dữ liệu mesh (box, sphere, capsule, cylinder, plane), không cần module của engine |
 | `EditToolbar.ts` | New / Duplicate / Delete / Undo / Redo ở đầu Hierarchy |
-| `ColliderEdit.ts` | Ảnh chụp trạng thái, ColliderRef, lệnh thêm/xóa collider |
-| `ColliderGizmo.ts` | Vẽ khung collider |
-| `ColliderInspector.ts` | Khối collider trong Inspector |
+| `ColliderEdit.ts` | Có physics không, collider thuộc loại nào |
+| `ColliderGizmo.ts` | Vẽ khung collider (của node đang chọn, hoặc của mọi node) |
+| `ColliderInspector.ts` | Khối collider có sẵn trong Inspector |
 | `ConsoleCapture.ts` | Bắt log, lỗi, promise reject; không phụ thuộc DOM |
 | `ConsolePanel.ts` | Ngăn kéo Console và nút đếm lỗi |
 | `HierarchyPanel.ts` | Cây node, nút ẩn/solo |

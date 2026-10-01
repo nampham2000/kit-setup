@@ -1,6 +1,7 @@
 import {
     Camera, Canvas, DirectionalLight, director, Label, Layers, Material, MeshRenderer, Node, utils, Vec3,
 } from 'cc';
+import * as engine from 'cc';
 import { boxData, capsuleData, cylinderData, MeshData, planeData, sphereData } from './Primitives';
 
 export type NodeKind = 'empty' | 'cube' | 'sphere' | 'capsule' | 'cylinder' | 'plane' | 'light' | 'label';
@@ -36,54 +37,76 @@ function usable (material: Material | null | undefined): boolean {
     return !!material && material.isValid && !!material.passes && material.passes.length > 0 && !!material.effectAsset;
 }
 
+/** Names the engine registers its own ready-made materials under, best first. */
+const BUILTIN_MATERIALS = ['default-material', 'standard-material'];
+
 /**
- * A lit material for the primitives made here, found rather than assumed.
+ * The material for the primitives made here: Cocos's own default, a plain lit surface
+ * with no texture, which is what the editor gives a new cube.
  *
- * The engine's `builtin-standard` effect is not always registered: a project can crop
- * what its build contains, and then a material built from it has no passes, which makes
- * the first mesh using it throw when it enters the scene. So this looks for a material
- * that is known to work, in order of preference:
- *   1. one already on a mesh in the scene whose effect is the standard one;
- *   2. any other standard-looking material on a mesh in the scene;
- *   3. a fresh `builtin-standard`, if that effect turns out to exist;
- *   4. any usable material on a mesh in the scene, whatever it is.
+ * It is looked up rather than assumed, because a project can crop what its build
+ * contains, and a material whose effect is missing has no passes and makes the first
+ * mesh using it throw. In order of preference:
+ *   1. the engine's own default material, from its built-in resources;
+ *   2. a fresh material from the `builtin-standard` effect, if that effect exists;
+ *   3. a fresh material from the same effect as a standard-looking material on a mesh
+ *      in the scene. It is a new material, so it carries that effect's defaults and none
+ *      of the mesh's textures or colours;
+ *   4. the same, from any effect a scene mesh uses.
  * Returns null when none works, and the caller declines to create the object.
  */
-function standardMaterial (): Material | null {
+function defaultMaterial (): Material | null {
     if (usable(_material)) return _material;
     _material = null;
 
-    const found: Material[] = [];
+    // 1. The engine's own.
+    const manager = (engine as unknown as { builtinResMgr?: { get (name: string): Material | undefined } }).builtinResMgr;
+    if (manager && typeof manager.get === 'function') {
+        for (const name of BUILTIN_MATERIALS) {
+            try {
+                const material = manager.get(name);
+                if (usable(material)) {
+                    _material = material as Material;
+                    return _material;
+                }
+            } catch {
+                // Not registered under this name in this build.
+            }
+        }
+    }
+
+    // 2. A fresh one from the standard effect.
+    const fresh = tryFromEffect({ effectName: 'builtin-standard' });
+    if (fresh) return (_material = fresh);
+
+    // 3 and 4. Borrow an effect from the scene, but not the material that uses it.
     const scene = director.getScene();
     if (scene) {
+        const effects: engine.EffectAsset[] = [];
         for (const renderer of scene.getComponentsInChildren(MeshRenderer)) {
-            const material = renderer.sharedMaterial;
-            if (usable(material) && found.indexOf(material as Material) < 0) found.push(material as Material);
+            const effect = renderer.sharedMaterial ? renderer.sharedMaterial.effectAsset : null;
+            if (effect && effects.indexOf(effect) < 0) effects.push(effect);
+        }
+        const standard = effects.filter((effect) => (effect.name || '').toLowerCase().indexOf('standard') >= 0);
+        for (const effect of standard.concat(effects)) {
+            const made = tryFromEffect({ effectAsset: effect });
+            if (made) return (_material = made);
         }
     }
-    const named = (material: Material, text: string) => (material.effectName || '').toLowerCase().indexOf(text) >= 0;
+    return null;
+}
 
-    const exact = found.find((m) => named(m, 'builtin-standard'));
-    const similar = found.find((m) => named(m, 'standard'));
-    if (exact || similar) {
-        _material = exact || similar;
-        return _material;
-    }
-
+/** Build a material from `info`, or return null if it comes out unusable. */
+function tryFromEffect (info: engine.IMaterialInfo): Material | null {
     try {
-        const fresh = new Material();
-        fresh.initialize({ effectName: 'builtin-standard' });
-        if (usable(fresh)) {
-            _material = fresh;
-            return fresh;
-        }
-        fresh.destroy();
+        const material = new Material();
+        material.initialize(info);
+        if (usable(material)) return material;
+        material.destroy();
     } catch {
-        // The effect is not there; fall through to whatever the scene has.
+        // The effect is missing or rejected; the caller tries the next source.
     }
-
-    _material = found.length ? found[0] : null;
-    return _material;
+    return null;
 }
 
 function primitiveNode (name: string, data: MeshData): Node | null {
@@ -92,10 +115,10 @@ function primitiveNode (name: string, data: MeshData): Node | null {
         console.warn('[SceneView] this build has no mesh utility (utils.MeshUtils), so a 3D object cannot be created');
         return null;
     }
-    const material = standardMaterial();
+    const material = defaultMaterial();
     if (!material) {
-        console.warn('[SceneView] cannot create a 3D object: no usable material. The engine\'s builtin-standard effect is not '
-            + 'in this build and no mesh in the scene has a material to borrow.');
+        console.warn('[SceneView] cannot create a 3D object: no usable material. The engine\'s default material and its '
+            + 'builtin-standard effect are not in this build, and no mesh in the scene offers an effect to build one from.');
         return null;
     }
     const node = new Node(name);

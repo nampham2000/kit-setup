@@ -2,7 +2,15 @@ import { BoxCollider, CapsuleCollider, Collider, Color, Mat4, Node, SphereCollid
 import { physicsAvailable } from './ColliderEdit';
 import { GeometryRenderer } from './SceneGizmos';
 
-const SHAPE = new Color(123, 227, 123, 255);
+/** The selected node's colliders. */
+const SELECTED = new Color(123, 227, 123, 255);
+/** Every other collider, when all of them are shown: dimmer, so the selected one still stands out. */
+const OTHERS = new Color(70, 150, 90, 255);
+/** The colour the shape functions below draw with; set by whichever entry point is running. */
+let SHAPE = SELECTED;
+
+/** Most colliders drawn at once when showing all of them. */
+const MAX_ALL = 500;
 const SEGMENTS = 32;
 
 const _m = new Mat4();
@@ -33,13 +41,39 @@ const EDGES = [
  */
 export function drawColliders (gr: GeometryRenderer, node: Node) {
     if (!gr || !node || !node.isValid || !physicsAvailable()) return;
+    SHAPE = SELECTED;
+    for (const collider of node.getComponents(Collider)) drawOne(gr, collider);
+}
 
-    for (const collider of node.getComponents(Collider)) {
-        if (!collider.isValid) continue;
-        if (collider instanceof BoxCollider) drawBox(gr, node, collider);
-        else if (collider instanceof SphereCollider) drawSphere(gr, node, collider);
-        else if (collider instanceof CapsuleCollider) drawCapsule(gr, node, collider);
+/** Every collider in the scene, found by walking it. Cheap enough to do every half second. */
+export function collectColliders (scene: Node | null): Collider[] {
+    if (!scene || !physicsAvailable()) return [];
+    return scene.getComponentsInChildren(Collider);
+}
+
+/**
+ * Draw colliders from `list` (see collectColliders), except those on `skip`, which is drawn
+ * brighter by drawColliders. Inactive nodes and disabled colliders are left out: they
+ * take no part in the physics, so drawing them would only mislead.
+ */
+export function drawAllColliders (gr: GeometryRenderer, list: readonly Collider[], skip: Node | null) {
+    if (!gr || !physicsAvailable()) return;
+    SHAPE = OTHERS;
+    let drawn = 0;
+    for (const collider of list) {
+        if (drawn >= MAX_ALL) break;
+        if (!collider.isValid || !collider.enabledInHierarchy || collider.node === skip) continue;
+        drawOne(gr, collider);
+        drawn++;
     }
+}
+
+function drawOne (gr: GeometryRenderer, collider: Collider) {
+    if (!collider.isValid) return;
+    const node = collider.node;
+    if (collider instanceof BoxCollider) drawBox(gr, node, collider);
+    else if (collider instanceof SphereCollider) drawSphere(gr, node, collider);
+    else if (collider instanceof CapsuleCollider) drawCapsule(gr, node, collider);
 }
 
 function drawBox (gr: GeometryRenderer, node: Node, collider: BoxCollider) {
