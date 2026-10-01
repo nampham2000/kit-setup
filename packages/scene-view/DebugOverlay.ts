@@ -117,12 +117,12 @@ const CSS = `
 .sv-btn:hover { background: rgba(255, 255, 255, .14); color: #fff; }
 .sv-btn.sv-on { color: #ff9830; border-color: rgba(255, 152, 48, .55); }
 
-.sv-field { display: flex; align-items: center; gap: .4em; padding: .15em .7em; }
-.sv-label { flex: none; width: 3.9em; color: #a9b1c0; }
+.sv-field { display: flex; align-items: center; gap: .4em; padding: .15em .5em; }
+.sv-label { flex: none; width: 3.6em; color: #a9b1c0; }
 .sv-num {
     flex: 1 1 0; min-width: 0; width: 100%; background: rgba(255, 255, 255, .07);
     border: 1px solid rgba(255, 255, 255, .16); border-radius: .3em; color: #f0f3f8;
-    font-family: var(--sv-mono); font-size: .9em; padding: .15em .25em; text-align: right;
+    font-family: var(--sv-mono); font-size: .85em; padding: .15em .25em; text-align: right;
 }
 .sv-num:focus { outline: none; border-color: #ff9830; background: rgba(255, 152, 48, .14); }
 .sv-text { padding: .2em .7em; color: #c3cad7; white-space: pre-wrap; word-break: break-all; }
@@ -216,9 +216,9 @@ export type Dock = 'left' | 'right';
  * larger text size gets a wider panel instead of the same width with truncated names.
  * At the default 13px these come to about 210 and 420 px.
  */
-const MIN_PANEL_EM = 16;
+const MIN_PANEL_EM = 20;
 /** The Inspector holds three number fields per row, which need more room than a tree. */
-const MIN_INSPECTOR_EM = 22;
+const MIN_INSPECTOR_EM = 18;
 /** Width of a dock whose card is folded: just its title bar. */
 const COLLAPSED_EM = 11;
 const COLLAPSE_KEY = 'scene-view-collapsed';

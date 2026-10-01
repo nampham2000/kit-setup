@@ -172,6 +172,8 @@ function parse (raw: string, fallback: number): number {
     return isFinite(value) ? value : fallback;
 }
 
+/** Up to three decimals with the trailing zeros dropped: 500, not 500.000, so a field stays short. */
 function fixed (n: number): string {
-    return n.toFixed(3);
+    const text = String(parseFloat(n.toFixed(3)));
+    return text === '-0' ? '0' : text;
 }

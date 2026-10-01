@@ -466,7 +466,7 @@ Vị trí và kích thước được **đo từ chính canvas**, nên khớp v�
 - **Chiều cao bằng chiều cao canvas.** Neo theo cửa sổ thì panel bắt đầu từ mép trên và che
   mất thanh công cụ của trang preview (Design Resolution, Rotate, Debug Mode, Show FPS,
   Pause…) nằm phía trên canvas.
-- **Sát mép canvas, bề rộng lấp đầy dải trống** (từ 210 đến 420 px, chừa 8 px mỗi bên). Neo
+- **Sát mép canvas, bề rộng lấp đầy dải trống** (tính theo cỡ chữ: Hierarchy 20 đến 32 em, Inspector 18 đến 32 em, tức 300 và 270 px ở 15 px; chừa 8 px mỗi bên). Neo
   vào mép cửa sổ và chặn bề rộng tối đa thì còn thừa một khoảng hở giữa panel và game mỗi
   khi dải trống rộng hơn mức chặn.
 - **Bám theo canvas khi đổi thiết bị.** Chọn thiết bị trong Design Resolution thì trang gọi
