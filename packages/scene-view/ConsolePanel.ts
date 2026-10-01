@@ -58,6 +58,7 @@ export class ConsolePanel {
     private _body: HTMLElement = null;
     private _copyButton: HTMLElement = null;
     private _note: HTMLElement = null;
+    private _hidden: HTMLElement = null;
     private _noteTimer = 0;
     private _filterButtons = new Map<LogLevel, HTMLElement>();
     private _filterCounts = new Map<LogLevel, HTMLElement>();
@@ -138,6 +139,13 @@ export class ConsolePanel {
         spacer.className = 'sv-console-spacer';
         head.appendChild(spacer);
 
+        this._hidden = document.createElement('span');
+        this._hidden.className = 'sv-console-hidden';
+        this._hidden.style.display = 'none';
+        this._hidden.title = 'Errors thrown by browser extensions (their URLs start with chrome-extension://) are left out: '
+            + 'they come from the browser, not from the game. Press Clear to reset the count.';
+        head.appendChild(this._hidden);
+
         this._note = document.createElement('span');
         this._note.className = 'sv-console-note';
         head.appendChild(this._note);
@@ -180,6 +188,7 @@ export class ConsolePanel {
         this._body = null;
         this._copyButton = null;
         this._note = null;
+        this._hidden = null;
         this._errBadge = null;
         this._warnBadge = null;
         this._filterButtons.clear();
@@ -385,6 +394,12 @@ export class ConsolePanel {
     private _refreshCounts () {
         const counts = consoleLog.counts;
         for (const [level, el] of this._filterCounts) el.textContent = String(counts[level]);
+
+        if (this._hidden) {
+            const n = consoleLog.ignored;
+            this._hidden.textContent = `${n} from extensions hidden`;
+            this._hidden.style.display = n ? '' : 'none';
+        }
 
         if (this._errBadge) {
             this._errBadge.textContent = String(counts.error);

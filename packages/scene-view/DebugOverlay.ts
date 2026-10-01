@@ -221,6 +221,7 @@ const CSS = `
 /* A page can switch text selection off globally; the log is meant to be selected and copied. */
 .sv-console-body, .sv-console-body * { -webkit-user-select: text !important; user-select: text !important; }
 .sv-console:focus { outline: none; }
+.sv-console-hidden { color: #8b93a3; font-size: .8em; margin-right: .5em; white-space: nowrap; cursor: help; }
 .sv-console-note { color: #8bd48b; font-size: .85em; margin-right: .3em; white-space: nowrap; }
 .sv-log-row { cursor: default; }
 .sv-log-row.sv-picked { background: rgba(59, 111, 212, .38); color: #fff; }

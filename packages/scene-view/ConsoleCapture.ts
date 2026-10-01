@@ -14,6 +14,13 @@ const MAX_ENTRIES = 1000;
 const MAX_TEXT = 4000;
 
 /**
+ * A URL that belongs to a browser extension, not to the page. A line that mentions one
+ * (typically in a stack) was thrown by extension code that happens to run in this tab,
+ * and has nothing to do with the game or this tool.
+ */
+const FROM_EXTENSION = /(?:chrome|moz|safari|ms-browser|edge)-extension:\/\//i;
+
+/**
  * Everything the page logs, kept so the scene view can show it without DevTools.
  *
  * It wraps the console methods rather than replacing them: the original always runs
@@ -30,6 +37,11 @@ class ConsoleCapture {
     public readonly counts: Record<LogLevel, number> = { log: 0, warn: 0, error: 0 };
     /** Bumped by clear(), so a view can tell that its rows no longer match the entries. */
     public generation = 0;
+    /**
+     * How many messages were left out because a browser extension produced them. Counted
+     * rather than silently dropped, so the log can say how much it is not showing.
+     */
+    public ignored = 0;
 
     private _listeners = new Set<() => void>();
     private _nextId = 1;
@@ -46,6 +58,7 @@ class ConsoleCapture {
         this.counts.log = 0;
         this.counts.warn = 0;
         this.counts.error = 0;
+        this.ignored = 0;
         this._notify();
     }
 
@@ -77,6 +90,11 @@ class ConsoleCapture {
                 this.push('error', `Failed to load <${el.tagName.toLowerCase()}>: ${el.src || el.href || '(unknown)'}`);
                 return;
             }
+            // Checked on the full path: below it is cut down to a bare file name, which no longer says whose it is.
+            if (event.filename && FROM_EXTENSION.test(event.filename)) {
+                this._ignore();
+                return;
+            }
             // A stack already starts with the message, so use it alone when there is one.
             if (event.error && event.error.stack) {
                 this.push('error', `Uncaught ${event.error.stack}`);
@@ -92,7 +110,16 @@ class ConsoleCapture {
         });
     }
 
+    private _ignore () {
+        this.ignored++;
+        this._notify();
+    }
+
     public push (level: LogLevel, text: string) {
+        if (FROM_EXTENSION.test(text)) {
+            this._ignore();
+            return;
+        }
         const clipped = text.length > MAX_TEXT ? `${text.slice(0, MAX_TEXT)}... (${text.length - MAX_TEXT} more characters)` : text;
         this.counts[level]++;
 
@@ -123,10 +150,32 @@ function shortName (url: string): string {
     return slash >= 0 ? clean.slice(slash + 1) : clean;
 }
 
+/**
+ * A DOM event. JSON turns one into `{"isTrusted":true}`, which says nothing, because
+ * `isTrusted` is the only property it owns. Recognised by shape, so it works for any kind
+ * of event, including ones this environment has no class for.
+ */
+function isEventLike (value: unknown): value is { type: string; isTrusted: boolean } {
+    return !!value && typeof value === 'object'
+        && typeof (value as { type?: unknown }).type === 'string'
+        && typeof (value as { isTrusted?: unknown }).isTrusted === 'boolean';
+}
+
+function describeEvent (event: { type: string }): string {
+    const e = event as { type: string; constructor?: { name?: string }; message?: unknown; reason?: unknown; target?: { tagName?: string } | null };
+    let text = `[${(e.constructor && e.constructor.name) || 'Event'} ${e.type}`;
+    if (e.target && typeof e.target.tagName === 'string') text += ` on <${e.target.tagName.toLowerCase()}>`;
+    text += ']';
+    if (typeof e.message === 'string' && e.message) text += ` ${e.message}`;
+    if (e.reason !== undefined) text += ` reason: ${e.reason instanceof Error ? (e.reason.stack || e.reason.message) : safeJson(e.reason)}`;
+    return text;
+}
+
 function safeJson (value: unknown): string {
     if (value === undefined) return 'undefined';
     if (typeof value === 'string') return value;
     if (typeof value === 'function') return `[function ${value.name || 'anonymous'}]`;
+    if (isEventLike(value)) return describeEvent(value);
     try {
         const seen = new WeakSet<object>();
         const text = JSON.stringify(value, (_key, item) => {

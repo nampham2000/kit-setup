@@ -582,6 +582,15 @@ của viewport, nên bấm vào dải dưới ngăn kéo không chọn nhầm v�
 - **Không thay thế console thật:** `ConsoleCapture.ts` bọc các hàm `console`, hàm gốc luôn chạy trước,
   nên F12 vẫn thấy mọi thứ y như cũ. Hook được cài **ngay khi file được import**, vì hook cài muộn không
   lấy lại được những gì đã log trước đó. Bộ nhớ tối đa 1000 dòng, trang chỉ giữ 400 dòng cuối.
+- **Lỗi từ tiện ích trình duyệt bị lọc ra.** Một tiện ích Chrome chạy trong tab có thể ném lỗi (stack có
+  `chrome-extension://...`, ví dụ `Cannot read properties of undefined (reading 'M_ID')` từ `executors/200.js`) và trang nhìn thấy chúng
+  như lỗi của mình. Chúng không phải của game, nên không được ghi và không làm đỏ nút đếm; thay vào đó tiêu đề
+  Console hiện **"N from extensions hidden"** (rê chuột để đọc giải thích; **Clear** đặt lại về 0), để biết log đã bỏ bớt bao nhiêu.
+  Nhận biết bằng đường dẫn `chrome-extension://`, `moz-extension://`, `safari-extension://`, `ms-browser-extension://`, `edge-extension://`.
+  Với sự kiện `error` toàn cục thì kiểm tra đường dẫn đầy đủ **trước khi** rút gọn thành tên file. Muốn tự xác nhận một lỗi là của
+  tiện ích: mở `chrome://extensions/?id=<ID trong stack>`, hoặc mở trang bằng cửa sổ ẩn danh (tiện ích mặc định bị tắt) rồi xem lỗi còn không.
+- **Đối tượng sự kiện in dễ đọc.** `console.error(event)` trước đây ra `{"isTrusted":true}` (vì `isTrusted` là thuộc tính duy nhất nó sở hữu).
+  Giờ ra dạng `[ErrorEvent error] Script error.`, `[Event load on <img>]`, `[PromiseRejectionEvent unhandledrejection] reason: ...`.
 - **Gộp dòng trùng** liên tiếp thành một dòng có số lần (như DevTools). `%c` bị bỏ, `%s %d %i %f %o %O`
   được thay đúng, object vòng không làm hỏng log.
 - **Lọc** theo Log / Warn / Error (kèm số lượng), **Clear** xóa hết. **Copy** xem mục "Chọn và chép dòng log" ngay dưới. Đang ở cuối danh sách thì tự cuộn theo dòng mới; cuộn lên đọc thì không bị kéo xuống.
