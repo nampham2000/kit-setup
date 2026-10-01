@@ -42,6 +42,8 @@ export class Tooltip {
         this._installed = true;
         ensureStyles();
         document.addEventListener('mouseover', this._over, true);
+        // Moving inside one element can take the pointer on or off its text without any mouseover.
+        document.addEventListener('mousemove', this._over, true);
         document.addEventListener('mouseout', this._out, true);
         document.addEventListener('mousedown', this._hide, true);
         document.addEventListener('wheel', this._hide, true);
@@ -53,6 +55,7 @@ export class Tooltip {
         if (!this._installed) return;
         this._installed = false;
         document.removeEventListener('mouseover', this._over, true);
+        document.removeEventListener('mousemove', this._over, true);
         document.removeEventListener('mouseout', this._out, true);
         document.removeEventListener('mousedown', this._hide, true);
         document.removeEventListener('wheel', this._hide, true);
@@ -95,7 +98,24 @@ export class Tooltip {
 
     private _over = (e: MouseEvent) => {
         const target = e.target as Element;
-        const element = target && typeof target.closest === 'function' ? this._find(target) : null;
+        const inside = !!target && typeof target.closest === 'function' && !!target.closest(ROOTS);
+        if (!inside) {
+            // Over the canvas or the rest of the page. An element's tooltip goes; one drawn for the
+            // engine is the owner's to take down, and must not be fought over on every mouse move.
+            if (this._current) {
+                this._current = null;
+                window.clearTimeout(this._timer);
+                this._timer = 0;
+                this._conceal();
+            }
+            return;
+        }
+
+        let element = this._find(target);
+        // Only the text itself counts. A row is wide and mostly empty, and a tooltip that appears
+        // wherever the pointer happens to cross it is a nuisance; it should take a deliberate move onto the words.
+        if (element && !overText(element, e.clientX, e.clientY)) element = null;
+
         // Same element as before: nothing to do, unless an engine-drawn tooltip is up, which
         // entering any element of the page must take down.
         if (element === this._current && !this._engineText) return;
@@ -191,6 +211,39 @@ export class Tooltip {
         el.style.top = `${Math.max(EDGE, top)}px`;
         this._visible = true;
     }
+}
+
+/** How far outside a word's box the pointer may be and still count as on it, in pixels. */
+const SLACK = 3;
+
+/**
+ * Whether a point is over the element's own text, as opposed to its padding, its empty
+ * space or a control inside it. Each piece of text is measured separately, so a row with
+ * a label, a switch and a key cap answers yes over the label and the key cap and no over
+ * the rest. An element with no text at all (a coloured square, an icon) is judged by its
+ * whole box instead. Where the browser cannot measure text, everything counts.
+ */
+export function overText (element: Element, x: number, y: number): boolean {
+    if (typeof document.createTreeWalker !== 'function' || typeof document.createRange !== 'function') return true;
+    if (typeof x !== 'number' || typeof y !== 'number') return true;
+
+    // 4 is NodeFilter.SHOW_TEXT.
+    const walker = document.createTreeWalker(element, 4);
+    let anyText = false;
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        const value = node.nodeValue;
+        if (!value || !value.trim()) continue;
+        anyText = true;
+
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        const rects = range.getClientRects();
+        for (let i = 0; i < rects.length; i++) {
+            const r = rects[i];
+            if (x >= r.left - SLACK && x <= r.right + SLACK && y >= r.top - SLACK && y <= r.bottom + SLACK) return true;
+        }
+    }
+    return !anyText;
 }
 
 export const tooltip = new Tooltip();
