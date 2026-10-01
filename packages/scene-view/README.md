@@ -440,6 +440,7 @@ phím tắt theo nhóm: Tools, Select and focus, Camera, Panel.
 |---|---|
 | `H` | Mở/đóng panel trợ giúp |
 | `P` | Bật/tắt panel Hierarchy và Inspector (chỉ browser) |
+| `L` | Mở/đóng Console trong trang (chỉ browser) |
 
 ## Cỡ chữ của các panel
 
@@ -457,6 +458,28 @@ Chữ trong panel từng là **monospace 11px**: nhỏ, và monospace là lựa 
   dòng cây, caret, chip, công tắc và nút, chứ không chỉ chữ. Bề rộng tối thiểu/tối đa của panel
   cũng tính theo em (16 và 32), nên chữ to hơn thì panel rộng hơn, không bị cắt tên.
 - Nút `!` tự tính vị trí theo kích thước thật của nó vì nó cũng to lên theo cỡ chữ.
+
+## Console trong trang (phím `L`)
+
+Xem log mà không cần mở F12 (mở F12 trên màn hình nhỏ nghĩa là bóp game lại). Cạnh nút `!` có
+nút **Console** mang số **lỗi** (đỏ) và **cảnh báo** (vàng): lỗi hiện ra ngay cả khi ngăn kéo đang đóng.
+Bấm nút hoặc phím `L` để mở ngăn kéo; nó nằm giữa hai panel bên, ngay trên hàng nút, và nhớ trạng
+thái đóng/mở.
+
+- **Bắt gì:** `console.log / info / debug / warn / error`, lỗi chưa bắt (`window.onerror`), promise bị
+  reject mà không ai xử lý, và tài nguyên tải hỏng (ảnh, script...). Các lỗi mạng của `fetch`/XHR
+  không có sự kiện nào để bắt, chúng chỉ hiện trong DevTools.
+- **Không thay thế console thật:** `ConsoleCapture.ts` bọc các hàm `console`, hàm gốc luôn chạy trước,
+  nên F12 vẫn thấy mọi thứ y như cũ. Hook được cài **ngay khi file được import**, vì hook cài muộn không
+  lấy lại được những gì đã log trước đó. Bộ nhớ tối đa 1000 dòng, trang chỉ giữ 400 dòng cuối.
+- **Gộp dòng trùng** liên tiếp thành một dòng có số lần (như DevTools). `%c` bị bỏ, `%s %d %i %f %o %O`
+  được thay đúng, object vòng không làm hỏng log.
+- **Lọc** theo Log / Warn / Error (kèm số lượng), **Copy** chép các dòng đang hiện vào clipboard,
+  **Clear** xóa hết. Đang ở cuối danh sách thì tự cuộn theo dòng mới; cuộn lên đọc thì không bị kéo xuống.
+- **Chỉ ở browser**, như Hierarchy/Inspector: trong Preview của editor đã có Console của editor, và
+  Preview không chuyển click vào trang. Phím `L` và công tắc "Console" trong panel `!` cũng chỉ có ở browser.
+- Giới hạn: dòng log trông như xuất phát từ `ConsoleCapture.ts` chứ không phải file gọi, nếu soi bằng DevTools.
+  Muốn biết nơi gọi thì xem stack (lỗi và `Error` có sẵn stack trong dòng).
 
 ## Panel Hierarchy + Inspector trên bản preview web
 
@@ -585,6 +608,8 @@ Split-screen vẫn chạy bình thường kể cả khi thiếu module này.
 | `ScreenDraw.ts` | Vẽ screen-space bằng GeometryRenderer |
 | `EditorBridge.ts` | Đẩy selection sang Hierarchy/Inspector thật của editor |
 | `DebugOverlay.ts` | Gốc DOM dùng chung + CSS + bookkeeping input (fallback) |
+| `ConsoleCapture.ts` | Bắt log, lỗi, promise reject; không phụ thuộc DOM |
+| `ConsolePanel.ts` | Ngăn kéo Console và nút đếm lỗi |
 | `HierarchyPanel.ts` | Cây node, nút ẩn/solo |
 | `InspectorPanel.ts` | Inspector sửa được giá trị |
 | `VisibilityController.ts` | Trạng thái ẩn/solo và khôi phục |

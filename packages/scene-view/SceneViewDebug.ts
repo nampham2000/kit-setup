@@ -7,6 +7,7 @@ import { DEBUG, EDITOR_NOT_IN_PREVIEW } from 'cc/env';
 import { CanvasWatcher } from './CanvasWatcher';
 import { DebugOverlay, ensureStyles } from './DebugOverlay';
 import { EditorBridge } from './EditorBridge';
+import { ConsolePanel } from './ConsolePanel';
 import { HelpPanel, HelpToggle } from './HelpPanel';
 import { bumpFontSize } from './UiScale';
 import { Axis, GizmoMode, TransformGizmo } from './TransformGizmo';
@@ -208,6 +209,7 @@ export class SceneViewDebug extends Component {
     private _rescanTimer = 0;
     private _active = false;
     private _help = new HelpPanel();
+    private _console = new ConsolePanel();
     private _watcher = new CanvasWatcher();
     private _panelsOn = false;
     private _warnedNoGizmos = false;
@@ -455,6 +457,7 @@ export class SceneViewDebug extends Component {
         this._renderers.length = 0;
         this._watcher.stop();
         this._help.unmount();
+        this._console.unmount();
     }
 
     public get gizmoMode (): GizmoMode { return this._handles.mode; }
@@ -862,6 +865,14 @@ export class SceneViewDebug extends Component {
         this._splitter.sync(this._sceneCamera, this._split);
         this._palette.sync(this._sceneCamera, this._split);
         this._help.sync(this._sceneCamera, this._split);
+        this._syncConsole();
+    }
+
+    private _syncConsole () {
+        const canvas = game.canvas as HTMLCanvasElement;
+        const rect = canvas?.getBoundingClientRect?.();
+        if (!rect) return;
+        this._console.sync(rect, this._insetLeft, this._insetRight, this._help.buttonRect());
     }
 
     private _rescan () {
@@ -1072,6 +1083,9 @@ export class SceneViewDebug extends Component {
         case KeyCode.KEY_P:
             if (this._active) this.togglePanels();
             break;
+        case KeyCode.KEY_L:
+            if (this._active) this.toggleConsole();
+            break;
         case KeyCode.KEY_G:
             if (this._active) this.toggleFollow();
             break;
@@ -1213,9 +1227,15 @@ export class SceneViewDebug extends Component {
         this._help.toggle();
     }
 
+    /** Show or hide the in-page console. Browser only: the editor has its own. */
+    public toggleConsole () {
+        this._console.toggle();
+        this._updateHint();
+    }
+
     /** True while the pointer is over any DOM overlay: it must not reach the scene underneath. */
     private _overUI (): boolean {
-        return this._overlay.cursorInside || this._help.cursorInside;
+        return this._overlay.cursorInside || this._help.cursorInside || this._console.cursorInside;
     }
 
     private _mountHelp () {
@@ -1229,6 +1249,13 @@ export class SceneViewDebug extends Component {
         this._help.onInteract = () => (game.canvas as HTMLCanvasElement)?.focus?.();
         this._help.mount(!this._bridge.hasEditor);
         this._help.sync(this._sceneCamera, this._split);
+
+        // The editor has its own console, and its Preview delivers no clicks to the page.
+        if (!this._bridge.hasEditor) {
+            this._console.onInteract = () => (game.canvas as HTMLCanvasElement)?.focus?.();
+            this._console.mount();
+            this._syncConsole();
+        }
     }
 
     private _helpToggles (): HelpToggle[] {
@@ -1254,6 +1281,12 @@ export class SceneViewDebug extends Component {
                 key: 'P',
                 get: () => this.showPanels,
                 set: (on) => { if (on !== this.showPanels) this.togglePanels(); },
+            });
+            toggles.push({
+                label: 'Console',
+                key: 'L',
+                get: () => this._console.isOpen,
+                set: (on) => { if (on !== this._console.isOpen) this.toggleConsole(); },
             });
         }
 

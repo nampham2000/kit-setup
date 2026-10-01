@@ -6,7 +6,7 @@ const STYLE_ID = 'scene-view-overlay-style';
 const CSS = `
 /* One text size drives everything. --sv-fs is published by UiScale; every length below
    is in em, so changing it scales rows, carets, chips and switches with the letters. */
-.sv-root, .sv-help, .sv-help-btn {
+.sv-root, .sv-help, .sv-help-btn, .sv-console, .sv-log-btn {
     --sv-ui: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     /* Monospace only where alignment matters: numbers and key caps. Names and labels
        are far easier to read in a proportional face. */
@@ -135,6 +135,64 @@ const CSS = `
     text-align: center; cursor: pointer; user-select: none;
 }
 .sv-help-btn:hover, .sv-help-btn.sv-on { background: #3b6fd4; border-color: #3b6fd4; color: #fff; }
+
+/* The console: a button beside the help button, and a drawer above it. The drawer is at
+   50 like the docks, below the preview page's own dropdown (99); the button at 51 so it
+   stays clickable over the drawer's edge. */
+.sv-log-btn {
+    position: fixed; z-index: 51; display: flex; align-items: center; gap: .45em;
+    height: 2em; padding: 0 .8em; border-radius: 1em; box-sizing: border-box;
+    background: rgba(20, 22, 26, .92); border: 1px solid rgba(255, 255, 255, .28);
+    color: #e3e7ee; font-weight: 600; font-size: .9em; cursor: pointer; user-select: none;
+}
+.sv-log-btn:hover, .sv-log-btn.sv-on { background: #3b6fd4; border-color: #3b6fd4; color: #fff; }
+.sv-badge {
+    min-width: 1.5em; padding: 0 .35em; border-radius: .8em; text-align: center;
+    font-size: .85em; font-family: var(--sv-mono); line-height: 1.5;
+}
+.sv-badge-err { background: #d64545; color: #fff; }
+.sv-badge-warn { background: #e2b93b; color: #241c00; }
+
+.sv-console {
+    position: fixed; z-index: 50; display: none; flex-direction: column; box-sizing: border-box;
+    background: rgba(16, 18, 22, .96); border: 1px solid rgba(255, 255, 255, .18);
+    border-radius: .45em; overflow: hidden;
+}
+.sv-console.sv-open { display: flex; }
+.sv-console-head {
+    display: flex; align-items: center; gap: .5em; flex: none; padding: .35em .6em;
+    background: rgba(255, 255, 255, .06);
+}
+.sv-console-title {
+    margin-right: .4em; color: #a9b1c0; font-size: .8em; font-weight: 600;
+    letter-spacing: .08em; text-transform: uppercase;
+}
+.sv-console-spacer { flex: 1; }
+.sv-chip-btn {
+    font: inherit; font-size: .9em; padding: .1em .65em; border-radius: .3em;
+    border: 1px solid rgba(255, 255, 255, .2); background: none; color: #8b93a3; cursor: pointer;
+}
+.sv-chip-btn:hover { background: rgba(255, 255, 255, .12); color: #fff; }
+.sv-chip-btn.sv-on { background: rgba(255, 255, 255, .14); color: #fff; }
+.sv-lvbtn-warn.sv-on { color: #f0d070; }
+.sv-lvbtn-error.sv-on { color: #ff9a9a; }
+.sv-console-body {
+    flex: 1 1 auto; min-height: 0; overflow: auto; user-select: text;
+    font-family: var(--sv-mono); font-size: .88em;
+}
+.sv-log-row {
+    display: flex; gap: .7em; padding: .12em .7em; white-space: pre-wrap; word-break: break-word;
+    border-bottom: 1px solid rgba(255, 255, 255, .04);
+}
+.sv-log-time { flex: none; color: #6f7787; }
+.sv-log-msg { flex: 1; min-width: 0; }
+.sv-log-count {
+    flex: none; align-self: flex-start; padding: 0 .5em; border-radius: .8em;
+    background: rgba(255, 255, 255, .16); font-size: .85em;
+}
+.sv-lv-warn { background: rgba(226, 185, 59, .10); color: #f0d070; }
+.sv-lv-error { background: rgba(214, 69, 69, .14); color: #ff9a9a; }
+.sv-log-empty { padding: .8em; color: #8b93a3; }
 
 .sv-help {
     position: fixed; z-index: 51; display: none; width: 25em; max-height: 72vh;

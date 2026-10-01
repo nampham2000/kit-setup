@@ -53,6 +53,7 @@ const SHORTCUTS: { title: string; rows: ShortcutRow[] }[] = [
         title: 'Panel',
         rows: [
             { keys: 'H', text: 'Show or hide this panel' },
+            { keys: 'L', text: 'Show or hide the console' },
             { keys: 'F1', text: 'Close the scene view' },
         ],
     },
@@ -175,6 +176,11 @@ export class HelpPanel {
         this._rows = [];
         this._open = false;
         this._inside = false;
+    }
+
+    /** Where the round button is on screen, or null before it is mounted. */
+    public buttonRect (): DOMRect | null {
+        return this._button ? this._button.getBoundingClientRect() : null;
     }
 
     public toggle () { this.setOpen(!this._open); }
