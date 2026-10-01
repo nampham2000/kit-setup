@@ -464,7 +464,10 @@ Chữ trong panel từng là **monospace 11px**: nhỏ, và monospace là lựa 
 Xem log mà không cần mở F12 (mở F12 trên màn hình nhỏ nghĩa là bóp game lại). Cạnh nút `!` có
 nút **Console** mang số **lỗi** (đỏ) và **cảnh báo** (vàng): lỗi hiện ra ngay cả khi ngăn kéo đang đóng.
 Bấm nút hoặc phím `L` để mở ngăn kéo; nó nằm giữa hai panel bên, ngay trên hàng nút, và nhớ trạng
-thái đóng/mở.
+thái đóng/mở. **Mở ra thì game và scene view co lại phía trên để nhường chỗ**, không bị ngăn kéo đè lên
+(cùng cơ chế với hai panel bên: `insets` trái/phải/dưới, game giữ nguyên tỉ lệ và căn giữa trong phần còn lại).
+Nền ngăn kéo đặc, không để hình phía sau lộ xuyên qua. Picker và free-look cũng chặn theo cạnh trên/dưới
+của viewport, nên bấm vào dải dưới ngăn kéo không chọn nhầm vật.
 
 - **Bắt gì:** `console.log / info / debug / warn / error`, lỗi chưa bắt (`window.onerror`), promise bị
   reject mà không ai xử lý, và tài nguyên tải hỏng (ảnh, script...). Các lỗi mạng của `fetch`/XHR

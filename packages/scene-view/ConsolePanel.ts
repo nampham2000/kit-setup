@@ -29,6 +29,8 @@ const FILTERS: { level: LogLevel; label: string }[] = [
 export class ConsolePanel {
     /** Called after the panel was clicked, so the owner can give the canvas keyboard focus back. */
     public onInteract: () => void = null;
+    /** Called when the drawer opens or closes, so the owner can make the views give up or take back its space. */
+    public onToggle: () => void = null;
 
     private _button: HTMLElement = null;
     private _errBadge: HTMLElement = null;
@@ -45,8 +47,15 @@ export class ConsolePanel {
     private _flushTimer = 0;
     private _lastId = 0;
     private _generation = 0;
+    private _reserved = 0;
 
     public get isOpen (): boolean { return this._open; }
+
+    /**
+     * How many pixels at the bottom of the canvas the drawer takes, or 0 when it is
+     * closed. The views are laid out above this rather than drawn underneath it.
+     */
+    public get reservedBottom (): number { return this._reserved; }
 
     /** True while the pointer is over the button or the drawer. */
     public get cursorInside (): boolean { return this._inside; }
@@ -142,6 +151,7 @@ export class ConsolePanel {
         this._rows.clear();
         this._inside = false;
         this._lastId = 0;
+        this._reserved = 0;
     }
 
     public toggle () { this.setOpen(!this._open); }
@@ -155,6 +165,8 @@ export class ConsolePanel {
         }
         this._apply();
         if (open && this._body) this._body.scrollTop = this._body.scrollHeight;
+        if (!open) this._reserved = 0;
+        this.onToggle?.();
     }
 
     /**
@@ -173,13 +185,17 @@ export class ConsolePanel {
         const left = canvas.left + canvas.width * insetLeft;
         const right = canvas.right - canvas.width * insetRight;
         const width = Math.max(right - left, Math.min(canvas.width, 240));
-        const height = Math.max(150, Math.min(canvas.height * 0.35, 420));
+        const height = Math.max(140, Math.min(canvas.height * 0.3, 360));
 
         this._drawer.style.left = `${left}px`;
         this._drawer.style.width = `${width}px`;
         this._drawer.style.height = `${height}px`;
         // Above the button row rather than behind it.
         this._drawer.style.bottom = `${window.innerHeight - anchor.top + 8}px`;
+
+        // The drawer's top edge, measured from the canvas bottom: what the views must leave free.
+        const drawerTop = anchor.top - 8 - height;
+        this._reserved = this._open ? Math.max(0, canvas.bottom - drawerTop) : 0;
     }
 
     private _apply () {

@@ -32,7 +32,7 @@ const SCENE_BG = new Color(38, 40, 46, 255);
 const BACKDROP_BG = new Color(22, 23, 27, 255);
 
 /**
- * Where a game camera goes when the game view spans `left` to `split` of the window width.
+ * Where a game camera goes when the game view is the box between the panels.
  *
  * Both axes shrink by the same factor, so the game keeps the window's own aspect
  * ratio and is seen whole. Narrowing only the width, as this used to, cut the game
@@ -40,13 +40,16 @@ const BACKDROP_BG = new Color(22, 23, 27, 255);
  * right part of it simply fell outside the viewport. The result is centred
  * vertically, and a camera that started with a partial rect keeps its place in it.
  */
-function gameRect (saved: Rect, left: number, split: number): Rect {
-    // `left` is where the game view begins, after any panel covering the canvas edge.
-    const k = Math.max(split - left, 0.01);
-    const offsetY = (1 - k) / 2;
+function gameRect (saved: Rect, left: number, right: number, bottom: number): Rect {
+    // The game view is the box from `left` to `right` across and from `bottom` to the top, after
+    // whatever panels cover the canvas edges. The game keeps its shape inside it, whichever of
+    // width and height is the tighter fit, and is centred along the other.
+    const width = Math.max(right - left, 0.01);
+    const height = Math.max(1 - bottom, 0.01);
+    const k = Math.min(width, height);
     return new Rect(
-        left + saved.x * k,
-        offsetY + saved.y * k,
+        left + (width - k) / 2 + saved.x * k,
+        bottom + (height - k) / 2 + saved.y * k,
         saved.width * k,
         saved.height * k,
     );
@@ -56,6 +59,7 @@ function gameRect (saved: Rect, left: number, split: number): Rect {
 const DEFAULT_SPLIT = 0.5;
 /** The most of the width a panel docked over the canvas may take from the views. */
 const MAX_INSET = 0.4;
+const MAX_INSET_BOTTOM = 0.6;
 
 /** A press that travels farther than this (device px) is a drag, not a click. */
 const CLICK_SLOP = 4;
@@ -195,6 +199,8 @@ export class SceneViewDebug extends Component {
     /** Share of the canvas width covered by the left and right panels. */
     private _insetLeft = 0;
     private _insetRight = 0;
+    /** Share of the canvas height taken by the console drawer at the bottom. */
+    private _insetBottom = 0;
     private _grabbedAxis: Axis | null = null;
     private _inspector = new InspectorPanel();
     private _visibility = new VisibilityController();
@@ -667,7 +673,7 @@ export class SceneViewDebug extends Component {
             if (camera.isValid) this._applyGameRect(camera, saved);
         }
         if (this._sceneCamera && this._sceneCamera.isValid) {
-            this._sceneCamera.rect = new Rect(this._split, 0, Math.max(hi - this._split, 0.01), 1);
+            this._sceneCamera.rect = new Rect(this._split, this._insetBottom, Math.max(hi - this._split, 0.01), Math.max(1 - this._insetBottom, 0.01));
         }
     }
 
@@ -682,10 +688,16 @@ export class SceneViewDebug extends Component {
             left = Math.min(MAX_INSET, px.left / rect.width);
             right = Math.min(MAX_INSET, px.right / rect.width);
         }
-        if (Math.abs(left - this._insetLeft) < 0.002 && Math.abs(right - this._insetRight) < 0.002) return;
+        let bottom = 0;
+        if (this._panelsOn && rect && rect.height > 0) {
+            bottom = Math.min(MAX_INSET_BOTTOM, this._console.reservedBottom / rect.height);
+        }
+        if (Math.abs(left - this._insetLeft) < 0.002 && Math.abs(right - this._insetRight) < 0.002
+            && Math.abs(bottom - this._insetBottom) < 0.002) return;
 
         this._insetLeft = left;
         this._insetRight = right;
+        this._insetBottom = bottom;
         this._reflow();
     }
 
@@ -699,7 +711,7 @@ export class SceneViewDebug extends Component {
     }
 
     private _applyGameRect (camera: Camera, desired: Rect) {
-        const shrunk = gameRect(desired, this._insetLeft, this._split);
+        const shrunk = gameRect(desired, this._insetLeft, this._split, this._insetBottom);
         this._savedRects.set(camera, desired);
         this._appliedRects.set(camera, shrunk.clone());
         camera.rect = shrunk;
@@ -774,7 +786,7 @@ export class SceneViewDebug extends Component {
         const camera = this._sceneCamera;
         camera.node.active = true;
         camera.enabled = true;
-        camera.rect = new Rect(this._split, 0, Math.max(1 - this._insetRight - this._split, 0.01), 1);
+        camera.rect = new Rect(this._split, this._insetBottom, Math.max(1 - this._insetRight - this._split, 0.01), Math.max(1 - this._insetBottom, 0.01));
         camera.priority = 1 << 20;
         camera.clearFlags = Camera.ClearFlag.SOLID_COLOR;
         camera.clearColor = SCENE_BG;
@@ -861,10 +873,12 @@ export class SceneViewDebug extends Component {
         // Keeps each panel inside the free margin beside the canvas as it moves, and
         // then fits the views to whatever of the canvas the panels still cover.
         this._overlay.layout();
+        this._syncConsole();
         this._updateInsets();
         this._splitter.sync(this._sceneCamera, this._split);
         this._palette.sync(this._sceneCamera, this._split);
         this._help.sync(this._sceneCamera, this._split);
+        // Again: the help button has just moved, and the console button sits beside it.
         this._syncConsole();
     }
 
@@ -933,7 +947,7 @@ export class SceneViewDebug extends Component {
         }
 
         if (!this.enableTransformGizmo || !this._selected) return;
-        if (this._overUI() || !isInsideViewport(this._sceneCamera, x)) return;
+        if (this._overUI() || !isInsideViewport(this._sceneCamera, x, y)) return;
 
         // Grabbing a handle takes priority over selecting whatever is behind it.
         const axis = this._handles.hitTest(x, y);
@@ -959,7 +973,7 @@ export class SceneViewDebug extends Component {
         if (!this.enableTransformGizmo || !this._selected) return;
         if (this._handles.dragging) {
             this._handles.drag(x, y);
-        } else if (this._overUI() || !isInsideViewport(this._sceneCamera, x)) {
+        } else if (this._overUI() || !isInsideViewport(this._sceneCamera, x, y)) {
             this._handles.clearHover();
         } else {
             this._handles.setHover(x, y);
@@ -997,7 +1011,7 @@ export class SceneViewDebug extends Component {
         // would also fire a pick at that screen position.
         if (!pressed || this._overUI() || this._splitter.dragging) return;
         if (!this.enablePicking) return;
-        if (!isInsideViewport(this._sceneCamera, x)) return;
+        if (!isInsideViewport(this._sceneCamera, x, y)) return;
         // Ignore drags - only a clean click changes the selection.
         if (moved) return;
 
@@ -1253,6 +1267,7 @@ export class SceneViewDebug extends Component {
         // The editor has its own console, and its Preview delivers no clicks to the page.
         if (!this._bridge.hasEditor) {
             this._console.onInteract = () => (game.canvas as HTMLCanvasElement)?.focus?.();
+            this._console.onToggle = () => { if (this._active) this._syncWidgets(); };
             this._console.mount();
             this._syncConsole();
         }

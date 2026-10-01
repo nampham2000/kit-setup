@@ -95,8 +95,26 @@ export function viewportMaxX (camera: Camera): number {
     return usable * (camera.rect.x + camera.rect.width);
 }
 
-export function isInsideViewport (camera: Camera, screenX: number): boolean {
-    return screenX >= viewportMinX(camera) && screenX <= viewportMaxX(camera);
+/** Bottom and top edges of a camera's viewport. Mouse y runs up from the bottom, like the camera rect. */
+export function viewportMinY (camera: Camera): number {
+    if (!camera) return 0;
+    const height = (camera.camera as any)?.height;
+    const usable = height > 0 ? height : screen.windowSize.height;
+    return usable * camera.rect.y;
+}
+
+export function viewportMaxY (camera: Camera): number {
+    if (!camera) return 0;
+    const height = (camera.camera as any)?.height;
+    const usable = height > 0 ? height : screen.windowSize.height;
+    return usable * (camera.rect.y + camera.rect.height);
+}
+
+/** `screenY` is optional: callers that only know x still get the horizontal test. */
+export function isInsideViewport (camera: Camera, screenX: number, screenY?: number): boolean {
+    if (screenX < viewportMinX(camera) || screenX > viewportMaxX(camera)) return false;
+    if (screenY === undefined) return true;
+    return screenY >= viewportMinY(camera) && screenY <= viewportMaxY(camera);
 }
 
 

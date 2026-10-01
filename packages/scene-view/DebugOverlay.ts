@@ -155,7 +155,7 @@ const CSS = `
 
 .sv-console {
     position: fixed; z-index: 50; display: none; flex-direction: column; box-sizing: border-box;
-    background: rgba(16, 18, 22, .96); border: 1px solid rgba(255, 255, 255, .18);
+    background: #101216; border: 1px solid rgba(255, 255, 255, .18);
     border-radius: .45em; overflow: hidden;
 }
 .sv-console.sv-open { display: flex; }

@@ -99,7 +99,7 @@ export class FreeCamera {
     private _insideViewport (e: EventMouse) {
         // Shares the picker's test so the look region and the pick region can never
         // drift apart, and so both stay in the camera's own coordinate space.
-        return isInsideViewport(this.viewportCamera, e.getLocationX());
+        return isInsideViewport(this.viewportCamera, e.getLocationX(), e.getLocationY());
     }
 
     private _onMouseDown (e: EventMouse) {
