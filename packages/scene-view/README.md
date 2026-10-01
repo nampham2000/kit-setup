@@ -573,9 +573,14 @@ Bảng công cụ 1-5 và thanh chia được vẽ bằng geometry renderer.
 - **Lệch khi giữ chuột phải di chuyển camera, dừng lại mới về đúng chỗ: đã sửa.** Widget đặt bằng `screenToWorld`, đọc ma trận
   camera, mà ma trận chỉ được làm mới lúc render, nên widget dựng theo tư thế camera của frame trước rồi vẽ với tư thế frame này.
   `_prepareCameras` làm mới ma trận ngay sau khi camera đã di chuyển trong frame, trước khi vẽ.
-- **Bị vật trong suốt che (ví dụ một bức tường đen lớn): CHƯA sửa.** Geometry renderer vẽ chung lượt với scene, nên thứ scene vẽ sau
-  (vật trong suốt) đè lên widget bất kể độ sâu. Đã thử vẽ widget trên một camera lớp phủ riêng, nhưng trên project thật widget
-  **biến mất hẳn** nên đã gỡ. Chưa rõ nguyên nhân, và chưa có cách nào kiểm được ngoài chạy thật, nên không thử đoán tiếp.
+- **Bị UI của game che (ví dụ một tấm nền đen phủ cả màn hình): sửa ở trình duyệt bằng cách dùng phần tử DOM.** Mesh 3D không che
+  được widget, nhưng UI thì có: engine vẽ UI ở bước sau cùng, sau mọi gizmo, nên bất cứ thứ gì geometry renderer vẽ đều nằm dưới
+  một phần tử UI phủ kín. Đã thử vẽ widget trên một camera lớp phủ riêng, nhưng trên project thật widget **biến mất hẳn** nên đã gỡ.
+  Giờ ở trình duyệt, **bảng công cụ và thanh chia là phần tử trang** (\`DomWidgets.ts\`): luôn nằm trên cả canvas dù engine vẽ gì,
+  **không lệch khi camera chuyển động** (vị trí chỉ phụ thuộc rect của canvas và tỉ lệ chia, không có tư thế camera nào ở đây),
+  có hover và tooltip sẵn. Icon SVG dùng lại đúng nét vẽ của bản engine. Thanh chia kéo bằng pointer capture, giữ trong 10%-90%,
+  và ngắn lại khi Console mở để không cắt qua nó. **Trong Preview của editor vẫn dùng bản vẽ bằng engine** như trước, vì ở đó
+  trang không nhận chuột; bản engine chỉ được vẽ khi bản DOM chưa được dựng, nên không bao giờ có hai bản.
 
 ## Giải thích khi rê chuột (tooltip)
 

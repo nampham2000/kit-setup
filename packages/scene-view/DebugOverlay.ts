@@ -6,7 +6,7 @@ const STYLE_ID = 'scene-view-overlay-style';
 const CSS = `
 /* One text size drives everything. --sv-fs is published by UiScale; every length below
    is in em, so changing it scales rows, carets, chips and switches with the letters. */
-.sv-root, .sv-help, .sv-help-btn, .sv-console, .sv-log-btn, .sv-menu, .sv-tip {
+.sv-root, .sv-help, .sv-help-btn, .sv-console, .sv-log-btn, .sv-menu, .sv-tip, .sv-tools {
     --sv-ui: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     /* Monospace only where alignment matters: numbers and key caps. Names and labels
        are far easier to read in a proportional face. */
@@ -180,6 +180,24 @@ const CSS = `
     background: #16181d; border: 1px solid rgba(255, 255, 255, .22);
     box-shadow: 0 .4em 1.2em rgba(0, 0, 0, .5);
 }
+/* The tool strip and the divider, as page elements. They sit at 50 like the docks. */
+.sv-tools {
+    position: fixed; z-index: 50; display: flex; flex-direction: column; gap: 2px; padding: 3px;
+    background: #181a1f; border: 1px solid rgba(255, 255, 255, .18); border-radius: .3em;
+}
+.sv-tool {
+    width: 28px; height: 28px; padding: 5px; box-sizing: border-box; border: 0; border-radius: .25em;
+    background: none; color: #c6cdd9; cursor: pointer;
+}
+.sv-tool svg { display: block; width: 100%; height: 100%; }
+.sv-tool:hover { background: #3e434e; color: #e6e9ef; }
+.sv-tool.sv-on { background: #3b6fd4; color: #fff; }
+.sv-divider { position: fixed; z-index: 50; width: 10px; cursor: col-resize; touch-action: none; }
+.sv-divider::after {
+    content: ''; position: absolute; left: 3px; top: 0; bottom: 0; width: 4px; background: rgba(255, 255, 255, .14);
+}
+.sv-divider:hover::after, .sv-divider.sv-drag::after { background: #ff9830; }
+
 /* The hover explanation. Above the menus (52) but below the preview page's own dropdown (99). */
 .sv-tip {
     position: fixed; z-index: 60; display: none; max-width: 22em; padding: .5em .75em; box-sizing: border-box;

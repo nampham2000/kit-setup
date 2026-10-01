@@ -11,6 +11,7 @@ import { Collider } from 'cc';
 import { collectColliders, drawAllColliders, drawColliders } from './ColliderGizmo';
 import { ColliderHandles } from './ColliderHandles';
 import { copyText } from './Clipboard';
+import { DomWidgets } from './DomWidgets';
 import { ConsolePanel } from './ConsolePanel';
 import { ContextMenu } from './ContextMenu';
 import { EditToolbar } from './EditToolbar';
@@ -243,6 +244,8 @@ export class SceneViewDebug extends Component {
     /** Set when a mouse press began on a collider handle, so its release is not taken for a click. */
     private _colliderGrab = false;
     private _menu = new ContextMenu();
+    /** The tool strip and divider as page elements, in a browser. The engine draws them where there is no page. */
+    private _dom = new DomWidgets();
     /** What Copy last took. Pasting makes a fresh copy of it, so it can be pasted more than once. */
     private _clipboard: Node | null = null;
     private _toolbar = new EditToolbar({
@@ -379,8 +382,11 @@ export class SceneViewDebug extends Component {
         }
 
         // Overlay widgets go last so they sit on top of the scene and the gizmos.
-        if (this.showSplitter) this._splitter.draw(this._gizmos);
-        if (this.enableTransformGizmo && this.showToolPalette) this._palette.draw(this._gizmos);
+        // Page elements replace these in a browser; the engine draws them in the editor Preview.
+        if (!this._dom.mounted) {
+            if (this.showSplitter) this._splitter.draw(this._gizmos);
+            if (this.enableTransformGizmo && this.showToolPalette) this._palette.draw(this._gizmos);
+        }
     }
 
     public toggle () { this._active ? this.close() : this.open(); }
@@ -512,6 +518,7 @@ export class SceneViewDebug extends Component {
         this._watcher.stop();
         this._help.unmount();
         this._console.unmount();
+        this._dom.unmount();
         tooltip.uninstall();
     }
 
@@ -527,6 +534,7 @@ export class SceneViewDebug extends Component {
         this._handles.clearHover();
         this._colliderHandles.clearHover();
         this._palette.setMode(mode);
+        this._dom.setMode(mode);
         this._updateHint();
     }
 
@@ -940,12 +948,23 @@ export class SceneViewDebug extends Component {
         // then fits the views to whatever of the canvas the panels still cover.
         this._overlay.layout();
         this._syncConsole();
+        this._syncDomWidgets();
         this._updateInsets();
         this._splitter.sync(this._sceneCamera, this._split);
         this._palette.sync(this._sceneCamera, this._split);
         this._help.sync(this._sceneCamera, this._split);
         // Again: the help button has just moved, and the console button sits beside it.
         this._syncConsole();
+    }
+
+    /** Place the page-element tool strip and divider. They depend only on the canvas and the split. */
+    private _syncDomWidgets () {
+        if (!this._dom.mounted) return;
+        const canvas = game.canvas as HTMLCanvasElement;
+        const rect = canvas?.getBoundingClientRect?.();
+        if (!rect) return;
+        this._dom.sync(rect, this._split, this._console.reservedBottom,
+            this.enableTransformGizmo && this.showToolPalette, this.showSplitter);
     }
 
     private _syncConsole () {
@@ -1049,7 +1068,9 @@ export class SceneViewDebug extends Component {
         let text: string | null = null;
         const busy = this._splitter.dragging || this._handles.dragging || this._colliderHandles.dragging || this._overUI();
         if (!busy) {
-            if (this.showSplitter && this._splitter.hitTest(x)) {
+            if (this._dom.mounted) {
+                // The page elements explain themselves.
+            } else if (this.showSplitter && this._splitter.hitTest(x)) {
                 text = SPLITTER_TIP;
             } else if (this.enableTransformGizmo && this.showToolPalette) {
                 const tool = this._palette.hitTest(x, y);
@@ -1547,7 +1568,7 @@ export class SceneViewDebug extends Component {
 
     /** True while the pointer is over any DOM overlay: it must not reach the scene underneath. */
     private _overUI (): boolean {
-        return this._overlay.cursorInside || this._help.cursorInside || this._console.cursorInside || this._menu.cursorInside;
+        return this._overlay.cursorInside || this._help.cursorInside || this._console.cursorInside || this._menu.cursorInside || this._dom.cursorInside;
     }
 
     private _mountHelp () {
@@ -1567,6 +1588,11 @@ export class SceneViewDebug extends Component {
             this._console.onInteract = () => (game.canvas as HTMLCanvasElement)?.focus?.();
             this._console.onToggle = () => { if (this._active) this._syncWidgets(); };
             this._console.menu = this._menu;
+            this._dom.onTool = (mode) => this._setGizmoMode(mode);
+            this._dom.onSplit = (fraction) => this._applySplit(fraction);
+            this._dom.onInteract = () => (game.canvas as HTMLCanvasElement)?.focus?.();
+            this._dom.mount();
+            this._dom.setMode(this._handles.mode);
             // Hover explanations need real DOM mouse events, which the editor Preview does not send.
             tooltip.install();
             this._console.mount();

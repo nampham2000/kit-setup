@@ -5,6 +5,8 @@ import { screenFill, screenStroke, screenThickPath } from './ScreenDraw';
 import { GizmoMode } from './TransformGizmo';
 
 const ORDER: GizmoMode[] = ['move', 'rotate', 'scale', 'view', 'collider'];
+/** The tools in key order, for anything else that lists them (the DOM strip). */
+export const TOOL_ORDER: readonly GizmoMode[] = ORDER;
 
 /** Geometry in camera pixels. Hit-testing and drawing read the same numbers. */
 const MARGIN = 10;
@@ -36,7 +38,7 @@ function arc (cx: number, cy: number, r: number, from: number, to: number, steps
  * geometry renderer draws neither text nor images, and a monospace font has
  * nothing that reads as "rotate" anyway.
  */
-const ICONS: Record<GizmoMode, readonly number[][]> = {
+export const ICONS: Record<GizmoMode, readonly number[][]> = {
     move: [
         [0.5, 0.1, 0.5, 0.9],
         [0.1, 0.5, 0.9, 0.5],

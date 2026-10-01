@@ -1,7 +1,7 @@
 import { ensureStyles } from './DebugOverlay';
 
 /** Everything this tool puts on the page. A tooltip is only ever shown for something inside one of these. */
-const ROOTS = '.sv-root, .sv-help, .sv-help-btn, .sv-console, .sv-log-btn, .sv-menu';
+const ROOTS = '.sv-root, .sv-help, .sv-help-btn, .sv-console, .sv-log-btn, .sv-menu, .sv-tools, .sv-divider';
 
 /** How long the pointer rests on something before its tooltip appears, in milliseconds. */
 const DELAY = 380;
