@@ -441,6 +441,8 @@ phím tắt theo nhóm: Tools, Select and focus, Camera, Panel.
 | `H` | Mở/đóng panel trợ giúp |
 | `P` | Bật/tắt panel Hierarchy và Inspector (chỉ browser) |
 | `L` | Mở/đóng Console trong trang (chỉ browser) |
+| `Ctrl+Z` / `Ctrl+Y` | Hoàn tác / làm lại |
+| `Delete` | Xóa node đang chọn (hoàn tác được) |
 
 ## Cỡ chữ của các panel
 
@@ -458,6 +460,54 @@ Chữ trong panel từng là **monospace 11px**: nhỏ, và monospace là lựa 
   dòng cây, caret, chip, công tắc và nút, chứ không chỉ chữ. Bề rộng tối thiểu/tối đa của panel
   cũng tính theo em (16 và 32), nên chữ to hơn thì panel rộng hơn, không bị cắt tên.
 - Nút `!` tự tính vị trí theo kích thước thật của nó vì nó cũng to lên theo cỡ chữ.
+
+## Chỉnh sửa trong preview: hoàn tác, tạo node, collider
+
+Mọi thay đổi này **chỉ nằm trong phiên preview**, không ghi vào file scene. Tải lại trang là mất.
+Muốn giữ thì làm lại trong editor.
+
+### Hoàn tác / làm lại (`Ctrl+Z`, `Ctrl+Y` hoặc `Ctrl+Shift+Z`)
+
+`History.ts` là một ngăn xếp lệnh dùng chung (tối đa 200 bước). Một lệnh được đẩy vào **sau khi** thao
+tác đã làm xong, nên code thao tác giữ nguyên, chỉ cần mô tả cách đảo ngược. Làm thao tác mới thì
+xóa ngăn xếp redo. Có hai nút ↶ ↷ ở đầu Hierarchy (tooltip nói sẽ hoàn tác gì) cho ai chỉ dùng chuột.
+Cocos 3.8 không cho cờ Ctrl/Shift trong sự kiện phím, nên tool tự theo dõi phím Ctrl/Cmd/Shift qua
+`KEY_DOWN/KEY_UP`. Ctrl+Z cũng chạy trong Preview của editor (gizmo dùng input của engine).
+
+Hoàn tác được: **kéo gizmo** (move/rotate/scale, một lần kéo = một bước), **sửa vị trí/xoay/scale/active
+trong Inspector**, **tạo / nhân đôi / xóa node**, **sửa collider và thêm/bớt collider**.
+
+### Tạo, nhân đôi, xóa node (browser)
+
+Hàng nút ở đầu Hierarchy: **New ▾**, **Duplicate**, **Delete**.
+
+- **New** mở menu: Empty node; Cube, Sphere, Capsule, Cylinder, Plane (mesh dựng bằng
+  `primitives` + `builtin-standard`, không cần asset); Directional light; Label (UI).
+- Node mới là **con của node đang chọn** (không chọn gì thì nằm dưới scene), và được chọn ngay.
+  Vật 3D đặt cách camera scene view khoảng 6 đơn vị, để hiện đúng chỗ bạn đang nhìn thay vì ở gốc
+  tọa độ, có thể rất xa. **Label** phải nằm dưới một Canvas mới vẽ được, nên tool đặt nó dưới Canvas
+  gần nhất; scene không có Canvas thì báo trong Console và không tạo.
+- **Duplicate** dùng `instantiate` (nhân cả cây con) và chèn ngay sau bản gốc. **Delete** (hoặc phím
+  `Delete`) gỡ node khỏi scene **nhưng không destroy**, để hoàn tác đặt lại đúng node đó với đủ component.
+  Không xóa/nhân đôi được scene và camera của chính tool.
+- Chưa có: Sprite, Button, Camera, kéo thả đổi cha trong Hierarchy.
+
+### Chỉnh collider (browser)
+
+Chọn node có collider thì **khung collider hiện màu xanh lá** trong scene view (theo xoay và scale của
+node, như physics áp dụng; vẽ không depth test để không bị chính mesh che). Property `Show Colliders`
+hoặc công tắc "Collider shapes" trong panel `!`.
+
+Inspector có một khối cho mỗi collider: **Box** (center, size), **Sphere** (center, radius), **Capsule**
+(center, radius, height, direction X/Y/Z), thêm công tắc **trigger** và nút **Remove**. Cuối khối có
+**+ Box / + Sphere / + Capsule**: collider mới được **khớp theo mesh** của node (nếu có mesh đọc được),
+không thì dùng mặc định của engine. Sửa số thì khung đổi ngay.
+
+- Dùng được khi build có module physics. Bản cắt physics thì khối này không hiện.
+- Collider bị xóa rồi hoàn tác sẽ là **component mới** dựng lại từ trạng thái đã lưu. Lệnh sửa số giữ
+  `ColliderRef` (một tay cầm bền) chứ không giữ component, nên redo/undo vẫn trúng đúng collider sau khi
+  nó bị xóa và dựng lại. Đã kiểm bằng test: thêm, sửa, undo hết, redo hết.
+- Chưa có: kéo tay cầm ngay trong viewport (hiện chỉ sửa bằng số), MeshCollider.
 
 ## Console trong trang (phím `L`)
 
@@ -611,6 +661,13 @@ Split-screen vẫn chạy bình thường kể cả khi thiếu module này.
 | `ScreenDraw.ts` | Vẽ screen-space bằng GeometryRenderer |
 | `EditorBridge.ts` | Đẩy selection sang Hierarchy/Inspector thật của editor |
 | `DebugOverlay.ts` | Gốc DOM dùng chung + CSS + bookkeeping input (fallback) |
+| `History.ts` | Ngăn xếp undo/redo và các lệnh cơ bản (giá trị, pose) |
+| `SceneEdit.ts` | Lệnh thêm/xóa node |
+| `NodeFactory.ts` | Dựng node mới: primitive, light, label |
+| `EditToolbar.ts` | New / Duplicate / Delete / Undo / Redo ở đầu Hierarchy |
+| `ColliderEdit.ts` | Ảnh chụp trạng thái, ColliderRef, lệnh thêm/xóa collider |
+| `ColliderGizmo.ts` | Vẽ khung collider |
+| `ColliderInspector.ts` | Khối collider trong Inspector |
 | `ConsoleCapture.ts` | Bắt log, lỗi, promise reject; không phụ thuộc DOM |
 | `ConsolePanel.ts` | Ngăn kéo Console và nút đếm lỗi |
 | `HierarchyPanel.ts` | Cây node, nút ẩn/solo |

@@ -6,7 +6,7 @@ const STYLE_ID = 'scene-view-overlay-style';
 const CSS = `
 /* One text size drives everything. --sv-fs is published by UiScale; every length below
    is in em, so changing it scales rows, carets, chips and switches with the letters. */
-.sv-root, .sv-help, .sv-help-btn, .sv-console, .sv-log-btn {
+.sv-root, .sv-help, .sv-help-btn, .sv-console, .sv-log-btn, .sv-menu {
     --sv-ui: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     /* Monospace only where alignment matters: numbers and key caps. Names and labels
        are far easier to read in a proportional face. */
@@ -168,12 +168,40 @@ const CSS = `
     letter-spacing: .08em; text-transform: uppercase;
 }
 .sv-console-spacer { flex: 1; }
+
+/* Edit buttons at the top of the Hierarchy, and the New menu they open. */
+.sv-toolbar {
+    display: flex; align-items: center; gap: .35em; flex: none; padding: .3em .5em;
+    border-bottom: 1px solid rgba(255, 255, 255, .08);
+}
+.sv-card.sv-collapsed .sv-toolbar { display: none; }
+.sv-menu {
+    position: fixed; z-index: 52; min-width: 12em; padding: .25em 0; border-radius: .4em;
+    background: #16181d; border: 1px solid rgba(255, 255, 255, .22);
+    box-shadow: 0 .4em 1.2em rgba(0, 0, 0, .5);
+}
+.sv-menu-title {
+    padding: .35em .9em .1em; color: #8b93a3; font-size: .78em; font-weight: 600;
+    letter-spacing: .08em; text-transform: uppercase;
+}
+.sv-menu-item { padding: .3em .9em; cursor: pointer; }
+.sv-menu-item:hover { background: rgba(59, 111, 212, .55); color: #fff; }
 .sv-chip-btn {
     font: inherit; font-size: .9em; padding: .1em .65em; border-radius: .3em;
     border: 1px solid rgba(255, 255, 255, .2); background: none; color: #8b93a3; cursor: pointer;
 }
 .sv-chip-btn:hover { background: rgba(255, 255, 255, .12); color: #fff; }
 .sv-chip-btn.sv-on { background: rgba(255, 255, 255, .14); color: #fff; }
+.sv-chip-btn:disabled { opacity: .35; cursor: default; background: none; color: #8b93a3; }
+/* One block per collider in the Inspector. */
+.sv-section { margin-top: .4em; padding-top: .3em; border-top: 1px solid rgba(255, 255, 255, .1); }
+.sv-section-head { display: flex; align-items: center; padding: .1em .5em .2em; color: #7be37b; font-weight: 600; }
+.sv-section-remove { margin-left: auto; }
+.sv-add-row { display: flex; gap: .35em; padding: .3em .5em .2em; }
+.sv-select {
+    flex: 1; min-width: 0; font: inherit; font-size: .9em; padding: .1em .3em; color: #f0f3f8;
+    background: rgba(255, 255, 255, .07); border: 1px solid rgba(255, 255, 255, .16); border-radius: .3em;
+}
 .sv-lvbtn-warn.sv-on { color: #f0d070; }
 .sv-lvbtn-error.sv-on { color: #ff9a9a; }
 .sv-console-body {

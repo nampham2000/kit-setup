@@ -50,6 +50,14 @@ const SHORTCUTS: { title: string; rows: ShortcutRow[] }[] = [
         ],
     },
     {
+        title: 'Edit',
+        rows: [
+            { keys: 'Ctrl Z', text: 'Undo' },
+            { keys: 'Ctrl Y', text: 'Redo (also Ctrl Shift Z)' },
+            { keys: 'Delete', text: 'Delete the selected node' },
+        ],
+    },
+    {
         title: 'Panel',
         rows: [
             { keys: 'H', text: 'Show or hide this panel' },

@@ -1,13 +1,18 @@
 import {
     CCObject, Camera, Color, Component, Director, EventKeyboard, EventMouse, Game, Input, KeyCode, Layers,
     screen,
-    ModelRenderer, Node, Rect, UIRenderer, UITransform, Vec3, _decorator, director, game, geometry, input,
+    ModelRenderer, Node, Rect, UIRenderer, UITransform, Vec3, _decorator, director, game, geometry, input, instantiate,
 } from 'cc';
 import { DEBUG, EDITOR_NOT_IN_PREVIEW } from 'cc/env';
 import { CanvasWatcher } from './CanvasWatcher';
 import { DebugOverlay, ensureStyles } from './DebugOverlay';
 import { EditorBridge } from './EditorBridge';
+import { drawColliders } from './ColliderGizmo';
 import { ConsolePanel } from './ConsolePanel';
+import { EditToolbar } from './EditToolbar';
+import { createNode, NodeKind } from './NodeFactory';
+import { AddNodeCommand, RemoveNodeCommand } from './SceneEdit';
+import { capturePose, History, Pose, PoseCommand, poseChanged } from './History';
 import { HelpPanel, HelpToggle } from './HelpPanel';
 import { bumpFontSize } from './UiScale';
 import { Axis, GizmoMode, TransformGizmo } from './TransformGizmo';
@@ -142,6 +147,9 @@ export class SceneViewDebug extends Component {
     @property({ tooltip: 'Draw the ground grid.' })
     public showGrid = true;
 
+    @property({ tooltip: 'Draw the shape of the selected node\'s colliders as a green wireframe, so they can be matched to the mesh by eye. Edit them in the Inspector.' })
+    public showColliders = true;
+
     @property({ tooltip: 'Draw the world-origin axis cross. Off by default: it sits on '
         + 'top of whatever is at the origin and gets in the way.' })
     public showWorldAxes = false;
@@ -216,6 +224,19 @@ export class SceneViewDebug extends Component {
     private _active = false;
     private _help = new HelpPanel();
     private _console = new ConsolePanel();
+    /** Every undoable edit made in the scene view: gizmo drags, Inspector edits, created and deleted nodes. */
+    public readonly history = new History();
+    /** The selected node's transform when the current gizmo drag began. */
+    private _dragPose: Pose | null = null;
+    private _toolbar = new EditToolbar({
+        onCreate: (kind) => this.createNode(kind),
+        onDuplicate: () => this.duplicateSelected(),
+        onDelete: () => this.deleteSelected(),
+        onUndo: () => this.undo(),
+        onRedo: () => this.redo(),
+    });
+    private _ctrl = false;
+    private _shift = false;
     private _watcher = new CanvasWatcher();
     private _panelsOn = false;
     private _warnedNoGizmos = false;
@@ -258,12 +279,14 @@ export class SceneViewDebug extends Component {
         console.log(`[SceneView] ${this._bridge.describe()}`);
 
         input.on(Input.EventType.KEY_DOWN, this._onKeyDown, this);
+        input.on(Input.EventType.KEY_UP, this._onKeyUp, this);
         this._suppressContextMenu();
         if (this.startEnabled) this.open();
     }
 
     protected onDestroy () {
         input.off(Input.EventType.KEY_DOWN, this._onKeyDown, this);
+        input.off(Input.EventType.KEY_UP, this._onKeyUp, this);
         this.close();
         // close() only parks the observer camera; this is where it actually goes.
         if (this._sceneCamera && this._sceneCamera.isValid) this._sceneCamera.node.destroy();
@@ -327,6 +350,7 @@ export class SceneViewDebug extends Component {
             drawUIBounds(this._gizmos, this._uiElements, UI_BOUNDS_COLOR);
         }
         this._drawFrustums();
+        if (this.showColliders && this._selected) drawColliders(this._gizmos, this._selected);
         if (this._selected) {
             drawSelection(this._gizmos, this._selected);
             if (this.enableTransformGizmo) this._handles.draw(this._gizmos);
@@ -953,6 +977,7 @@ export class SceneViewDebug extends Component {
         const axis = this._handles.hitTest(x, y);
         if (axis !== null) {
             this._grabbedAxis = axis;
+            this._dragPose = capturePose(this._selected);
             this._handles.beginDrag(axis, x, y);
         }
     }
@@ -993,6 +1018,7 @@ export class SceneViewDebug extends Component {
         const dragged = this._grabbedAxis !== null;
         this._handles.endDrag();
         this._grabbedAxis = null;
+        if (dragged) this._commitGizmoEdit();
 
         const x = e.getLocationX();
         const y = e.getLocationY();
@@ -1074,8 +1100,110 @@ export class SceneViewDebug extends Component {
             return null;
         }
     }
+    /** Cocos 3.8 keyboard events carry no modifier flags, so Ctrl and Shift are tracked from their own key events. */
+    private _trackModifier (code: KeyCode, down: boolean) {
+        if (code === KeyCode.CTRL_LEFT || code === KeyCode.CTRL_RIGHT
+            // KeyCode has no names for the Windows / Command keys; these are their codes.
+            || (code as number) === 91 || (code as number) === 93 || (code as number) === 224) {
+            this._ctrl = down;
+        } else if (code === KeyCode.SHIFT_LEFT || code === KeyCode.SHIFT_RIGHT) {
+            this._shift = down;
+        }
+    }
+
+    private _onKeyUp (e: EventKeyboard) {
+        this._trackModifier(e.keyCode, false);
+    }
+
+    /** Record a finished gizmo drag as one undo step, if it actually changed anything. */
+    private _commitGizmoEdit () {
+        const before = this._dragPose;
+        this._dragPose = null;
+        const node = this._selected;
+        if (!before || !node || !node.isValid) return;
+
+        const after = capturePose(node);
+        if (!poseChanged(before, after)) return;
+        const verb = this._handles.mode === 'rotate' ? 'Rotate' : this._handles.mode === 'scale' ? 'Scale' : 'Move';
+        this.history.push(new PoseCommand(`${verb} ${node.name}`, node, before, after));
+    }
+
+    /** The scene itself, and this tool's own camera, are not the user's to duplicate or delete. */
+    private _canEditSelection (): boolean {
+        const node = this._selected;
+        if (!node || !node.isValid || !node.parent) return false;
+        const own = this._sceneCamera ? this._sceneCamera.node : null;
+        for (let n = own; n; n = n.parent) {
+            if (n === node) return false;
+        }
+        return true;
+    }
+
+    /** Create a node under the selection (or the scene), put it on the undo stack, and select it. */
+    public createNode (kind: NodeKind) {
+        const scene = director.getScene();
+        if (!scene) return;
+        const parent = this._selected && this._selected.isValid ? this._selected : scene;
+
+        const node = createNode(kind, parent, this._sceneCamera);
+        if (!node) return;
+        this.history.push(new AddNodeCommand(`Create ${node.name}`, node, node.parent, node.getSiblingIndex()));
+        this.select(node);
+        console.log(`[SceneView] created ${node.name}`);
+    }
+
+    public duplicateSelected () {
+        const source = this._selected;
+        if (!source || !this._canEditSelection()) return;
+
+        const copy = instantiate(source);
+        copy.name = `${source.name} copy`;
+        const parent = source.parent;
+        parent.insertChild(copy, source.getSiblingIndex() + 1);
+        this.history.push(new AddNodeCommand(`Duplicate ${source.name}`, copy, parent, copy.getSiblingIndex()));
+        this.select(copy);
+        console.log(`[SceneView] duplicated ${source.name}`);
+    }
+
+    public deleteSelected () {
+        const node = this._selected;
+        if (!node || !this._canEditSelection()) return;
+
+        const parent = node.parent;
+        const index = node.getSiblingIndex();
+        const name = node.name;
+        // Taken out of the scene but not destroyed, so Undo can put it back as it was.
+        node.removeFromParent();
+        this.history.push(new RemoveNodeCommand(`Delete ${name}`, node, parent, index));
+        this.select(null);
+        console.log(`[SceneView] deleted ${name}`);
+    }
+
+    public undo () {
+        const label = this.history.undo();
+        console.log(label ? `[SceneView] undo: ${label}` : '[SceneView] nothing to undo');
+    }
+
+    public redo () {
+        const label = this.history.redo();
+        console.log(label ? `[SceneView] redo: ${label}` : '[SceneView] nothing to redo');
+    }
+
     private _onKeyDown (e: EventKeyboard) {
+        this._trackModifier(e.keyCode, true);
         switch (e.keyCode) {
+        case KeyCode.KEY_Z:
+            if (this._active && this._ctrl) {
+                if (this._shift) this.redo();
+                else this.undo();
+            }
+            break;
+        case KeyCode.KEY_Y:
+            if (this._active && this._ctrl) this.redo();
+            break;
+        case KeyCode.DELETE:
+            if (this._active) this.deleteSelected();
+            break;
         case KeyCode.F1:
             this.toggle();
             break;
@@ -1207,6 +1335,9 @@ export class SceneViewDebug extends Component {
         this._overlay.onLayoutChange = () => this._syncWidgets();
         this._overlay.mount();
         this._hierarchy.mount(this._overlay);
+        this._toolbar.mount(this._hierarchy.bodyElement);
+        this.history.onChange = () => this._updateHint();
+        this._inspector.onEdit = (command) => this.history.push(command);
         this._inspector.mount(this._overlay);
         this._hierarchy.setSelected(this._selected);
         this._inspector.show(this._selected);
@@ -1216,6 +1347,7 @@ export class SceneViewDebug extends Component {
 
     private _unmountPanels () {
         this._panelsOn = false;
+        this._toolbar.unmount();
         this._inspector.unmount();
         this._hierarchy.unmount();
         this._overlay.unmount();
@@ -1249,7 +1381,7 @@ export class SceneViewDebug extends Component {
 
     /** True while the pointer is over any DOM overlay: it must not reach the scene underneath. */
     private _overUI (): boolean {
-        return this._overlay.cursorInside || this._help.cursorInside || this._console.cursorInside;
+        return this._overlay.cursorInside || this._help.cursorInside || this._console.cursorInside || this._toolbar.cursorInside;
     }
 
     private _mountHelp () {
@@ -1309,6 +1441,7 @@ export class SceneViewDebug extends Component {
             { label: 'Grid', key: '', get: () => this.showGrid, set: (on) => { this.showGrid = on; } },
             { label: 'Bounding boxes', key: '', get: () => this.showBounds, set: (on) => { this.showBounds = on; } },
             { label: 'Selected camera frustum', key: '', get: () => this.showFrustum, set: (on) => { this.showFrustum = on; } },
+            { label: 'Collider shapes', key: '', get: () => this.showColliders, set: (on) => { this.showColliders = on; } },
             { label: 'World axes', key: '', get: () => this.showWorldAxes, set: (on) => { this.showWorldAxes = on; } },
             {
                 label: 'Debug logging',
@@ -1328,6 +1461,11 @@ export class SceneViewDebug extends Component {
     /** Bring the help panel's switches and status line in step with the real state. */
     private _updateHint () {
         this._help.refresh();
+        this._toolbar.setState({
+            hasSelection: !!this._selected && this._canEditSelection(),
+            undoLabel: this.history.undoLabel,
+            redoLabel: this.history.redoLabel,
+        });
     }
 }
 

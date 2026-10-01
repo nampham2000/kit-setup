@@ -58,6 +58,9 @@ export class HierarchyPanel {
         private _callbacks: HierarchyCallbacks,
     ) {}
 
+    /** The scrolling list element, so something can be inserted between it and the card's title. */
+    public get bodyElement (): HTMLElement { return this._body; }
+
     public mount (overlay: DebugOverlay) {
         const { card, body } = overlay.card('hierarchy', 'sv-tree', 'left');
         this._body = body;
