@@ -581,9 +581,7 @@ Rê chuột vào bất kỳ nút, công tắc, ô số, hàng nào của tool th
 - **Hiện sau ~0,4 giây** khi chuột đứng yên, nhưng **hiện ngay** khi chuyển từ cái này sang cái khác đã có giải thích, nên lướt qua
   cả một panel không phải chờ ở từng hàng. Mất đi khi bấm chuột, cuộn, bấm phím, mất focus cửa sổ, hoặc chuột rời đi.
 - **Mọi `title` cũ tự được nâng cấp:** tooltip lấy chữ của `title` rồi xóa thuộc tính đó (để tooltip chậm, không có kiểu của trình
-  duyệt không hiện chồng lên), nên các nút đặt `title` từ trước không cần sửa. Muốn thêm giải thích cho một phần tử mới: `tip(el, "Tiêu đề
-Mô tả")` (`
-` là dấu xuống dòng trong chuỗi, tách tiêu đề khỏi mô tả).
+  duyệt không hiện chồng lên), nên các nút đặt `title` từ trước không cần sửa. Muốn thêm giải thích cho một phần tử mới: `tip(el, 'Tiêu đề' + String.fromCharCode(10) + 'Mô tả')`: dấu xuống dòng tách tiêu đề (in đậm) khỏi mô tả (trong code TypeScript viết là `\n` bên trong chuỗi).
 - Tự đặt vị trí: dưới phần tử, lật lên trên nếu hết chỗ, trượt vào nếu sát mép, không bao giờ ra ngoài cửa sổ.
 - Như các panel DOM khác, **chỉ ở browser** (Preview của editor không chuyển sự kiện chuột vào trang).
 
