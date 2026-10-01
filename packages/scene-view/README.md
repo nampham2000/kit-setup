@@ -1,7 +1,7 @@
 # Scene View (v3)
 
 Unity-style Scene view chạy **bên trong** game đang chạy. Màn hình chia đôi:
-game thật ở nửa trái (camera gốc giữ nguyên, chỉ bị đổi viewport), một camera
+game thật ở bên trái (camera gốc giữ nguyên, chỉ bị đổi viewport), một camera
 quan sát bay tự do ở nửa phải nhìn vào **cùng scene đang chạy**, kèm gizmo.
 
 ## Dùng lại ở project khác
@@ -120,6 +120,21 @@ kéo gizmo. Dùng pointer capture để kéo không chết khi con trỏ rời k
 Khi tỉ lệ đổi, **bốn** chỗ phải cập nhật cùng lúc: rect của các camera game, rect
 của camera quan sát, vùng nhận chuột của free-look, và ngưỡng viewport của picker.
 Tất cả đọc chung một giá trị `_split`.
+
+### Game view thu nhỏ đúng hình dạng, không bị cắt
+
+Camera game **không** bị bóp chiều ngang. Trước đây rect là `(0, 0, split, 1)`: Canvas UI vẫn bố
+cục theo cả cửa sổ nên nửa phải của game rơi ra ngoài viewport và bị cắt. Giờ cả hai chiều
+thu cùng hệ số `split`, nên game giữ nguyên tỉ lệ cửa sổ, thấy trọn vẹn, căn giữa theo chiều
+dọc (hàm `gameRect`). Hai dải trên/dưới game do một camera nền (`__SceneViewBackdrop__`, con của
+camera quan sát nên không hiện trong Hierarchy) xóa sạch, nếu không chúng giữ lại hình của
+frame trước.
+
+**Game tự đặt `camera.rect` thì sao?** Nhiều game làm vậy (SmashFest tự letterbox game dọc
+trong cửa sổ ngang, rect `[0.313, 0, 0.374, 1]`) và ghi đè rect mà tool đặt một lần. Nên mỗi frame,
+ngay trước khi vẽ (`EVENT_BEFORE_DRAW`), tool so rect hiện tại với rect nó đã đặt; khác thì coi giá trị
+đó là ý của game và thu nhỏ lại. Camera nào game tạo thêm **sau khi** mở tool chưa được nhận.
+Đã đo trên SmashFest: chọn iPhone 14 Pro, Rotate, kéo thanh chia, rect đều đúng.
 
 ## Bảng công cụ bấm chuột
 

@@ -27,6 +27,27 @@ const BOUNDS_COLOR = new Color(120, 220, 160, 100);
 const FRUSTUM_COLOR = new Color(255, 200, 80, 220);
 const UI_BOUNDS_COLOR = new Color(90, 190, 255, 120);
 const SCENE_BG = new Color(38, 40, 46, 255);
+/** Fills the bands around the game view. Darker than the scene view so the two read as separate panes. */
+const BACKDROP_BG = new Color(22, 23, 27, 255);
+
+/**
+ * Where a game camera goes when the game view is `fraction` of the window wide.
+ *
+ * Both axes shrink by the same factor, so the game keeps the window's own aspect
+ * ratio and is seen whole. Narrowing only the width, as this used to, cut the game
+ * off instead: the UI canvas still lays itself out for the full window, so the
+ * right part of it simply fell outside the viewport. The result is centred
+ * vertically, and a camera that started with a partial rect keeps its place in it.
+ */
+function gameRect (saved: Rect, fraction: number): Rect {
+    const offsetY = (1 - fraction) / 2;
+    return new Rect(
+        saved.x * fraction,
+        offsetY + saved.y * fraction,
+        saved.width * fraction,
+        saved.height * fraction,
+    );
+}
 
 /** Starting fraction of the screen width where the scene viewport begins. */
 const DEFAULT_SPLIT = 0.5;
@@ -154,6 +175,7 @@ export class SceneViewDebug extends Component {
     public rescanInterval = 0.5;
 
     private _sceneCamera: Camera = null;
+    private _backdrop: Camera = null;
     private _freeCamera: FreeCamera = null;
     private _gizmos: GeometryRenderer = null;
     private _overlay = new DebugOverlay();
@@ -167,7 +189,10 @@ export class SceneViewDebug extends Component {
     private _inspector = new InspectorPanel();
     private _visibility = new VisibilityController();
     private _hierarchy: HierarchyPanel = null;
+    /** Each game camera's rect as the game wants it, before it was shrunk. */
     private _savedRects = new Map<Camera, Rect>();
+    /** What this tool last set on each of them, to notice when the game sets its own again. */
+    private _appliedRects = new Map<Camera, Rect>();
     private _renderers: ModelRenderer[] = [];
     private _uiElements: UIRenderer[] = [];
     private _selected: Node = null;
@@ -417,6 +442,7 @@ export class SceneViewDebug extends Component {
             if (camera.isValid) camera.rect = rect;
         }
         this._savedRects.clear();
+        this._appliedRects.clear();
         this._renderers.length = 0;
         this._watcher.stop();
         this._help.unmount();
@@ -510,8 +536,10 @@ export class SceneViewDebug extends Component {
     }
 
     private _onBeforeDraw () {
+        if (!this._active) return;
+        this._followGameRects();
         // While the director is running, update() already drove this frame.
-        if (this._active && director.isPaused()) this._frame(this._frameDelta());
+        if (director.isPaused()) this._frame(this._frameDelta());
     }
 
     private _onGamePause () {
@@ -601,8 +629,8 @@ export class SceneViewDebug extends Component {
     private _applySplit (fraction: number) {
         this._split = fraction;
 
-        for (const camera of this._savedRects.keys()) {
-            if (camera.isValid) camera.rect = new Rect(0, 0, fraction, 1);
+        for (const [camera, saved] of this._savedRects) {
+            if (camera.isValid) this._applyGameRect(camera, saved);
         }
         if (this._sceneCamera && this._sceneCamera.isValid) {
             this._sceneCamera.rect = new Rect(fraction, 0, 1 - fraction, 1);
@@ -612,14 +640,64 @@ export class SceneViewDebug extends Component {
         this._syncWidgets();
     }
 
-    /** Squeeze every existing camera — 3D and UI alike — into the left half. */
+    /** Shrink every existing camera — 3D and UI alike — into the left part, keeping the game's own shape. */
     private _splitGameCameras () {
         const cameras = director.getScene().getComponentsInChildren(Camera);
         for (const camera of cameras) {
-            if (camera === this._sceneCamera) continue;
-            this._savedRects.set(camera, camera.rect.clone());
-            camera.rect = new Rect(0, 0, this._split, 1);
+            if (camera === this._sceneCamera || camera === this._backdrop) continue;
+            this._applyGameRect(camera, camera.rect.clone());
         }
+    }
+
+    private _applyGameRect (camera: Camera, desired: Rect) {
+        const shrunk = gameRect(desired, this._split);
+        this._savedRects.set(camera, desired);
+        this._appliedRects.set(camera, shrunk.clone());
+        camera.rect = shrunk;
+    }
+
+    /**
+     * Some games set their cameras' rects themselves, on resize or every frame - a
+     * portrait game letterboxing itself inside a landscape window does exactly this.
+     * Such a write replaces the shrunk rect and the game would draw full size again
+     * behind the scene view. So just before drawing, any camera whose rect is no
+     * longer the one set here has that rect taken as the game's new wish and shrunk
+     * again. Runs on every frame, paused or not, and costs a few comparisons.
+     */
+    private _followGameRects () {
+        for (const [camera, applied] of this._appliedRects) {
+            if (!camera.isValid) continue;
+            const now = camera.rect;
+            if (Math.abs(now.x - applied.x) > 1e-5 || Math.abs(now.y - applied.y) > 1e-5
+                || Math.abs(now.width - applied.width) > 1e-5 || Math.abs(now.height - applied.height) > 1e-5) {
+                this._applyGameRect(camera, now.clone());
+            }
+        }
+    }
+
+    /**
+     * A camera that draws nothing and only clears the whole window.
+     *
+     * The game is shrunk to its own shape inside the left part, which leaves bands
+     * above and below it. A camera clears only its own viewport, so without this the
+     * bands would show whatever the last frame left there. It is a child of the
+     * observer camera, so it is hidden from the Hierarchy and goes away with it.
+     */
+    private _ensureBackdrop (parent: Node) {
+        if (!this._backdrop || !this._backdrop.isValid) {
+            const node = new Node('__SceneViewBackdrop__');
+            node.layer = Layers.Enum.DEFAULT;
+            node.hideFlags |= CCObject.Flags.DontSave | CCObject.Flags.HideInHierarchy;
+            parent.addChild(node);
+            this._backdrop = node.addComponent(Camera);
+        }
+        const backdrop = this._backdrop;
+        backdrop.enabled = true;
+        backdrop.rect = new Rect(0, 0, 1, 1);
+        backdrop.priority = -(1 << 24);
+        backdrop.clearFlags = Camera.ClearFlag.SOLID_COLOR;
+        backdrop.clearColor = BACKDROP_BG;
+        backdrop.visibility = 0;
     }
 
     /**
@@ -654,6 +732,8 @@ export class SceneViewDebug extends Component {
         camera.visibility = this._observerVisibility();
         camera.near = 0.05;
         camera.far = 2000;
+
+        this._ensureBackdrop(camera.node);
 
         this._initGizmos();
 
