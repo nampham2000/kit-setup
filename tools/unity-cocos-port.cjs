@@ -246,6 +246,7 @@ const {
   ensureDirectoryMetas,
   getNestedList,
   resolveUnitySpriteFrame: resolveUnitySpriteFrameImpl,
+  handleMissingModel: handleMissingModelImpl,
 });
 const fontPorter = createFontPorter({
   getField,
@@ -2580,11 +2581,19 @@ class CocosAssetDatabase {
     const candidates = this.findModelRecordsByStem(stem, unityRelativePath);
     for (const record of candidates) {
       const animations = subMetaRecords(record.uuid, record.subMetas, 'gltf-animation');
-      const match = animations.find(({ subMeta }) => {
+      // Exact name beats suffix beats substring ("Idle" must not pick "LayToIdle" when an exact clip exists).
+      const rank = ({ subMeta }) => {
         const name = normalizeKey(subMeta.name || subMeta.displayName || '');
-        return name === normalizedHint
-          || (shortHint && (name.endsWith(shortHint) || name.includes(shortHint)));
-      });
+        const shortName = normalizeKey(String(subMeta.name || subMeta.displayName || '').split('|').pop().replace(/\.animation$/i, ''));
+        if (name === normalizedHint || shortName === normalizedHint || (shortHint && shortName === shortHint)) return 0;
+        if (shortHint && name.endsWith(shortHint)) return 1;
+        if (shortHint && name.includes(shortHint)) return 2;
+        return 99;
+      };
+      const match = animations
+        .map((item) => ({ item, r: rank(item) }))
+        .filter((x) => x.r < 99)
+        .sort((a, b) => a.r - b.r || String(a.item.subMeta.name).length - String(b.item.subMeta.name).length)[0]?.item;
       if (match) {
         return {
           uuid: match.uuid,

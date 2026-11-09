@@ -37,15 +37,10 @@ const INSTALL_DIRS = [
   'extensions/super-html',
 ];
 
-// Only these ad platform folders are kept after export.
+// Ad platform folders kept after export. '*' keeps every channel Super HTML generates
+// (a new project must ship all of them on its first build); list names to keep only those.
 // "common" is always retained automatically.
-const RETAINED_AD_PLATFORMS = [
-  'applovin',
-  'google',
-  'facebook',
-  'mintegral',
-  'unity',
-];
+const RETAINED_AD_PLATFORMS = ['*'];
 
 const BUILD_CONFIG_OVERRIDES = {
   debug: false,

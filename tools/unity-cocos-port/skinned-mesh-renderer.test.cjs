@@ -22,8 +22,8 @@ function hierarchy() {
 
 function run(skin, extra = {}, materials = [{ guid: 'material' }]) {
   const { objects, hero, geo } = hierarchy();
-  const added = [], codes = [];
-  const builder = { objects, addSkinnedMeshRenderer: (...args) => added.push(args) };
+  const added = [], codes = [], staticAdded = [];
+  const builder = { objects, addSkinnedMeshRenderer: (...args) => added.push(args), addMeshRenderer: (...args) => staticAdded.push(args) };
   const reporter = Object.fromEntries(['high', 'medium', 'low'].map((level) => [level, (code) => codes.push(code)]));
   const meshAsset = { ext: '.fbx', stem: 'Character', relativePath: 'Assets/Character.fbx' };
   const porter = createRendererPorter({
@@ -42,7 +42,7 @@ function run(skin, extra = {}, materials = [{ guid: 'material' }]) {
   const unityDb = { get: (guid) => ({ material: {}, mesh: meshAsset })[guid] };
   porter.emitSkinnedMeshRenderer({ name: 'Alpha_HighTorsoGeo' }, geo, '137',
     { m_Mesh: { guid: 'mesh', fileID: 4300000 }, m_Materials: materials }, { file: 'scene' }, builder, reporter, {}, unityDb, cocosDb);
-  return { added, codes, hero };
+  return { added, codes, hero, staticAdded };
 }
 
 test('skinning root is the ancestor that resolves every joint path', () => {
@@ -56,7 +56,14 @@ test('a bone hierarchy that differs from the model is reported, not bound', () =
   const { added, codes } = run({ skeletonUuid: 'fbx@skeleton', joints: ['Alpha:Hips/Alpha:Neck'] });
   assert.equal(added.length, 0);
   assert.deepEqual(codes, ['SKINNED_MESH_ROOT_UNRESOLVED']);
-  assert.deepEqual(run(null).codes, ['SKINNED_MESH_SKELETON_UNRESOLVED']);
+});
+
+test('a mesh whose imported model has no skeleton is kept as a rigid MeshRenderer', () => {
+  const { added, staticAdded, codes } = run(null);
+  assert.equal(added.length, 0);
+  assert.equal(staticAdded.length, 1);
+  assert.deepEqual(staticAdded[0].slice(2, 4), ['fbx@torso', ['gray-material']]);
+  assert.deepEqual(codes, ['SKINNED_MESH_STATIC_FALLBACK']);
 });
 
 test('skinning roots get real-time skinning: the ported Animation becomes a SkeletalAnimation', () => {

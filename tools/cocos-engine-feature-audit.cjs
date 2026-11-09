@@ -505,7 +505,7 @@ function parseEngineProfile(bytes, file = 'settings/v2/packages/engine.json') {
 
 function readEngineProfile(projectRoot) {
   const file = engineProfilePath(projectRoot);
-  if (!fs.existsSync(file)) throw new EngineFeatureError('ENGINE_FEATURE_PROFILE_MISSING', `Missing ${file}`);
+  if (!fs.existsSync(file)) throw new EngineFeatureError('ENGINE_FEATURE_PROFILE_MISSING', `Missing ${file}. Run npm run setup (it seeds settings/v2 and profiles/v2 from the kit templates), then open the project once with 1_open-project.bat.`);
   const bytes = fs.readFileSync(file);
   const parsed = parseEngineProfile(bytes, file);
   return { ...parsed, file, bytes, hash: sha256(bytes), modifiedMs: fs.statSync(file).mtimeMs };
@@ -1026,6 +1026,7 @@ async function createMcpClient(projectRoot, options = {}) {
   let url = options.mcpUrl;
   if (!url) {
     const settingsFile = path.join(projectRoot, 'settings', 'mcp-server.json');
+    if (!fs.existsSync(settingsFile)) throw new EngineFeatureError('ENGINE_FEATURE_MCP_SETTINGS_MISSING', `Missing ${settingsFile}. Open the project once with 1_open-project.bat so the Cocos MCP extension creates it, then rerun.`);
     const settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
     url = `http://127.0.0.1:${settings.port || 3000}/mcp`;
   }

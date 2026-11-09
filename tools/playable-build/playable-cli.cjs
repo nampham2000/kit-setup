@@ -673,6 +673,15 @@ function movePathFast(src, dst) {
 }
 
 function pruneBuildPlatformOutputs(buildPath) {
+  if ((RETAINED_AD_PLATFORMS || []).includes('*')) {
+    // keep every channel, but drop the empty stub folder Super HTML leaves under the build's own name
+    const stub = path.join(buildPath, path.basename(buildPath));
+    if (fs.existsSync(stub) && fs.statSync(stub).isDirectory()) {
+      fs.rmSync(stub, { recursive: true, force: true });
+      log(`Removed stub folder ${path.relative(ROOT_DIR, stub)}`);
+    }
+    return;
+  }
   const retained = new Set(['common', ...(RETAINED_AD_PLATFORMS || []).map((name) => String(name).trim().toLowerCase()).filter(Boolean)]);
   const removed = [];
 

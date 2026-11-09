@@ -63,6 +63,11 @@ function checkTypeScript() {
       const lines = output.split(/\r?\n/).filter((l) => l.includes('error TS'));
       result.errors = lines.slice(0, 10);
       result.details = `${lines.length} compiler error(s) found.`;
+      if (!lines.length) {
+        // tsc failed before type-checking (for example no tsconfig.json yet): say why instead of "0 errors".
+        const reason = output.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(0, 3).join(' | ');
+        result.details = `tsc did not run a type check (exit ${proc.status}). Run npm run setup to create tsconfig.json and open the project once in Cocos Creator. ${reason}`;
+      }
     } else {
       result.details = 'TypeScript compilation clean (0 errors).';
     }

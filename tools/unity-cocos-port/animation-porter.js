@@ -44,6 +44,28 @@ function findRootTransformTracks(clip) {
   return [...found].sort();
 }
 
+// Unity FBX clips are addressed by internalID; the name lives in the FBX .meta (clipAnimations).
+const fbxClipNameCache = new Map();
+function unityFbxClipName(clipAsset, internalId) {
+  const metaPath = clipAsset && clipAsset.path ? clipAsset.path + '.meta' : '';
+  if (!metaPath || !internalId) return '';
+  let names = fbxClipNameCache.get(metaPath);
+  if (!names) {
+    names = new Map();
+    try {
+      const text = require('node:fs').readFileSync(metaPath, 'utf8').replace(/\r/g, '');
+      const blocks = text.slice(text.indexOf('clipAnimations:')).split('    - serializedVersion: 16\n').slice(1);
+      for (const block of blocks) {
+        const id = /\n      internalID: (-?\d+)/.exec('\n' + block);
+        const name = /\n      name: (.*)/.exec('\n' + block);
+        if (id && name) names.set(id[1], name[1].trim());
+      }
+    } catch (error) { /* meta unreadable: fall back to the state name */ }
+    fbxClipNameCache.set(metaPath, names);
+  }
+  return names.get(String(internalId)) || '';
+}
+
 module.exports = function createAnimationPorter(deps) {
   const {
     parseUnityYaml,
@@ -1398,7 +1420,7 @@ module.exports = function createAnimationPorter(deps) {
       }
       let clipInfo = null;
       if (['.fbx', '.gltf', '.glb'].includes(clipAsset.ext)) {
-        clipInfo = cocosDb?.resolveModelAnimationByStem(clipAsset.stem, state.name, clipAsset.relativePath) || null;
+        clipInfo = cocosDb?.resolveModelAnimationByStem(clipAsset.stem, unityFbxClipName(clipAsset, state.motionFileId) || state.name, clipAsset.relativePath) || null;
         if (clipInfo?.uuid) {
           clipInfo = { ...clipInfo, name: state.name };
           reporter.low(
@@ -1409,11 +1431,18 @@ module.exports = function createAnimationPorter(deps) {
             clipInfo.uuid,
           );
         } else {
+          // The clips live in an FBX that is not in Cocos yet (an animation-source model shared by several rigs).
+          // Copy it the same way a missing mesh FBX is copied so the next pass can wire the clips.
+          const copiedClipSource = deps.handleMissingModel
+            ? deps.handleMissingModel(clipAsset, reporter, options, { autoCopy: true, severity: 'low', meshNameHint: state.name })
+            : null;
           reporter.medium(
             'ANIMATOR_EMBEDDED_MODEL_CLIP_UNRESOLVED',
             clipAsset.relativePath,
             state.name,
-            'Animator state references an embedded model clip that has no matching imported Cocos animation sub-asset',
+            copiedClipSource?.pendingImport
+              ? 'Clip source FBX was copied into Cocos for import; refresh AssetDB, then rerun the porter with --overwrite to wire this clip'
+              : 'Animator state references an embedded model clip that has no matching imported Cocos animation sub-asset',
             state.motionFileId,
           );
         }

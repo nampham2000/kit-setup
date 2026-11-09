@@ -393,14 +393,32 @@ module.exports = function createRendererPorter(deps) {
       resolved = missing.resolved || null;
       if (!resolved?.meshUuid) {
         reporter.medium('SKINNED_MESH_PENDING_IMPORT', meshAsset.relativePath, gameObject.name,
-          'Model copied for AssetDB import; refresh and rerun the porter to bind the skinned mesh.');
+          'Model copied for AssetDB import; refresh AssetDB, then rerun the porter with --overwrite to bind the skinned mesh.');
         return;
       }
     }
     const skin = cocosDb.resolveModelSkinByMesh(meshAsset.stem, resolved.meshUuid, resolved.fallbackExt || meshAsset.ext, meshAsset.relativePath);
     if (!skin?.skeletonUuid || !skin.joints.length) {
+      // A model that Cocos imported with its mesh but no skeleton is a rigid mesh (for example a dino
+      // eye that Unity parents to a bone through a SkinnedMeshRenderer). Keep it visible as a plain
+      // MeshRenderer instead of dropping it; a stale AssetDB is the only case that still needs a rerun.
+      if (resolved?.meshUuid && !resolved.pendingImport) {
+        const modelMaterials = resolved.materialUuids || [];
+        const materialUuids = getNestedList(doc, 'm_Materials').map((materialRef, index) => {
+          const materialAsset = unityDb.get(unityRefGuid(materialRef));
+          return (materialAsset ? resolveUnityMaterialUuid(materialAsset, options, unityDb, cocosDb, reporter, gameObject.name) : '') || modelMaterials[index] || '';
+        });
+        builder.addMeshRenderer(nodeId, componentId, resolved.meshUuid, materialUuids.length ? materialUuids : modelMaterials.slice(), `cmp-mesh-renderer-${componentId}`, {
+          castShadows: Number(getField(doc, 'm_CastShadows', 1) || 0) !== 0,
+          receiveShadows: Number(getField(doc, 'm_ReceiveShadows', 1) || 0) !== 0,
+          enabled: unityRendererEnabled(getField, doc),
+        });
+        reporter.medium('SKINNED_MESH_STATIC_FALLBACK', meshAsset.relativePath, gameObject.name,
+          'The imported Cocos model has no skeleton for this SkinnedMeshRenderer mesh, so it was emitted as a rigid MeshRenderer on the same node; verify its position and parenting visually.');
+        return;
+      }
       reporter.high('SKINNED_MESH_SKELETON_UNRESOLVED', meshAsset.relativePath, gameObject.name,
-        'The imported Cocos model has no skeleton for this mesh; refresh AssetDB and rerun the porter.');
+        'The imported Cocos model has no skeleton for this mesh; refresh AssetDB, then rerun the porter with --overwrite.');
       return;
     }
     let skinningRoot = parentNodeId(builder, nodeId);

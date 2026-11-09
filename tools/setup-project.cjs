@@ -14,6 +14,30 @@ function runSteps(steps, run) {
   }
 }
 
+// A brand-new Cocos project has no settings/v2 or profiles/v2 until the editor has been opened
+// once, yet the engine-feature gate needs them. Seed only what is missing from the kit templates;
+// files that already exist are never overwritten.
+function seedCocosProjectConfig(project, kit) {
+  const seeded = [];
+  for (const dir of ['settings/v2', 'profiles/v2']) {
+    const from = path.join(kit, 'template-config', dir);
+    if (!fs.existsSync(from)) continue;
+    const to = path.join(project, dir);
+    const before = fs.existsSync(to) ? new Set(fs.readdirSync(path.join(to, 'packages'), { withFileTypes: false })) : new Set();
+    fs.mkdirSync(to, { recursive: true });
+    fs.cpSync(from, to, { recursive: true, force: false, errorOnExist: false });
+    for (const name of fs.readdirSync(path.join(to, 'packages'))) if (!before.has(name)) seeded.push(dir + '/packages/' + name);
+  }
+  // tsc (verify, lint) needs the project tsconfig, which extends the one the Cocos editor generates under temp/.
+  const tsconfig = path.join(project, 'tsconfig.json');
+  const tsconfigTemplate = path.join(kit, 'template-config', 'tsconfig_TEMPLATE.json');
+  if (!fs.existsSync(tsconfig) && fs.existsSync(tsconfigTemplate)) {
+    fs.copyFileSync(tsconfigTemplate, tsconfig);
+    seeded.push('tsconfig.json');
+  }
+  return seeded;
+}
+
 function setup(project) {
   const kit = path.join(project, 'playable-shared-kit');
   const pkgFile = path.join(project, 'package.json');
@@ -62,4 +86,4 @@ if (require.main === module) {
   else try { setup(path.resolve(process.argv[2] || path.join(__dirname, '../..'))); }
   catch (error) { console.error(error.message); process.exitCode = 1; }
 }
-module.exports = { runSteps, setup };
+module.exports = { runSteps, seedCocosProjectConfig, setup };
